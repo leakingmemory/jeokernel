@@ -233,29 +233,63 @@ void boot_stage1(void *multiboot_header_addr) {
 
                 if (ph.p_memsz > 0) {
                     uint32_t phaddr = kernel_elf_start + ph.p_offset;
-                    uint32_t vaddr = ph.p_vaddr;
-                    uint32_t vaddr_end = vaddr + ph.p_memsz;
-                    if ((phaddr & 4095) != 0 || (vaddr & 4095) != 0) {
-                        vga.display(ln, 0, "error: kernel exec not page aligned");
-                        while (1) {
+                    uint32_t phdata = kernel_elf_end;
+                    {
+                        uint32_t overrun = phdata & 4095;
+                        if (overrun != 0) {
+                            phdata += 4096 - overrun;
                         }
                     }
-                    while (vaddr < vaddr_end) {
-                        uint32_t page_ppn = phaddr / 4096;
-                        vga.display(ln, 0, "pagemap ");
-                        hexstr((char (&)[8]) hex, vaddr);
-                        vga.display(ln, 8, hex);
-                        pageentr &pe = get_pageentr64(pml4t, vaddr);
-                        hexstr((char (&)[8]) hex, pe.page_ppn);
-                        vga.display(ln, 17, hex);
-                        pe.page_ppn = page_ppn;
-                        vga.display(ln, 26, " -> ");
-                        hexstr((char (&)[8]) hex, pe.page_ppn);
-                        vga.display(ln, 30, hex);
-                        ln++;
+                    uint32_t vaddr = ph.p_vaddr;
+                    uint32_t vaddr_end = vaddr + ph.p_memsz;
+                    if (ph.p_filesz == ph.p_memsz) {
+                        if ((phaddr & 4095) != 0 || (vaddr & 4095) != 0) {
+                            vga.display(ln, 0, "error: kernel exec not page aligned");
+                            while (1) {
+                            }
+                        }
+                        while (vaddr < vaddr_end) {
+                            uint32_t page_ppn = phaddr / 4096;
+                            vga.display(ln, 0, "pagemap ");
+                            hexstr((char (&)[8]) hex, vaddr);
+                            vga.display(ln, 8, hex);
+                            pageentr &pe = get_pageentr64(pml4t, vaddr);
+                            hexstr((char (&)[8]) hex, pe.page_ppn);
+                            vga.display(ln, 17, hex);
+                            pe.page_ppn = page_ppn;
+                            vga.display(ln, 26, " -> ");
+                            hexstr((char (&)[8]) hex, pe.page_ppn);
+                            vga.display(ln, 30, hex);
+                            ln++;
 
-                        vaddr += 4096;
-                        phaddr += 4096;
+                            vaddr += 4096;
+                            phaddr += 4096;
+                        }
+                    } else {
+                        while (vaddr < vaddr_end) {
+                            uint32_t page_ppn = phdata / 4096;
+                            vga.display(ln, 0, "pagzmap ");
+                            hexstr((char (&)[8]) hex, vaddr);
+                            vga.display(ln, 8, hex);
+                            pageentr &pe = get_pageentr64(pml4t, vaddr);
+                            hexstr((char (&)[8]) hex, pe.page_ppn);
+                            vga.display(ln, 17, hex);
+                            pe.page_ppn = page_ppn;
+                            vga.display(ln, 26, " -> ");
+                            hexstr((char (&)[8]) hex, pe.page_ppn);
+                            vga.display(ln, 30, hex);
+                            ln++;
+
+                            {
+                                uint8_t *z = (uint8_t *) phdata;
+                                for (int i = 0; i < 4096; i++) {
+                                    z[i] = 0;
+                                }
+                            }
+
+                            vaddr += 4096;
+                            phdata += 4096;
+                        }
                     }
                 }
             }
