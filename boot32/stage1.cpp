@@ -5,13 +5,6 @@
 #include <multiboot.h>
 #include <elf_impl.h>
 
-static GDT init_gdt64[4] = {
-        GDT(0, 0x1FFFF, 0, 0),
-        GDT(0, 0xF0000, 0xA, 0x9A),
-        GDT(0, 0, 0, 0x92),
-        GDT(0, 0, 0, 0)
-};
-
 extern "C" {
 
 void __text_start();
@@ -122,8 +115,6 @@ void boot_stage1(void *multiboot_header_addr) {
     hexstr((char (&)[8]) hex, (uint32_t) cr0);
     vga.display(2, 4, hex);
     vga.display(2, 0, "cr0=");
-
-    asm("lgdt (%0)" :: "r"(&init_gdt64));
 
     hexstr((char (&)[8]) hex, (uint32_t) multiboot_header_addr);
     vga.display(2, 13, "multiboot=");
@@ -269,8 +260,42 @@ void boot_stage1(void *multiboot_header_addr) {
                 }
             }
 
+            {
+                GDT_table<3> &init_gdt64 = *((GDT_table<3> *) 0x05000);
+                init_gdt64 = GDT_table<3>();
+                init_gdt64[0] = GDT(0, 0x1FFFF, 0, 0);
+                init_gdt64[1] = GDT(0, 0xF0000, 0xC, 0x9A);
+                init_gdt64[2] = GDT(0, 0, 0, 0x92);
+                vga.display(19, 0, "GDT:");
+                uint32_t *gdt64 = (uint32_t *) &init_gdt64;
+                asm("lgdt (%0)" :: "r"(init_gdt64.pointer()));
+                hexstr((char (&)[8]) hex, gdt64[0]);
+                vga.display(20, 8, hex);
+                hexstr((char (&)[8]) hex, gdt64[1]);
+                vga.display(20, 0, hex);
+                hexstr((char (&)[8]) hex, gdt64[2]);
+                vga.display(21, 8, hex);
+                hexstr((char (&)[8]) hex, gdt64[3]);
+                vga.display(21, 0, hex);
+                hexstr((char (&)[8]) hex, gdt64[4]);
+                vga.display(22, 8, hex);
+                hexstr((char (&)[8]) hex, gdt64[5]);
+                vga.display(22, 0, hex);
+                hexstr((char (&)[8]) hex, gdt64[6]);
+                vga.display(23, 8, hex);
+                hexstr((char (&)[8]) hex, gdt64[7]);
+                vga.display(23, 0, hex);
+                hexstr((char (&)[8]) hex, gdt64[8]);
+                vga.display(24, 8, hex);
+                hexstr((char (&)[8]) hex, gdt64[9]);
+                vga.display(24, 0, hex);
+            }
+
+
+            for (int i = 0; i < 1000000; i++) {
+            }
             //asm("mov $0x10,%%ax; mov %%ax, %%ds; mov %%ax, %%es; mov %%ax, %%fs; mov %%ax, %%ss; " ::: "%ax");
-            asm("jmp %0" :: "r"((void *) elf64_header.e_entry));
+            asm("mov %0,%%eax; jmp jumpto64" :: "r"(elf64_header.e_entry));
         } else {
             vga.display(4, 0, "error: ");
             vga.display(4, 7, kernel.get_error());

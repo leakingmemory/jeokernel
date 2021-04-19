@@ -21,13 +21,55 @@ struct GDT {
         granularity = 0;
         base_high = 0;
     }
-    GDT(uint32_t base, uint32_t limit, uint8_t granularity, uint8_t type) {
-        limit_low = limit & 0xFFFF;
-        base_low = base & 0xFFFFFF;
-        type = type;
-        limit_high = (limit >> 16) & 0x0F;
-        granularity = granularity & 0x0F;
-        base_high = base >> 24;
+    GDT(uint32_t base, uint32_t limit, uint8_t granularity, uint8_t type) :
+        limit_low(limit & 0xFFFF),
+        base_low(base & 0xFFFFFF),
+        type(type),
+        limit_high((limit >> 16) & 0x0F),
+        granularity(granularity & 0x0F),
+        base_high(base >> 24)
+    {
+    }
+} __attribute__((__packed__));
+
+struct GDT_addr_64_in_32 {
+    uint32_t low;
+    uint32_t high;
+};
+
+union GDT_addr {
+    GDT_addr_64_in_32 addr64in32;
+    uint64_t addr;
+};
+static_assert(sizeof(GDT_addr) == 8);
+
+template <int n> struct GDT_table {
+    static_assert(n > 0);
+    GDT gdt[n];
+    uint16_t size;
+    GDT_addr ptr;
+
+    GDT_table() {
+        for (int i = 0; i < n; i++) {
+            gdt[i] = GDT();
+        }
+        size = sizeof(gdt) - 1;
+    }
+
+    GDT & operator [] (int i) {
+        if (i < 0) {
+            return gdt[0];
+        }
+        if (i < n) {
+            return gdt[i];
+        } else {
+            return gdt[n -1];
+        }
+    }
+
+    uint64_t pointer() {
+        ptr.addr = (uint64_t) this;
+        return (uint64_t) &size;
     }
 } __attribute__((__packed__));
 
