@@ -3,18 +3,28 @@
 //
 
 #include <stdint.h>
+#include <klogger.h>
+#include "textconsole/b8000logger.h"
+#include <pagealloc.h>
 
 extern "C" {
 
     void start_m64() {
-        uint8_t *whoop = (uint8_t *) 0xB8000;
-        whoop[0] = '-';
-        whoop[1] = '-';
-        whoop[2] = '-';
-        whoop[3] = '-';
-
-        while (1) {
+        /*
+         * Let's try to alloc a stack
+         */
+        uint64_t stack = (uint64_t) pagealloc(16384);
+        if (stack != 0) {
+            asm("hlt");
         }
     }
 
+    void init_m64() {
+        b8000 b8000logger{};
+        b8000logger << "Hello world!\n";
+
+        asm("hlt");
+        while (1) {
+        }
+    }
 }

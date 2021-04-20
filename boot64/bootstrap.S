@@ -19,3 +19,7 @@ bootstrap:
     mov $stackTop, %rsp
     call start_m64
 
+.globl secondboot
+secondboot:
+    call init_m64
+

@@ -106,4 +106,10 @@ struct pageentr {
 
 static_assert(sizeof(pageentr) == 8);
 
+pageentr &get_pml4t_pageentr64(pageentr (&pml4t)[512], uint64_t addr);
+pageentr &get_pdpt_pageentr64(pageentr (&pdpt_ref)[512], uint64_t addr);
+pageentr &get_pdt_pageentr64(pageentr (&pdt_ref)[512], uint64_t addr);
+pageentr &get_pt_pageentr64(pageentr (&pt_ref)[512], uint64_t addr);
+pageentr &get_pageentr64(pageentr (&pml4t)[512], uint64_t addr);
+
 #endif //JEOKERNEL_PAGETABLE_H
