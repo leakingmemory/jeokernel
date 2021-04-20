@@ -298,7 +298,7 @@ void boot_stage1(void *multiboot_header_addr) {
                 GDT_table<3> &init_gdt64 = *((GDT_table<3> *) 0x05000);
                 init_gdt64 = GDT_table<3>();
                 init_gdt64[0] = GDT(0, 0x1FFFF, 0, 0);
-                init_gdt64[1] = GDT(0, 0xF0000, 0xC, 0x9A);
+                init_gdt64[1] = GDT(0, 0xF0000, 0xA, 0x9A);
                 init_gdt64[2] = GDT(0, 0, 0, 0x92);
                 vga.display(19, 0, "GDT:");
                 uint32_t *gdt64 = (uint32_t *) &init_gdt64;
