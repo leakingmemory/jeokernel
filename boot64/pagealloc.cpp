@@ -9,7 +9,7 @@ uint64_t vpagealloc(uint64_t size) {
         size += 4096;
     }
     size /= 4096;
-    pageentr (&pml4t)[512] = *((pageentr (*)[512]) 0x1000);
+    pagetable &pml4t = get_pml4t();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     int i = 512;
@@ -48,6 +48,7 @@ uint64_t vpagealloc(uint64_t size) {
                                             if (addr == starting_addr) {
                                                 pe.os_virt_start = 1; // GRAB
                                             }
+                                            pe.present = 0;
                                         }
                                         return starting_addr;
                                     }
@@ -56,15 +57,15 @@ uint64_t vpagealloc(uint64_t size) {
                                 }
                             }
                         } else {
-                            starting_addr = 0;
+                            count = 0;
                         }
                     }
                 } else {
-                    starting_addr = 0;
+                    count = 0;
                 }
             }
         } else {
-            starting_addr = 0;
+            count = 0;
         }
     }
     return 0;
@@ -74,7 +75,7 @@ uint64_t ppagealloc(uint64_t size) {
         size += 4096;
     }
     size /= 4096;
-    pageentr (&pml4t)[512] = *((pageentr (*)[512]) 0x1000);
+    pagetable &pml4t = get_pml4t();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     for (int i = 0; i < 512; i++) {
@@ -113,7 +114,6 @@ uint64_t ppagealloc(uint64_t size) {
                                         if (size == 1) {
                                             pt[l].os_phys_avail = 0; // GRAB
                                             pt[l].os_phys_start = 1; // GRAB
-                                            pt[l].present = 0;
                                             return starting_addr;
                                         } else {
                                             count = 1;
@@ -145,18 +145,19 @@ void ppagefree(uint64_t addr) {
 }
 
 void *pagealloc(uint64_t size) {
-    pageentr (&pml4t)[512] = *((pageentr (*)[512]) 0x1000);
+    pagetable &pml4t = get_pml4t();
     uint64_t vpages = vpagealloc(size);
     if (vpages != 0) {
         uint64_t ppages = ppagealloc(size);
         if (ppages != 0) {
             for (uint64_t offset = 0; offset < size; offset += 4096) {
                 pageentr &pe = get_pageentr64(pml4t, vpages + offset);
-                uint64_t page_ppn = vpages + offset;
+                uint64_t page_ppn = ppages + offset;
                 page_ppn = page_ppn >> 12;
                 pe.page_ppn = page_ppn;
                 pe.present = 1;
                 pe.writeable = 1;
+                pe.execution_disabled = 1;
             }
 
             uint64_t cr3 = 0x1000;

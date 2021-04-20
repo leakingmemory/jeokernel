@@ -23,6 +23,24 @@ public:
     b8000();
     void lnbreak();
     b8000 & operator << (const char *str);
+
+    b8000 &print_u8(uint8_t bnum) {
+        uint8_t ch1 = bnum >> 4;
+        uint8_t ch2 = bnum & 15;
+        ch1 += ch1 < 10 ? '0' : 'A' - 10;
+        ch2 += ch2 < 10 ? '0' : 'A' - 10;
+        char str[3]{(char) ch1, (char) ch2, 0};
+        return *this << str;
+    }
+    b8000 &print_u16(uint16_t wnum) {
+        return (this->print_u8(wnum >> 8)).print_u8(wnum & 0xff);
+    }
+    b8000 &print_u32(uint32_t wnum) {
+        return (this->print_u16(wnum >> 16)).print_u16(wnum & 0xffff);
+    }
+    b8000 &print_u64(uint64_t qnum) {
+        return (this->print_u32(qnum >> 32)).print_u32(qnum & 0xFFFFFFFF);
+    }
 private:
     void cursor();
     void scroll();

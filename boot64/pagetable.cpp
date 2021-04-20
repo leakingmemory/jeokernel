@@ -4,3 +4,7 @@
 
 #include <stdint.h>
 #include <pagetable_impl.h>
+
+pagetable &get_pml4t() {
+    return *((pagetable *) 0x1000);
+}

@@ -5,9 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 
 enable_language(C ASM)
 
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32 -nostdinc -nostdlib -DIA32 ")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32 -nostdinc -nostdlib -DIA32 ")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32 -nostdinc -nostdlib -DIA32 ")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32 -nostdinc -nostdlib -DIA32 -DLOADER ")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32 -nostdinc -nostdlib -DIA32 -DLOADER ")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32 -nostdinc -nostdlib -DIA32 -DLOADER ")
 
 add_executable(jeokernel bootstrap.S stage1.cpp plainvga32.cpp plainvga32.h strs.cpp ../include/strs.h)
 

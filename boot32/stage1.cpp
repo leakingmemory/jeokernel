@@ -105,7 +105,7 @@ void boot_stage1(void *multiboot_header_addr) {
     vga.display(1, 67, hex);
     vga.display(1, 62, "efer#");
 
-    wrmsr(0xC0000080, efer | (1 << 8));
+    wrmsr(0xC0000080, efer | /*long mode enable:*/(1 << 8) | /*no exec bit enabl:*/(1 << 11));
 
     efer = rdmsr(0xC0000080);
     hexstr((char (&)[8]) hex, (uint32_t) efer);
@@ -118,6 +118,7 @@ void boot_stage1(void *multiboot_header_addr) {
     vga.display(2, 4, hex);
     vga.display(2, 0, "cr0#");
 
+    cr0 |= 1 << 16; // Write protected memory enabled
     cr0 |= 1 << 31; // Paging bit = 1
     asm("mov %0, %%cr0" :: "r"(cr0));
 

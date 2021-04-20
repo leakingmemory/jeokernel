@@ -112,4 +112,11 @@ pageentr &get_pdt_pageentr64(pageentr (&pdt_ref)[512], uint64_t addr);
 pageentr &get_pt_pageentr64(pageentr (&pt_ref)[512], uint64_t addr);
 pageentr &get_pageentr64(pageentr (&pml4t)[512], uint64_t addr);
 
+#ifndef LOADER
+
+typedef pageentr pagetable[512];
+
+pagetable &get_pml4t();
+
+#endif
 #endif //JEOKERNEL_PAGETABLE_H
