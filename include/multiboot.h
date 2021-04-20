@@ -56,8 +56,13 @@ uint32_t MultibootInfoHeaderPart::padded_size() const {
 }
 
 bool MultibootInfoHeaderPart::hasNext(MultibootInfoHeader &header) const {
+#ifdef IA32
     uint32_t size = (uint32_t) this;
     size -= (uint32_t) &header;
+#else
+    uint32_t size = (uint64_t) this;
+    size -= (uint64_t) &header;
+#endif
     size += this->padded_size();
     size += sizeof(MultibootInfoHeaderPart);
     if (size <= header.total_size) {
@@ -92,5 +97,7 @@ struct MultibootModuleInfo {
 MultibootModuleInfo &MultibootInfoHeaderPart::get_type3() const {
     return *((MultibootModuleInfo *) this);
 }
+
+const MultibootInfoHeader &get_multiboot2();
 
 #endif //JEOKERNEL_MULTIBOOT_H

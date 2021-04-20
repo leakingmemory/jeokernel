@@ -17,9 +17,12 @@ bootstrap:
     mov %ax,%gs
     mov %ax,%ss
     mov $stackTop, %rsp
+    push %rbx
     call start_m64
+    pop %rbx
+    hlt
 
 .globl secondboot
 secondboot:
     call init_m64
-
+    hlt

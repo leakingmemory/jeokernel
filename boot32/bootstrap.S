@@ -59,12 +59,10 @@ bootstrap:
 
 .globl jumpto64
 jumpto64:
-    mov $0xB8000,%ebx
-    movw $0x4545,(%ebx)
-    jmp $0x08,$in64bit
+    ljmp $0x08,$in64bit
     hlt
 
 .code64
 in64bit:
-    jmp %rax
-    hlt
+    jmp %rax;
+    hlt;

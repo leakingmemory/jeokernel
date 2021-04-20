@@ -6,10 +6,18 @@
 #include <klogger.h>
 #include "textconsole/b8000logger.h"
 #include <pagealloc.h>
+#include <multiboot.h>
+
+static const MultibootInfoHeader *multiboot_info = nullptr;
+
+const MultibootInfoHeader &get_multiboot2() {
+    return *multiboot_info;
+}
 
 extern "C" {
 
-    void start_m64() {
+    void start_m64(const MultibootInfoHeader *multibootInfoHeaderPtr) {
+        multiboot_info = multibootInfoHeaderPtr;
         /*
          * Let's try to alloc a stack
          */

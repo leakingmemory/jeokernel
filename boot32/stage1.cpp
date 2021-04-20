@@ -334,7 +334,7 @@ void boot_stage1(void *multiboot_header_addr) {
             }
 
             {
-                GDT_table<3> &init_gdt64 = *((GDT_table<3> *) 0x05000);
+                GDT_table<3> &init_gdt64 = *((GDT_table<3> *) 0x00500);
                 init_gdt64 = GDT_table<3>();
                 init_gdt64[0] = GDT(0, 0x1FFFF, 0, 0);
                 init_gdt64[1] = GDT(0, 0xF0000, 0xA, 0x9A);
@@ -368,7 +368,7 @@ void boot_stage1(void *multiboot_header_addr) {
             for (int i = 0; i < 1000000; i++) {
             }
             //asm("mov $0x10,%%ax; mov %%ax, %%ds; mov %%ax, %%es; mov %%ax, %%fs; mov %%ax, %%ss; " ::: "%ax");
-            asm("mov %0,%%eax; jmp jumpto64" :: "r"(elf64_header.e_entry));
+            asm("mov %0,%%eax; mov %1, %%ebx; jmp jumpto64" :: "r"(elf64_header.e_entry), "r"(multiboot_header_addr));
         } else {
             vga.display(4, 0, "error: ");
             vga.display(4, 7, kernel.get_error());
