@@ -82,9 +82,12 @@ struct pageentr {
     uint8_t write_through : 1;
     uint8_t cache_disabled : 1;
     uint8_t accessed : 1;
-    uint8_t ignored1 : 1;
+    uint8_t os_virt_avail : 1;
     uint8_t size : 1;
-    uint8_t ignored2 : 4;
+    uint8_t os_virt_start : 1;
+    uint8_t os_phys_avail : 1;
+    uint8_t os_phys_start : 1;
+    uint8_t ignored2 : 1;
     uint32_t page_ppn : 28;
     uint16_t reserved1 : 12;
     uint16_t ignored3 : 11;

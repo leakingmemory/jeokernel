@@ -55,12 +55,15 @@ void boot_stage1(void *multiboot_header_addr) {
     pml4t[0].page_ppn = 0x2000 / 4096;
     pml4t[0].writeable = 1;
     pml4t[0].present = 1;
+    pml4t[0].os_virt_avail = 1;
     pdpt[0].page_ppn = 0x3000 / 4096;
     pdpt[0].writeable = 1;
     pdpt[0].present = 1;
+    pdpt[0].os_virt_avail = 1;
     pdt[0].page_ppn = 0x4000 / 4096;
     pdt[0].writeable = 1;
     pdt[0].present = 1;
+    pdt[0].os_virt_avail = 1;
     /*
      * Make first 2MiB adressable,writable,execable
      */
@@ -68,6 +71,13 @@ void boot_stage1(void *multiboot_header_addr) {
         pt[i].page_ppn = i;
         pt[i].writeable = 1;
         pt[i].present = 1;
+    }
+    /*
+     * Make second half allocateable
+     */
+    for (uint16_t i = 256; i < 512; i++) {
+        pt[i].os_phys_avail = 1;
+        pt[i].os_virt_avail = 1;
     }
     vga.display(0, 0, "/");
 
@@ -124,6 +134,19 @@ void boot_stage1(void *multiboot_header_addr) {
     uint32_t kernel_elf_start;
     uint32_t kernel_elf_end;
     {
+        {
+            uint32_t phaddr = (uint32_t) multiboot_header_addr;
+            uint32_t end = phaddr + header.total_size;
+            phaddr &= ~4095;
+            while (phaddr < end) {
+                auto &pe = get_pageentr64(pml4t, phaddr);
+                pe.os_virt_avail = 0;
+                pe.os_virt_start = 1;
+                pe.os_phys_avail = 0;
+                pe.os_phys_start = 1;
+                phaddr += 4096;
+            }
+        }
         bool multiple_modules = false;
         int ln = 3;
         if (header.has_parts()) {
@@ -244,16 +267,27 @@ void boot_stage1(void *multiboot_header_addr) {
                     uint32_t vaddr_end = vaddr + ph.p_memsz;
                     if (ph.p_filesz == ph.p_memsz) {
                         if ((phaddr & 4095) != 0 || (vaddr & 4095) != 0) {
-                            vga.display(ln, 0, "error: kernel exec not page aligned");
-                            while (1) {
+                            uint32_t alignment_error = phaddr & 4095;
+                            if (alignment_error != (vaddr & 4095)) {
+                                vga.display(ln, 0, "error: kernel exec not page aligned");
+                                while (1) {
+                                    asm("hlt;");
+                                }
                             }
+                            phaddr -= alignment_error;
+                            vaddr -= alignment_error;
                         }
                         while (vaddr < vaddr_end) {
+                            pageentr &phys_pe = get_pageentr64(pml4t, phaddr);
+                            phys_pe.os_phys_avail = 0;
+                            phys_pe.os_phys_start = 1;
                             uint32_t page_ppn = phaddr / 4096;
                             vga.display(ln, 0, "pagemap ");
                             hexstr((char (&)[8]) hex, vaddr);
                             vga.display(ln, 8, hex);
                             pageentr &pe = get_pageentr64(pml4t, vaddr);
+                            pe.os_virt_avail = 0;
+                            pe.os_virt_start = 1;
                             hexstr((char (&)[8]) hex, pe.page_ppn);
                             vga.display(ln, 17, hex);
                             pe.page_ppn = page_ppn;
@@ -267,12 +301,17 @@ void boot_stage1(void *multiboot_header_addr) {
                         }
                     } else {
                         while (vaddr < vaddr_end) {
+                            pageentr &phys_pe = get_pageentr64(pml4t, phdata);
+                            phys_pe.os_phys_avail = 0;
+                            phys_pe.os_phys_start = 1;
                             uint32_t page_ppn = phdata / 4096;
                             vga.display(ln, 0, "pagzmap ");
                             hexstr((char (&)[8]) hex, vaddr);
                             vga.display(ln, 8, hex);
                             pageentr &pe = get_pageentr64(pml4t, vaddr);
                             hexstr((char (&)[8]) hex, pe.page_ppn);
+                            pe.os_virt_avail = 0;
+                            pe.os_virt_start = 1;
                             vga.display(ln, 17, hex);
                             pe.page_ppn = page_ppn;
                             vga.display(ln, 26, " -> ");
