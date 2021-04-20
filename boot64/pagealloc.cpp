@@ -138,10 +138,50 @@ uint64_t ppagealloc(uint64_t size) {
     return 0;
 }
 void vpagefree(uint64_t addr) {
-
+    pagetable &pml4t = get_pml4t();
+    addr = addr >> 12;
+    uint64_t first = addr;
+    while (true) {
+        uint64_t paddr = addr;
+        int l = paddr & 511;
+        paddr = paddr >> 9;
+        int k = paddr & 511;
+        paddr = paddr >> 9;
+        int j = paddr & 511;
+        paddr = paddr >> 9;
+        int i = paddr & 511;
+        pageentr &pe = pml4t[i].get_subtable()[j].get_subtable()[k].get_subtable()[l];
+        if (pe.os_virt_avail || (first != addr && pe.os_virt_start)) {
+            break;
+        }
+        pe.os_virt_avail = 1;
+        pe.os_virt_start = 0;
+        pe.present = 0;
+        ++addr;
+    }
 }
 void ppagefree(uint64_t addr) {
-
+    pagetable &pml4t = get_pml4t();
+    addr = addr >> 12;
+    uint64_t first = addr;
+    while (true) {
+        uint64_t paddr = addr;
+        int l = paddr & 511;
+        paddr = paddr >> 9;
+        int k = paddr & 511;
+        paddr = paddr >> 9;
+        int j = paddr & 511;
+        paddr = paddr >> 9;
+        int i = paddr & 511;
+        pageentr &pe = pml4t[i].get_subtable()[j].get_subtable()[k].get_subtable()[l];
+        if (pe.os_phys_avail || (first != addr && pe.os_phys_start)) {
+            break;
+        }
+        pe.os_phys_avail = 1;
+        pe.os_phys_start = 1;
+        pe.present = 0;
+        ++addr;
+    }
 }
 
 void *pagealloc(uint64_t size) {
@@ -173,5 +213,8 @@ void *pagealloc(uint64_t size) {
     return (void *) vpages;
 }
 void pagefree(void *vaddr) {
-
+    uint64_t vai = (uint64_t) vaddr;
+    uint64_t phys = get_phys_from_virt(vai);
+    vpagefree(vai);
+    ppagefree(phys);
 }

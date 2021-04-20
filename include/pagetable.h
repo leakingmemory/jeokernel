@@ -117,6 +117,7 @@ pageentr &get_pageentr64(pageentr (&pml4t)[512], uint64_t addr);
 typedef pageentr pagetable[512];
 
 pagetable &get_pml4t();
+uint64_t get_phys_from_virt(uint64_t vaddr);
 
 #endif
 #endif //JEOKERNEL_PAGETABLE_H
