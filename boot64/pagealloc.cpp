@@ -12,32 +12,28 @@ uint64_t vpagealloc(uint64_t size) {
     pageentr (&pml4t)[512] = *((pageentr (*)[512]) 0x1000);
     uint64_t starting_addr = 0;
     uint64_t count = 0;
-    for (int i = 0; i < 512; i++) {
+    int i = 512;
+    while (i > 0) {
+        --i;
         if (pml4t[i].os_virt_avail) {
             auto &pdpt = pml4t[i].get_subtable();
-            for (int j = 0; j < 512; j++) {
+            int j = 512;
+            while (j > 0) {
+                --j;
                 if (pdpt[j].os_virt_avail) {
                     auto &pdt = pdpt[j].get_subtable();
-                    for (int k = 0; k < 512; k++) {
+                    int k = 512;
+                    while (k > 0) {
+                        --k;
                         if (pdt[k].os_virt_avail) {
                             auto &pt = pdt[k].get_subtable();
-                            for (int l = 0; l < 512; l++) {
+                            int l = 512;
+                            while (l > 0) {
+                                --l;
                                 /* the page acquire check */
                                 if (pt[l].os_virt_avail) {
-                                    if (starting_addr != 0) {
-                                        count++;
-                                        if (count == size) {
-                                            uint64_t ending_addr = starting_addr + (count * 4096);
-                                            for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
-                                                pageentr &pe = get_pageentr64(pml4t, addr);
-                                                pe.os_virt_avail = 0; // GRAB
-                                                if (addr == starting_addr) {
-                                                    pe.os_virt_start = 1; // GRAB
-                                                }
-                                            }
-                                            return starting_addr;
-                                        }
-                                    } else {
+                                    count++;
+                                    if (count == size) {
                                         starting_addr = i << 9;
                                         starting_addr |= j;
                                         starting_addr = starting_addr << 9;
@@ -45,17 +41,18 @@ uint64_t vpagealloc(uint64_t size) {
                                         starting_addr = starting_addr << 9;
                                         starting_addr |= l;
                                         starting_addr = starting_addr << 12;
-                                        if (size == 1) {
-                                            pt[l].os_virt_avail = 0; // GRAB
-                                            pt[l].os_virt_start = 1; // GRAB
-                                            pt[l].present = 0;
-                                            return starting_addr;
-                                        } else {
-                                            count = 1;
+                                        uint64_t ending_addr = starting_addr + (count * 4096);
+                                        for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
+                                            pageentr &pe = get_pageentr64(pml4t, addr);
+                                            pe.os_virt_avail = 0; // GRAB
+                                            if (addr == starting_addr) {
+                                                pe.os_virt_start = 1; // GRAB
+                                            }
                                         }
+                                        return starting_addr;
                                     }
                                 } else {
-                                    starting_addr = 0;
+                                    count = 0;
                                 }
                             }
                         } else {
