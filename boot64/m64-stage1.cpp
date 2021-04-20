@@ -15,8 +15,12 @@ extern "C" {
          */
         uint64_t stack = (uint64_t) pagealloc(16384);
         if (stack != 0) {
-            asm("hlt");
+            stack += 16384 - 16;
+            asm("mov %0, %%rax; mov %%rax,%%rsp; jmp secondboot; hlt;" :: "r"(stack) : "%rax");
         }
+        b8000 b8000logger{};
+        b8000logger << "Error: Unable to install new stack!\n";
+        asm("hlt");
     }
 
     void init_m64() {
