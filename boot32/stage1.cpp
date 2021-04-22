@@ -44,12 +44,24 @@ void boot_stage1(void *multiboot_header_addr) {
     pageentr (&pdt)[512] = (pageentr (&)[512]) pdt_raw;
     uint64_t (&pt_raw)[512] = *((uint64_t (*)[512]) 0x4000);
     pageentr (&pt)[512] = (pageentr (&)[512]) pt_raw;
+    uint64_t (&pt_raw2)[512] = *((uint64_t (*)[512]) 0x5000);
+    pageentr (&pt2)[512] = (pageentr (&)[512]) pt_raw2;
+    uint64_t (&pt_raw3)[512] = *((uint64_t (*)[512]) 0x6000);
+    pageentr (&pt3)[512] = (pageentr (&)[512]) pt_raw3;
+    uint64_t (&pt_raw4)[512] = *((uint64_t (*)[512]) 0x7000);
+    pageentr (&pt4)[512] = (pageentr (&)[512]) pt_raw4;
+    uint64_t (&pt_raw5)[512] = *((uint64_t (*)[512]) 0x8000);
+    pageentr (&pt5)[512] = (pageentr (&)[512]) pt_raw5;
 
     for (uint16_t i = 0; i < 512; i++) {
         pml4t_raw[i] = 0;
         pdpt_raw[i] = 0;
         pdt_raw[i] = 0;
         pt_raw[i] = 0;
+        pt_raw2[i] = 0;
+        pt_raw3[i] = 0;
+        pt_raw4[i] = 0;
+        pt_raw5[i] = 0;
     }
 
     pml4t[0].page_ppn = 0x2000 / 4096;
@@ -64,13 +76,33 @@ void boot_stage1(void *multiboot_header_addr) {
     pdt[0].writeable = 1;
     pdt[0].present = 1;
     pdt[0].os_virt_avail = 1;
+    pdt[1].page_ppn = 0x5000 / 4096;
+    pdt[1].writeable = 1;
+    pdt[1].present = 1;
+    pdt[1].os_virt_avail = 1;
+    pdt[2].page_ppn = 0x6000 / 4096;
+    pdt[2].writeable = 1;
+    pdt[2].present = 1;
+    pdt[2].os_virt_avail = 1;
+    pdt[3].page_ppn = 0x7000 / 4096;
+    pdt[3].writeable = 1;
+    pdt[3].present = 1;
+    pdt[3].os_virt_avail = 1;
+    pdt[4].page_ppn = 0x8000 / 4096;
+    pdt[4].writeable = 1;
+    pdt[4].present = 1;
+    pdt[4].os_virt_avail = 1;
     /*
      * Make first 2MiB adressable,writable,execable
      */
-    for (uint16_t i = 0; i < 512; i++) {
+    for (uint16_t i = 1; i < 512; i++) {
         pt[i].page_ppn = i;
         pt[i].writeable = 1;
         pt[i].present = 1;
+        pt2[i].os_virt_avail = 1;
+        pt3[i].os_virt_avail = 1;
+        pt4[i].os_virt_avail = 1;
+        pt5[i].os_virt_avail = 1;
     }
     /*
      * Make second half allocateable
@@ -332,7 +364,7 @@ void boot_stage1(void *multiboot_header_addr) {
             }
 
             {
-                GDT_table<3> &init_gdt64 = *((GDT_table<3> *) 0x00500);
+                GDT_table<3> &init_gdt64 = *((GDT_table<3> *) 0x09000);
                 init_gdt64 = GDT_table<3>();
                 init_gdt64[0] = GDT(0, 0x1FFFF, 0, 0);
                 init_gdt64[1] = GDT(0, 0xF0000, 0xA, 0x9A);
