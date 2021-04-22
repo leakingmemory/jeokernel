@@ -3,7 +3,6 @@
 //
 
 #include <stdint.h>
-#include <klogger.h>
 #include "textconsole/b8000logger.h"
 #include <pagealloc.h>
 #include <multiboot.h>
