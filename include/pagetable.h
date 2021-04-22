@@ -86,7 +86,7 @@ struct pageentr {
     uint8_t size : 1;
     uint8_t os_virt_start : 1;
     uint8_t os_phys_avail : 1;
-    uint8_t os_phys_start : 1;
+    uint8_t os_zero : 1;
     uint8_t ignored2 : 1;
     uint32_t page_ppn : 28;
     uint16_t reserved1 : 12;

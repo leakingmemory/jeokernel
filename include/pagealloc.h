@@ -10,8 +10,8 @@
 
 uint64_t vpagealloc(uint64_t size);
 uint64_t ppagealloc(uint64_t size);
-void vpagefree(uint64_t addr);
-void ppagefree(uint64_t addr);
+uint64_t vpagefree(uint64_t addr);
+void ppagefree(uint64_t addr, uint64_t size);
 
 void *pagealloc(uint64_t size);
 void pagefree(void *vaddr);

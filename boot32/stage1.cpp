@@ -144,7 +144,6 @@ void boot_stage1(void *multiboot_header_addr) {
                 pe.os_virt_avail = 0;
                 pe.os_virt_start = 1;
                 pe.os_phys_avail = 0;
-                pe.os_phys_start = 1;
                 phaddr += 4096;
             }
         }
@@ -281,7 +280,6 @@ void boot_stage1(void *multiboot_header_addr) {
                         while (vaddr < vaddr_end) {
                             pageentr &phys_pe = get_pageentr64(pml4t, phaddr);
                             phys_pe.os_phys_avail = 0;
-                            phys_pe.os_phys_start = 1;
                             uint32_t page_ppn = phaddr / 4096;
                             vga.display(ln, 0, "pagemap ");
                             hexstr((char (&)[8]) hex, vaddr);
@@ -304,7 +302,6 @@ void boot_stage1(void *multiboot_header_addr) {
                         while (vaddr < vaddr_end) {
                             pageentr &phys_pe = get_pageentr64(pml4t, phdata);
                             phys_pe.os_phys_avail = 0;
-                            phys_pe.os_phys_start = 1;
                             uint32_t page_ppn = phdata / 4096;
                             vga.display(ln, 0, "pagzmap ");
                             hexstr((char (&)[8]) hex, vaddr);
