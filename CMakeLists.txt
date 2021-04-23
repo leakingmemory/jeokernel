@@ -8,6 +8,9 @@ enable_language(C ASM)
 add_subdirectory(boot32)
 add_subdirectory(boot64)
 
+enable_testing()
+add_subdirectory(test)
+
 #add_executable(jeokernel /dev/null)
 #target_link_libraries(jeokernel boot32)
 #target_link_libraries(jeokernel boot64)

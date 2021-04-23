@@ -22,4 +22,10 @@ static_assert(sizeof(int64_t) == 8);
 typedef unsigned long long int uint64_t;
 static_assert(sizeof(uint64_t) == 8);
 
+#ifdef IA32
+typedef uint32_t size_t;
+#else
+typedef unsigned long int size_t;
+#endif
+
 #endif //JEOKERNEL_STDINT_H

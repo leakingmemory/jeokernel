@@ -3,9 +3,10 @@
 //
 
 #include <stdint.h>
-#include "textconsole/b8000logger.h"
+#include "textconsole/b8000.h"
 #include <pagealloc.h>
 #include <multiboot.h>
+#include <core/malloc.h>
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 
@@ -31,8 +32,28 @@ extern "C" {
     }
 
     void init_m64() {
+        setup_simplest_malloc_impl();
+
         b8000 b8000logger{};
-        b8000logger << "Hello world!\n";
+        b8000logger << "Test malloc:\n";
+
+        char *str = (char *) malloc(64);
+        b8000logger << " mallocated\n";
+
+        str[0] = 'A';
+        str[1] = 'B';
+        str[2] = 'C';
+        str[3] = '\n';
+        str[4] = 0;
+        b8000logger << str;
+
+        free(str);
+
+        b8000logger << " freed\n";
+
+        destroy_simplest_malloc_impl();
+
+        b8000logger << " destroyed\n";
 
         asm("hlt");
         while (1) {

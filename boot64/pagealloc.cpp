@@ -159,6 +159,12 @@ uint64_t vpagefree(uint64_t addr) {
     }
     return size << 12;
 }
+
+void reload_pagetables() {
+    uint64_t cr3 = 0x1000;
+    asm("mov %0,%%cr3; " :: "r"(cr3));
+}
+
 void ppagefree(uint64_t addr, uint64_t size) {
     pagetable &pml4t = get_pml4t();
     addr = addr >> 12;
@@ -201,14 +207,12 @@ void *pagealloc(uint64_t size) {
                 pe.execution_disabled = 1;
             }
 
-            uint64_t cr3 = 0x1000;
-            asm("mov %0,%%cr3; " :: "r"(cr3));
+            reload_pagetables();
         } else {
             vpagefree(vpages);
             vpages = 0;
 
-            uint64_t cr3 = 0x1000;
-            asm("mov %0,%%cr3; " :: "r"(cr3));
+            reload_pagetables();
         }
     }
     return (void *) vpages;
@@ -218,4 +222,5 @@ void pagefree(void *vaddr) {
     uint64_t phys = get_phys_from_virt(vai);
     uint64_t size = vpagefree(vai);
     ppagefree(phys, size);
+    reload_pagetables();
 }
