@@ -8,7 +8,6 @@ static KLogger *klogger = nullptr;
 
 void set_klogger(KLogger *n_klogger) {
     klogger = n_klogger;
-    *n_klogger << "Received\n";
 }
 
 KLogger &get_klogger() {
