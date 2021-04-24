@@ -130,10 +130,10 @@ void boot_stage1(void *multiboot_header_addr) {
             uint32_t end = phaddr + header.total_size;
             phaddr &= ~4095;
             while (phaddr < end) {
-                auto &pe = get_pageentr64(pml4t, phaddr);
-                pe.os_virt_avail = 0;
-                pe.os_virt_start = 1;
-                pe.os_phys_avail = 0;
+                auto *pe = get_pageentr64(pml4t, phaddr);
+                pe->os_virt_avail = 0;
+                pe->os_virt_start = 1;
+                pe->os_phys_avail = 0;
                 phaddr += 4096;
                 vga.display(0, 0, "#");
             }
@@ -143,7 +143,7 @@ void boot_stage1(void *multiboot_header_addr) {
         vga.display(0, 0, "!");
         if (header.has_parts()) {
             vga.display(0, 0, "-");
-            MultibootInfoHeaderPart *part = &header.first_part();
+            const MultibootInfoHeaderPart *part = header.first_part();
             bool hasNext = part->hasNext(header);
             vga.display(0, 0, "\\");
             do {
@@ -155,7 +155,7 @@ void boot_stage1(void *multiboot_header_addr) {
                 hexstr((char (&)[8]) *hex, part->type);
                 vga.display(ln, 18, hex);
                 if (part->type == 3) {
-                    MultibootModuleInfo &moduleInfo = part->get_type3();
+                    const MultibootModuleInfo &moduleInfo = part->get_type3();
                     hexstr((char (&)[8]) *hex, moduleInfo.mod_start);
                     vga.display(ln, 27, hex);
                     hexstr((char (&)[8]) *hex, moduleInfo.mod_end);
@@ -170,7 +170,7 @@ void boot_stage1(void *multiboot_header_addr) {
                     }
                 }
                 if (hasNext) {
-                    part = &part->next();
+                    part = part->next();
                     hasNext = part->hasNext(header);
                 }
                 ln++;
@@ -206,8 +206,8 @@ void boot_stage1(void *multiboot_header_addr) {
          */
         for (uint32_t addr = (uint32_t) kernel_elf_start; addr < ((uint32_t) kernel_elf_end); addr += 4096) {
             uint32_t paddr = addr & ~4095;
-            pageentr &pe = get_pageentr64(pml4t, paddr);
-            pe.os_phys_avail = 0;
+            pageentr *pe = get_pageentr64(pml4t, paddr);
+            pe->os_phys_avail = 0;
         }
 
         ELF kernel{(void *) kernel_elf_start, (void *) kernel_elf_end};
@@ -284,20 +284,20 @@ void boot_stage1(void *multiboot_header_addr) {
                             vaddr -= alignment_error;
                         }
                         while (vaddr < vaddr_end) {
-                            pageentr &phys_pe = get_pageentr64(pml4t, phaddr);
-                            phys_pe.os_phys_avail = 0;
+                            pageentr *phys_pe = get_pageentr64(pml4t, phaddr);
+                            phys_pe->os_phys_avail = 0;
                             uint32_t page_ppn = phaddr / 4096;
                             vga.display(ln, 0, "pagemap ");
                             hexstr((char (&)[8]) *hex, vaddr);
                             vga.display(ln, 8, hex);
-                            pageentr &pe = get_pageentr64(pml4t, vaddr);
-                            pe.os_virt_avail = 0;
-                            pe.os_virt_start = 1;
-                            hexstr((char (&)[8]) *hex, pe.page_ppn);
+                            pageentr *pe = get_pageentr64(pml4t, vaddr);
+                            pe->os_virt_avail = 0;
+                            pe->os_virt_start = 1;
+                            hexstr((char (&)[8]) *hex, pe->page_ppn);
                             vga.display(ln, 17, hex);
-                            pe.page_ppn = page_ppn;
+                            pe->page_ppn = page_ppn;
                             vga.display(ln, 26, " -> ");
-                            hexstr((char (&)[8]) *hex, pe.page_ppn);
+                            hexstr((char (&)[8]) *hex, pe->page_ppn);
                             vga.display(ln, 30, hex);
                             ln++;
 
@@ -306,20 +306,20 @@ void boot_stage1(void *multiboot_header_addr) {
                         }
                     } else {
                         while (vaddr < vaddr_end) {
-                            pageentr &phys_pe = get_pageentr64(pml4t, phdata);
-                            phys_pe.os_phys_avail = 0;
+                            pageentr *phys_pe = get_pageentr64(pml4t, phdata);
+                            phys_pe->os_phys_avail = 0;
                             uint32_t page_ppn = phdata / 4096;
                             vga.display(ln, 0, "pagzmap ");
                             hexstr((char (&)[8]) *hex, vaddr);
                             vga.display(ln, 8, hex);
-                            pageentr &pe = get_pageentr64(pml4t, vaddr);
-                            hexstr((char (&)[8]) *hex, pe.page_ppn);
-                            pe.os_virt_avail = 0;
-                            pe.os_virt_start = 1;
+                            pageentr *pe = get_pageentr64(pml4t, vaddr);
+                            hexstr((char (&)[8]) *hex, pe->page_ppn);
+                            pe->os_virt_avail = 0;
+                            pe->os_virt_start = 1;
                             vga.display(ln, 17, hex);
-                            pe.page_ppn = page_ppn;
+                            pe->page_ppn = page_ppn;
                             vga.display(ln, 26, " -> ");
-                            hexstr((char (&)[8]) *hex, pe.page_ppn);
+                            hexstr((char (&)[8]) *hex, pe->page_ppn);
                             vga.display(ln, 30, hex);
                             ln++;
 

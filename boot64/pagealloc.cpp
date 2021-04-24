@@ -15,17 +15,17 @@ uint64_t vpagealloc(uint64_t size) {
     int i = 512;
     while (i > 0) {
         --i;
-        if (pml4t[i].os_virt_avail) {
+        if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
             int j = 512;
             while (j > 0) {
                 --j;
-                if (pdpt[j].os_virt_avail) {
+                if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
                     int k = 512;
                     while (k > 0) {
                         --k;
-                        if (pdt[k].os_virt_avail) {
+                        if (pdt[k].present) {
                             auto &pt = pdt[k].get_subtable();
                             int l = 512;
                             while (l > 0) {
@@ -43,12 +43,12 @@ uint64_t vpagealloc(uint64_t size) {
                                         starting_addr = starting_addr << 12;
                                         uint64_t ending_addr = starting_addr + (count * 4096);
                                         for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
-                                            pageentr &pe = get_pageentr64(pml4t, addr);
-                                            pe.os_virt_avail = 0; // GRAB
+                                            pageentr *pe = get_pageentr64(pml4t, addr);
+                                            pe->os_virt_avail = 0; // GRAB
                                             if (addr == starting_addr) {
-                                                pe.os_virt_start = 1; // GRAB
+                                                pe->os_virt_start = 1; // GRAB
                                             }
-                                            pe.present = 0;
+                                            pe->present = 0;
                                         }
                                         return starting_addr;
                                     }
@@ -79,13 +79,13 @@ uint64_t ppagealloc(uint64_t size) {
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     for (int i = 0; i < 512; i++) {
-        if (pml4t[i].os_virt_avail) {
+        if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
             for (int j = 0; j < 512; j++) {
-                if (pdpt[j].os_virt_avail) {
+                if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
                     for (int k = 0; k < 512; k++) {
-                        if (pdt[k].os_virt_avail) {
+                        if (pdt[k].present) {
                             auto &pt = pdt[k].get_subtable();
                             for (int l = 0; l < 512; l++) {
                                 /* the page acquire check */
@@ -95,8 +95,8 @@ uint64_t ppagealloc(uint64_t size) {
                                         if (count == size) {
                                             uint64_t ending_addr = starting_addr + (count * 4096);
                                             for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
-                                                pageentr &pe = get_pageentr64(pml4t, addr);
-                                                pe.os_phys_avail = 0; // GRAB
+                                                pageentr *pe = get_pageentr64(pml4t, addr);
+                                                pe->os_phys_avail = 0; // GRAB
                                             }
                                             return starting_addr;
                                         }
@@ -147,7 +147,18 @@ uint64_t vpagefree(uint64_t addr) {
         int j = paddr & 511;
         paddr = paddr >> 9;
         int i = paddr & 511;
-        pageentr &pe = pml4t[i].get_subtable()[j].get_subtable()[k].get_subtable()[l];
+        if (pml4t[i].present == 0) {
+            break;
+        }
+        auto &pdpt = pml4t[i].get_subtable();
+        if (pdpt[j].present == 0) {
+            break;
+        }
+        auto &pdt = pdpt[j].get_subtable();
+        if (pdt[k].present == 0) {
+            break;
+        }
+        pageentr &pe = pdt[k].get_subtable()[l];
         if (pe.os_virt_avail || (first != addr && pe.os_virt_start)) {
             break;
         }
@@ -198,13 +209,13 @@ void *pagealloc(uint64_t size) {
         uint64_t ppages = ppagealloc(size);
         if (ppages != 0) {
             for (uint64_t offset = 0; offset < size; offset += 4096) {
-                pageentr &pe = get_pageentr64(pml4t, vpages + offset);
+                pageentr *pe = get_pageentr64(pml4t, vpages + offset);
                 uint64_t page_ppn = ppages + offset;
                 page_ppn = page_ppn >> 12;
-                pe.page_ppn = page_ppn;
-                pe.present = 1;
-                pe.writeable = 1;
-                pe.execution_disabled = 1;
+                pe->page_ppn = page_ppn;
+                pe->present = 1;
+                pe->writeable = 1;
+                pe->execution_disabled = 1;
             }
 
             reload_pagetables();

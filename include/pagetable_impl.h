@@ -47,12 +47,21 @@ pageentr &get_pt_pageentr64(pageentr (&pt_ref)[512], uint64_t addr) {
     return pt_ref[vector];
 }
 
-pageentr &get_pageentr64(pageentr (&pml4t)[512], uint64_t addr) {
+pageentr *get_pageentr64(pageentr (&pml4t)[512], uint64_t addr) {
     pageentr &pml4t_pe = get_pml4t_pageentr64(pml4t, addr);
+    if (pml4t_pe.present == 0) {
+        return nullptr;
+    }
     pageentr &pdpt = get_pdpt_pageentr64(pml4t_pe.get_subtable(), addr);
+    if (pdpt.present == 0) {
+        return nullptr;
+    }
     pageentr &pdt = get_pdt_pageentr64(pdpt.get_subtable(), addr);
+    if (pdt.present == 0) {
+        return nullptr;
+    }
     pageentr &pt = get_pt_pageentr64(pdt.get_subtable(), addr);
-    return pt;
+    return &pt;
 }
 
 #endif //JEOKERNEL_PAGETABLE_IMPL_H

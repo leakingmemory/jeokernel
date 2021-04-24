@@ -26,8 +26,8 @@ extern "C" {
             stack += 16384 - 16;
             asm("mov %0, %%rax; mov %%rax,%%rsp; jmp secondboot; hlt;" :: "r"(stack) : "%rax");
         }
-        b8000 b8000logger{};
-        b8000logger << "Error: Unable to install new stack!\n";
+        b8000 b8000Logger{};
+        b8000Logger << "Error: Unable to install new stack!\n";
         asm("hlt");
     }
 
@@ -36,12 +36,65 @@ extern "C" {
 
         b8000logger *b8000Logger = new b8000logger();
 
-        *b8000Logger << "Sizeof pointer: ";
-        b8000Logger->print_u16((uint16_t) sizeof(&b8000Logger));
-        *b8000Logger << "\n";
         set_klogger(b8000Logger);
 
-        get_klogger() << "Kernel logger setup\n";
+        {
+            const auto &multiboot2 = get_multiboot2();
+            get_klogger() << "Multiboot2 info at " << ((uint64_t) &multiboot2) << "\n";
+            if (!multiboot2.has_parts()) {
+                get_klogger() << "Error: Multiboot2 structure has no information\n";
+                while (1) {
+                    asm("hlt");
+                }
+            }
+            uint64_t phys_mem_watermark = 0x200000;
+            {
+                uint64_t phys_mem_added = 0;
+                const auto *part = multiboot2.first_part();
+                do {
+                    if (part->type == 6) {
+                        get_klogger() << "Memory map:\n";
+                        auto &pml4t = get_pml4t();
+                        const auto &memoryMap = part->get_type6();
+                        int num = memoryMap.get_num_entries();
+                        uint64_t phys_mem_watermark_next = phys_mem_watermark;
+                        for (int i = 0; i < num; i++) {
+                            const auto &entr = memoryMap.get_entry(i);
+                            get_klogger() << " - Region " << entr.base_addr << " (" << entr.length << ") type "
+                                          << entr.type << "\n";
+                            if (entr.type == 1) {
+                                if ((entr.base_addr + entr.length) > phys_mem_watermark) {
+                                    uint64_t start = entr.base_addr >= phys_mem_watermark ? entr.base_addr : phys_mem_watermark;
+                                    uint64_t last = start + 1;
+                                    get_klogger() << "   - Added " << start << " - ";
+                                    for (uint64_t addr = start; addr < (entr.base_addr + entr.length); addr += 0x1000) {
+                                        pageentr *pe = get_pageentr64(pml4t, addr);
+                                        if (pe == nullptr) {
+                                            break;
+                                        }
+                                        pe->os_phys_avail = 1;
+                                        last = addr + 0x1000;
+                                        if (last > phys_mem_watermark_next) {
+                                            phys_mem_watermark_next = last;
+                                        }
+                                        phys_mem_added += 0x1000;
+                                    }
+                                    --last;
+                                    get_klogger() << last << "\n";
+                                }
+                            }
+                        }
+                        phys_mem_watermark = phys_mem_watermark_next;
+                        get_klogger() << "Added " << phys_mem_added << " bytes, watermark " << phys_mem_watermark << "\n";
+                    }
+                    if (part->hasNext(multiboot2)) {
+                        part = part->next();
+                    } else {
+                        part = nullptr;
+                    }
+                } while (part != nullptr);
+            }
+        }
 
         while (1) {
             asm("hlt");

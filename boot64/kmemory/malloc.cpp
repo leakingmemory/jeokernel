@@ -65,22 +65,22 @@ void setup_simplest_malloc_impl() {
     void *memoryAllocatorP = (MemoryAllocator *) vpagealloc(0x41000);
     {
         {
-            pageentr &pe = get_pageentr64(get_pml4t(), (uint64_t) memoryAllocatorP);
+            pageentr *pe = get_pageentr64(get_pml4t(), (uint64_t) memoryAllocatorP);
             uint64_t ppage = ppagealloc(4096);
-            pe.page_ppn = ppage >> 12;
-            pe.writeable = 1;
-            pe.execution_disabled = 1;
-            pe.accessed = 0;
-            pe.present = 1;
+            pe->page_ppn = ppage >> 12;
+            pe->writeable = 1;
+            pe->execution_disabled = 1;
+            pe->accessed = 0;
+            pe->present = 1;
         }
         {
-            pageentr &pe = get_pageentr64(get_pml4t(), ((uint64_t) memoryAllocatorP) + 4096);
+            pageentr *pe = get_pageentr64(get_pml4t(), ((uint64_t) memoryAllocatorP) + 4096);
             uint64_t ppage = ppagealloc(4096);
-            pe.page_ppn = ppage >> 12;
-            pe.writeable = 1;
-            pe.execution_disabled = 1;
-            pe.accessed = 0;
-            pe.present = 1;
+            pe->page_ppn = ppage >> 12;
+            pe->writeable = 1;
+            pe->execution_disabled = 1;
+            pe->accessed = 0;
+            pe->present = 1;
         }
     }
     reload_pagetables();
