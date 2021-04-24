@@ -200,6 +200,16 @@ void boot_stage1(void *multiboot_header_addr) {
         hexstr((char (&)[8]) *hex, kernel_elf_end);
         vga.display(3, 27, hex);
 
+        /*
+         * Allocate the kernel binary data so that the next stage can read headers without
+         * being worried anybody have overwritten them.
+         */
+        for (uint32_t addr = (uint32_t) kernel_elf_start; addr < ((uint32_t) kernel_elf_end); addr += 4096) {
+            uint32_t paddr = addr & ~4095;
+            pageentr &pe = get_pageentr64(pml4t, paddr);
+            pe.os_phys_avail = 0;
+        }
+
         ELF kernel{(void *) kernel_elf_start, (void *) kernel_elf_end};
         if (kernel.is_valid()) {
             const auto &elf64_header = kernel.get_elf64_header();
