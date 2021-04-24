@@ -1,3 +1,5 @@
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
+
 cmake_minimum_required(VERSION 3.16)
 project(jeokernel)
 
@@ -8,8 +10,10 @@ enable_language(C ASM)
 add_subdirectory(boot32)
 add_subdirectory(boot64)
 
-enable_testing()
-add_subdirectory(test)
+if (NOT DEFINED ENV{DISABLE_TESTS})
+        enable_testing()
+        add_subdirectory(test)
+endif (NOT DEFINED ENV{DISABLE_TESTS})
 
 #add_executable(jeokernel /dev/null)
 #target_link_libraries(jeokernel boot32)

@@ -1,6 +1,6 @@
-set(CMAKE_CXX_STANDARD 20)
-
 include(../toolchain.cmake)
+
+set(CMAKE_CXX_STANDARD 20)
 
 add_library(kmemory STATIC mallocator.cpp mallocator.h malloc.cpp)
 

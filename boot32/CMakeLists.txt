@@ -1,3 +1,5 @@
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
+
 include(toolchain.cmake)
 
 cmake_minimum_required(VERSION 3.16)

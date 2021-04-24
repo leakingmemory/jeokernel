@@ -1,7 +1,6 @@
-include(toolchain.cmake)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
-cmake_minimum_required(VERSION 3.16)
-project(jeokernel)
+include(toolchain.cmake)
 
 set(CMAKE_CXX_STANDARD 20)
 
