@@ -1,5 +1,11 @@
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
+if(DEFINED ENV{USE_CLANG})
+        set(USE_CLANG true)
+        set(CMAKE_C_COMPILER clang-11)
+        set(CMAKE_CXX_COMPILER clang++-11)
+endif(DEFINED ENV{USE_CLANG})
+
 cmake_minimum_required(VERSION 3.16)
 project(jeokernel)
 

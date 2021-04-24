@@ -1,9 +1,11 @@
 
-#set(USE_CLANG true)
+if(DEFINED ENV{USE_CLANG})
+    set(USE_CLANG true)
+endif(DEFINED ENV{USE_CLANG})
 
 if(USE_CLANG)
-    set(CMAKE_C_COMPILER /usr/bin/clang-11)
-    set(CMAKE_CXX_COMPILER /usr/bin/clang++-11)
+    #set(CMAKE_C_COMPILER /usr/bin/clang-11)
+    #set(CMAKE_CXX_COMPILER /usr/bin/clang++-11)
     #set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -target i686-pc-none-elf ")
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m32 -march=i686 -nostdinc -nostdlib -ffreestanding -DIA32 -DLOADER ")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32 -target i686-pc-none-elf -nostdinc -nostdlib -ffreestanding -DCLANG -DIA32 -DLOADER ")
