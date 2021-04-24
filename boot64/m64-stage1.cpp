@@ -48,6 +48,7 @@ extern "C" {
                 }
             }
             uint64_t phys_mem_watermark = 0x200000;
+            uint64_t end_phys_addr = 0x200000;
             {
                 uint64_t phys_mem_added = 0;
                 const auto *part = multiboot2.first_part();
@@ -63,7 +64,11 @@ extern "C" {
                             get_klogger() << " - Region " << entr.base_addr << " (" << entr.length << ") type "
                                           << entr.type << "\n";
                             if (entr.type == 1) {
-                                if ((entr.base_addr + entr.length) > phys_mem_watermark) {
+                                uint64_t region_end = entr.base_addr + entr.length;
+                                if (region_end > end_phys_addr) {
+                                    end_phys_addr = region_end;
+                                }
+                                if (region_end > phys_mem_watermark) {
                                     uint64_t start = entr.base_addr >= phys_mem_watermark ? entr.base_addr : phys_mem_watermark;
                                     uint64_t last = start + 1;
                                     get_klogger() << "   - Added " << start << " - ";
@@ -85,7 +90,7 @@ extern "C" {
                             }
                         }
                         phys_mem_watermark = phys_mem_watermark_next;
-                        get_klogger() << "Added " << phys_mem_added << " bytes, watermark " << phys_mem_watermark << "\n";
+                        get_klogger() << "Added " << phys_mem_added << " bytes, watermark " << phys_mem_watermark << ", end " << end_phys_addr << "\n";
                     }
                     if (part->hasNext(multiboot2)) {
                         part = part->next();
