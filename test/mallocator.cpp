@@ -39,7 +39,7 @@ std::string hex64(uint64_t num) {
 
 int main() {
     SmallUnitMemoryArea memoryArea{};
-    static_assert(sizeof(SmallUnitMemoryArea) == 0x41000);
+    //static_assert(sizeof(SmallUnitMemoryArea) == 0x41000);
     std::cout << "Memory area " << hex64((uint64_t) &memoryArea) << "-" << hex64(((uint64_t) &memoryArea) + sizeof(memoryArea) - 1) << std::endl;
     uint64_t size = 16;
     void *ptrs[15];

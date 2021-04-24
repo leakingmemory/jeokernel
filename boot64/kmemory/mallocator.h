@@ -143,18 +143,7 @@ static_assert(sizeof(SmallUnitMemoryAllocTable) == 4096);
 
 struct SmallUnitMemoryArea {
     SmallUnitMemoryAllocTable alloctable;
-    small_alloc_unit units[4096 * 4];
-};
-
-struct PhysicalMapTable {
-    uint8_t mapbits[(4096 * 4) / 8];
-};
-
-static_assert(sizeof(PhysicalMapTable) == 2048);
-
-struct MemoryAllocatorState {
-    SmallUnitMemoryAllocTable alloctable;
-    PhysicalMapTable physicalMapTable;
+    //small_alloc_unit units[4096 * 4];
 };
 
 /*

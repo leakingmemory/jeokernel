@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <strings.h>
 #include <string.h>
+#include <core/malloc.h>
 
 /*
  * This is just stubs for the compiler libraries to link. Currently the code
@@ -55,4 +56,37 @@ extern "C" {
     int dl_iterate_phdr() {
         return 0;
     }
+
+#ifndef CLANG
+    void *operator new (size_t size)
+    {
+    return malloc (size);
+    }
+
+    void *operator new [] (size_t size)
+    {
+    return malloc (size);
+    }
+
+    void operator delete (void *p)
+    {
+        if (p) free (p);
+    }
+
+    void operator delete [] (void *p)
+    {
+        if (p) free (p);
+    }
+
+    void operator delete (void *p, size_t)
+    {
+        if (p) free (p);
+    }
+#else
+
+    void *operator new(size_t size, void*ref) {
+        return ref;
+    }
+
+#endif
 }

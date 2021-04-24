@@ -3,7 +3,7 @@
 //
 
 #include <stdint.h>
-#include "textconsole/b8000.h"
+#include "textconsole/b8000logger.h"
 #include <pagealloc.h>
 #include <multiboot.h>
 #include <core/malloc.h>
@@ -34,29 +34,17 @@ extern "C" {
     void init_m64() {
         setup_simplest_malloc_impl();
 
-        b8000 b8000logger{};
-        b8000logger << "Test malloc:\n";
+        b8000logger *b8000Logger = new b8000logger();
 
-        char *str = (char *) malloc(64);
-        b8000logger << " mallocated\n";
+        *b8000Logger << "Sizeof pointer: ";
+        b8000Logger->print_u16((uint16_t) sizeof(&b8000Logger));
+        *b8000Logger << "\n";
+        set_klogger(b8000Logger);
 
-        str[0] = 'A';
-        str[1] = 'B';
-        str[2] = 'C';
-        str[3] = '\n';
-        str[4] = 0;
-        b8000logger << str;
+        get_klogger() << "Kernel logger setup\n";
 
-        free(str);
-
-        b8000logger << " freed\n";
-
-        destroy_simplest_malloc_impl();
-
-        b8000logger << " destroyed\n";
-
-        asm("hlt");
         while (1) {
+            asm("hlt");
         }
     }
 }

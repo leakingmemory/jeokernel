@@ -6,7 +6,7 @@ SECTIONS
 	. = 1M;
 
   	/* text section */
-	.text BLOCK(4K) : ALIGN(4K)
+	.text ALIGN(4K) : SUBALIGN(8)
 	{
 	    __text_start = .;
 		*(.multiboot)
@@ -14,13 +14,13 @@ SECTIONS
 	}
 
 	/* read only data section */
-	.rodata BLOCK(4K) : ALIGN(4K)
+	.rodata ALIGN(4K) : SUBALIGN(8)
 	{
 		*(.rodata)
 	}
 
 	/* data section */
-	.data BLOCK(4K) : ALIGN(4K)
+	.data ALIGN(4K) : SUBALIGN(8)
 	{
 	    __data_start = .;
 		*(.data);
@@ -28,7 +28,7 @@ SECTIONS
 	}
 
 	/* bss section */
-	.bss BLOCK(4K) : ALIGN(4K)
+	.bss ALIGN(4K) : SUBALIGN(8)
 	{
 		*(COMMON)
 		*(.bss)

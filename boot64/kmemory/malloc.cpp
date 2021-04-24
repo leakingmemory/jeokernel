@@ -62,7 +62,7 @@ void setup_simplest_malloc_impl() {
     wild_malloc_struct.free = wild_free;
     wild_malloc_struct.sizeof_alloc = wild_sizeof_alloc;
     impl = &wild_malloc_struct;
-    void *memoryAllocatorP = (MemoryAllocator *) vpagealloc(sizeof(*memoryAllocator));
+    void *memoryAllocatorP = (MemoryAllocator *) vpagealloc(0x41000);
     {
         {
             pageentr &pe = get_pageentr64(get_pml4t(), (uint64_t) memoryAllocatorP);

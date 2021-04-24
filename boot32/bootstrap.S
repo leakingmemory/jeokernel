@@ -48,10 +48,12 @@ stackBottom:
 
 stackTop:
 
+.globl _start
 .globl bootstrap
 
+_start:
 bootstrap:
-    mov $stackTop, %esp
+    mov $0xa0000, %esp
     push %ebx
     call boot_stage1
     pop %ebx
@@ -64,5 +66,5 @@ jumpto64:
 
 .code64
 in64bit:
-    jmp %rax;
+    .short 0xe0ff // jmp %rax
     hlt;

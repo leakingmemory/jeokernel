@@ -8,7 +8,9 @@ stackBottom:
 stackTop:
 
 .globl bootstrap
+.globl _start
 
+_start:
 bootstrap:
     mov $0x10,%ax
     mov %ax,%ds

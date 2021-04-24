@@ -7,8 +7,8 @@
 
 #include <stdint.h>
 
-void *operator new(long unsigned int size, void*ref) {
+inline void *operator new(size_t size, void*ref) {
     return ref;
-}
+};
 
 #endif //JEOKERNEL_CORE_NEW_H

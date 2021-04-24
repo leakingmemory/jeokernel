@@ -3,8 +3,8 @@ project(jeokernel)
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -march=x86-64 -nostdinc -nostdlib")
+include(../toolchain.cmake)
 
-add_library(textconsole STATIC b8000.cpp b8000.h)
+add_library(textconsole STATIC b8000.cpp b8000.h b8000logger.cpp b8000logger.h)
 
 target_include_directories(textconsole PRIVATE ../../include)

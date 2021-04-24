@@ -26,15 +26,19 @@ void boot_stage1(void *multiboot_header_addr) {
     MultibootInfoHeader &header = *((MultibootInfoHeader *) multiboot_header_addr);
     plainvga32 vga;
     vga.display(0, 0, "| JEO Kernel 1.0 - Stage 1 boot");
-    char hex[9]{0, 0, 0, 0, 0, 0, 0, 0, 0};
-    hexstr((char (&)[8]) hex, (uint32_t) __text_start);
+    char *hex = (char *) 0x0500;
+    hexstr((char (&)[8]) *hex, (uint32_t) __text_start);
     vga.display(1, 0, hex);
-    hexstr((char (&)[8]) hex, (uint32_t) __data_start);
+    hexstr((char (&)[8]) *hex, (uint32_t) __data_start);
     vga.display(1, 9, hex);
-    hexstr((char (&)[8]) hex, (uint32_t) __data_end);
+    hexstr((char (&)[8]) *hex, (uint32_t) __data_end);
     vga.display(1, 18, hex);
-    hexstr((char (&)[8]) hex, (uint32_t) __end);
+    hexstr((char (&)[8]) *hex, (uint32_t) __end);
     vga.display(1, 27, hex);
+    uint32_t esp;
+    asm("mov %%esp,%0" : "=r"(esp));
+    hexstr((char (&)[8]) *hex, (uint32_t) esp);
+    vga.display(1, 36, hex);
 
     uint64_t (&pml4t_raw)[512] = *((uint64_t (*)[512]) 0x1000);
     pageentr (&pml4t)[512] = (pageentr (&)[512]) pml4t_raw;
@@ -113,53 +117,7 @@ void boot_stage1(void *multiboot_header_addr) {
     }
     vga.display(0, 0, "/");
 
-
-    uint32_t cr3 = 0x1000;
-    asm("mov %0,%%cr3; " :: "r"(cr3));
-    asm("mov %%cr3, %0; " : "=r"(cr3));
-    hexstr((char (&)[8]) hex, (uint32_t) cr3);
-    vga.display(1, 40, hex);
-    vga.display(1, 36, "cr3=");
-    uint32_t cr4;
-    asm("mov %%cr4, %0; " : "=r"(cr4));
-    hexstr((char (&)[8]) hex, (uint32_t) cr4);
-    vga.display(1, 53, hex);
-    vga.display(1, 49, "cr4#");
-    cr4 |= 1 << 5;
-    asm("mov %0, %%cr4; " :: "r"(cr4));
-    asm("mov %%cr4, %0; " : "=r"(cr4));
-    hexstr((char (&)[8]) hex, (uint32_t) cr4);
-    vga.display(1, 53, hex);
-    vga.display(1, 49, "cr4=");
-
-    uint32_t efer = rdmsr(0xC0000080);
-    hexstr((char (&)[8]) hex, (uint32_t) efer);
-    vga.display(1, 67, hex);
-    vga.display(1, 62, "efer#");
-
-    wrmsr(0xC0000080, efer | /*long mode enable:*/(1 << 8) | /*no exec bit enabl:*/(1 << 11));
-
-    efer = rdmsr(0xC0000080);
-    hexstr((char (&)[8]) hex, (uint32_t) efer);
-    vga.display(1, 67, hex);
-    vga.display(1, 62, "efer=");
-
-    uint32_t cr0;
-    asm("mov %%cr0, %0" : "=r"(cr0));
-    hexstr((char (&)[8]) hex, (uint32_t) cr0);
-    vga.display(2, 4, hex);
-    vga.display(2, 0, "cr0#");
-
-    cr0 |= 1 << 16; // Write protected memory enabled
-    cr0 |= 1 << 31; // Paging bit = 1
-    asm("mov %0, %%cr0" :: "r"(cr0));
-
-    asm("mov %%cr0, %0" : "=r"(cr0));
-    hexstr((char (&)[8]) hex, (uint32_t) cr0);
-    vga.display(2, 4, hex);
-    vga.display(2, 0, "cr0=");
-
-    hexstr((char (&)[8]) hex, (uint32_t) multiboot_header_addr);
+    hexstr((char (&)[8]) *hex, (uint32_t) multiboot_header_addr);
     vga.display(2, 13, "multiboot=");
     vga.display(2, 23, hex);
 
@@ -177,25 +135,30 @@ void boot_stage1(void *multiboot_header_addr) {
                 pe.os_virt_start = 1;
                 pe.os_phys_avail = 0;
                 phaddr += 4096;
+                vga.display(0, 0, "#");
             }
         }
         bool multiple_modules = false;
         int ln = 3;
+        vga.display(0, 0, "!");
         if (header.has_parts()) {
+            vga.display(0, 0, "-");
             MultibootInfoHeaderPart *part = &header.first_part();
             bool hasNext = part->hasNext(header);
+            vga.display(0, 0, "\\");
             do {
-                hexstr((char (&)[8]) hex, (uint32_t) part);
+                vga.display(0, 0, "|");
+                hexstr((char (&)[8]) *hex, (uint32_t) part);
                 vga.display(ln, 0, hex);
-                hexstr((char (&)[8]) hex, part->size);
+                hexstr((char (&)[8]) *hex, part->size);
                 vga.display(ln, 9, hex);
-                hexstr((char (&)[8]) hex, part->type);
+                hexstr((char (&)[8]) *hex, part->type);
                 vga.display(ln, 18, hex);
                 if (part->type == 3) {
                     MultibootModuleInfo &moduleInfo = part->get_type3();
-                    hexstr((char (&)[8]) hex, moduleInfo.mod_start);
+                    hexstr((char (&)[8]) *hex, moduleInfo.mod_start);
                     vga.display(ln, 27, hex);
-                    hexstr((char (&)[8]) hex, moduleInfo.mod_end);
+                    hexstr((char (&)[8]) *hex, moduleInfo.mod_end);
                     vga.display(ln, 36, hex);
                     vga.display(ln, 45, moduleInfo.get_name());
                     if (!one_kernel_as_module) {
@@ -212,6 +175,7 @@ void boot_stage1(void *multiboot_header_addr) {
                 }
                 ln++;
             } while (hasNext);
+            vga.display(0, 0, "/");
         }
         vga.display(ln, 0, "End of header");
         ln++;
@@ -231,9 +195,9 @@ void boot_stage1(void *multiboot_header_addr) {
     }
     if (one_kernel_as_module) {
         vga.display(3, 0, "Loading kernel64 ");
-        hexstr((char (&)[8]) hex, kernel_elf_start);
+        hexstr((char (&)[8]) *hex, kernel_elf_start);
         vga.display(3, 18, hex);
-        hexstr((char (&)[8]) hex, kernel_elf_end);
+        hexstr((char (&)[8]) *hex, kernel_elf_end);
         vga.display(3, 27, hex);
 
         ELF kernel{(void *) kernel_elf_start, (void *) kernel_elf_end};
@@ -241,7 +205,7 @@ void boot_stage1(void *multiboot_header_addr) {
             const auto &elf64_header = kernel.get_elf64_header();
 
             vga.display(4, 0, "entry ");
-            hexstr((char (&)[8]) hex, elf64_header.e_entry);
+            hexstr((char (&)[8]) *hex, elf64_header.e_entry);
             vga.display(4, 20, hex);
             /*
             vga.display(5, 0, "phoff ");
@@ -274,15 +238,15 @@ void boot_stage1(void *multiboot_header_addr) {
             for (uint16_t i = 0; i < elf64_header.e_phnum; i++) {
                 const auto &ph = elf64_header.get_program_entry(i);
                 vga.display(ln, 0, "ph ");
-                hexstr((char (&)[8]) hex, ph.p_offset);
+                hexstr((char (&)[8]) *hex, ph.p_offset);
                 vga.display(ln, 4, hex);
-                hexstr((char (&)[8]) hex, ph.p_vaddr);
+                hexstr((char (&)[8]) *hex, ph.p_vaddr);
                 vga.display(ln, 13, hex);
-                hexstr((char (&)[8]) hex, ph.p_filesz);
+                hexstr((char (&)[8]) *hex, ph.p_filesz);
                 vga.display(ln, 22, hex);
-                hexstr((char (&)[8]) hex, ph.p_memsz);
+                hexstr((char (&)[8]) *hex, ph.p_memsz);
                 vga.display(ln, 31, hex);
-                hexstr((char (&)[8]) hex, ph.p_flags);
+                hexstr((char (&)[8]) *hex, ph.p_flags);
                 vga.display(ln, 40, hex);
                 ln++;
 
@@ -314,16 +278,16 @@ void boot_stage1(void *multiboot_header_addr) {
                             phys_pe.os_phys_avail = 0;
                             uint32_t page_ppn = phaddr / 4096;
                             vga.display(ln, 0, "pagemap ");
-                            hexstr((char (&)[8]) hex, vaddr);
+                            hexstr((char (&)[8]) *hex, vaddr);
                             vga.display(ln, 8, hex);
                             pageentr &pe = get_pageentr64(pml4t, vaddr);
                             pe.os_virt_avail = 0;
                             pe.os_virt_start = 1;
-                            hexstr((char (&)[8]) hex, pe.page_ppn);
+                            hexstr((char (&)[8]) *hex, pe.page_ppn);
                             vga.display(ln, 17, hex);
                             pe.page_ppn = page_ppn;
                             vga.display(ln, 26, " -> ");
-                            hexstr((char (&)[8]) hex, pe.page_ppn);
+                            hexstr((char (&)[8]) *hex, pe.page_ppn);
                             vga.display(ln, 30, hex);
                             ln++;
 
@@ -336,16 +300,16 @@ void boot_stage1(void *multiboot_header_addr) {
                             phys_pe.os_phys_avail = 0;
                             uint32_t page_ppn = phdata / 4096;
                             vga.display(ln, 0, "pagzmap ");
-                            hexstr((char (&)[8]) hex, vaddr);
+                            hexstr((char (&)[8]) *hex, vaddr);
                             vga.display(ln, 8, hex);
                             pageentr &pe = get_pageentr64(pml4t, vaddr);
-                            hexstr((char (&)[8]) hex, pe.page_ppn);
+                            hexstr((char (&)[8]) *hex, pe.page_ppn);
                             pe.os_virt_avail = 0;
                             pe.os_virt_start = 1;
                             vga.display(ln, 17, hex);
                             pe.page_ppn = page_ppn;
                             vga.display(ln, 26, " -> ");
-                            hexstr((char (&)[8]) hex, pe.page_ppn);
+                            hexstr((char (&)[8]) *hex, pe.page_ppn);
                             vga.display(ln, 30, hex);
                             ln++;
 
@@ -372,26 +336,74 @@ void boot_stage1(void *multiboot_header_addr) {
                 vga.display(19, 0, "GDT:");
                 uint32_t *gdt64 = (uint32_t *) &init_gdt64;
                 asm("lgdt (%0)" :: "r"(init_gdt64.pointer()));
-                hexstr((char (&)[8]) hex, gdt64[0]);
+                hexstr((char (&)[8]) *hex, gdt64[0]);
                 vga.display(20, 8, hex);
-                hexstr((char (&)[8]) hex, gdt64[1]);
+                hexstr((char (&)[8]) *hex, gdt64[1]);
                 vga.display(20, 0, hex);
-                hexstr((char (&)[8]) hex, gdt64[2]);
+                hexstr((char (&)[8]) *hex, gdt64[2]);
                 vga.display(21, 8, hex);
-                hexstr((char (&)[8]) hex, gdt64[3]);
+                hexstr((char (&)[8]) *hex, gdt64[3]);
                 vga.display(21, 0, hex);
-                hexstr((char (&)[8]) hex, gdt64[4]);
+                hexstr((char (&)[8]) *hex, gdt64[4]);
                 vga.display(22, 8, hex);
-                hexstr((char (&)[8]) hex, gdt64[5]);
+                hexstr((char (&)[8]) *hex, gdt64[5]);
                 vga.display(22, 0, hex);
-                hexstr((char (&)[8]) hex, gdt64[6]);
+                hexstr((char (&)[8]) *hex, gdt64[6]);
                 vga.display(23, 8, hex);
-                hexstr((char (&)[8]) hex, gdt64[7]);
+                hexstr((char (&)[8]) *hex, gdt64[7]);
                 vga.display(23, 0, hex);
-                hexstr((char (&)[8]) hex, gdt64[8]);
+                hexstr((char (&)[8]) *hex, gdt64[8]);
                 vga.display(24, 8, hex);
-                hexstr((char (&)[8]) hex, gdt64[9]);
+                hexstr((char (&)[8]) *hex, gdt64[9]);
                 vga.display(24, 0, hex);
+
+                vga.display(0, 0, "Go for launch! ");
+
+                uint32_t cr3 = 0x1000;
+                asm("mov %0,%%cr3; " :: "r"(cr3));
+                asm("mov %%cr3, %0; " : "=r"(cr3));
+                hexstr((char (&)[8]) *hex, (uint32_t) cr3);
+                vga.display(1, 40, hex);
+                vga.display(1, 36, "cr3=");
+                uint32_t cr4;
+                asm("mov %%cr4, %0; " : "=r"(cr4));
+                hexstr((char (&)[8]) *hex, (uint32_t) cr4);
+                vga.display(1, 53, hex);
+                vga.display(1, 49, "cr4#");
+                cr4 |= 1 << 5;
+                asm("mov %0, %%cr4; " :: "r"(cr4));
+                asm("mov %%cr4, %0; " : "=r"(cr4));
+                hexstr((char (&)[8]) *hex, (uint32_t) cr4);
+                vga.display(1, 53, hex);
+                vga.display(1, 49, "cr4=");
+
+                uint32_t efer = rdmsr(0xC0000080);
+                hexstr((char (&)[8]) *hex, (uint32_t) efer);
+                vga.display(1, 67, hex);
+                vga.display(1, 62, "efer#");
+
+                wrmsr(0xC0000080, efer | /*long mode enable:*/(1 << 8) | /*no exec bit enabl:*/(1 << 11));
+
+                efer = rdmsr(0xC0000080);
+                hexstr((char (&)[8]) *hex, (uint32_t) efer);
+                vga.display(1, 67, hex);
+                vga.display(1, 62, "efer=");
+
+                uint32_t cr0;
+                asm("mov %%cr0, %0" : "=r"(cr0));
+                hexstr((char (&)[8]) *hex, (uint32_t) cr0);
+                vga.display(2, 4, hex);
+                vga.display(2, 0, "cr0#");
+
+                cr0 |= 1 << 16; // Write protected memory enabled
+                cr0 |= 1 << 31; // Paging bit = 1
+                asm("mov %0, %%cr0" :: "r"(cr0));
+
+                asm("mov %%cr0, %0" : "=r"(cr0));
+                //hexstr((char (&)[8]) *hex, (uint32_t) cr0);
+                //vga.display(2, 4, hex);
+                //vga.display(2, 0, "cr0=");
+
             }
 
 
