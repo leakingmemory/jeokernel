@@ -22,6 +22,24 @@ void wrmsr(uint32_t addr, uint32_t msr) {
     asm("mov %0, %%ecx; mov %1, %%eax; wrmsr; " :: "r"(addr), "r"(msr) : "%eax", "%ecx");
 }
 
+void vmem_dump() {
+    pageentr *pt = (pageentr *) 0x4000;
+    for (int i = 0; i < 512; i++) {
+        char *addr = (char *) ((i << 1) + 0xb8000);
+        if (pt[i].os_virt_avail) {
+            if (pt[i].os_phys_avail) {
+                *addr = '+';
+            } else {
+                *addr = 'V';
+            }
+        } else if (pt[i].os_phys_avail) {
+            *addr = 'P';
+        } else {
+            *addr = '-';
+        }
+    }
+}
+
 void boot_stage1(void *multiboot_header_addr) {
     MultibootInfoHeader &header = *((MultibootInfoHeader *) multiboot_header_addr);
     plainvga32 vga;
@@ -99,10 +117,12 @@ void boot_stage1(void *multiboot_header_addr) {
     /*
      * Make first 2MiB adressable,writable,execable
      */
-    for (uint16_t i = 1; i < 512; i++) {
-        pt[i].page_ppn = i;
-        pt[i].writeable = 1;
-        pt[i].present = 1;
+    for (uint16_t i = 0; i < 512; i++) {
+        if (i > 0) {
+            pt[i].page_ppn = i;
+            pt[i].writeable = 1;
+            pt[i].present = 1;
+        }
         pt2[i].os_virt_avail = 1;
         pt3[i].os_virt_avail = 1;
         pt4[i].os_virt_avail = 1;
@@ -244,6 +264,7 @@ void boot_stage1(void *multiboot_header_addr) {
             vga.display(12, 20, hex);
             */
 
+            uint32_t phdata = kernel_elf_end;
             uint8_t ln = 5;
             for (uint16_t i = 0; i < elf64_header.e_phnum; i++) {
                 const auto &ph = elf64_header.get_program_entry(i);
@@ -262,7 +283,6 @@ void boot_stage1(void *multiboot_header_addr) {
 
                 if (ph.p_memsz > 0) {
                     uint32_t phaddr = kernel_elf_start + ph.p_offset;
-                    uint32_t phdata = kernel_elf_end;
                     {
                         uint32_t overrun = phdata & 4095;
                         if (overrun != 0) {
@@ -301,6 +321,10 @@ void boot_stage1(void *multiboot_header_addr) {
                             vga.display(ln, 30, hex);
                             ln++;
 
+                            if (ln > 25) {
+                                ln = 0;
+                            }
+
                             vaddr += 4096;
                             phaddr += 4096;
                         }
@@ -322,6 +346,10 @@ void boot_stage1(void *multiboot_header_addr) {
                             hexstr((char (&)[8]) *hex, pe->page_ppn);
                             vga.display(ln, 30, hex);
                             ln++;
+
+                            if (ln > 25) {
+                                ln = 0;
+                            }
 
                             {
                                 uint8_t *z = (uint8_t *) phdata;
@@ -397,33 +425,33 @@ stack_allocated:
                 vga.display(1, 36, "cr3=");
                 uint32_t cr4;
                 asm("mov %%cr4, %0; " : "=r"(cr4));
-                hexstr((char (&)[8]) *hex, (uint32_t) cr4);
-                vga.display(1, 53, hex);
-                vga.display(1, 49, "cr4#");
+                //hexstr((char (&)[8]) *hex, (uint32_t) cr4);
+                //vga.display(1, 53, hex);
+                //vga.display(1, 49, "cr4#");
                 cr4 |= 1 << 5;
                 asm("mov %0, %%cr4; " :: "r"(cr4));
                 asm("mov %%cr4, %0; " : "=r"(cr4));
-                hexstr((char (&)[8]) *hex, (uint32_t) cr4);
-                vga.display(1, 53, hex);
-                vga.display(1, 49, "cr4=");
+                //hexstr((char (&)[8]) *hex, (uint32_t) cr4);
+                //vga.display(1, 53, hex);
+                //vga.display(1, 49, "cr4=");
 
                 uint32_t efer = rdmsr(0xC0000080);
-                hexstr((char (&)[8]) *hex, (uint32_t) efer);
-                vga.display(1, 67, hex);
-                vga.display(1, 62, "efer#");
+                //hexstr((char (&)[8]) *hex, (uint32_t) efer);
+                //vga.display(1, 67, hex);
+                //vga.display(1, 62, "efer#");
 
                 wrmsr(0xC0000080, efer | /*long mode enable:*/(1 << 8) | /*no exec bit enabl:*/(1 << 11));
 
                 efer = rdmsr(0xC0000080);
-                hexstr((char (&)[8]) *hex, (uint32_t) efer);
-                vga.display(1, 67, hex);
-                vga.display(1, 62, "efer=");
+                //hexstr((char (&)[8]) *hex, (uint32_t) efer);
+                //vga.display(1, 67, hex);
+                //vga.display(1, 62, "efer=");
 
                 uint32_t cr0;
                 asm("mov %%cr0, %0" : "=r"(cr0));
-                hexstr((char (&)[8]) *hex, (uint32_t) cr0);
-                vga.display(2, 4, hex);
-                vga.display(2, 0, "cr0#");
+                //hexstr((char (&)[8]) *hex, (uint32_t) cr0);
+                //vga.display(2, 4, hex);
+                //vga.display(2, 0, "cr0#");
 
                 cr0 |= 1 << 16; // Write protected memory enabled
                 cr0 |= 1 << 31; // Paging bit = 1
@@ -437,8 +465,6 @@ stack_allocated:
             }
 
 
-            for (int i = 0; i < 1000000; i++) {
-            }
             //asm("mov $0x10,%%ax; mov %%ax, %%ds; mov %%ax, %%es; mov %%ax, %%fs; mov %%ax, %%ss; " ::: "%ax");
             asm("mov %0,%%eax; mov %1, %%ebx; mov %2, %%esi; jmp jumpto64" :: "r"(elf64_header.e_entry), "r"(multiboot_header_addr), "r"(stack_ptr));
         } else {
