@@ -107,15 +107,16 @@ struct pageentr {
 
 static_assert(sizeof(pageentr) == 8);
 
-pageentr &get_pml4t_pageentr64(pageentr (&pml4t)[512], uint64_t addr);
-pageentr &get_pdpt_pageentr64(pageentr (&pdpt_ref)[512], uint64_t addr);
-pageentr &get_pdt_pageentr64(pageentr (&pdt_ref)[512], uint64_t addr);
-pageentr &get_pt_pageentr64(pageentr (&pt_ref)[512], uint64_t addr);
-pageentr *get_pageentr64(pageentr (&pml4t)[512], uint64_t addr);
+typedef pageentr pagetable[512];
+
+pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr);
+pageentr &get_pdpt_pageentr64(pagetable &pdpt_ref, uint64_t addr);
+pageentr &get_pdt_pageentr64(pagetable &pdt_ref, uint64_t addr);
+pageentr &get_pt_pageentr64(pagetable &pt_ref, uint64_t addr);
+pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr);
 
 #ifndef LOADER
 
-typedef pageentr pagetable[512];
 
 pagetable &get_pml4t();
 uint64_t get_phys_from_virt(uint64_t vaddr);
