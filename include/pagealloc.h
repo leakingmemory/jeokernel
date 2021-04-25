@@ -20,6 +20,9 @@ void ppagefree(uint64_t addr, uint64_t size);
 uint64_t pv_fix_pagealloc(uint64_t size);
 uint64_t pv_fix_pagefree(uint64_t addr);
 
+uint64_t alloc_stack(uint64_t size);
+void free_stack(uint64_t addr);
+
 void reload_pagetables();
 
 void *pagealloc(uint64_t size);

@@ -1,0 +1,10 @@
+//
+// Created by sigsegv on 25.04.2021.
+//
+
+#ifndef JEOKERNEL_KERNELCONFIG_H
+#define JEOKERNEL_KERNELCONFIG_H
+
+#define NORMAL_STACK_SIZE 65536
+
+#endif //JEOKERNEL_KERNELCONFIG_H

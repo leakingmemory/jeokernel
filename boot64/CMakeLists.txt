@@ -11,7 +11,7 @@ add_subdirectory(kmemory)
 
 add_library(bootstrap bootstrap.S)
 
-add_executable(kernel m64-stage1.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp)
+add_executable(kernel m64-stage1.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp stack.cpp)
 
 target_include_directories(kernel PRIVATE ../include)
 

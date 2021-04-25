@@ -265,6 +265,93 @@ uint64_t pv_fix_pagefree(uint64_t vaddr) {
     return size;
 }
 
+uint64_t alloc_stack(uint64_t size) {
+    uint64_t vaddr_top = 0;
+    uint64_t vaddr_bottom = vpagealloc(size + 4096);
+    if (vaddr_bottom != 0) {
+        uint64_t vaddr_start = vaddr_bottom + 4096;
+        uint64_t paddr_start = ppagealloc(size);
+        if (paddr_start != 0) {
+            pagetable &pml4t = get_pml4t();
+            for (uint64_t offset = 0; offset < size; offset += 4096) {
+                pageentr *pe = get_pageentr64(pml4t, vaddr_start + offset);
+                uint64_t page_ppn = paddr_start + offset;
+                page_ppn = page_ppn >> 12;
+                pe->page_ppn = page_ppn;
+                pe->present = 1;
+                pe->writeable = 1;
+                pe->execution_disabled = 1;
+            }
+            vaddr_top = vaddr_start + size;
+
+            reload_pagetables();
+        } else {
+            vpagefree(vaddr_bottom);
+            vaddr_top = 0;
+        }
+    }
+    return vaddr_top;
+}
+
+void free_stack(uint64_t vaddr) {
+    pagetable &pml4t = get_pml4t();
+    vaddr = vaddr >> 12;
+    uint64_t size = 0;
+    uint64_t phys_addr = 0;
+    while (true) {
+        --vaddr;
+        uint64_t paddr = vaddr;
+        int l = paddr & 511;
+        paddr = paddr >> 9;
+        int k = paddr & 511;
+        paddr = paddr >> 9;
+        int j = paddr & 511;
+        paddr = paddr >> 9;
+        int i = paddr & 511;
+        if (pml4t[i].present == 0) {
+            wild_panic("Stack is outside allocatable");
+        }
+        auto &pdpt = pml4t[i].get_subtable();
+        if (pdpt[j].present == 0) {
+            wild_panic("Stack is outside allocatable");
+        }
+        auto &pdt = pdpt[j].get_subtable();
+        if (pdt[k].present == 0) {
+            wild_panic("Stack is outside allocatable");
+        }
+        pageentr &pe = pdt[k].get_subtable()[l];
+        if (pe.os_virt_avail == 1) {
+            get_klogger() << "\nPage " << vaddr << " not allocated\n";
+            wild_panic("Stack address given runs into unallocated vpage");
+        }
+        bool first_page = pe.os_virt_start == 1;
+        if (pe.present) {
+            if (first_page) {
+                wild_panic("This was not a stack allocation");
+            }
+            phys_addr = pe.page_ppn;
+            ++size;
+        } else {
+            if (!first_page) {
+                wild_panic("Part of stack is not present");
+            }
+        }
+
+        pe.os_virt_avail = 1;
+        pe.os_virt_start = 0;
+
+        if (first_page) {
+            break;
+        }
+
+        pe.present = 0;
+    }
+    phys_addr = phys_addr << 12;
+    size = size << 12;
+
+    ppagefree(phys_addr, size);
+    reload_pagetables();
+}
 
 void reload_pagetables() {
     uint64_t cr3 = 0x1000;

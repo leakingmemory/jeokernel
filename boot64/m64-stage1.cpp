@@ -8,8 +8,10 @@
 #include <multiboot.h>
 #include <core/malloc.h>
 #include <string.h>
+#include <stack.h>
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
+static normal_stack *stage1_stack = nullptr;
 
 const MultibootInfoHeader &get_multiboot2() {
     return *multiboot_info;
@@ -50,19 +52,14 @@ extern "C" {
         /*
          * Let's try to alloc a stack
          */
-        uint64_t stack = (uint64_t) pagealloc(16384);
-        if (stack != 0) {
-            stack += 16384 - 16;
-            asm("mov %0, %%rax; mov %%rax,%%rsp; jmp secondboot; hlt;" :: "r"(stack) : "%rax");
-        }
-        b8000 b8000Logger{};
-        b8000Logger << "Error: Unable to install new stack!\n";
-        asm("hlt");
+        setup_simplest_malloc_impl();
+
+        stage1_stack = new normal_stack;
+        uint64_t stack = stage1_stack->get_addr();
+        asm("mov %0, %%rax; mov %%rax,%%rsp; jmp secondboot; hlt;" :: "r"(stack) : "%rax");
     }
 
     void init_m64() {
-        setup_simplest_malloc_impl();
-
         b8000logger *b8000Logger = new b8000logger();
 
         set_klogger(b8000Logger);
