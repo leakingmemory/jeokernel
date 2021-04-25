@@ -77,5 +77,8 @@ void b8000::lnbreak() {
 void b8000::scroll() {
     for (int i = 80; i < (80*25); i++) {
         videobuf[i-80] = videobuf[i];
+        videobuf[i].chr = ' ';
+        videobuf[i].bg_color = 0;
+        videobuf[i].fg_color = 7;
     }
 }
