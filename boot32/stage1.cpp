@@ -4,6 +4,8 @@
 #include <pagetable_impl.h>
 #include <multiboot.h>
 #include <elf_impl.h>
+#include <string.h>
+#include <loaderconfig.h>
 
 extern "C" {
 
@@ -386,8 +388,9 @@ void boot_stage1(void *multiboot_header_addr) {
 stack_allocated:
 
             {
-                GDT_table<3> &init_gdt64 = *((GDT_table<3> *) 0x09000);
-                init_gdt64 = GDT_table<3>();
+                GDT_table<GDT_SIZE> &init_gdt64 = *((GDT_table<GDT_SIZE> *) GDT_ADDR);
+                static_assert(sizeof(init_gdt64) <= GDT_MAX_SIZE);
+                memset(&init_gdt64, 0, sizeof(init_gdt64));
                 init_gdt64[0] = GDT(0, 0x1FFFF, 0, 0);
                 init_gdt64[1] = GDT(0, 0xF0000, 0xA, 0x9A);
                 init_gdt64[2] = GDT(0, 0, 0, 0x92);

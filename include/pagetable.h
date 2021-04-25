@@ -53,7 +53,13 @@ template <int n> struct GDT_table {
         for (int i = 0; i < n; i++) {
             gdt[i] = GDT();
         }
+    }
+
+    void set_size() {
         size = sizeof(gdt) - 1;
+    }
+    void set_ptr() {
+        ptr.addr = (uint64_t) this;
     }
 
     GDT & operator [] (int i) {
@@ -68,7 +74,8 @@ template <int n> struct GDT_table {
     }
 
     uint64_t pointer() {
-        ptr.addr = (uint64_t) this;
+        set_size();
+        set_ptr();
         return (uint64_t) &size;
     }
 } __attribute__((__packed__));
