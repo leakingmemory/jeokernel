@@ -291,7 +291,6 @@ void ppagefree(uint64_t addr, uint64_t size) {
         pageentr &pe = pml4t[i].get_subtable()[j].get_subtable()[k].get_subtable()[l];
         pe.os_phys_avail = 1;
         pe.os_zero = 1;
-        pe.present = 0;
         ++addr;
         --size;
     }
