@@ -17,6 +17,9 @@ uint64_t ppagealloc(uint64_t size);
 uint64_t vpagefree(uint64_t addr);
 void ppagefree(uint64_t addr, uint64_t size);
 
+uint64_t pv_fix_pagealloc(uint64_t size);
+uint64_t pv_fix_pagefree(uint64_t addr);
+
 void reload_pagetables();
 
 void *pagealloc(uint64_t size);

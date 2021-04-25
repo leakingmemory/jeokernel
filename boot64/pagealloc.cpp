@@ -3,6 +3,7 @@
 //
 
 #include <pagealloc.h>
+#include <klogger.h>
 
 uint64_t vpagealloc(uint64_t size) {
     if ((size & 4095) != 0) {
@@ -170,6 +171,100 @@ uint64_t vpagefree(uint64_t addr) {
     }
     return size << 12;
 }
+
+uint64_t pv_fix_pagealloc(uint64_t size) {
+    if ((size & 4095) != 0) {
+        size += 4096;
+    }
+    size /= 4096;
+    pagetable &pml4t = get_pml4t();
+    uint64_t starting_addr = 0;
+    uint64_t count = 0;
+    for (int i = 0; i < 512; i++) {
+        if (pml4t[i].present) {
+            auto &pdpt = pml4t[i].get_subtable();
+            for (int j = 0; j < 512; j++) {
+                if (pdpt[j].present) {
+                    auto &pdt = pdpt[j].get_subtable();
+                    for (int k = 0; k < 512; k++) {
+                        if (pdt[k].present) {
+                            auto &pt = pdt[k].get_subtable();
+                            for (int l = 0; l < 512; l++) {
+                                /* the page acquire check */
+                                if (pt[l].os_phys_avail == 1 && pt[l].os_virt_avail == 1) {
+                                    if (starting_addr != 0) {
+                                        count++;
+                                        if (count == size) {
+                                            uint64_t ending_addr = starting_addr + (count * 4096);
+                                            for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
+                                                pageentr *pe = get_pageentr64(pml4t, addr);
+                                                pe->os_virt_avail = 0; // GRAB
+                                                pe->os_phys_avail = 0; // GRAB
+                                                if (addr == starting_addr) {
+                                                    pe->os_virt_start = 1;
+                                                }
+                                                pe->page_ppn = addr >> 12;
+                                                pe->present = 1;
+                                                pe->writeable = 1;
+                                                pe->execution_disabled = 1;
+                                                pe->accessed = 0;
+                                                pe->user_access = 0;
+                                            }
+                                            reload_pagetables();
+                                            return starting_addr;
+                                        }
+                                    } else {
+                                        starting_addr = i << 9;
+                                        starting_addr |= j;
+                                        starting_addr = starting_addr << 9;
+                                        starting_addr |= k;
+                                        starting_addr = starting_addr << 9;
+                                        starting_addr |= l;
+                                        starting_addr = starting_addr << 12;
+                                        if (size == 1) {
+                                            pageentr &pe = pt[l];
+                                            pe.os_virt_avail = 0; // GRAB
+                                            pe.os_phys_avail = 0; // GRAB
+                                            pe.os_virt_start = 1; // starting point
+                                            pe.page_ppn = starting_addr >> 12;
+                                            pe.present = 1;
+                                            pe.writeable = 1;
+                                            pe.execution_disabled = 1;
+                                            pe.accessed = 0;
+                                            pe.user_access = 0;
+                                            return starting_addr;
+                                        } else {
+                                            count = 1;
+                                        }
+                                    }
+                                } else {
+                                    starting_addr = 0;
+                                }
+                            }
+                        } else {
+                            starting_addr = 0;
+                        }
+                    }
+                } else {
+                    starting_addr = 0;
+                }
+            }
+        } else {
+            starting_addr = 0;
+        }
+    }
+    return 0;
+}
+
+uint64_t pv_fix_pagefree(uint64_t vaddr) {
+    uint64_t vai = (uint64_t) vaddr;
+    uint64_t phys = get_phys_from_virt(vai);
+    uint64_t size = vpagefree(vai);
+    ppagefree(phys, size);
+    reload_pagetables();
+    return size;
+}
+
 
 void reload_pagetables() {
     uint64_t cr3 = 0x1000;
