@@ -1,12 +1,6 @@
 .section .text
 .code64
 
-stackBottom:
-
-.skip 4096
-
-stackTop:
-
 .globl bootstrap
 .globl _start
 
@@ -18,7 +12,9 @@ bootstrap:
     mov %ax,%fs
     mov %ax,%gs
     mov %ax,%ss
-    mov $stackTop, %rsp
+    // Stack ptr is in esi
+    xor %rsp, %rsp
+    mov %esi, %esp
     pushq %rbx
     mov %rbx, %rdi
     call start_m64

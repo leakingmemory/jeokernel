@@ -337,6 +337,26 @@ void boot_stage1(void *multiboot_header_addr) {
                 }
             }
 
+            uint32_t stack_ptr = 0;
+            for (int i = 256; i < 512; i++) {
+                if (pt[i].os_virt_avail && pt[i].os_phys_avail && pt[i].page_ppn == i) {
+                    pt[i].os_virt_avail = 0;
+                    pt[i].os_phys_avail = 0;
+                    pt[i].os_virt_start = 1;
+                    pt[i].writeable = 1;
+                    pt[i].present = 1;
+                    pt[i].accessed = 0;
+                    stack_ptr = i;
+                    stack_ptr = (stack_ptr << 12) + 4096;
+                    goto stack_allocated;
+                }
+            }
+            vga.display(0, 0, "ERROR: failed to allocate stack for next stage  ");
+            while(1) {
+                asm("hlt");
+            }
+stack_allocated:
+
             {
                 GDT_table<3> &init_gdt64 = *((GDT_table<3> *) 0x09000);
                 init_gdt64 = GDT_table<3>();
@@ -420,7 +440,7 @@ void boot_stage1(void *multiboot_header_addr) {
             for (int i = 0; i < 1000000; i++) {
             }
             //asm("mov $0x10,%%ax; mov %%ax, %%ds; mov %%ax, %%es; mov %%ax, %%fs; mov %%ax, %%ss; " ::: "%ax");
-            asm("mov %0,%%eax; mov %1, %%ebx; jmp jumpto64" :: "r"(elf64_header.e_entry), "r"(multiboot_header_addr));
+            asm("mov %0,%%eax; mov %1, %%ebx; mov %2, %%esi; jmp jumpto64" :: "r"(elf64_header.e_entry), "r"(multiboot_header_addr), "r"(stack_ptr));
         } else {
             vga.display(4, 0, "error: ");
             vga.display(4, 7, kernel.get_error());
