@@ -5,6 +5,8 @@
 #ifndef JEOKERNEL_PAGETABLE_H
 #define JEOKERNEL_PAGETABLE_H
 
+#include <stdint.h>
+
 struct GDT {
     uint16_t limit_low : 16;
     uint32_t base_low : 24;
@@ -29,6 +31,15 @@ struct GDT {
         granularity(granularity & 0x0F),
         base_high(base >> 24)
     {
+    }
+
+    void set_base(uint32_t base_addr) {
+        base_low = base_addr & 0xFFFFFF;
+        base_high = (base_addr >> 24);
+    }
+    void set_limit(uint32_t limit) {
+        limit_low = limit & 0xFFFF;
+        limit_high = (limit >> 16) & 0x0F;
     }
 } __attribute__((__packed__));
 
