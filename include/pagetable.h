@@ -82,15 +82,16 @@ struct pageentr {
     uint8_t write_through : 1;
     uint8_t cache_disabled : 1;
     uint8_t accessed : 1;
-    uint8_t os_virt_avail : 1;
+    uint8_t dirty : 1;
     uint8_t size : 1;
-    uint8_t os_virt_start : 1;
+    uint8_t global : 1;
     uint8_t os_phys_avail : 1;
     uint8_t os_zero : 1;
-    uint8_t ignored2 : 1;
+    uint8_t os_virt_avail : 1;
     uint32_t page_ppn : 28;
     uint16_t reserved1 : 12;
-    uint16_t ignored3 : 11;
+    uint8_t os_virt_start : 1;
+    uint16_t ignored3 : 10;
     uint8_t execution_disabled : 1;
 
     uint64_t get_subtable_addr() const {
