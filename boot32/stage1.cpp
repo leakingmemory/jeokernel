@@ -368,16 +368,22 @@ void boot_stage1(void *multiboot_header_addr) {
             }
 
             uint32_t stack_ptr = 0;
-            for (int i = 256; i < 512; i++) {
-                if (pt[i].os_virt_avail && pt[i].os_phys_avail && pt[i].page_ppn == i) {
+            for (int i = 256; i < 511; i++) {
+                if (pt[i].os_virt_avail && pt[i].os_phys_avail && pt[i].page_ppn == i && pt[i + 1].os_virt_avail && pt[i + 1].os_phys_avail && pt[i + 1].page_ppn == (i + 1)) {
                     pt[i].os_virt_avail = 0;
                     pt[i].os_phys_avail = 0;
                     pt[i].os_virt_start = 1;
                     pt[i].writeable = 1;
                     pt[i].present = 1;
                     pt[i].accessed = 0;
+                    pt[i + 1].os_virt_avail = 0;
+                    pt[i + 1].os_phys_avail = 0;
+                    pt[i + 1].os_virt_start = 1;
+                    pt[i + 1].writeable = 1;
+                    pt[i + 1].present = 1;
+                    pt[i + 1].accessed = 0;
                     stack_ptr = i;
-                    stack_ptr = (stack_ptr << 12) + 4096;
+                    stack_ptr = (stack_ptr << 12) + 8192;
                     goto stack_allocated;
                 }
             }
