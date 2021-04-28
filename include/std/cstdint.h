@@ -9,6 +9,7 @@
 
 namespace std {
     typedef size_t size_t;
+    typedef ssize_t ssize_t;
     typedef void *pointer;
 }
 
