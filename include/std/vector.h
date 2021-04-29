@@ -79,117 +79,128 @@ namespace std {
         typedef vector_iterator<T> iterator;
         typedef vector_iterator<const T> const_iterator;
     private:
-        T *_data;
-        size_type _size;
-        size_type _capacity;
-        Allocator _allocator;
+        struct vector_container : Allocator {
+            T *_data;
+            size_type _size;
+            size_type _capacity;
+
+            vector_container() : Allocator(), _data(nullptr), _size(0), _capacity(0) {
+            }
+        };
+
+        vector_container c;
+
+        Allocator &get_allocator() {
+            return c;
+        }
     public:
 
         constexpr const T *data() const noexcept {
-            return _data;
+            return c._data;
         }
 
         constexpr size_type size() const noexcept {
-            return _size;
+            return c._size;
         }
 
         constexpr size_type capacity() const noexcept {
-            return _capacity;
+            return c._capacity;
         }
 
         constexpr bool empty() const noexcept {
-            return _size == 0;
+            return c._size == 0;
         }
 
         constexpr iterator begin() noexcept {
-            return iterator(_data);
+            return iterator(c._data);
         }
         constexpr iterator end() noexcept {
-            return iterator(_data + _size);
+            return iterator(c._data + c._size);
         }
         constexpr const_iterator begin() const noexcept {
-            return const_iterator(_data);
+            return const_iterator(c._data);
         }
         constexpr const_iterator end() const noexcept {
-            return const_iterator(_data + _size);
+            return const_iterator(c._data + c._size);
         }
         constexpr const_iterator cbegin() const noexcept {
-            return const_iterator(_data);
+            return const_iterator(c._data);
         }
         constexpr const_iterator cend() const noexcept {
-            return const_iterator(_data + _size);
+            return const_iterator(c._data + c._size);
         }
 
-        vector() : _data(nullptr), _size(0), _capacity(0), _allocator() {}
+        vector() : c() {
+        }
 
         ~vector() {
-            if (_data != nullptr) {
-                for (size_type i = 0; i < _size; i++) {
-                    _data[i].~T();
+            if (c._data != nullptr) {
+                for (size_type i = 0; i < c._size; i++) {
+                    c._data[i].~T();
                 }
-                _allocator.deallocate(_data, _capacity);
-                _data = nullptr;
-                _capacity = 0;
-                _size = 0;
+                get_allocator().deallocate(c._data, c._capacity);
+                c._data = nullptr;
+                c._capacity = 0;
+                c._size = 0;
             }
         }
 
         constexpr void reserve(size_type new_cap) {
-            if (_data != nullptr) {
-                if (_capacity < new_cap) {
-                    T *new_ptr = _allocator.allocate(new_cap);
-                    for (size_type i = 0; i < _size; i++) {
-                        new ((void *) &new_ptr[i]) T(move(_data[i]));
-                        _data[i].~T();
+            if (c._data != nullptr) {
+                if (c._capacity < new_cap) {
+                    T *new_ptr = get_allocator().allocate(new_cap);
+                    for (size_type i = 0; i < c._size; i++) {
+                        new ((void *) &new_ptr[i]) T(move(c._data[i]));
+                        c._data[i].~T();
                     }
-                    _allocator.deallocate(_data, _capacity);
-                    _data = new_ptr;
-                    _capacity = new_cap;
+                    get_allocator().deallocate(c._data, c._capacity);
+                    c._data = new_ptr;
+                    c._capacity = new_cap;
                 }
             } else {
-                _data = _allocator.allocate(new_cap);
-                _capacity = new_cap;
+                c._data = get_allocator().allocate(new_cap);
+                c._capacity = new_cap;
             }
         }
 
         constexpr void shrink_to_fit() {
-            if (_data != nullptr && _size < _capacity) {
-                T *new_ptr = _allocator.allocate(_size);
-                for (size_type i = 0; i < _size; i++) {
-                    new ((void *) &new_ptr[i]) T(move(_data[i]));
-                    _data[i].~T();
+            if (c._data != nullptr && c._size < c._capacity) {
+                T *new_ptr = get_allocator().allocate(c._size);
+                for (size_type i = 0; i < c._size; i++) {
+                    new ((void *) &new_ptr[i]) T(move(c._data[i]));
+                    c._data[i].~T();
                 }
-                _allocator.deallocate(_data, _capacity);
-                _data = new_ptr;
-                _capacity = _size;
+                get_allocator().deallocate(c._data, c._capacity);
+                c._data = new_ptr;
+                c._capacity = c._size;
             }
         }
 
         constexpr reference front() {
-            return *_data;
+            return *c._data;
         }
 
         constexpr const_reference front() const {
-            return *_data;
+            return *c._data;
         }
 
         constexpr reference back() {
-            T *ptr = _size > 0 ? _data[_size - 1] : nullptr;
+            T *ptr = c._size > 0 ? c._data[c._size - 1] : nullptr;
             return *ptr;
         }
 
         constexpr const_reference back() const {
-            T *ptr = _size > 0 ? _data[_size - 1] : nullptr;
+            T *ptr = c._size > 0 ? c._data[c._size - 1] : nullptr;
             return *ptr;
         }
 
         reference at(size_type i) {
-            T *ptr = i >= 0 && i < _size ? &(_data[i]) : nullptr;
+            T *ptr = i >= 0 && i < c._size ? &(c._data[i]) : nullptr;
             return *ptr;
         }
 
         const_reference at(size_type i) const {
-            T *ptr = i >= 0 && i < _size ? &(_data[i]) : nullptr;
+            T *ptr = i >= 0 && i < c._size ? &(c._data[i]) : nullptr;
             return *ptr;
         }
 
@@ -202,31 +213,31 @@ namespace std {
         }
 
         constexpr void push_back(const T &cp) {
-            size_type exp = _size + 1;
-            if (exp >= _capacity) {
+            size_type exp = c._size + 1;
+            if (exp >= c._capacity) {
                 reserve(exp);
             }
-            new ((void *) &(_data[_size])) T(cp);
-            _size = exp;
+            new ((void *) &(c._data[c._size])) T(cp);
+            c._size = exp;
         }
 
         constexpr void push_back(T &&mv) {
-            size_type exp = _size + 1;
-            if (exp >= _capacity) {
+            size_type exp = c._size + 1;
+            if (exp >= c._capacity) {
                 reserve(exp);
             }
-            new ((void *) &(_data[_size])) T(std::move(mv));
-            _size = exp;
+            new ((void *) &(c._data[c._size])) T(std::move(mv));
+            c._size = exp;
         }
 
         template<class... Args>
         constexpr reference emplace_back(Args &&... args) {
-            size_type exp = _size + 1;
-            if (exp >= _capacity) {
+            size_type exp = c._size + 1;
+            if (exp >= c._capacity) {
                 reserve(exp);
             }
-            T *ptr = new((void *) &(_data[_size])) T(args...);
-            _size = exp;
+            T *ptr = new((void *) &(c._data[c._size])) T(args...);
+            c._size = exp;
             return *ptr;
         }
     };
