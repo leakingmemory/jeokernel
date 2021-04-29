@@ -1,0 +1,17 @@
+--- /dev/null	2021-04-16 15:43:50.679599114 +0200
++++ gcc/config/i386/t-x86_64-elf	2021-04-29 19:55:45.144013936 +0200
+@@ -0,0 +1,4 @@
++# Add libgcc multilib variant without red-zone requirement
++ 
++MULTILIB_OPTIONS += mno-red-zone
++MULTILIB_DIRNAMES += no-red-zone
+--- gcc/config.gcc.orig	2021-04-08 13:56:28.033740243 +0200
++++ gcc/config.gcc	2021-04-29 20:01:14.336940978 +0200
+@@ -1896,6 +1896,7 @@
+ 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h newlib-stdint.h i386/i386elf.h"
+ 	;;
+ x86_64-*-elf*)
++        tmake_file="${tmake_file} i386/t-x86_64-elf"
+ 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h newlib-stdint.h i386/i386elf.h i386/x86-64.h"
+ 	;;
+ x86_64-*-rtems*)
