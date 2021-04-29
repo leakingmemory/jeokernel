@@ -30,7 +30,7 @@ endif (NOT DEFINED ENV{DISABLE_TESTS})
 add_custom_command(
         OUTPUT jeokernel.iso
         DEPENDS jeokernel kernel
-        COMMAND ${CMAKE_SOURCE_DIR}/create_isoboot.sh
+        COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" ${CMAKE_SOURCE_DIR}/create_isoboot.sh
         )
 
 add_custom_target(jeokernel_iso ALL echo "ISO file built" DEPENDS jeokernel.iso)
