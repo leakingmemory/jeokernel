@@ -189,30 +189,40 @@ namespace std {
     public:
         typedef typename allocator::size_type size_type;
     private:
-        allocator _allocator;
-        union {
-            short_string_s<CharT, string_pointer_s<CharT, size_type>> shrt;
-            string_pointer_s<CharT, size_type> ptr;
+        struct _data_container : allocator {
+            union {
+                short_string_s<CharT, string_pointer_s<CharT, size_type>> shrt;
+                string_pointer_s<CharT, size_type> ptr;
+            }__attribute__((__packed__));
+
+            _data_container() : allocator(), shrt() {
+            }
         }__attribute__((__packed__));
+
+        _data_container c;
+
+        allocator &get_allocator() {
+            return c;
+        }
 
     public:
         basic_string() {
-            shrt.set_empty();
+            c.shrt.set_empty();
         }
 
         constexpr CharT *data() {
-            if (shrt.is_short()) {
-                return shrt.get_data();
+            if (c.shrt.is_short()) {
+                return c.shrt.get_data();
             } else {
-                return ptr.get_data();
+                return c.ptr.get_data();
             }
         }
 
         constexpr const CharT *data() const {
-            if (shrt.is_short()) {
-                return shrt.get_data();
+            if (c.shrt.is_short()) {
+                return c.shrt.get_data();
             } else {
-                return ptr.get_data();
+                return c.ptr.get_data();
             }
         }
 
@@ -225,18 +235,18 @@ namespace std {
         }
 
         constexpr size_type size() const {
-            if (shrt.is_short()) {
-                return shrt.get_size();
+            if (c.shrt.is_short()) {
+                return c.shrt.get_size();
             } else {
-                return ptr.get_size();
+                return c.ptr.get_size();
             }
         }
 
         constexpr size_type capacity() const {
-            if (shrt.is_short()) {
-                return shrt.get_capacity();
+            if (c.shrt.is_short()) {
+                return c.shrt.get_capacity();
             } else {
-                return ptr.get_capacity();
+                return c.ptr.get_capacity();
             }
         }
 
@@ -283,35 +293,35 @@ namespace std {
         constexpr void reserve(size_type new_cap) {
             size_type prev_cap = capacity();
             if (new_cap > prev_cap) {
-                bool is_short = shrt.is_short();
-                size_type padded_alloc_len = ptr.pad_capacity(new_cap + 1);
+                bool is_short = c.shrt.is_short();
+                size_type padded_alloc_len = c.ptr.pad_capacity(new_cap + 1);
                 size_type size_v = size();
                 CharT *old_data = data();
-                CharT *new_data = _allocator.allocate(padded_alloc_len);
+                CharT *new_data = get_allocator().allocate(padded_alloc_len);
                 Traits::move(new_data, old_data, size_v + 1);
-                ptr.pointer = new_data;
-                ptr.set_capacity(padded_alloc_len - 1);
+                c.ptr.pointer = new_data;
+                c.ptr.set_capacity(padded_alloc_len - 1);
                 if (is_short) {
-                    ptr.size = size_v;
+                    c.ptr.size = size_v;
                 } else {
-                    _allocator.deallocate(old_data, prev_cap + 1);
+                    get_allocator().deallocate(old_data, prev_cap + 1);
                 }
             }
         }
 
         constexpr void shrink_to_fit() {
-            bool is_short = shrt.is_short();
+            bool is_short = c.shrt.is_short();
             if (!is_short) {
                 size_type prev_cap = capacity();
                 size_type size_v = size();
-                size_type padded_alloc_len = ptr.pad_capacity(size_v + 1);
+                size_type padded_alloc_len = c.ptr.pad_capacity(size_v + 1);
                 if (padded_alloc_len < prev_cap) {
                     CharT *old_data = data();
-                    CharT *new_data = _allocator.allocate(padded_alloc_len);
+                    CharT *new_data = get_allocator().allocate(padded_alloc_len);
                     Traits::move(new_data, old_data, size_v + 1);
-                    ptr.pointer = new_data;
-                    ptr.set_capacity(padded_alloc_len - 1);
-                    _allocator.deallocate(old_data, prev_cap + 1);
+                    c.ptr.pointer = new_data;
+                    c.ptr.set_capacity(padded_alloc_len - 1);
+                    get_allocator().deallocate(old_data, prev_cap + 1);
                 }
             }
         }
@@ -320,13 +330,13 @@ namespace std {
 
     private:
         void copy_from(const basic_string &cp) {
-            if (cp.shrt.is_short()) {
-                this->shrt = cp.shrt;
+            if (cp.c.shrt.is_short()) {
+                this->c.shrt = cp.c.shrt;
             } else {
                 size_type s = cp.size();
                 reserve(s);
-                Traits::copy(ptr.pointer, cp.data(), s + 1);
-                ptr.size = s;
+                Traits::copy(c.ptr.pointer, cp.data(), s + 1);
+                c.ptr.size = s;
             }
         }
 
@@ -337,18 +347,18 @@ namespace std {
         }
 
         basic_string &operator=(basic_string &&mv) {
-            if (!shrt.is_short()) {
-                _allocator.deallocate(ptr.pointer, ptr.capacity + 1);
-                ptr = mv.ptr;
+            if (!c.shrt.is_short()) {
+                get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
+                c.ptr = mv.c.ptr;
             } else {
-                shrt = mv.shrt;
+                c.shrt = mv.c.shrt;
             }
             return *this;
         }
 
         basic_string &operator=(const basic_string &cp) {
-            if (!shrt.is_short()) {
-                _allocator.deallocate(ptr.pointer, ptr.capacity + 1);
+            if (!c.shrt.is_short()) {
+                get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
             }
             copy_from(cp);
             return *this;
@@ -360,10 +370,10 @@ namespace std {
                 reserve(length);
             }
             Traits::copy(data(), cstr, length + 1);
-            if (shrt.is_short()) {
-                shrt.set_size(length);
+            if (c.shrt.is_short()) {
+                c.shrt.set_size(length);
             } else {
-                ptr.size = length;
+                c.ptr.size = length;
             }
         }
 
@@ -373,20 +383,20 @@ namespace std {
                 reserve(length);
             }
             Traits::copy(data(), cstr, length + 1);
-            if (shrt.is_short()) {
-                shrt.set_size(length);
+            if (c.shrt.is_short()) {
+                c.shrt.set_size(length);
             } else {
-                ptr.size = length;
+                c.ptr.size = length;
             }
             return *this;
         }
 
         constexpr void clear() noexcept {
-            if (shrt.is_short()) {
-                shrt.set_empty();
+            if (c.shrt.is_short()) {
+                c.shrt.set_empty();
             } else {
-                ptr.size = 0;
-                ptr.pointer[0] = 0;
+                c.ptr.size = 0;
+                c.ptr.pointer[0] = 0;
             }
         }
 
@@ -396,11 +406,11 @@ namespace std {
                 reserve(s + count);
             }
             Traits::copy(data() + s, str, count);
-            if (shrt.is_short()) {
-                shrt.set_size(s + count);
+            if (c.shrt.is_short()) {
+                c.shrt.set_size(s + count);
             } else {
                 data()[s + count] = 0;
-                ptr.size = s + count;
+                c.ptr.size = s + count;
             }
             return *this;
         }
@@ -412,6 +422,12 @@ namespace std {
 
         constexpr basic_string &append(const basic_string &str) {
             return append(str.data(), str.size());
+        }
+
+        ~basic_string() {
+            if (!c.shrt.is_short()) {
+                get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
+            }
         }
     };
 
