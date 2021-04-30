@@ -69,7 +69,7 @@ const ELF &KernelElf::elf() const {
 
 static int lim = 0;
 
-std::tuple<uint64_t, std::string> KernelElf::get_symbol(void *ptr) const {
+std::tuple<uint64_t, const char *> KernelElf::get_symbol(void *ptr) const {
     const ELF64_header &elf64 = kernel_elf.get_elf64_header();
     const auto *symtab = elf64.get_symtab();
     const char *strtab = elf64.get_strtab();
@@ -77,7 +77,7 @@ std::tuple<uint64_t, std::string> KernelElf::get_symbol(void *ptr) const {
     if (symtab != nullptr && strtab != nullptr) {
         uint64_t addr = (uint64_t) ptr;
         uint64_t best = 0;
-        std::string str{"0x0"};
+        const char *str = "0x0";
         for (uint32_t i = 0; i < elf64.get_symbols(*symtab); i++) {
             const ELF64_symbol_entry &sym = elf64.get_symbol(*symtab, i);
             if (sym.st_value < addr && sym.st_value > best && sym.st_name != 0 && sym.st_name < strtab_len) {
@@ -85,7 +85,7 @@ std::tuple<uint64_t, std::string> KernelElf::get_symbol(void *ptr) const {
                 str = (strtab + sym.st_name);
             }
         }
-        return std::make_tuple<uint64_t, std::string>(best, str);
+        return std::make_tuple<uint64_t, const char *>(best, str);
     }
-    return std::make_tuple<uint64_t, std::string>(0, "0x0");
+    return std::make_tuple<uint64_t, const char *>(0, "0x0");
 }

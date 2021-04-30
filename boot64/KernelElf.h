@@ -20,7 +20,7 @@ public:
     ~KernelElf();
 
     const ELF &elf() const;
-    std::tuple<uint64_t,std::string> get_symbol(void *) const;
+    std::tuple<uint64_t,const char *> get_symbol(void *) const;
 };
 
 const KernelElf &get_kernel_elf();

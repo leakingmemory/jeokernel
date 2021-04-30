@@ -18,11 +18,11 @@ void Interrupt::print_debug() const {
     << "Stack:\n";
     const KernelElf &kernelElf = get_kernel_elf();
     {
-        std::tuple<uint64_t, std::string> sym = kernelElf.get_symbol((void *) rip());
+        std::tuple<uint64_t, const char *> sym = kernelElf.get_symbol((void *) rip());
         uint64_t vaddr = std::get<0>(sym);
-        std::string name = std::get<1>(sym);
+        const char *name = std::get<1>(sym);
         uint32_t offset = (uint32_t) (rip() - vaddr);
-        get_klogger() << name.c_str() << "+0x" << offset << "\n";
+        get_klogger() << name << "+0x" << offset << "\n";
     }
     /*auto stack = get_caller_stack();
     for (size_t i = 0; i < stack.length(); i++) {
@@ -37,11 +37,11 @@ void Interrupt::print_debug() const {
     for (const std::tuple<size_t,uint64_t> &value : calls) {
         {
             uint64_t ripaddr = std::get<1>(value);
-            std::tuple<uint64_t,std::string> sym = kernelElf.get_symbol((void *) ripaddr);
+            std::tuple<uint64_t,const char *> sym = kernelElf.get_symbol((void *) ripaddr);
             uint64_t vaddr = std::get<0>(sym);
-            std::string name = std::get<1>(sym);
+            const char * name = std::get<1>(sym);
             uint32_t offset = (uint32_t) (ripaddr - vaddr);
-            get_klogger() << name.c_str() << "+0x" << offset;
+            get_klogger() << name << "+0x" << offset;
         }
         get_klogger() << " (";
         for (size_t par = std::get<0>(value) + 1; par < (3 + std::get<0>(value)) && par < stack.length(); par++) {
