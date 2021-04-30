@@ -5,6 +5,9 @@
 #ifndef JEOKERNEL_TUPLE_H
 #define JEOKERNEL_TUPLE_H
 
+#include <cstdint>
+#include <type_traits>
+#include <utility>
 
 namespace std {
     template<class... Types> class tuple;
@@ -32,19 +35,17 @@ namespace std {
         tuple_onion &operator =(const tuple_onion &) = default;
         tuple_onion &operator =(tuple_onion &&) = default;
 
-        template <std::size_t i> constexpr const typename std::conditional<i == 0,T,typename tuple_element_deref<i,T,Types...>::type>::type &const_at() const noexcept {
-            if (i == 0) {
-                return obj;
-            } else {
-                return layer.template const_at<i - 1>();
-            }
+        template <std::size_t i> constexpr const typename std::enable_if<i == 0,T>::type &const_at() const noexcept {
+            return obj;
         }
-        template <std::size_t i> constexpr typename std::conditional<i == 0, T, typename tuple_element_deref<i,T,Types...>::type>::type &at() const noexcept {
-            if (i == 0) {
-                return obj;
-            } else {
-                return layer.template at<i - 1>();
-            }
+        template <std::size_t i> constexpr const typename std::enable_if<i != 0,typename tuple_element_deref<i,T,Types...>::type>::type &const_at() const noexcept {
+            return layer.template const_at<i - 1>();
+        }
+        template <std::size_t i> constexpr typename std::enable_if<i == 0, T>::type &at() const noexcept {
+            return obj;
+        }
+        template <std::size_t i> constexpr typename std::enable_if<i != 0, typename tuple_element_deref<i,T,Types...>::type>::type &at() const noexcept {
+            return layer.template at<i - 1>();
         }
     };
 
