@@ -63,6 +63,18 @@ namespace std {
 
     };
 
+    ios_base &dec(ios_base &ios) {
+        ios.clear((ios.rdstate() & ~ios_base::basefield) | ios_base::dec);
+    }
+
+    ios_base &oct(ios_base &ios) {
+        ios.clear((ios.rdstate() & ~ios_base::basefield) | ios_base::oct);
+    }
+
+    ios_base &hex(ios_base &ios) {
+        ios.clear((ios.rdstate() & ~ios_base::basefield) | ios_base::hex);
+    }
+
 }
 
 #endif //JEOKERNEL_IOS_H

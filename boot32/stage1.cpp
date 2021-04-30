@@ -2,7 +2,7 @@
 #include "plainvga32.h"
 #include <strs.h>
 #include <pagetable_impl.h>
-#include <multiboot.h>
+#include <multiboot_impl.h>
 #include <elf_impl.h>
 #include <string.h>
 #include <loaderconfig.h>

@@ -54,6 +54,11 @@ namespace std {
             write(&(str[0]), length);
             return *this;
         }
+
+        basic_ostream & operator << (std::ios_base& (*func)(std::ios_base&)) {
+            func(*this);
+            return *this;
+        }
     };
 }
 

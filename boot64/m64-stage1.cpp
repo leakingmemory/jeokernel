@@ -8,13 +8,17 @@
 #include "InterruptTaskState.h"
 #include "InterruptDescriptorTable.h"
 #include "interrupt.h"
+#include "KernelElf.h"
 #include <pagealloc.h>
-#include <multiboot.h>
+#include <multiboot_impl.h>
 #include <core/malloc.h>
 #include <string.h>
 #include <stack.h>
 #include <vector>
 #include <tuple>
+#include <sstream>
+#include <cpuid.h>
+#include <string>
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -22,9 +26,14 @@ static GlobalDescriptorTable *gdt = nullptr;
 static TaskStateSegment *tss = nullptr;
 static InterruptTaskState *int_task_state = nullptr;
 static InterruptDescriptorTable *idt = nullptr;
+static KernelElf *kernel_elf = nullptr;
 
 const MultibootInfoHeader &get_multiboot2() {
     return *multiboot_info;
+}
+
+const KernelElf &get_kernel_elf() {
+    return *kernel_elf;
 }
 
 void vmem_graph() {
@@ -504,6 +513,44 @@ done_with_mem_extension:
         /*for (int i = 0; i < 16; i++) {
             get_klogger() << idt_ptr[i << 1] << " " << idt_ptr[(i << 1) + 1] << "\n";
         }*/
+
+        kernel_elf = new KernelElf(*multiboot_info);
+
+#if 0
+        get_klogger() << "ELF Sections:\n";
+        {
+            const ELF64_header &elfhdr = kernel_elf->elf().get_elf64_header();
+            const char *strtab = elfhdr.get_strtab();
+            for (uint16_t i = 0; i < elfhdr.e_shnum; i++) {
+                const ELF64_section_entry &se = elfhdr.get_section_entry(i);
+                char flags[5];
+                flags[4] = 0;
+                flags[3] = se.sh_flags & SHF_STRINGS ? 'S' : ' ';
+                flags[2] = se.sh_flags & SHF_EXECINSTR ? 'E' : ' ';
+                flags[1] = se.sh_flags & SHF_WRITE ? 'W' : ' ';
+                flags[0] = se.sh_flags & SHF_ALLOC ? 'A' : ' ';
+                get_klogger() << se.sh_type << " " << &(flags[0]) << " " << (uint32_t) se.sh_offset << " " << (uint32_t) se.sh_addr << " " << (uint32_t) se.sh_size << " " << (strtab + se.sh_name) << "\n";
+            }
+            const auto *symtab = elfhdr.get_symtab();
+            if (symtab != nullptr) {
+                get_klogger() << "Symbols: " << symtab->sh_offset << " " << symtab->sh_size << "\n";
+                for (uint32_t i = 0; i < elfhdr.get_symbols(*symtab); i++) {
+                    const ELF64_symbol_entry &sym = elfhdr.get_symbol(*symtab, i);
+                    get_klogger() << sym.st_value << " " << sym.st_size << " " << (strtab + sym.st_name) << "\n";
+                }
+            }
+        }
+#endif
+
+        cpuid<1> _cpuid{};
+        std::string cpu_detect{};
+        {
+            std::stringstream sstream{};
+            sstream << "cpu0: id=" << std::hex << (unsigned int) _cpuid.get_cpu_id() << " " << _cpuid.get_cpu_signature() << "\n";
+            cpu_detect = sstream.str();
+        }
+
+        get_klogger() << cpu_detect.c_str();
 
         asm("sti");
 

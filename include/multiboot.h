@@ -47,45 +47,6 @@ struct MultibootInfoHeader {
     }
 };
 
-uint32_t MultibootInfoHeaderPart::padded_size() const {
-    uint8_t off = (uint8_t) (size & 7);
-    if (off == 0) {
-        return size;
-    } else {
-        off = 8 - off;
-        return size + off;
-    }
-}
-
-bool MultibootInfoHeaderPart::hasNext(const MultibootInfoHeader &header) const {
-#ifdef IA32
-    uint32_t size = (uint32_t) this;
-    size -= (uint32_t) &header;
-#else
-    uint32_t size = (uint64_t) this;
-    size -= (uint64_t) &header;
-#endif
-    size += this->padded_size();
-    size += sizeof(MultibootInfoHeaderPart);
-    if (size <= header.total_size) {
-        size -= sizeof(MultibootInfoHeaderPart);
-        auto *n = next();
-        if (n->size == 0) {
-            return false;
-        }
-        size += n->size;
-        return size <= header.total_size;
-    } else {
-        return false;
-    }
-}
-
-const MultibootInfoHeaderPart *MultibootInfoHeaderPart::next() const {
-    uint8_t *ptr = (uint8_t *) this;
-    ptr += padded_size();
-    return ((MultibootInfoHeaderPart *) ptr);
-}
-
 struct MultibootModuleInfo {
     MultibootInfoHeaderPart part_header;
     uint32_t mod_start;
@@ -126,14 +87,6 @@ struct MultibootMemoryMap {
         return get_entries_ptr()[n];
     }
 } __attribute__((__packed__));
-
-const MultibootModuleInfo &MultibootInfoHeaderPart::get_type3() const {
-    return *((MultibootModuleInfo *) this);
-}
-
-const MultibootMemoryMap &MultibootInfoHeaderPart::get_type6() const {
-    return *((MultibootMemoryMap *) this);
-}
 
 const MultibootInfoHeader &get_multiboot2();
 
