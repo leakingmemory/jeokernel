@@ -5,6 +5,8 @@
 #ifndef JEOKERNEL_MEMORY_H
 #define JEOKERNEL_MEMORY_H
 
+#include <core/malloc.h>
+
 namespace std {
     template<class T> class allocator {
     public:
@@ -13,7 +15,7 @@ namespace std {
         constexpr allocator() noexcept {}
         constexpr allocator( const allocator& other ) noexcept {}
         template<class U> constexpr allocator( const allocator<U>& other) noexcept {}
-        constexpr ~allocator() {}
+        ~allocator() {}
 
         [[nodiscard]] constexpr T* allocate( size_type n ) {
             return (T *) malloc(sizeof(T) * n);

@@ -365,7 +365,7 @@ interrupt_imm10_handler:
 interrupt_imm11_handler:
     pushaq
     mov $0x11,%rdi // first argument
-    jmp interrupt_imm_handler
+    jmp interrupt_imm_errorcode_handler
 interrupt_imm12_handler:
     pushaq
     mov $0x12,%rdi // first argument
@@ -405,15 +405,15 @@ interrupt_imm1A_handler:
 interrupt_imm1B_handler:
     pushaq
     mov $0x1B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm1C_handler:
     pushaq
     mov $0x1C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm1D_handler:
     pushaq
     mov $0x1D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm1E_handler:
     pushaq
     mov $0x1E,%rdi // first argument
@@ -457,7 +457,7 @@ interrupt_imm27_handler:
 interrupt_imm28_handler: // double fault handler
     pushaq
     mov $0x28,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm29_handler:
     pushaq
     mov $0x29,%rdi // first argument
@@ -465,23 +465,23 @@ interrupt_imm29_handler:
 interrupt_imm2A_handler:
     pushaq
     mov $0x2A,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm2B_handler:
     pushaq
     mov $0x2B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm2C_handler:
     pushaq
     mov $0x2C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm2D_handler:
     pushaq
     mov $0x2D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm2E_handler:
     pushaq
     mov $0x2E,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm2F_handler:
     pushaq
     mov $0x2F,%rdi // first argument
@@ -521,7 +521,7 @@ interrupt_imm37_handler:
 interrupt_imm38_handler: // double fault handler
     pushaq
     mov $0x38,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm39_handler:
     pushaq
     mov $0x39,%rdi // first argument
@@ -529,23 +529,23 @@ interrupt_imm39_handler:
 interrupt_imm3A_handler:
     pushaq
     mov $0x3A,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm3B_handler:
     pushaq
     mov $0x3B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm3C_handler:
     pushaq
     mov $0x3C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm3D_handler:
     pushaq
     mov $0x3D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm3E_handler:
     pushaq
     mov $0x3E,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm3F_handler:
     pushaq
     mov $0x3F,%rdi // first argument
@@ -585,7 +585,7 @@ interrupt_imm47_handler:
 interrupt_imm48_handler: // double fault handler
     pushaq
     mov $0x48,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm49_handler:
     pushaq
     mov $0x49,%rdi // first argument
@@ -593,23 +593,23 @@ interrupt_imm49_handler:
 interrupt_imm4A_handler:
     pushaq
     mov $0x4A,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm4B_handler:
     pushaq
     mov $0x4B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm4C_handler:
     pushaq
     mov $0x4C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm4D_handler:
     pushaq
     mov $0x4D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm4E_handler:
     pushaq
     mov $0x4E,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm4F_handler:
     pushaq
     mov $0x4F,%rdi // first argument
@@ -649,7 +649,7 @@ interrupt_imm57_handler:
 interrupt_imm58_handler: // double fault handler
     pushaq
     mov $0x58,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm59_handler:
     pushaq
     mov $0x59,%rdi // first argument
@@ -657,23 +657,23 @@ interrupt_imm59_handler:
 interrupt_imm5A_handler:
     pushaq
     mov $0x5A,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm5B_handler:
     pushaq
     mov $0x5B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm5C_handler:
     pushaq
     mov $0x5C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm5D_handler:
     pushaq
     mov $0x5D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm5E_handler:
     pushaq
     mov $0x5E,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm5F_handler:
     pushaq
     mov $0x5F,%rdi // first argument
@@ -713,7 +713,7 @@ interrupt_imm67_handler:
 interrupt_imm68_handler: // double fault handler
     pushaq
     mov $0x68,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm69_handler:
     pushaq
     mov $0x69,%rdi // first argument
@@ -721,23 +721,23 @@ interrupt_imm69_handler:
 interrupt_imm6A_handler:
     pushaq
     mov $0x6A,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm6B_handler:
     pushaq
     mov $0x6B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm6C_handler:
     pushaq
     mov $0x6C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm6D_handler:
     pushaq
     mov $0x6D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm6E_handler:
     pushaq
     mov $0x6E,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm6F_handler:
     pushaq
     mov $0x6F,%rdi // first argument
@@ -777,7 +777,7 @@ interrupt_imm77_handler:
 interrupt_imm78_handler: // double fault handler
     pushaq
     mov $0x78,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm79_handler:
     pushaq
     mov $0x79,%rdi // first argument
@@ -785,23 +785,23 @@ interrupt_imm79_handler:
 interrupt_imm7A_handler:
     pushaq
     mov $0x7A,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm7B_handler:
     pushaq
     mov $0x7B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm7C_handler:
     pushaq
     mov $0x7C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm7D_handler:
     pushaq
     mov $0x7D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm7E_handler:
     pushaq
     mov $0x7E,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm7F_handler:
     pushaq
     mov $0x7F,%rdi // first argument
@@ -841,7 +841,7 @@ interrupt_imm87_handler:
 interrupt_imm88_handler: // double fault handler
     pushaq
     mov $0x88,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm89_handler:
     pushaq
     mov $0x89,%rdi // first argument
@@ -849,23 +849,23 @@ interrupt_imm89_handler:
 interrupt_imm8A_handler:
     pushaq
     mov $0x8A,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm8B_handler:
     pushaq
     mov $0x8B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm8C_handler:
     pushaq
     mov $0x8C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm8D_handler:
     pushaq
     mov $0x8D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm8E_handler:
     pushaq
     mov $0x8E,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm8F_handler:
     pushaq
     mov $0x8F,%rdi // first argument
@@ -905,7 +905,7 @@ interrupt_imm97_handler:
 interrupt_imm98_handler: // double fault handler
     pushaq
     mov $0x98,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm99_handler:
     pushaq
     mov $0x99,%rdi // first argument
@@ -913,23 +913,23 @@ interrupt_imm99_handler:
 interrupt_imm9A_handler:
     pushaq
     mov $0x9A,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm9B_handler:
     pushaq
     mov $0x9B,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm9C_handler:
     pushaq
     mov $0x9C,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm9D_handler:
     pushaq
     mov $0x9D,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm9E_handler:
     pushaq
     mov $0x9E,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_imm9F_handler:
     pushaq
     mov $0x9F,%rdi // first argument
@@ -969,7 +969,7 @@ interrupt_immA7_handler:
 interrupt_immA8_handler: // double fault handler
     pushaq
     mov $0xA8,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immA9_handler:
     pushaq
     mov $0xA9,%rdi // first argument
@@ -977,23 +977,23 @@ interrupt_immA9_handler:
 interrupt_immAA_handler:
     pushaq
     mov $0xAA,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immAB_handler:
     pushaq
     mov $0xAB,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immAC_handler:
     pushaq
     mov $0xAC,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immAD_handler:
     pushaq
     mov $0xAD,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immAE_handler:
     pushaq
     mov $0xAE,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immAF_handler:
     pushaq
     mov $0xAF,%rdi // first argument
@@ -1033,7 +1033,7 @@ interrupt_immB7_handler:
 interrupt_immB8_handler: // double fault handler
     pushaq
     mov $0xB8,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immB9_handler:
     pushaq
     mov $0xB9,%rdi // first argument
@@ -1041,23 +1041,23 @@ interrupt_immB9_handler:
 interrupt_immBA_handler:
     pushaq
     mov $0xBA,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immBB_handler:
     pushaq
     mov $0xBB,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immBC_handler:
     pushaq
     mov $0xBC,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immBD_handler:
     pushaq
     mov $0xBD,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immBE_handler:
     pushaq
     mov $0xBE,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immBF_handler:
     pushaq
     mov $0xBF,%rdi // first argument
@@ -1097,7 +1097,7 @@ interrupt_immC7_handler:
 interrupt_immC8_handler: // double fault handler
     pushaq
     mov $0xC8,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immC9_handler:
     pushaq
     mov $0xC9,%rdi // first argument
@@ -1105,23 +1105,23 @@ interrupt_immC9_handler:
 interrupt_immCA_handler:
     pushaq
     mov $0xCA,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immCB_handler:
     pushaq
     mov $0xCB,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immCC_handler:
     pushaq
     mov $0xCC,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immCD_handler:
     pushaq
     mov $0xCD,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immCE_handler:
     pushaq
     mov $0xCE,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immCF_handler:
     pushaq
     mov $0xCF,%rdi // first argument
@@ -1161,7 +1161,7 @@ interrupt_immD7_handler:
 interrupt_immD8_handler: // double fault handler
     pushaq
     mov $0xD8,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immD9_handler:
     pushaq
     mov $0xD9,%rdi // first argument
@@ -1169,23 +1169,23 @@ interrupt_immD9_handler:
 interrupt_immDA_handler:
     pushaq
     mov $0xDA,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immDB_handler:
     pushaq
     mov $0xDB,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immDC_handler:
     pushaq
     mov $0xDC,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immDD_handler:
     pushaq
     mov $0xDD,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immDE_handler:
     pushaq
     mov $0xDE,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immDF_handler:
     pushaq
     mov $0xDF,%rdi // first argument
@@ -1225,7 +1225,7 @@ interrupt_immE7_handler:
 interrupt_immE8_handler: // double fault handler
     pushaq
     mov $0xE8,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immE9_handler:
     pushaq
     mov $0xE9,%rdi // first argument
@@ -1233,23 +1233,23 @@ interrupt_immE9_handler:
 interrupt_immEA_handler:
     pushaq
     mov $0xEA,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immEB_handler:
     pushaq
     mov $0xEB,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immEC_handler:
     pushaq
     mov $0xEC,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immED_handler:
     pushaq
     mov $0xED,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immEE_handler:
     pushaq
     mov $0xEE,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immEF_handler:
     pushaq
     mov $0xEF,%rdi // first argument
@@ -1289,7 +1289,7 @@ interrupt_immF7_handler:
 interrupt_immF8_handler: // double fault handler
     pushaq
     mov $0xF8,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immF9_handler:
     pushaq
     mov $0xF9,%rdi // first argument
@@ -1297,23 +1297,23 @@ interrupt_immF9_handler:
 interrupt_immFA_handler:
     pushaq
     mov $0xFA,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immFB_handler:
     pushaq
     mov $0xFB,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immFC_handler:
     pushaq
     mov $0xFC,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immFD_handler:
     pushaq
     mov $0xFD,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immFE_handler:
     pushaq
     mov $0xFE,%rdi // first argument
-    jmp interrupt_imm_errorcode_handler
+    jmp interrupt_imm_handler
 interrupt_immFF_handler:
     pushaq
     mov $0xFF,%rdi // first argument
