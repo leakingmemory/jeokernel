@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string.h>
+#include <memory>
 
 namespace std {
 
@@ -335,8 +336,12 @@ namespace std {
             } else {
                 size_type s = cp.size();
                 reserve(s);
-                Traits::copy(c.ptr.pointer, cp.data(), s + 1);
-                c.ptr.size = s;
+                Traits::copy(data(), cp.data(), s + 1);
+                if (c.shrt.is_short()) {
+                    c.shrt.set_size(s);
+                } else {
+                    c.ptr.size = s;
+                }
             }
         }
 
@@ -350,6 +355,7 @@ namespace std {
             if (!c.shrt.is_short()) {
                 get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
                 c.ptr = mv.c.ptr;
+                mv.c.shrt.set_empty();
             } else {
                 c.shrt = mv.c.shrt;
             }
@@ -377,7 +383,7 @@ namespace std {
             }
         }
 
-        basic_string &operator=(char *cstr) {
+        basic_string &operator=(const char *cstr) {
             size_type length = Traits::length(cstr);
             if (length >= capacity()) {
                 reserve(length);
@@ -427,6 +433,7 @@ namespace std {
         ~basic_string() {
             if (!c.shrt.is_short()) {
                 get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
+                c.shrt.set_empty();
             }
         }
     };
