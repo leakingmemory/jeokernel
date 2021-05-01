@@ -461,6 +461,21 @@ stack_allocated:
 
                 vga.display(0, 0, "Go for launch! ");
 
+                // SSE FP enable:
+                {
+                    uint32_t cr0;
+                    asm("mov %%cr0,%0":"=r"(cr0));
+                    cr0 &= 0xFFFFFFFB; // coprocessor emu off
+                    cr0 |= 2; // coprocessor monitor
+                    asm("mov %0,%%cr0"::"r"(cr0));
+                }
+                {
+                    uint32_t cr4;
+                    asm("mov %%cr4,%0":"=r"(cr4));
+                    cr4 |= 0x600; // FXSR XMMSEXCEPT
+                    asm("mov %0,%%cr4"::"r"(cr4));
+                }
+
                 uint32_t cr3 = 0x1000;
                 asm("mov %0,%%cr3; " :: "r"(cr3));
                 asm("mov %%cr3, %0; " : "=r"(cr3));
