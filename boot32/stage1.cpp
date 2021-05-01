@@ -461,6 +461,24 @@ stack_allocated:
 
                 vga.display(0, 0, "Go for launch! ");
 
+                {
+                    uint32_t checklong;
+                    asm("mov $0x80000000, %%eax; cpuid; mov %%eax, %0":"=r"(checklong) :: "%eax", "%ebx", "%ecx", "%edx");
+                    if (checklong > 0x80000001) {
+                        asm("mov $0x80000001, %%eax; cpuid; mov %%edx, %0":"=r"(checklong) :: "%eax", "%ebx", "%ecx", "%edx");
+                        if ((checklong & (1 << 29)) == 0) {
+                            vga.display(0, 0, "Error: No long mode (64bit) ");
+                            while (1) {
+                                asm("hlt");
+                            }
+                        }
+                    } else {
+                        vga.display(0, 0, "Error: No long mode (64bit) ");
+                        while (1) {
+                            asm("hlt");
+                        }
+                    }
+                }
                 // SSE FP enable:
                 {
                     uint32_t cr0;
@@ -484,42 +502,19 @@ stack_allocated:
                 vga.display(1, 36, "cr3=");
                 uint32_t cr4;
                 asm("mov %%cr4, %0; " : "=r"(cr4));
-                //hexstr((char (&)[8]) *hex, (uint32_t) cr4);
-                //vga.display(1, 53, hex);
-                //vga.display(1, 49, "cr4#");
                 cr4 |= 1 << 5;
                 asm("mov %0, %%cr4; " :: "r"(cr4));
                 asm("mov %%cr4, %0; " : "=r"(cr4));
-                //hexstr((char (&)[8]) *hex, (uint32_t) cr4);
-                //vga.display(1, 53, hex);
-                //vga.display(1, 49, "cr4=");
 
-                uint32_t efer = rdmsr(0xC0000080);
-                //hexstr((char (&)[8]) *hex, (uint32_t) efer);
-                //vga.display(1, 67, hex);
-                //vga.display(1, 62, "efer#");
-
-                wrmsr(0xC0000080, efer | /*long mode enable:*/(1 << 8) | /*no exec bit enabl:*/(1 << 11));
-
-                efer = rdmsr(0xC0000080);
-                //hexstr((char (&)[8]) *hex, (uint32_t) efer);
-                //vga.display(1, 67, hex);
-                //vga.display(1, 62, "efer=");
+                // enable long mode: 0x100 (1 << 8) and 0x800 (1 << 11)
+                asm("mov $0xC0000080, %%ecx; rdmsr; or $0x900, %%eax; wrmsr; " ::: "%eax", "%ecx");
 
                 uint32_t cr0;
                 asm("mov %%cr0, %0" : "=r"(cr0));
-                //hexstr((char (&)[8]) *hex, (uint32_t) cr0);
-                //vga.display(2, 4, hex);
-                //vga.display(2, 0, "cr0#");
 
                 cr0 |= 1 << 16; // Write protected memory enabled
                 cr0 |= 1 << 31; // Paging bit = 1
                 asm("mov %0, %%cr0" :: "r"(cr0));
-
-                asm("mov %%cr0, %0" : "=r"(cr0));
-                //hexstr((char (&)[8]) *hex, (uint32_t) cr0);
-                //vga.display(2, 4, hex);
-                //vga.display(2, 0, "cr0=");
 
             }
 
