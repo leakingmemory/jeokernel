@@ -328,6 +328,13 @@ void boot_stage1(void *multiboot_header_addr) {
                             hexstr((char (&)[8]) *hex, vaddr);
                             vga.display(ln, 8, hex);
                             pageentr *pe = get_pageentr64(pml4t, vaddr);
+
+                            /*
+                             * Default read only and non-exec
+                             */
+                            pe->writeable = 0;
+                            pe->execution_disabled = 1;
+
                             pe->os_virt_avail = 0;
                             pe->os_virt_start = 1;
                             hexstr((char (&)[8]) *hex, pe->page_ppn);
@@ -360,6 +367,13 @@ void boot_stage1(void *multiboot_header_addr) {
                                     pe->os_virt_avail = 0;
                                     pe->os_virt_start = 1;
                                     vga.display(ln, 17, hex);
+
+                                    /*
+                                     * Default read-only and non-exec
+                                     */
+                                    pe->writeable = 0;
+                                    pe->execution_disabled = 1;
+
                                     pe->page_ppn = page_ppn;
                                     vga.display(ln, 26, " -> ");
                                     hexstr((char (&)[8]) *hex, pe->page_ppn);
@@ -386,6 +400,24 @@ void boot_stage1(void *multiboot_header_addr) {
                             }
 good_data_page_alloc:
                             vaddr += 4096;
+                        }
+                    }
+                }
+            }
+
+            for (uint16_t i = 0; i < elf64_header.e_shnum; i++) {
+                const auto &section = elf64_header.get_section_entry(i);
+                if (section.sh_addr != 0 && section.sh_size != 0) {
+                    uint32_t vaddr = (uint32_t) section.sh_addr;
+                    uint32_t end_vaddr = vaddr + ((uint32_t) section.sh_size);
+                    vaddr = vaddr & 0xFFFFF000;
+                    for (; vaddr < end_vaddr; vaddr += 0x1000) {
+                        pageentr *pe = get_pageentr64(pml4t, vaddr);
+                        if (section.sh_flags & SHF_WRITE) {
+                            pe->writeable = 1;
+                        }
+                        if (section.sh_flags & SHF_EXECINSTR) {
+                            pe->execution_disabled = 0;
                         }
                     }
                 }
