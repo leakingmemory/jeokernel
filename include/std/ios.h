@@ -64,15 +64,18 @@ namespace std {
     };
 
     ios_base &dec(ios_base &ios) {
-        ios.clear((ios.rdstate() & ~ios_base::basefield) | ios_base::dec);
+        ios.flags((ios.flags() & ~ios_base::basefield) | ios_base::dec);
+        return ios;
     }
 
     ios_base &oct(ios_base &ios) {
-        ios.clear((ios.rdstate() & ~ios_base::basefield) | ios_base::oct);
+        ios.flags((ios.flags() & ~ios_base::basefield) | ios_base::oct);
+        return ios;
     }
 
     ios_base &hex(ios_base &ios) {
-        ios.clear((ios.rdstate() & ~ios_base::basefield) | ios_base::hex);
+        ios.flags((ios.flags() & ~ios_base::basefield) | ios_base::hex);
+        return ios;
     }
 
 }
