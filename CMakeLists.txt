@@ -33,4 +33,11 @@ add_custom_command(
         COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" ${CMAKE_SOURCE_DIR}/create_isoboot.sh
         )
 
+add_custom_command(
+        OUTPUT jeokernel.img
+        DEPENDS jeokernel kernel
+        COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" ${CMAKE_SOURCE_DIR}/create_diskboot.sh
+)
+
 add_custom_target(jeokernel_iso ALL echo "ISO file built" DEPENDS jeokernel.iso)
+add_custom_target(jeokernel_disk ALL echo "ISO file built" DEPENDS jeokernel.img)
