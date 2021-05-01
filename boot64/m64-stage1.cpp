@@ -9,6 +9,7 @@
 #include "InterruptDescriptorTable.h"
 #include "interrupt.h"
 #include "KernelElf.h"
+#include "cpu_mpfp.h"
 #include <pagealloc.h>
 #include <multiboot_impl.h>
 #include <core/malloc.h>
@@ -541,6 +542,8 @@ done_with_mem_extension:
             }
         }
 #endif
+
+        cpu_mpfp mpfp{reserved_mem};
 
         cpuid<1> _cpuid{};
         std::string cpu_detect{};

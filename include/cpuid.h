@@ -51,7 +51,7 @@ public:
 
     constexpr typename std::enable_if<query == 1,uint32_t>::type get_cpu_signature() const {
         if (query == 1) {
-            return edx;
+            return edx & 0xFFF;
         }
     }
 };
