@@ -124,6 +124,9 @@ void boot_stage1(void *multiboot_header_addr) {
             pt[i].page_ppn = i;
             pt[i].writeable = 1;
             pt[i].present = 1;
+            pt2[i].page_ppn = i + 512;
+            pt2[i].writeable = 1;
+            pt2[i].present = 1;
         }
         pt2[i].os_virt_avail = 1;
         pt3[i].os_virt_avail = 1;
@@ -131,13 +134,25 @@ void boot_stage1(void *multiboot_header_addr) {
         pt5[i].os_virt_avail = 1;
     }
     /*
-     * Make second half allocateable
+     * Make second half, and next, allocateable
      */
-    for (uint16_t i = 256; i < 512; i++) {
-        pt[i].os_phys_avail = 1;
-        pt[i].os_virt_avail = 1;
+    for (uint16_t i = 0; i < 512; i++) {
+        if (i >= 256) {
+            pt[i].os_phys_avail = 1;
+            pt[i].os_virt_avail = 1;
+        }
+        pt2[i].os_phys_avail = 1;
+        pt2[i].os_virt_avail = 1;
     }
     vga.display(0, 0, "/");
+
+    // Our stack is at pt2[511]
+    for (uint16_t i = 502; i < 511; i++) {
+        pt2[i].os_phys_avail = 0;
+        pt2[i].os_virt_avail = 0;
+    }
+    pt2[502].os_virt_start = 1;
+    pt2[502].present = 0; // Crash barrier
 
     hexstr((char (&)[8]) *hex, (uint32_t) multiboot_header_addr);
     vga.display(2, 13, "multiboot=");
@@ -332,58 +347,78 @@ void boot_stage1(void *multiboot_header_addr) {
                         }
                     } else {
                         while (vaddr < vaddr_end) {
-                            pageentr *phys_pe = get_pageentr64(pml4t, phdata);
-                            phys_pe->os_phys_avail = 0;
-                            uint32_t page_ppn = phdata / 4096;
-                            vga.display(ln, 0, "pagzmap ");
-                            hexstr((char (&)[8]) *hex, vaddr);
-                            vga.display(ln, 8, hex);
-                            pageentr *pe = get_pageentr64(pml4t, vaddr);
-                            hexstr((char (&)[8]) *hex, pe->page_ppn);
-                            pe->os_virt_avail = 0;
-                            pe->os_virt_start = 1;
-                            vga.display(ln, 17, hex);
-                            pe->page_ppn = page_ppn;
-                            vga.display(ln, 26, " -> ");
-                            hexstr((char (&)[8]) *hex, pe->page_ppn);
-                            vga.display(ln, 30, hex);
-                            ln++;
+                            for (uint32_t phdataaddr = 0x100000; phdataaddr < 0x200000; phdataaddr += 0x1000) {
+                                pageentr *phys_pe = get_pageentr64(pml4t, phdataaddr);
+                                if (phys_pe->os_phys_avail) {
+                                    phys_pe->os_phys_avail = 0;
+                                    uint32_t page_ppn = phdataaddr / 4096;
+                                    vga.display(ln, 0, "pagzmap ");
+                                    hexstr((char (&)[8]) *hex, vaddr);
+                                    vga.display(ln, 8, hex);
+                                    pageentr *pe = get_pageentr64(pml4t, vaddr);
+                                    hexstr((char (&)[8]) *hex, pe->page_ppn);
+                                    pe->os_virt_avail = 0;
+                                    pe->os_virt_start = 1;
+                                    vga.display(ln, 17, hex);
+                                    pe->page_ppn = page_ppn;
+                                    vga.display(ln, 26, " -> ");
+                                    hexstr((char (&)[8]) *hex, pe->page_ppn);
+                                    vga.display(ln, 30, hex);
+                                    ln++;
 
-                            if (ln > 25) {
-                                ln = 0;
-                            }
+                                    if (ln > 25) {
+                                        ln = 0;
+                                    }
 
-                            {
-                                uint8_t *z = (uint8_t *) phdata;
-                                for (int i = 0; i < 4096; i++) {
-                                    z[i] = 0;
+                                    {
+                                        uint8_t *z = (uint8_t *) vaddr;
+                                        for (int i = 0; i < 4096; i++) {
+                                            z[i] = 0;
+                                        }
+                                    }
+
+                                    goto good_data_page_alloc;
                                 }
                             }
-
+                            vga.display(0, 0, "ERROR: failed to allocate data page  ");
+                            while(1) {
+                                asm("hlt");
+                            }
+good_data_page_alloc:
                             vaddr += 4096;
-                            phdata += 4096;
                         }
                     }
                 }
             }
 
             uint32_t stack_ptr = 0;
+            uint16_t stack_pages = 7;
+            ++stack_pages; // Crash barrier
             for (int i = 256; i < 511; i++) {
-                if (pt[i].os_virt_avail && pt[i].os_phys_avail && pt[i].page_ppn == i && pt[i + 1].os_virt_avail && pt[i + 1].os_phys_avail && pt[i + 1].page_ppn == (i + 1)) {
-                    pt[i].os_virt_avail = 0;
-                    pt[i].os_phys_avail = 0;
-                    pt[i].os_virt_start = 1;
-                    pt[i].writeable = 1;
-                    pt[i].present = 1;
-                    pt[i].accessed = 0;
-                    pt[i + 1].os_virt_avail = 0;
-                    pt[i + 1].os_phys_avail = 0;
-                    pt[i + 1].os_virt_start = 1;
-                    pt[i + 1].writeable = 1;
-                    pt[i + 1].present = 1;
-                    pt[i + 1].accessed = 0;
+                int j = 0;
+                while (j < stack_pages && (i+j) < 512) {
+                    if (!pt[i+j].os_virt_avail || !pt[i+j].os_phys_avail || pt[i+j].page_ppn != (i+j)) {
+                        break;
+                    }
+                    j++;
+                }
+                if (stack_pages == j) {
                     stack_ptr = i;
-                    stack_ptr = (stack_ptr << 12) + 8192;
+                    stack_ptr = (stack_ptr << 12) + (stack_pages * 4096);
+                    pt[i].os_virt_avail = 0;
+                    pt[i].os_virt_start = 1;
+                    pt[i].writeable = 0;
+                    pt[i].present = 0;
+                    pt[i].accessed = 0;
+                    for (int j = 1; j < stack_pages; j++) {
+                        pt[i+j].os_phys_avail = 0;
+                        pt[i+j].os_virt_avail = 0;
+                        pt[i+j].os_virt_start = 0;
+                        pt[i+j].writeable = 1;
+                        pt[i+j].present = 1;
+                        pt[i+j].accessed = 0;
+                        pt[i+j].execution_disabled = 1;
+                    }
                     goto stack_allocated;
                 }
             }

@@ -94,7 +94,7 @@ extern "C" {
                     asm("hlt");
                 }
             }
-            uint64_t phys_mem_watermark = 0x200000;
+            uint64_t phys_mem_watermark = 0x400000;
             uint64_t end_phys_addr = 0x200000;
             {
                 uint64_t phys_mem_added = 0;
