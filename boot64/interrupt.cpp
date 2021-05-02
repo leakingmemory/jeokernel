@@ -10,11 +10,13 @@
 #include "KernelElf.h"
 
 void Interrupt::print_debug() const {
-    get_klogger() << "Interrupt " << _interrupt << " at " << cs() << ":" << rip() << " rflags " << rflags() << "\n"
-    << "rax=" << rax() << " rbx="<< rbx() << " rcx=" << rcx() << " rdx="<< rdx() << "\n"
-    << "rsi=" << rsi() << " rdi="<< rdi() << " rbp=" << rbp() << " rsp="<< rsp() << "\n"
-    << "  r8=" << r8() << "  r9="<<r9() << " r10="<<r10()<<" r11=" << r11() << "\n"
-    << " r12=" << r12() << " r13="<<r13() <<" r14="<<r14()<<" r15="<< r15() << "\n"
+    get_klogger() << "Interrupt " << _interrupt << " at " << cs() << ":" << rip() << " rflags " << rflags() << " err " << error_code() << "\n"
+    << "ax=" << rax() << " bx="<< rbx() << " cx=" << rcx() << " dx="<< rdx() << "\n"
+    << "si=" << rsi() << " di="<< rdi() << " bp=" << rbp() << " sp="<< rsp() << "\n"
+    << "r8=" << r8() << " r9="<<r9() << " rA="<<r10()<<" rB=" << r11() << "\n"
+    << "rC=" << r12() << " rD="<<r13() <<" rE="<<r14()<<" rF="<< r15() << "\n"
+    << "cs=" << cs() << " ds=" << ds() << " es=" << es() << " fs=" << fs() << " gs="
+    << gs() << " ss="<< ss() <<"\n"
     << "Stack:\n";
     const KernelElf &kernelElf = get_kernel_elf();
     {
@@ -71,11 +73,7 @@ std::vector<std::tuple<size_t,uint64_t>> Interrupt::unwind_stack() const {
 caller_stack Interrupt::get_caller_stack() const {
     caller_stack stack{};
     uint8_t *ptr;
-    if (has_error_code()) {
-        ptr = (uint8_t *) ((void *) &(_frame->e_ss));
-    } else {
-        ptr = (uint8_t *) ((void *) &(_frame->ss));
-    }
+    ptr = (uint8_t *) ((void *) &(_frame->ss));
     ptr += sizeof(_frame->ss);
     stack.pointer = ptr;
 

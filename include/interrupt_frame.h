@@ -10,6 +10,10 @@
 #include <tuple>
 
 struct InterruptStackFrame {
+    uint16_t ds;
+    uint16_t es;
+    uint16_t fs;
+    uint16_t gs;
     uint64_t r15;
     uint64_t r14;
     uint64_t r13;
@@ -26,23 +30,14 @@ struct InterruptStackFrame {
     uint64_t rbx;
     uint64_t rax;
 
-    union {
-        struct {
-            uint32_t error;
-            uint64_t e_rip;
-            uint64_t e_cs;
-            uint64_t e_rflags;
-            uint64_t e_rsp;
-            uint64_t e_ss;
-        } __attribute__((__packed__));
-        struct {
-            uint64_t rip;
-            uint64_t cs;
-            uint64_t rflags;
-            uint64_t rsp;
-            uint64_t ss;
-        } __attribute__((__packed__));
-    } __attribute__((__packed__));
+    uint32_t alignment_padding;
+    uint32_t error_code;
+
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
 } __attribute__((__packed__));
 
 struct caller_stack {
@@ -114,22 +109,39 @@ public:
         return _frame->r15;
     }
 
+    uint16_t ds() const {
+        return _frame->ds;
+    }
+    uint16_t es() const {
+        return _frame->ds;
+    }
+    uint16_t fs() const {
+        return _frame->ds;
+    }
+    uint16_t gs() const {
+        return _frame->ds;
+    }
+
     bool has_error_code() const;
 
+    uint32_t error_code() const {
+        return _frame->error_code;
+    }
+
     uint16_t cs() const {
-        return has_error_code() ? _frame->e_cs : _frame->cs;
+        return _frame->cs;
     }
     uint64_t rip() const {
-        return has_error_code() ? _frame->e_rip : _frame->rip;
+        return _frame->rip;
     }
     uint64_t rflags() const {
-        return has_error_code() ? _frame->e_rflags : _frame->rflags;
+        return _frame->rflags;
     }
     uint64_t rsp() const {
-        return has_error_code() ? _frame->e_rsp : _frame->rsp;
+        return _frame->rsp;
     }
-    uint64_t ss() const {
-        return has_error_code() ? _frame->e_ss : _frame->ss;
+    uint16_t ss() const {
+        return _frame->ss;
     }
 
     caller_stack get_caller_stack() const;
