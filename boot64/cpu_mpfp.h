@@ -139,6 +139,7 @@ static_assert(sizeof(mp_configuration_table_header) == 0x2C);
 
 #define MAX_CPUs 32
 #define MAX_BUSs 32
+#define MAX_IOAPICs MAX_CPUs
 #define MAX_INTs 64
 #define MAX_LOCAL_INTs (MAX_CPUs * 16)
 
@@ -148,10 +149,12 @@ private:
     mp_configuration_table_header mp_tbl_hdr;
     mp_cpu_entry cpus[MAX_CPUs];
     mp_bus_entry bus[MAX_BUSs];
+    mp_ioapic_entry ioapic[MAX_IOAPICs];
     mp_ioapic_interrupt_entry ioapic_ints[MAX_INTs];
     mp_local_interrupt_entry local_ints[MAX_LOCAL_INTs];
     uint8_t ncpu;
     uint8_t nbus;
+    uint8_t nioapic;
     uint16_t n_ioapic_int;
     uint16_t n_local_int;
 public:

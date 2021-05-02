@@ -22,8 +22,8 @@ static mp_floating_pointer *search_page(void *ptr, size_t size) {
 }
 
 cpu_mpfp::cpu_mpfp(const std::vector<std::tuple<uint64_t, uint64_t>> &res_mem) :
-ncpu(0), nbus(0), n_ioapic_int(0), n_local_int(0),
-cpus(), bus(), ioapic_ints(), local_ints() {
+ncpu(0), nbus(0), nioapic(0), n_ioapic_int(0), n_local_int(0),
+cpus(), bus(), ioapic(), ioapic_ints(), local_ints() {
     vmem vm{0x2000};
     mp_configuration_table_header *mpc;
 
@@ -82,7 +82,7 @@ mpc_pointer_good:
                 switch (entry->entry_type) {
                     case 0:
                     {
-                        auto &cpu = entry->cpu();
+                        const auto &cpu = entry->cpu();
                         if (ncpu < MAX_CPUs) {
                             get_klogger() << "cpu" << ncpu << ": flags=" << cpu.cpu_flags <<
                             " signature=" << cpu.cpu_signature << " features=" <<
@@ -92,6 +92,56 @@ mpc_pointer_good:
                         }
                     }
                         break;
+                    case 1:
+                    {
+                        const auto &bus = entry->bus();
+                        if (nbus < MAX_BUSs) {
+                            char bus_type[7];
+                            for (int i = 0; i < 6; i++) {
+                                bus_type[i] = bus.bus_type[i];
+                            }
+                            bus_type[6] = 0;
+                            get_klogger() << "bus" << nbus << ": id=" << bus.bus_id << " " << &(bus_type[0]) << "\n";
+                            this->bus[nbus++] = bus;
+                        }
+                    }
+                        break;
+                    case 2:
+                    {
+                        const auto &ioapic = entry->ioapic();
+                        if (nioapic < MAX_IOAPICs) {
+                            get_klogger() << "ioapic" << nioapic << ": flags=" << ioapic.ioapic_flags << " id=" << ioapic.ioapic_id << " version=" << ioapic.ioapic_version << " mmap="<< ioapic.mapped_memory_addr << "\n";
+                            this->ioapic[nioapic++] = ioapic;
+                        }
+                    }
+                        break;
+                    case 3:
+                    {
+                        const auto &ioapic_int = entry->ioapic_int();
+                        if (n_ioapic_int < MAX_INTs) {
+                            get_klogger() << "ioapic-interrupt" << n_ioapic_int << ": ioapic-id=" << ioapic_int.destination_ioapic_id
+                            << " flags=" << ioapic_int.interrupt_flags << " type=" << ioapic_int.interrupt_type << " int="
+                            << ioapic_int.ioapic_intin << " bus-id=" << ioapic_int.source_bus_id << " irq="
+                            << ioapic_int.source_bus_irq << "\n";
+                            this->ioapic_ints[n_ioapic_int++] = ioapic_int;
+                        }
+                    }
+                        break;
+                    case 4:
+                    {
+                        const auto &local_int = entry->local_int();
+                        if (n_local_int < MAX_LOCAL_INTs) {
+                            get_klogger() << "local-interrupt" << n_local_int << ": flags=" << local_int.interrupt_flags
+                            << " type=" << local_int.interrupt_type << " apic-id=" << local_int.destination_apic_id
+                            << " int=" << local_int.apic_lintin << " bus-id=" << local_int.source_bus_id
+                            << " irq=" << local_int.source_bus_irq << "\n";
+                            this->local_ints[n_local_int++] = local_int;
+                        }
+                    }
+                        break;
+                    default:
+                        get_klogger() << "mp conf entry: type=" << entry->entry_type << " size="
+                        << entry->entry_length << "\n";
                 }
                 entry = entry->next();
             }
