@@ -82,9 +82,13 @@
 
     // Push state
     pushaq
+    sub $512, %rsp
+    fxsave (%rsp)
 .endm
 
 .macro intpop
+   fxrstor (%rsp)
+   add $512, %rsp
    popaq
    add 8, %rsp
 .endm

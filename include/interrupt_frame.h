@@ -9,7 +9,75 @@
 #include <vector>
 #include <tuple>
 
+struct x86_fpu_state {
+    /*   0 */ uint16_t fcw;
+    /*   2 */ uint16_t fsw;
+    /*   4 */ uint8_t ftw;
+    /*   5 */ uint8_t reserved1;
+    /*   6 */ uint16_t fop;
+    /*   8 */ uint32_t fpu_ip;
+    /*  12 */ uint16_t cs;
+    /*  14 */ uint16_t reserved2;
+    /*  16 */ uint32_t fpu_dp;
+    /*  20 */ uint16_t ds;
+    /*  22 */ uint16_t reserved3;
+    /*  24 */ uint32_t mxcsr;
+    /*  28 */ uint32_t mxcsr_mask;
+    /*  32 */ uint64_t st0_mm0_low;
+    /*  40 */ uint16_t st0_mm0_high;
+    /*  42 */ uint32_t reserved4_low;
+    /*  46 */ uint16_t reserved4_high;
+    /*  48 */ uint64_t st1_mm1_low;
+    /*  56 */ uint16_t st1_mm1_high;
+    /*  58 */ uint32_t reserved5_low;
+    /*  62 */ uint16_t reserved5_high;
+    /*  64 */ uint64_t st2_mm2_low;
+    /*  72 */ uint16_t st2_mm2_high;
+    /*  74 */ uint32_t reserved6_low;
+    /*  78 */ uint16_t reserved6_high;
+    /*  80 */ uint64_t st3_mm3_low;
+    /*  88 */ uint16_t st3_mm3_high;
+    /*  90 */ uint32_t reserved7_low;
+    /*  94 */ uint16_t reserved7_high;
+    /*  96 */ uint64_t st4_mm4_low;
+    /* 104 */ uint16_t st4_mm4_high;
+    /* 106 */ uint32_t reserved8_low;
+    /* 110 */ uint16_t reserved8_high;
+    /* 112 */ uint64_t st5_mm5_low;
+    /* 120 */ uint16_t st5_mm5_high;
+    /* 122 */ uint32_t reserved9_low;
+    /* 126 */ uint16_t reserved9_high;
+    /* 128 */ uint64_t st6_mm6_low;
+    /* 136 */ uint16_t st6_mm6_high;
+    /* 138 */ uint32_t reserved10_low;
+    /* 142 */ uint16_t reserved10_high;
+    /* 144 */ uint64_t st7_mm7_low;
+    /* 152 */ uint16_t st7_mm7_high;
+    /* 154 */ uint32_t reserved11_low;
+    /* 158 */ uint16_t reserved11_high;
+    /* 160 */ uint64_t xmm0_low;
+    /* 168 */ uint64_t xmm0_high;
+    /* 176 */ uint64_t xmm1_low;
+    /* 184 */ uint64_t xmm1_high;
+    /* 192 */ uint64_t xmm2_low;
+    /* 200 */ uint64_t xmm2_high;
+    /* 208 */ uint64_t xmm3_low;
+    /* 216 */ uint64_t xmm3_high;
+    /* 224 */ uint64_t xmm4_low;
+    /* 232 */ uint64_t xmm4_high;
+    /* 240 */ uint64_t xmm5_low;
+    /* 248 */ uint64_t xmm5_high;
+    /* 256 */ uint64_t xmm6_low;
+    /* 264 */ uint64_t xmm6_high;
+    /* 272 */ uint64_t xmm7_low;
+    /* 280 */ uint64_t xmm7_high;
+    /* 288 */ uint64_t reserved12[28];
+} __attribute__((__packed__));
+static_assert(sizeof(x86_fpu_state) == 512);
+
 struct InterruptStackFrame {
+    x86_fpu_state fpu_simd_state;
+
     uint16_t ds;
     uint16_t es;
     uint16_t fs;
@@ -142,6 +210,62 @@ public:
     }
     uint16_t ss() const {
         return _frame->ss;
+    }
+
+    uint64_t xmm0_low() const {
+        return _frame->fpu_simd_state.xmm0_low;
+    }
+    uint64_t xmm0_high() const {
+        return _frame->fpu_simd_state.xmm0_high;
+    }
+
+    uint64_t xmm1_low() const {
+        return _frame->fpu_simd_state.xmm1_low;
+    }
+    uint64_t xmm1_high() const {
+        return _frame->fpu_simd_state.xmm1_high;
+    }
+
+    uint64_t xmm2_low() const {
+        return _frame->fpu_simd_state.xmm2_low;
+    }
+    uint64_t xmm2_high() const {
+        return _frame->fpu_simd_state.xmm2_high;
+    }
+
+    uint64_t xmm3_low() const {
+        return _frame->fpu_simd_state.xmm3_low;
+    }
+    uint64_t xmm3_high() const {
+        return _frame->fpu_simd_state.xmm3_high;
+    }
+
+    uint64_t xmm4_low() const {
+        return _frame->fpu_simd_state.xmm4_low;
+    }
+    uint64_t xmm4_high() const {
+        return _frame->fpu_simd_state.xmm4_high;
+    }
+
+    uint64_t xmm5_low() const {
+        return _frame->fpu_simd_state.xmm5_low;
+    }
+    uint64_t xmm5_high() const {
+        return _frame->fpu_simd_state.xmm5_high;
+    }
+
+    uint64_t xmm6_low() const {
+        return _frame->fpu_simd_state.xmm6_low;
+    }
+    uint64_t xmm6_high() const {
+        return _frame->fpu_simd_state.xmm6_high;
+    }
+
+    uint64_t xmm7_low() const {
+        return _frame->fpu_simd_state.xmm7_low;
+    }
+    uint64_t xmm7_high() const {
+        return _frame->fpu_simd_state.xmm7_high;
     }
 
     caller_stack get_caller_stack() const;

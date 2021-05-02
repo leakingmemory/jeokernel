@@ -16,8 +16,16 @@ void Interrupt::print_debug() const {
     << "r8=" << r8() << " r9="<<r9() << " rA="<<r10()<<" rB=" << r11() << "\n"
     << "rC=" << r12() << " rD="<<r13() <<" rE="<<r14()<<" rF="<< r15() << "\n"
     << "cs=" << cs() << " ds=" << ds() << " es=" << es() << " fs=" << fs() << " gs="
-    << gs() << " ss="<< ss() <<"\n"
-    << "Stack:\n";
+    << gs() << " ss="<< ss() <<"\n";
+    get_klogger() << "xmm0 " << xmm0_high() << xmm0_low()
+            << " 1 " << xmm1_high() << xmm1_low() << "\n"
+            << "xmm2 " << xmm2_high() << xmm2_low()
+            << " 3 " << xmm3_high() << xmm3_low() << "\n"
+            << "xmm4 " << xmm4_high() << xmm4_low()
+            << " 5 " << xmm5_high() << xmm5_low() << "\n"
+            << "xmm6 " << xmm6_high() << xmm6_low()
+            << " 7 " << xmm7_high() << xmm7_low() << "\n";
+    get_klogger() << "Stack:\n";
     const KernelElf &kernelElf = get_kernel_elf();
     {
         std::tuple<uint64_t, const char *> sym = kernelElf.get_symbol((void *) rip());
