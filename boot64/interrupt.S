@@ -35,19 +35,19 @@
 .macro popaq
    pop %rax
    mov %rax, %rbx
-   and 0xFFFF, %rbx
+   and $0xFFFF, %rbx
    mov %bx, %ds
    shr $16, %rax
    mov %rax, %rbx
-   and 0xFFFF, %rbx
+   and $0xFFFF, %rbx
    mov %bx, %es
    shr $16, %rax
    mov %rax, %rbx
-   and 0xFFFF, %rbx
+   and $0xFFFF, %rbx
    mov %bx, %fs
    shr $16, %rax
    mov %rax, %rbx
-   and 0xFFFF, %rbx
+   and $0xFFFF, %rbx
    mov %bx, %gs
    pop %r15
    pop %r14
@@ -90,7 +90,7 @@
    fxrstor (%rsp)
    add $512, %rsp
    popaq
-   add 8, %rsp
+   add $8, %rsp
 .endm
 
 .globl interrupt_imm00_handler
@@ -1375,9 +1375,12 @@ interrupt_immFF_handler:
     mov $0xFF,%rdi // first argument
     jmp interrupt_imm_handler
 interrupt_imm_handler:
+    mov $0x10, %rax
+    mov %ax, %ss
     cld
     mov %rsp,%rsi // second argument
     call interrupt_handler
     intpop
+    sti
     iretq
 
