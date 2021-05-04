@@ -80,14 +80,38 @@
 //error_code:
     and $0xFFFFFFFFFFFFFFF8,%rsp
 
+    push %rax
+    mov $0x10, %rax
+    mov %ax, %ss
+    pop %rax
+
     // Push state
     pushaq
+
+    mov $0x10,%ax
+    mov %ax,%ds
+    mov %ax,%es
+    mov %ax,%fs
+    mov %ax,%gs
+    mov %ax,%ss
+
+    mov %rsp, %rsi // CPU frame as seconds argument to int handler
+
+    // 512 + stack realignment ; must be 16 byte aligned for fxsave
+
     sub $512, %rsp
-    fxsave (%rsp)
+    mov %rsp, %rdx
+    sub $0x10, %rsp
+    and $0xFFFFFFFFFFFFFFF0, %rdx
+    fxsave (%rdx) // x86/SSE/FPU frame as third argument to int handler
 .endm
 
 .macro intpop
-   fxrstor (%rsp)
+   mov %rsp, %rax
+   add $0x10, %rax
+   and $0xFFFFFFFFFFFFFFF0, %rax
+   fxrstor (%rax)
+   add $0x10, %rsp
    add $512, %rsp
    popaq
    add $8, %rsp
@@ -1375,10 +1399,7 @@ interrupt_immFF_handler:
     mov $0xFF,%rdi // first argument
     jmp interrupt_imm_handler
 interrupt_imm_handler:
-    mov $0x10, %rax
-    mov %ax, %ss
     cld
-    mov %rsp,%rsi // second argument
     call interrupt_handler
     intpop
     sti

@@ -76,8 +76,6 @@ struct x86_fpu_state {
 static_assert(sizeof(x86_fpu_state) == 512);
 
 struct InterruptStackFrame {
-    x86_fpu_state fpu_simd_state;
-
     uint16_t ds;
     uint16_t es;
     uint16_t fs;
@@ -126,9 +124,10 @@ struct caller_stack {
 class Interrupt {
 private:
     InterruptStackFrame *_frame;
+    x86_fpu_state *_fpu;
     uint8_t _interrupt;
 public:
-    Interrupt(InterruptStackFrame *frame, uint8_t interrupt) : _frame(frame), _interrupt(interrupt) {
+    Interrupt(InterruptStackFrame *frame, x86_fpu_state *fpu, uint8_t interrupt) : _frame(frame), _fpu(fpu), _interrupt(interrupt) {
     }
 
     uint64_t rax() const {
@@ -213,59 +212,63 @@ public:
     }
 
     uint64_t xmm0_low() const {
-        return _frame->fpu_simd_state.xmm0_low;
+        return _fpu->xmm0_low;
     }
     uint64_t xmm0_high() const {
-        return _frame->fpu_simd_state.xmm0_high;
+        return _fpu->xmm0_high;
     }
 
     uint64_t xmm1_low() const {
-        return _frame->fpu_simd_state.xmm1_low;
+        return _fpu->xmm1_low;
     }
     uint64_t xmm1_high() const {
-        return _frame->fpu_simd_state.xmm1_high;
+        return _fpu->xmm1_high;
     }
 
     uint64_t xmm2_low() const {
-        return _frame->fpu_simd_state.xmm2_low;
+        return _fpu->xmm2_low;
     }
     uint64_t xmm2_high() const {
-        return _frame->fpu_simd_state.xmm2_high;
+        return _fpu->xmm2_high;
     }
 
     uint64_t xmm3_low() const {
-        return _frame->fpu_simd_state.xmm3_low;
+        return _fpu->xmm3_low;
     }
     uint64_t xmm3_high() const {
-        return _frame->fpu_simd_state.xmm3_high;
+        return _fpu->xmm3_high;
     }
 
     uint64_t xmm4_low() const {
-        return _frame->fpu_simd_state.xmm4_low;
+        return _fpu->xmm4_low;
     }
     uint64_t xmm4_high() const {
-        return _frame->fpu_simd_state.xmm4_high;
+        return _fpu->xmm4_high;
     }
 
     uint64_t xmm5_low() const {
-        return _frame->fpu_simd_state.xmm5_low;
+        return _fpu->xmm5_low;
     }
     uint64_t xmm5_high() const {
-        return _frame->fpu_simd_state.xmm5_high;
+        return _fpu->xmm5_high;
     }
 
     uint64_t xmm6_low() const {
-        return _frame->fpu_simd_state.xmm6_low;
+        return _fpu->xmm6_low;
     }
     uint64_t xmm6_high() const {
-        return _frame->fpu_simd_state.xmm6_high;
+        return _fpu->xmm6_high;
     }
 
     uint64_t xmm7_low() const {
-        return _frame->fpu_simd_state.xmm7_low;
+        return _fpu->xmm7_low;
     }
     uint64_t xmm7_high() const {
-        return _frame->fpu_simd_state.xmm7_high;
+        return _fpu->xmm7_high;
+    }
+
+    uint8_t interrupt_vector() const {
+        return _interrupt;
     }
 
     caller_stack get_caller_stack() const;

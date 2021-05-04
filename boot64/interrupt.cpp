@@ -127,8 +127,8 @@ bool Interrupt::has_error_code() const {
 }
 
 extern "C" {
-    void interrupt_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame) {
-        Interrupt interrupt{stack_frame, (uint8_t) interrupt_vector};
+    void interrupt_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame, x86_fpu_state *fpusse) {
+        Interrupt interrupt{stack_frame, fpusse, (uint8_t) interrupt_vector};
         switch (interrupt_vector) {
             case 0: {
                 CpuExceptionTrap trap{"division by zero", interrupt};
