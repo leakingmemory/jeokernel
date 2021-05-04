@@ -46,6 +46,13 @@ namespace std {
     template <class T> class vector_iterator : public vector_iterator_base<T> {
     public:
         vector_iterator(T *ptr) : vector_iterator_base<T>(ptr) { }
+        vector_iterator(const vector_iterator &cp) : vector_iterator_base<T>(cp.ptr) { }
+
+        operator vector_iterator<const T> () const {
+            vector_iterator<const T> cvec(this->ptr);
+            return cvec;
+        }
+
         constexpr vector_iterator operator ++() noexcept {
             return vector_iterator<T>(this->ptr++);
         }
@@ -239,6 +246,18 @@ namespace std {
             T *ptr = new((void *) &(c._data[c._size])) T(args...);
             c._size = exp;
             return *ptr;
+        }
+
+        iterator erase(const_iterator position) {
+            uint64_t index = &(*position) - &(*begin());
+            c._data[index].~T();
+            c._size--;
+            for (uint64_t del = index; del < c._size; del++) {
+                c._data[del] = c._data[del + 1];
+            }
+            auto iterator = begin();
+            iterator += index;
+            return iterator;
         }
     };
 }
