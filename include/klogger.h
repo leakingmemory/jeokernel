@@ -10,6 +10,10 @@
 class KLogger {
 public:
     virtual ~KLogger() {}
+
+    virtual void print_at(uint8_t col, uint8_t row, const char *str) {
+    }
+
     virtual KLogger & operator << (const char *str) {
         return *this;
     };

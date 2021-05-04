@@ -13,6 +13,7 @@ public:
     b8000 cons;
     b8000logger();
     ~b8000logger();
+    void print_at(uint8_t col, uint8_t row, const char *str) override;
     b8000logger & operator << (const char *str) override;
 };
 

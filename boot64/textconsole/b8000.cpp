@@ -82,3 +82,19 @@ void b8000::scroll() {
         videobuf[i].fg_color = 7;
     }
 }
+
+void b8000::print_at(uint8_t col, uint8_t row, const char *str) {
+    uint16_t pos = row;
+    pos *= 80;
+    pos += col;
+    while (*str != 0) {
+        videobuf[pos].chr = *str;
+        videobuf[pos].bg_color = 0;
+        videobuf[pos].fg_color = 7;
+        ++pos;
+        ++str;
+        if (pos >= 80*25) {
+            pos = 0;
+        }
+    }
+}

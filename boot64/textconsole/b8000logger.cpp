@@ -14,3 +14,7 @@ b8000logger & b8000logger::operator << (const char *str) {
     cons << str;
     return *this;
 }
+
+void b8000logger::print_at(uint8_t col, uint8_t row, const char *str) {
+    cons.print_at(col, row, str);
+}
