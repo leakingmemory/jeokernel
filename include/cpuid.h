@@ -39,11 +39,12 @@ public:
             return CPUID_EDX_APIC_AVAIL;
         }
     }*/
+
     /**
      * Query 1, CPU ID
      * @return uint8_t
      */
-    constexpr typename std::enable_if<query == 1,uint8_t>::type get_cpu_id() const {
+    constexpr typename std::enable_if<query == 1,uint8_t>::type get_apic_id() const {
         if (query == 1) {
             return ebx >> 24;
         }

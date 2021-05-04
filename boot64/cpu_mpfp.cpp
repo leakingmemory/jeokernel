@@ -5,6 +5,7 @@
 #include <klogger.h>
 #include "cpu_mpfp.h"
 #include "vmem.h"
+#include <cpuid.h>
 
 static mp_floating_pointer *search_page(void *ptr, size_t size) {
     uint32_t *p = (uint32_t *) ptr;
@@ -119,10 +120,10 @@ mpc_pointer_good:
                     {
                         const auto &ioapic_int = entry->ioapic_int();
                         if (n_ioapic_int < MAX_INTs) {
-                            get_klogger() << "ioapic-interrupt" << n_ioapic_int << ": ioapic-id=" << ioapic_int.destination_ioapic_id
-                            << " flags=" << ioapic_int.interrupt_flags << " type=" << ioapic_int.interrupt_type << " int="
-                            << ioapic_int.ioapic_intin << " bus-id=" << ioapic_int.source_bus_id << " irq="
-                            << ioapic_int.source_bus_irq << "\n";
+                            //get_klogger() << "ioapic-interrupt" << n_ioapic_int << ": ioapic-id=" << ioapic_int.destination_ioapic_id
+                            //<< " flags=" << ioapic_int.interrupt_flags << " type=" << ioapic_int.interrupt_type << " int="
+                            //<< ioapic_int.ioapic_intin << " bus-id=" << ioapic_int.source_bus_id << " irq="
+                            //<< ioapic_int.source_bus_irq << "\n";
                             this->ioapic_ints[n_ioapic_int++] = ioapic_int;
                         }
                     }
@@ -131,10 +132,10 @@ mpc_pointer_good:
                     {
                         const auto &local_int = entry->local_int();
                         if (n_local_int < MAX_LOCAL_INTs) {
-                            get_klogger() << "local-interrupt" << n_local_int << ": flags=" << local_int.interrupt_flags
-                            << " type=" << local_int.interrupt_type << " apic-id=" << local_int.destination_apic_id
-                            << " int=" << local_int.apic_lintin << " bus-id=" << local_int.source_bus_id
-                            << " irq=" << local_int.source_bus_irq << "\n";
+                            //get_klogger() << "local-interrupt" << n_local_int << ": flags=" << local_int.interrupt_flags
+                            //<< " type=" << local_int.interrupt_type << " apic-id=" << local_int.destination_apic_id
+                            //<< " int=" << local_int.apic_lintin << " bus-id=" << local_int.source_bus_id
+                            //<< " irq=" << local_int.source_bus_irq << "\n";
                             this->local_ints[n_local_int++] = local_int;
                         }
                     }
@@ -149,6 +150,18 @@ mpc_pointer_good:
 mpc_pointer_bad:
         ;
     }
+}
+
+int cpu_mpfp::get_current_cpu_num() const {
+    cpuid<1> q{};
+    uint8_t apic_id = q.get_apic_id();
+    get_klogger() << "Current cpu apic id " << apic_id << "\n";
+    for (int i = 0; i < ncpu; i++) {
+        if (cpus[i].local_apic_id == apic_id) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 bool mp_floating_pointer::valid() {

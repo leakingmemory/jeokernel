@@ -139,7 +139,7 @@ static_assert(sizeof(mp_configuration_table_header) == 0x2C);
 
 #define MAX_CPUs 32
 #define MAX_BUSs 32
-#define MAX_IOAPICs MAX_CPUs
+#define MAX_IOAPICs 2
 #define MAX_INTs 64
 #define MAX_LOCAL_INTs (MAX_CPUs * 16)
 
@@ -163,6 +163,24 @@ public:
      * @param res_mem Reserved memory ranges <start,size>
      */
     explicit cpu_mpfp(const std::vector<std::tuple<uint64_t,uint64_t>> &res_mem);
+
+    int get_num_cpus() const {
+        return ncpu;
+    }
+    const mp_cpu_entry &get_cpu(int n) const {
+        return cpus[n];
+    }
+    int get_current_cpu_num() const;
+
+    uint32_t get_local_apic_addr() const {
+        return mp_tbl_hdr.local_apic_map_addr;
+    }
+    int get_num_ioapics() const {
+        return nioapic;
+    }
+    const mp_ioapic_entry &get_ioapic(int idx) const {
+        return ioapic[idx];
+    }
 };
 
 
