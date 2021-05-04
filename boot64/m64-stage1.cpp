@@ -10,6 +10,9 @@
 #include "interrupt.h"
 #include "KernelElf.h"
 #include "cpu_mpfp.h"
+#include "LocalApic.h"
+#include "Pic.h"
+#include "IOApic.h"
 #include <pagealloc.h>
 #include <multiboot_impl.h>
 #include <core/malloc.h>
@@ -20,6 +23,7 @@
 #include <sstream>
 #include <cpuid.h>
 #include <string>
+#include "HardwareInterrupts.h"
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -28,6 +32,7 @@ static TaskStateSegment *tss = nullptr;
 static InterruptTaskState *int_task_state = nullptr;
 static InterruptDescriptorTable *idt = nullptr;
 static KernelElf *kernel_elf = nullptr;
+static uint64_t timer_ticks = 0;
 
 const MultibootInfoHeader &get_multiboot2() {
     return *multiboot_info;
@@ -543,17 +548,65 @@ done_with_mem_extension:
         }
 #endif
 
+        create_hw_interrupt_handler();
         cpu_mpfp mpfp{reserved_mem};
+        LocalApic lapic{mpfp};
 
-        cpuid<1> _cpuid{};
-        std::string cpu_detect{};
         {
-            std::stringstream sstream{};
-            sstream << "cpu0: id=" << std::hex << (unsigned int) _cpuid.get_cpu_id() << " " << _cpuid.get_cpu_signature() << "\n";
-            cpu_detect = sstream.str();
+
+            int cpu_idx = lapic.get_cpu_num(mpfp);
+
+            get_klogger() << "Current cpu lapic reg " << lapic.get_lapic_id() << " num=" << (uint8_t) cpu_idx << "\n";
+
+            if (cpu_idx < 0) {
+                wild_panic("cpu configuration was not found or recongized");
+            }
+
+            auto &cpu = mpfp.get_cpu(cpu_idx);
+
+            if ((cpu.features & 0x200) == 0) {
+                wild_panic("system lacks apic support");
+            }
+
+            Pic pic{};
+            pic.disable();
+            pic.remap(0x20);
+            pic.disable();
+
+            lapic.enable_apic();
+            lapic.set_lint0_int(0x21, false);
+            lapic.set_lint1_int(0x22, false);
+            get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << "\n";
+            lapic.set_timer_div(0x3);
+            lapic.set_timer_count(0x100000);
+
+            IOApic ioApic{mpfp};
+
+            uint8_t vectors = ioApic.get_num_vectors();
+            get_klogger() << "ioapic vectors " << vectors << "\n";
+            for (uint8_t i = 0; i < vectors; i++) {
+                ioApic.set_vector_interrupt(i, 0x23 + i);
+            }
+
+            for (int i = 0; i < 3; i++) {
+                get_hw_interrupt_handler().add_finalizer(i, [&lapic](Interrupt &interrupt) {
+                    lapic.eio();
+                });
+            }
         }
 
-        get_klogger() << cpu_detect.c_str();
+        timer_ticks = 0;
+        const char *characters = "|/-\\|/-\\";
+        get_hw_interrupt_handler().add_handler(0, [&lapic, &mpfp, characters] (Interrupt &interrupt) {
+            uint64_t prev_vis = timer_ticks >> 5;
+            ++timer_ticks;
+            uint64_t vis = timer_ticks >> 5;
+            if (prev_vis != vis) {
+                char str[2] = {characters[vis & 7], 0};
+                uint8_t pos = 79 - lapic.get_cpu_num(mpfp);
+                get_klogger().print_at(pos, 24, &(str[0]));
+            }
+        });
 
         asm("sti");
 

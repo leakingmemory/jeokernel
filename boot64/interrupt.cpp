@@ -8,6 +8,7 @@
 #include "PageFault.h"
 #include "CpuExceptionTrap.h"
 #include "KernelElf.h"
+#include "HardwareInterrupts.h"
 
 void Interrupt::print_debug() const {
     get_klogger() << "Interrupt " << _interrupt << " at " << cs() << ":" << rip() << " rflags " << rflags() << " err " << error_code() << "\n"
@@ -225,6 +226,15 @@ extern "C" {
                 trap.handle();
                 break;
             }
+        }
+        if (interrupt_vector >= 0x20 && interrupt_vector < (0x20 + HW_INT_N)) {
+            bool handled = get_hw_interrupt_handler().handle(interrupt);
+            if (!handled) {
+                get_klogger() << "\nReceived interrupt " << interrupt_vector << "\n";
+                interrupt.print_debug();
+                wild_panic("unhandled interrupt");
+            }
+            return;
         }
         get_klogger() << "\nReceived interrupt " << interrupt_vector << "\n";
         interrupt.print_debug();
