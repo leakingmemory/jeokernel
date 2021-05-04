@@ -24,6 +24,7 @@
 #include <cpuid.h>
 #include <string>
 #include "HardwareInterrupts.h"
+#include "vmem.h"
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -34,8 +35,15 @@ static InterruptDescriptorTable *idt = nullptr;
 static KernelElf *kernel_elf = nullptr;
 static uint64_t timer_ticks = 0;
 
-const MultibootInfoHeader &get_multiboot2() {
-    return *multiboot_info;
+const MultibootInfoHeader &get_multiboot2(vmem &vm) {
+    uint64_t base_addr = (uint64_t) multiboot_info;
+    uint64_t offset = base_addr & 0x0FFF;
+    base_addr -= offset;
+    vm.page(0).rmap(base_addr);
+    vm.page(1).rmap(base_addr + 0x1000);
+    vm.page(2).rmap(base_addr + 0x2000);
+    vm.page(3).rmap(base_addr + 0x3000);
+    return *((const MultibootInfoHeader *) (((uint64_t )vm.pointer()) + offset));
 }
 
 const KernelElf &get_kernel_elf() {
@@ -91,8 +99,10 @@ extern "C" {
 
         std::vector<std::tuple<uint64_t,uint64_t>> reserved_mem{};
 
+        vmem multiboot_vm(16384);
+        const auto &multiboot2 = get_multiboot2(multiboot_vm);
+
         {
-            const auto &multiboot2 = get_multiboot2();
             get_klogger() << "Multiboot2 info at " << ((uint64_t) &multiboot2) << "\n";
             if (!multiboot2.has_parts()) {
                 get_klogger() << "Error: Multiboot2 structure has no information\n";
@@ -520,7 +530,7 @@ done_with_mem_extension:
             get_klogger() << idt_ptr[i << 1] << " " << idt_ptr[(i << 1) + 1] << "\n";
         }*/
 
-        kernel_elf = new KernelElf(*multiboot_info);
+        kernel_elf = new KernelElf(multiboot2);
 
 #if 0
         get_klogger() << "ELF Sections:\n";
