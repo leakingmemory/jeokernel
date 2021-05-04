@@ -48,3 +48,14 @@ void vmem_page::unmap() {
     pageentr *pe = get_pageentr64(get_pml4t(), addr);
     pe->present = 0;
 }
+
+void vmem_page::rwmap(uint64_t paddr) {
+    pageentr *pe = get_pageentr64(get_pml4t(), addr);
+    pe->dirty = 0;
+    pe->execution_disabled = 1;
+    pe->writeable = 1;
+    pe->accessed = 0;
+    pe->user_access = 0;
+    pe->page_ppn = paddr >> 12;
+    pe->present = 1;
+}
