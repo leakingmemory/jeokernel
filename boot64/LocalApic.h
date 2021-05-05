@@ -80,6 +80,10 @@ public:
         pointer[0x380 / 4] = count;
     }
 
+    uint32_t get_timer_value() {
+        return pointer[0x390 / 4];
+    }
+
     void enable_apic(bool en = true) {
         uint64_t msr = (get_msr_base_reg() &0x0FFFFFF000) | (en ? LAPIC_MSR_ENABLE : 0);
         get_klogger() << "Set apic msr " << msr << "\n";

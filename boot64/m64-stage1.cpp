@@ -36,6 +36,7 @@ static InterruptTaskState *int_task_state = nullptr;
 static InterruptDescriptorTable *idt = nullptr;
 static KernelElf *kernel_elf = nullptr;
 static uint64_t timer_ticks = 0;
+static uint64_t lapic_100ms = 0;
 
 const MultibootInfoHeader &get_multiboot2(vmem &vm) {
     uint64_t base_addr = (uint64_t) multiboot_info;
@@ -604,25 +605,26 @@ done_with_mem_extension:
             }
         }
 
-        get_klogger() << "Countdown ..";
+        lapic.set_timer_div(0x3);
         {
             PITTimerCalib calib_timer{};
-            critical_section cli();
-            for (int i = 10; i > 0; i--) {
-                std::stringstream ss{};
-                ss << std::dec << (unsigned int) i;
-                get_klogger() << " " << ss.str().c_str();
-                for (int j = 0; j < 25; j++) {
-                    calib_timer.delay(40000);
-                }
+            critical_section cli{};
+            lapic_100ms = (uint64_t) 0x00FFFFFFFF;
+            lapic.set_timer_count((uint32_t) lapic_100ms);
+            for (int i = 0; i < 10; i++) {
+                calib_timer.delay(10000);
             }
-            get_klogger() << " 0\n";
+            lapic.set_timer_int_mode(0x20, 0x10000); // Disable
+            lapic_100ms -= lapic.get_timer_value();
+            lapic.set_timer_count((uint32_t) (lapic_100ms / 10));
         }
 
-
-        get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << "\n";
-        lapic.set_timer_div(0x3);
-        lapic.set_timer_count(0x100000);
+        {
+            std::stringstream stream{};
+            stream << std::dec << " " << lapic_100ms << " ticks per 100ms";
+            std::string info = stream.str();
+            get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << info.c_str() << "\n";
+        }
 
         timer_ticks = 0;
         const char *characters = "|/-\\|/-\\";
