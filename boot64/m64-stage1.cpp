@@ -23,6 +23,8 @@
 #include <sstream>
 #include <cpuid.h>
 #include <string>
+#include <concurrency/critical_section.h>
+#include "PITTimerCalib.h"
 #include "HardwareInterrupts.h"
 #include "vmem.h"
 
@@ -586,9 +588,6 @@ done_with_mem_extension:
             lapic.enable_apic();
             lapic.set_lint0_int(0x21, false);
             lapic.set_lint1_int(0x22, false);
-            get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << "\n";
-            lapic.set_timer_div(0x3);
-            lapic.set_timer_count(0x100000);
 
             IOApic ioApic{mpfp};
 
@@ -604,6 +603,26 @@ done_with_mem_extension:
                 });
             }
         }
+
+        get_klogger() << "Countdown ..";
+        {
+            PITTimerCalib calib_timer{};
+            critical_section cli();
+            for (int i = 10; i > 0; i--) {
+                std::stringstream ss{};
+                ss << std::dec << (unsigned int) i;
+                get_klogger() << " " << ss.str().c_str();
+                for (int j = 0; j < 25; j++) {
+                    calib_timer.delay(40000);
+                }
+            }
+            get_klogger() << " 0\n";
+        }
+
+
+        get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << "\n";
+        lapic.set_timer_div(0x3);
+        lapic.set_timer_count(0x100000);
 
         timer_ticks = 0;
         const char *characters = "|/-\\|/-\\";

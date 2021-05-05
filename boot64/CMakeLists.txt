@@ -8,13 +8,15 @@ enable_language(C ASM)
 
 add_subdirectory(textconsole)
 add_subdirectory(kmemory)
+add_subdirectory(concurrency)
 
 add_library(bootstrap bootstrap.S)
 
-add_executable(kernel m64-stage1.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp stack.cpp GlobalDescriptorTable.cpp GlobalDescriptorTable.h InterruptDescriptorTable.cpp InterruptDescriptorTable.h TaskStateSegment.cpp TaskStateSegment.h InterruptTaskState.cpp InterruptTaskState.h interrupt.S interrupt.cpp PageFault.cpp PageFault.h elf.cpp KernelElf.cpp KernelElf.h vmem.cpp vmem.h cpu_mpfp.cpp cpu_mpfp.h LocalApic.cpp LocalApic.h Pic.cpp Pic.h IOApic.cpp IOApic.h HardwareInterrupts.cpp HardwareInterrupts.h)
+add_executable(kernel m64-stage1.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp stack.cpp GlobalDescriptorTable.cpp GlobalDescriptorTable.h InterruptDescriptorTable.cpp InterruptDescriptorTable.h TaskStateSegment.cpp TaskStateSegment.h InterruptTaskState.cpp InterruptTaskState.h interrupt.S interrupt.cpp PageFault.cpp PageFault.h elf.cpp KernelElf.cpp KernelElf.h vmem.cpp vmem.h cpu_mpfp.cpp cpu_mpfp.h LocalApic.cpp LocalApic.h Pic.cpp Pic.h IOApic.cpp IOApic.h HardwareInterrupts.cpp HardwareInterrupts.h PITTimerCalib.cpp PITTimerCalib.h)
 
 target_include_directories(kernel PRIVATE ../include)
 
 target_link_libraries(kernel PRIVATE bootstrap)
 target_link_libraries(kernel PRIVATE textconsole)
 target_link_libraries(kernel PRIVATE kmemory)
+target_link_libraries(kernel PRIVATE concurrency)
