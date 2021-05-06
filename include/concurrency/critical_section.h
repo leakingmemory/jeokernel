@@ -7,7 +7,7 @@
 
 class critical_section {
 private:
-    bool activated;
+    bool activated, was_activated;
 public:
     critical_section(bool enter = true);
     ~critical_section();

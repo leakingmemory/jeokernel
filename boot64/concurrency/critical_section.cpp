@@ -3,17 +3,32 @@
 //
 
 #include <concurrency/critical_section.h>
+#include <cstdint>
 
-critical_section::critical_section(bool enter) : activated(enter) {
+critical_section::critical_section(bool enter) : activated(enter), was_activated(false) {
     if (enter) {
-        asm("cli");
+        uint64_t flags;
+        asm("pushfq; cli; pop %%rax; mov %%rax, %0" : "=r"(flags) :: "%rax");
+        if ((flags & 0x200) == 0) {
+            was_activated = true;
+        }
+    } else {
+        uint64_t flags;
+        asm("pushfq; pop %%rax; mov %%rax, %0" : "=r"(flags) :: "%rax");
+        if ((flags & 0x200) == 0) {
+            activated = true;
+            was_activated = true;
+        }
     }
 }
 
 critical_section::~critical_section() {
-    if (activated) {
+    if (activated && !was_activated) {
         asm("sti");
         activated = false;
+    } else if (!activated && was_activated) {
+        asm("cli");
+        activated = true;
     }
 }
 
