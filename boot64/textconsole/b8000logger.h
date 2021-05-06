@@ -7,8 +7,11 @@
 
 #include "b8000.h"
 #include <klogger.h>
+#include <concurrency/hw_spinlock.h>
 
 class b8000logger : public KLogger {
+private:
+    hw_spinlock _lock;
 public:
     b8000 cons;
     b8000logger();
