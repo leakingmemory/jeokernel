@@ -12,7 +12,7 @@ void *MemoryAllocator::sm_allocate(uint32_t size) {
         uint64_t vmem_end = vmem + size;
         vmem = vmem & 0xFFFFFFFFFFFFF000;
         for (; vmem < vmem_end; vmem += 0x1000) {
-            pageentr *pe = get_pageentr64(get_pml4t(), vmem);
+            std::optional<pageentr> pe = get_pageentr(vmem);
             if (!pe->present) {
                 pe->page_ppn = ppagealloc(4096) >> 12;
                 pe->present = 1;
@@ -20,6 +20,7 @@ void *MemoryAllocator::sm_allocate(uint32_t size) {
                 pe->user_access = 0;
                 pe->execution_disabled = 1;
                 pe->accessed = 0;
+                update_pageentr(vmem, *pe);
             }
         }
         reload_pagetables();
@@ -30,7 +31,7 @@ void *MemoryAllocator::sm_allocate(uint32_t size) {
 MemoryAllocator::~MemoryAllocator() {
     uint64_t pageaddr_end = ((uint64_t) this) + sizeof(*this);
     for (uint64_t pageaddr = (uint64_t) this; pageaddr < pageaddr_end; pageaddr += 0x1000) {
-        pageentr *pe = get_pageentr64(get_pml4t(), pageaddr);
+        std::optional<pageentr> pe = get_pageentr(pageaddr);
         if (pe->present) {
             uint64_t paddr = pe->page_ppn;
             paddr = paddr << 12;

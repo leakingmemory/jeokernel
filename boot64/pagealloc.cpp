@@ -4,13 +4,21 @@
 
 #include <pagealloc.h>
 #include <klogger.h>
+#include <concurrency/hw_spinlock.h>
+#include <concurrency/critical_section.h>
+#include <mutex>
+
+#define _get_pml4t()  (*((pagetable *) 0x1000))
 
 uint64_t vpagealloc(uint64_t size) {
+    critical_section cli{};
+    std::lock_guard lock{get_pagetables_lock()};
+
     if ((size & 4095) != 0) {
         size += 4096;
     }
     size /= 4096;
-    pagetable &pml4t = get_pml4t();
+    pagetable &pml4t = _get_pml4t();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     int i = 512;
@@ -72,11 +80,14 @@ uint64_t vpagealloc(uint64_t size) {
     return 0;
 }
 uint64_t ppagealloc(uint64_t size) {
+    critical_section cli{};
+    std::lock_guard lock{get_pagetables_lock()};
+
     if ((size & 4095) != 0) {
         size += 4096;
     }
     size /= 4096;
-    pagetable &pml4t = get_pml4t();
+    pagetable &pml4t = _get_pml4t();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     for (int i = 0; i < 512; i++) {
@@ -135,7 +146,10 @@ uint64_t ppagealloc(uint64_t size) {
     return 0;
 }
 uint64_t vpagefree(uint64_t addr) {
-    pagetable &pml4t = get_pml4t();
+    critical_section cli{};
+    std::lock_guard lock{get_pagetables_lock()};
+
+    pagetable &pml4t = _get_pml4t();
     addr = addr >> 12;
     uint64_t first = addr;
     uint64_t size;
@@ -173,11 +187,14 @@ uint64_t vpagefree(uint64_t addr) {
 }
 
 uint64_t pv_fix_pagealloc(uint64_t size) {
+    critical_section cli{};
+    std::lock_guard lock{get_pagetables_lock()};
+
     if ((size & 4095) != 0) {
         size += 4096;
     }
     size /= 4096;
-    pagetable &pml4t = get_pml4t();
+    pagetable &pml4t = _get_pml4t();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     for (int i = 0; i < 512; i++) {
@@ -272,15 +289,15 @@ uint64_t alloc_stack(uint64_t size) {
         uint64_t vaddr_start = vaddr_bottom + 4096;
         uint64_t paddr_start = ppagealloc(size);
         if (paddr_start != 0) {
-            pagetable &pml4t = get_pml4t();
             for (uint64_t offset = 0; offset < size; offset += 4096) {
-                pageentr *pe = get_pageentr64(pml4t, vaddr_start + offset);
+                std::optional<pageentr> pe = get_pageentr(vaddr_start + offset);
                 uint64_t page_ppn = paddr_start + offset;
                 page_ppn = page_ppn >> 12;
                 pe->page_ppn = page_ppn;
                 pe->present = 1;
                 pe->writeable = 1;
                 pe->execution_disabled = 1;
+                update_pageentr(vaddr_start + offset, *pe);
             }
             vaddr_top = vaddr_start + size;
 
@@ -294,57 +311,61 @@ uint64_t alloc_stack(uint64_t size) {
 }
 
 void free_stack(uint64_t vaddr) {
-    pagetable &pml4t = get_pml4t();
-    vaddr = vaddr >> 12;
     uint64_t size = 0;
     uint64_t phys_addr = 0;
-    while (true) {
-        --vaddr;
-        uint64_t paddr = vaddr;
-        int l = paddr & 511;
-        paddr = paddr >> 9;
-        int k = paddr & 511;
-        paddr = paddr >> 9;
-        int j = paddr & 511;
-        paddr = paddr >> 9;
-        int i = paddr & 511;
-        if (pml4t[i].present == 0) {
-            wild_panic("Stack is outside allocatable");
-        }
-        auto &pdpt = pml4t[i].get_subtable();
-        if (pdpt[j].present == 0) {
-            wild_panic("Stack is outside allocatable");
-        }
-        auto &pdt = pdpt[j].get_subtable();
-        if (pdt[k].present == 0) {
-            wild_panic("Stack is outside allocatable");
-        }
-        pageentr &pe = pdt[k].get_subtable()[l];
-        if (pe.os_virt_avail == 1) {
-            get_klogger() << "\nPage " << vaddr << " not allocated\n";
-            wild_panic("Stack address given runs into unallocated vpage");
-        }
-        bool first_page = pe.os_virt_start == 1;
-        if (pe.present) {
+    vaddr = vaddr >> 12;
+    {
+        critical_section cli{};
+        std::lock_guard lock{get_pagetables_lock()};
+
+        while (true) {
+            --vaddr;
+            uint64_t paddr = vaddr;
+            int l = paddr & 511;
+            paddr = paddr >> 9;
+            int k = paddr & 511;
+            paddr = paddr >> 9;
+            int j = paddr & 511;
+            paddr = paddr >> 9;
+            int i = paddr & 511;
+            if (_get_pml4t()[i].present == 0) {
+                wild_panic("Stack is outside allocatable");
+            }
+            auto &pdpt = _get_pml4t()[i].get_subtable();
+            if (pdpt[j].present == 0) {
+                wild_panic("Stack is outside allocatable");
+            }
+            auto &pdt = pdpt[j].get_subtable();
+            if (pdt[k].present == 0) {
+                wild_panic("Stack is outside allocatable");
+            }
+            pageentr &pe = pdt[k].get_subtable()[l];
+            if (pe.os_virt_avail == 1) {
+                get_klogger() << "\nPage " << vaddr << " not allocated\n";
+                wild_panic("Stack address given runs into unallocated vpage");
+            }
+            bool first_page = pe.os_virt_start == 1;
+            if (pe.present) {
+                if (first_page) {
+                    wild_panic("This was not a stack allocation");
+                }
+                phys_addr = pe.page_ppn;
+                ++size;
+            } else {
+                if (!first_page) {
+                    wild_panic("Part of stack is not present");
+                }
+            }
+
+            pe.os_virt_avail = 1;
+            pe.os_virt_start = 0;
+
             if (first_page) {
-                wild_panic("This was not a stack allocation");
+                break;
             }
-            phys_addr = pe.page_ppn;
-            ++size;
-        } else {
-            if (!first_page) {
-                wild_panic("Part of stack is not present");
-            }
+
+            pe.present = 0;
         }
-
-        pe.os_virt_avail = 1;
-        pe.os_virt_start = 0;
-
-        if (first_page) {
-            break;
-        }
-
-        pe.present = 0;
     }
     phys_addr = phys_addr << 12;
     size = size << 12;
@@ -359,7 +380,10 @@ void reload_pagetables() {
 }
 
 void ppagefree(uint64_t addr, uint64_t size) {
-    pagetable &pml4t = get_pml4t();
+    critical_section cli{};
+    std::lock_guard lock{get_pagetables_lock()};
+
+    pagetable &pml4t = _get_pml4t();
     addr = addr >> 12;
     if ((size & 4095) != 0) {
         size += 4096;
@@ -384,19 +408,19 @@ void ppagefree(uint64_t addr, uint64_t size) {
 }
 
 void *pagealloc(uint64_t size) {
-    pagetable &pml4t = get_pml4t();
     uint64_t vpages = vpagealloc(size);
     if (vpages != 0) {
         uint64_t ppages = ppagealloc(size);
         if (ppages != 0) {
             for (uint64_t offset = 0; offset < size; offset += 4096) {
-                pageentr *pe = get_pageentr64(pml4t, vpages + offset);
+                std::optional<pageentr> pe = get_pageentr(vpages + offset);
                 uint64_t page_ppn = ppages + offset;
                 page_ppn = page_ppn >> 12;
                 pe->page_ppn = page_ppn;
                 pe->present = 1;
                 pe->writeable = 1;
                 pe->execution_disabled = 1;
+                update_pageentr(vpages + offset, *pe);
             }
 
             reload_pagetables();

@@ -170,7 +170,8 @@ public:
     const mp_cpu_entry &get_cpu(int n) const {
         return cpus[n];
     }
-    int get_current_cpu_num() const;
+    // Go via lapic, cpuid is not reliable
+    //int get_current_cpu_num() const;
 
     uint32_t get_local_apic_addr() const {
         return mp_tbl_hdr.local_apic_map_addr;

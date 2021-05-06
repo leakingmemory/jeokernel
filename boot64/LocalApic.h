@@ -112,6 +112,17 @@ public:
     void eio() {
         pointer[0xb0/4] = 0;
     }
+
+    void send_init_ipi(uint8_t lapic_id) {
+        pointer[0x280/4] = 0;
+        pointer[0x310/4] = (pointer[0x310/4] & 0x00CDFFFF) | (((uint32_t) lapic_id) << 24);
+        pointer[0x300/4] = (pointer[0x300/4] & 0xFFF00000) |0x004500;
+    }
+    void send_sipi(uint8_t lapic_id, uint16_t addr) {
+        pointer[0x280/4] = 0;
+        pointer[0x310/4] = (pointer[0x310/4] & 0x00CDFFFF) | (((uint32_t) lapic_id) << 24);
+        pointer[0x300/4] = (pointer[0x300/4] & 0xFFF00000) |0x4600 | ((uint32_t) addr);
+    }
 };
 
 

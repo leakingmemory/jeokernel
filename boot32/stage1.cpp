@@ -74,8 +74,6 @@ void boot_stage1(void *multiboot_header_addr) {
     pageentr (&pt3)[512] = (pageentr (&)[512]) pt_raw3;
     uint64_t (&pt_raw4)[512] = *((uint64_t (*)[512]) 0x7000);
     pageentr (&pt4)[512] = (pageentr (&)[512]) pt_raw4;
-    uint64_t (&pt_raw5)[512] = *((uint64_t (*)[512]) 0x8000);
-    pageentr (&pt5)[512] = (pageentr (&)[512]) pt_raw5;
 
     for (uint16_t i = 0; i < 512; i++) {
         pml4t_raw[i] = 0;
@@ -85,7 +83,6 @@ void boot_stage1(void *multiboot_header_addr) {
         pt_raw2[i] = 0;
         pt_raw3[i] = 0;
         pt_raw4[i] = 0;
-        pt_raw5[i] = 0;
     }
 
     pml4t[0].page_ppn = 0x2000 / 4096;
@@ -112,10 +109,6 @@ void boot_stage1(void *multiboot_header_addr) {
     pdt[3].writeable = 1;
     pdt[3].present = 1;
     pdt[3].os_virt_avail = 1;
-    pdt[4].page_ppn = 0x8000 / 4096;
-    pdt[4].writeable = 1;
-    pdt[4].present = 1;
-    pdt[4].os_virt_avail = 1;
     /*
      * Make first 2MiB adressable,writable,execable
      */
@@ -131,7 +124,6 @@ void boot_stage1(void *multiboot_header_addr) {
         pt2[i].os_virt_avail = 1;
         pt3[i].os_virt_avail = 1;
         pt4[i].os_virt_avail = 1;
-        pt5[i].os_virt_avail = 1;
     }
     /*
      * Make second half, and next, allocateable
@@ -168,8 +160,6 @@ void boot_stage1(void *multiboot_header_addr) {
             phaddr &= ~4095;
             while (phaddr < end) {
                 auto *pe = get_pageentr64(pml4t, phaddr);
-                pe->os_virt_avail = 0;
-                pe->os_virt_start = 1;
                 pe->os_phys_avail = 0;
                 phaddr += 4096;
                 vga.display(0, 0, "#");
@@ -423,6 +413,10 @@ good_data_page_alloc:
                 }
             }
 
+            /*
+             * The stack at will remain available for Additional Processors to
+             * bootstrap. See ap_trampoline.S / ap_started.S / ap_bootstrap.cpp
+             */
             uint32_t stack_ptr = 0;
             uint16_t stack_pages = 7;
             ++stack_pages; // Crash barrier

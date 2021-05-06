@@ -135,9 +135,17 @@ pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr);
 
 #ifndef LOADER
 
+#include <optional>
+#include <std/optional.h>
+#include <concurrency/hw_spinlock.h>
 
-pagetable &get_pml4t();
+void initialize_pagetable_control();
+
+hw_spinlock &get_pagetables_lock();
+
 uint64_t get_phys_from_virt(uint64_t vaddr);
+std::optional<pageentr> get_pageentr(uint64_t addr);
+bool update_pageentr(uint64_t addr, const pageentr &pe);
 
 #endif
 #endif //JEOKERNEL_PAGETABLE_H

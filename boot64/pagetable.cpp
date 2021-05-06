@@ -4,13 +4,59 @@
 
 #include <stdint.h>
 #include <pagetable_impl.h>
+#include <concurrency/hw_spinlock.h>
+#include <new>
+#include <mutex>
+#include <concurrency/critical_section.h>
 
-pagetable &get_pml4t() {
-    return *((pagetable *) 0x1000);
+static uint8_t __pagetables_lock_mem[sizeof(hw_spinlock)];
+static hw_spinlock *pagetables_lock;
+
+void initialize_pagetable_control() {
+    pagetables_lock = new ((void *) &(__pagetables_lock_mem[0])) hw_spinlock();
+}
+
+hw_spinlock &get_pagetables_lock() {
+    return *pagetables_lock;
+}
+
+#define _get_pml4t()  (*((pagetable *) 0x1000))
+
+std::optional<pageentr> get_pageentr(uint64_t addr) {
+    critical_section cli{};
+    std::lock_guard lock{*pagetables_lock};
+
+    pageentr *pe = get_pageentr64(_get_pml4t(), addr);
+    if (pe != nullptr) {
+        pageentr cp = *pe;
+        std::optional<pageentr> opt{cp};
+        return opt;
+    } else {
+        std::optional<pageentr> opt{};
+        return opt;
+    }
+}
+
+bool update_pageentr(uint64_t addr, const pageentr &pe_update) {
+    critical_section cli{};
+    std::lock_guard lock{*pagetables_lock};
+
+    pageentr *pe = get_pageentr64(_get_pml4t(), addr);
+    if (pe != nullptr) {
+        *pe = pe_update;
+        return true;
+    } else {
+        return false;
+    }
 }
 
 uint64_t get_phys_from_virt(uint64_t vaddr) {
-    uint64_t paddr = get_pageentr64(get_pml4t(), vaddr)->page_ppn;
-    paddr = paddr << 12;
-    return paddr;
+    std::optional<pageentr> pe = get_pageentr(vaddr);
+    if (pe) {
+        uint64_t paddr = (*pe).page_ppn;
+        paddr = paddr << 12;
+        return paddr;
+    } else {
+        return 0;
+    }
 }

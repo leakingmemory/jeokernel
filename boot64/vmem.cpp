@@ -34,7 +34,7 @@ void vmem::reload() {
 }
 
 void vmem_page::rmap(uint64_t paddr) {
-    pageentr *pe = get_pageentr64(get_pml4t(), addr);
+    std::optional<pageentr> pe = get_pageentr(addr);
     pe->dirty = 0;
     pe->execution_disabled = 1;
     pe->writeable = 0;
@@ -42,15 +42,17 @@ void vmem_page::rmap(uint64_t paddr) {
     pe->user_access = 0;
     pe->page_ppn = paddr >> 12;
     pe->present = 1;
+    update_pageentr(addr, *pe);
 }
 
 void vmem_page::unmap() {
-    pageentr *pe = get_pageentr64(get_pml4t(), addr);
+    std::optional<pageentr> pe = get_pageentr(addr);
     pe->present = 0;
+    update_pageentr(addr, *pe);
 }
 
 void vmem_page::rwmap(uint64_t paddr) {
-    pageentr *pe = get_pageentr64(get_pml4t(), addr);
+    std::optional<pageentr> pe = get_pageentr(addr);
     pe->dirty = 0;
     pe->execution_disabled = 1;
     pe->writeable = 1;
@@ -58,4 +60,5 @@ void vmem_page::rwmap(uint64_t paddr) {
     pe->user_access = 0;
     pe->page_ppn = paddr >> 12;
     pe->present = 1;
+    update_pageentr(addr, *pe);
 }

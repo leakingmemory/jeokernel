@@ -152,17 +152,18 @@ mpc_pointer_bad:
     }
 }
 
-int cpu_mpfp::get_current_cpu_num() const {
+/*int cpu_mpfp::get_current_cpu_num() const {
     cpuid<1> q{};
     uint8_t apic_id = q.get_apic_id();
     get_klogger() << "Current cpu apic id " << apic_id << "\n";
     for (int i = 0; i < ncpu; i++) {
+        // Seems to not match on real hw
         if (cpus[i].local_apic_id == apic_id) {
             return i;
         }
     }
     return -1;
-}
+}*/
 
 bool mp_floating_pointer::valid() {
     if (length != 1) {

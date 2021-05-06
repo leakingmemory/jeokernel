@@ -27,6 +27,7 @@
 #include "PITTimerCalib.h"
 #include "HardwareInterrupts.h"
 #include "vmem.h"
+#include "start_ap.h"
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -37,6 +38,10 @@ static InterruptDescriptorTable *idt = nullptr;
 static KernelElf *kernel_elf = nullptr;
 static uint64_t timer_ticks = 0;
 static uint64_t lapic_100ms = 0;
+
+extern "C" {
+    uint64_t bootstrap_stackptr = 0;
+}
 
 const MultibootInfoHeader &get_multiboot2(vmem &vm) {
     uint64_t base_addr = (uint64_t) multiboot_info;
@@ -53,8 +58,10 @@ const KernelElf &get_kernel_elf() {
     return *kernel_elf;
 }
 
+#define _get_pml4t()  (*((pagetable *) 0x1000))
+
 void vmem_graph() {
-    auto &pt = get_pml4t()[0].get_subtable()[0].get_subtable()[0].get_subtable();
+    auto &pt = _get_pml4t()[0].get_subtable()[0].get_subtable()[0].get_subtable();
     for (int i = 0; i < 512; i++) {
         char *addr = (char *) ((i << 1) + 0xb8000);
         if (pt[i].os_virt_avail) {
@@ -83,11 +90,13 @@ pagetable *allocate_pageentr() {
 
 extern "C" {
 
-    void start_m64(const MultibootInfoHeader *multibootInfoHeaderPtr) {
+    void start_m64(const MultibootInfoHeader *multibootInfoHeaderPtr, uint64_t stackptr) {
         multiboot_info = multibootInfoHeaderPtr;
+        bootstrap_stackptr = stackptr; // For reuse with AP startup
         /*
          * Let's try to alloc a stack
          */
+        initialize_pagetable_control();
         setup_simplest_malloc_impl();
 
         stage1_stack = new normal_stack;
@@ -121,7 +130,7 @@ extern "C" {
                 do {
                     if (part->type == 6) {
                         get_klogger() << "Memory map:\n";
-                        auto &pml4t = get_pml4t();
+                        auto &pml4t = _get_pml4t();
                         const auto &memoryMap = part->get_type6();
                         int num = memoryMap.get_num_entries();
                         uint64_t phys_mem_watermark_next = phys_mem_watermark;
@@ -605,39 +614,68 @@ done_with_mem_extension:
             }
         }
 
-        lapic.set_timer_div(0x3);
         {
             PITTimerCalib calib_timer{};
-            critical_section cli{};
-            lapic_100ms = (uint64_t) 0x00FFFFFFFF;
-            lapic.set_timer_count((uint32_t) lapic_100ms);
-            for (int i = 0; i < 10; i++) {
-                calib_timer.delay(10000);
+            lapic.set_timer_div(0x3);
+            {
+                lapic_100ms = (uint64_t) 0x00FFFFFFFF;
+                lapic.set_timer_count((uint32_t) lapic_100ms);
+                for (int i = 0; i < 10; i++) {
+                    calib_timer.delay(10000);
+                }
+                lapic.set_timer_int_mode(0x20, 0x10000); // Disable
+                lapic_100ms -= lapic.get_timer_value();
+                lapic.set_timer_count((uint32_t) (lapic_100ms / 10));
             }
-            lapic.set_timer_int_mode(0x20, 0x10000); // Disable
-            lapic_100ms -= lapic.get_timer_value();
-            lapic.set_timer_count((uint32_t) (lapic_100ms / 10));
-        }
 
-        {
-            std::stringstream stream{};
-            stream << std::dec << " " << lapic_100ms << " ticks per 100ms";
-            std::string info = stream.str();
-            get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << info.c_str() << "\n";
-        }
-
-        timer_ticks = 0;
-        const char *characters = "|/-\\|/-\\";
-        get_hw_interrupt_handler().add_handler(0, [&lapic, &mpfp, characters] (Interrupt &interrupt) {
-            uint64_t prev_vis = timer_ticks >> 5;
-            ++timer_ticks;
-            uint64_t vis = timer_ticks >> 5;
-            if (prev_vis != vis) {
-                char str[2] = {characters[vis & 7], 0};
-                uint8_t pos = 79 - lapic.get_cpu_num(mpfp);
-                get_klogger().print_at(pos, 24, &(str[0]));
+            {
+                std::stringstream stream{};
+                stream << std::dec << " " << lapic_100ms << " ticks per 100ms";
+                std::string info = stream.str();
+                get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << info.c_str()
+                              << "\n";
             }
-        });
+
+            timer_ticks = 0;
+            const char *characters = "|/-\\|/-\\";
+            get_hw_interrupt_handler().add_handler(0, [&lapic, &mpfp, characters](Interrupt &interrupt) {
+                uint64_t prev_vis = timer_ticks >> 5;
+                ++timer_ticks;
+                uint64_t vis = timer_ticks >> 5;
+                if (prev_vis != vis) {
+                    char str[2] = {characters[vis & 7], 0};
+                    uint8_t pos = 79 - lapic.get_cpu_num(mpfp);
+                    get_klogger().print_at(pos, 24, &(str[0]));
+                }
+            });
+
+            const uint32_t *ap_count = install_ap_bootstrap();
+            for (int i = 0; i < mpfp.get_num_cpus(); i++) {
+                if (i != lapic.get_cpu_num(mpfp)) {
+                    uint32_t apc = *ap_count;
+                    uint32_t exp_apc = apc + 1;
+                    uint8_t lapic_id = mpfp.get_cpu(i).local_apic_id;
+                    get_klogger() << "Starting cpu"<<((uint8_t) i)<<" "<<lapic_id<<"\n";
+                    lapic.send_init_ipi(lapic_id);
+                    calib_timer.delay(10000); //10ms
+                    lapic.send_sipi(lapic_id, 0x8);
+                    if (*ap_count == apc) {
+                        calib_timer.delay(1000); //1ms
+                        lapic.send_sipi(lapic_id, 0x8);
+                        calib_timer.delay(10000); //10ms
+                    }
+                    if (*ap_count == exp_apc) {
+                        get_klogger() << "Started cpu"<<((uint8_t) i)<<" "<<lapic_id<<"\n";
+                    } else {
+                        if (*ap_count != apc) {
+                            wild_panic("Something went wrong with starting AP(CPU)");
+                        }
+                        get_klogger() << "Failed to start cpu"<<((uint8_t) i)<<" "<<lapic_id<<"\n";
+                    }
+                    break;
+                }
+            }
+        }
 
         asm("sti");
 

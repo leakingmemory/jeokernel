@@ -92,8 +92,8 @@ caller_stack Interrupt::get_caller_stack() const {
         end_vpage &= 0xFFFFFFFFFFFFF000;
         uint64_t start_vpage = end_vpage;
         do {
-            pageentr *pe = get_pageentr64(get_pml4t(), end_vpage);
-            if (pe == nullptr || !pe->present || pe->os_virt_avail) {
+            std::optional<pageentr> pe = get_pageentr(end_vpage);
+            if (!pe || !pe->present || pe->os_virt_avail) {
                 break;
             }
             if (end_vpage != start_vpage && pe->os_virt_start) {

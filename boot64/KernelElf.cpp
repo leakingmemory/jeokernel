@@ -42,7 +42,7 @@ KernelElf::KernelElf(const MultibootInfoHeader &multibootInfoHeader) : ptr(nullp
         wild_panic("Failed to alloc vpages for reading kernel elf");
     }
     for (uint64_t i = 0; i < vsize; i += 0x1000) {
-        pageentr *pe = get_pageentr64(get_pml4t(), vstart + i);
+        std::optional<pageentr> pe = get_pageentr(vstart + i);
         pe->page_ppn = (((uint64_t) kernel_info->mod_start) + i) >> 12;
         pe->writeable = 0;
         pe->accessed = 0;
@@ -50,6 +50,7 @@ KernelElf::KernelElf(const MultibootInfoHeader &multibootInfoHeader) : ptr(nullp
         pe->execution_disabled = 1;
         pe->dirty = 0;
         pe->present = 1;
+        update_pageentr(vstart + i, *pe);
     }
     reload_pagetables();
 

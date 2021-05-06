@@ -14,7 +14,8 @@ bootstrap:
     mov %ax,%ss
     // Stack ptr is in esi
     xor %rsp, %rsp
-    mov %esi, %esp
+    movl %esi, %esp
+    mov %rsp, %rsi
     pushq %rbx
     mov %rbx, %rdi
     call start_m64
