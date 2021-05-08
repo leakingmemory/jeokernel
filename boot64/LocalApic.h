@@ -97,7 +97,7 @@ public:
 
     uint32_t set_timer_int_mode(uint8_t intr, uint32_t mode) {
         uint32_t reg = get_timer_reg();
-        set_timer_reg((reg & 0xFFFEFF00) | intr | mode);
+        set_timer_reg(/*(reg & 0xFFFEFF00) |*/ intr | mode);
         return reg;
     }
     void set_lint0_int(uint8_t intr, bool enable = true) {
