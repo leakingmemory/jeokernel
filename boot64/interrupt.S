@@ -87,20 +87,21 @@
 
     // 512 + stack realignment ; must be 16 byte aligned for fxsave
 
+    mov %rsp, %rdx
+    and $0xFFFFFFFFFFFFFFF0, %rsp
+    push %rdx // rsp before alignment - now aligned +8 bytes
+    push %rdx // rsp before alignment - now aligned
+
     sub $512, %rsp
     mov %rsp, %rdx
-    sub $0x10, %rsp
-    and $0xFFFFFFFFFFFFFFF0, %rdx
     fxsave (%rdx) // x86/SSE/FPU frame as third argument to int handler
 .endm
 
 .macro intpop
-   mov %rsp, %rax
-   add $0x10, %rax
-   and $0xFFFFFFFFFFFFFFF0, %rax
-   fxrstor (%rax)
-   add $0x10, %rsp
+   fxrstor (%rsp)
    add $512, %rsp
+   pop %rdx
+   mov %rdx, %rsp
    popaq
 .endm
 

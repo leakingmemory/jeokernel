@@ -112,24 +112,17 @@ caller_stack Interrupt::get_caller_stack() const {
 
 
 bool Interrupt::has_error_code() const {
-    switch (_interrupt) {
-        case 8:
-        case 10:
-        case 11:
-        case 12:
-        case 13:
-        case 14:
-        case 0x11:
-        case 0x1E:
-            return true;
-        default:
-            return false;
-    }
+    return _has_error_code;
+}
+
+void Interrupt::apply_error_code_correction() {
+    _cpu_frame = (InterruptCpuFrame *) (void *) (((uint8_t *) (void *) _cpu_frame) + 8);
+    _has_error_code = true;
 }
 
 extern "C" {
     void interrupt_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame, x86_fpu_state *fpusse) {
-        InterruptCpuFrame *cpuFrame = (InterruptCpuFrame *) (void *) (((uint8_t *) stack_frame) + (sizeof(*stack_frame) - 4)/*error-code-norm-not-avail*/);
+        InterruptCpuFrame *cpuFrame = (InterruptCpuFrame *) (void *) (((uint8_t *) stack_frame) + (sizeof(*stack_frame) - 8)/*error-code-norm-not-avail*/);
         Interrupt interrupt{cpuFrame, stack_frame, fpusse, (uint8_t) interrupt_vector};
         switch (interrupt_vector) {
             case 0: {
@@ -188,6 +181,7 @@ extern "C" {
                 break;
             }
             case 0xD: {
+                interrupt.apply_error_code_correction();
                 CpuExceptionTrap trap{"general protection fault", interrupt};
                 trap.handle();
                 break;
