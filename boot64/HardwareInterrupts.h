@@ -16,11 +16,12 @@
 
 class HardwareInterrupts {
 private:
+    hw_spinlock _lock;
     uint64_t serial;
     std::vector<std::tuple<uint64_t,std::function<void (Interrupt &)>>> handlers[HW_INT_N];
     std::vector<std::tuple<uint64_t,std::function<void (Interrupt &)>>> finalizers[HW_INT_N];
 public:
-    HardwareInterrupts() : serial(0), handlers(), finalizers() {}
+    HardwareInterrupts() : _lock(), serial(0), handlers(), finalizers() {}
     uint64_t add_handler(uint8_t intn, std::function<void (Interrupt &)> func);
     void remove_handler(uint64_t id);
     uint64_t add_finalizer(uint8_t intn, std::function<void (Interrupt &)> func);

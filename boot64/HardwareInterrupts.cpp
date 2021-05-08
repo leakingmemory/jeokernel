@@ -3,9 +3,14 @@
 //
 
 #include <klogger.h>
+#include <concurrency/critical_section.h>
+#include <mutex>
 #include "HardwareInterrupts.h"
 
 uint64_t HardwareInterrupts::add_handler(uint8_t intn, std::function<void(Interrupt &)> func) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
     uint64_t serial = this->serial++;
     std::tuple<uint64_t,std::function<void(Interrupt &)>> record = std::make_tuple<uint64_t,std::function<void (Interrupt &)>>(serial,func);
     handlers[intn].push_back(record);
@@ -13,6 +18,9 @@ uint64_t HardwareInterrupts::add_handler(uint8_t intn, std::function<void(Interr
 }
 
 void HardwareInterrupts::remove_handler(uint64_t id) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
     for (int i = 0; i < HW_INT_N; i++) {
         auto iterator = handlers[i].begin();
         while (iterator != handlers[i].end()) {
@@ -26,6 +34,9 @@ void HardwareInterrupts::remove_handler(uint64_t id) {
 }
 
 uint64_t HardwareInterrupts::add_finalizer(uint8_t intn, std::function<void(Interrupt &)> func) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
     uint64_t serial = this->serial++;
     std::tuple<uint64_t,std::function<void(Interrupt &)>> record = std::make_tuple<uint64_t,std::function<void (Interrupt &)>>(serial,func);
     finalizers[intn].push_back(record);
@@ -33,6 +44,9 @@ uint64_t HardwareInterrupts::add_finalizer(uint8_t intn, std::function<void(Inte
 }
 
 void HardwareInterrupts::remove_finalizer(uint64_t id) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
     for (int i = 0; i < HW_INT_N; i++) {
         auto iterator = finalizers[i].begin();
         while (iterator != finalizers[i].end()) {
@@ -46,17 +60,30 @@ void HardwareInterrupts::remove_finalizer(uint64_t id) {
 }
 
 bool HardwareInterrupts::handle(Interrupt &interrupt) {
+    std::vector<std::function<void (Interrupt &)>> call_order{};
     bool handled = true;
-    for (const std::tuple<uint64_t,std::function<void(Interrupt &)>> &handler : handlers[interrupt.interrupt_vector() - 0x20]) {
-        std::function<void (Interrupt &)> callable = std::get<1>(handler);
-        callable(interrupt);
-        handled = true;
+
+    {
+        std::lock_guard lock{_lock};
+
+        for (const std::tuple<uint64_t, std::function<void(Interrupt &)>> &handler : handlers[
+                interrupt.interrupt_vector() - 0x20]) {
+            std::function<void(Interrupt &)> callable = std::get<1>(handler);
+            call_order.push_back(callable);
+            handled = true;
+        }
+        for (const std::tuple<uint64_t, std::function<void(Interrupt &)>> &handler : finalizers[
+                interrupt.interrupt_vector() - 0x20]) {
+            std::function<void(Interrupt &)> callable = std::get<1>(handler);
+            call_order.push_back(callable);
+            handled = true;
+        }
     }
-    for (const std::tuple<uint64_t,std::function<void(Interrupt &)>> &handler : finalizers[interrupt.interrupt_vector() - 0x20]) {
-        std::function<void (Interrupt &)> callable = std::get<1>(handler);
+
+    for (std::function<void(Interrupt &)> &callable : call_order) {
         callable(interrupt);
-        handled = true;
     }
+
     return handled;
 }
 
