@@ -24,6 +24,7 @@
 #include <cpuid.h>
 #include <string>
 #include <concurrency/critical_section.h>
+#include <mutex>
 #include "PITTimerCalib.h"
 #include "HardwareInterrupts.h"
 #include "vmem.h"
@@ -684,16 +685,32 @@ done_with_mem_extension:
 
             timer_ticks = 0;
             const char *characters = "|/-\\|/-\\";
-            get_hw_interrupt_handler().add_handler(0, [&lapic, characters](Interrupt &interrupt) {
-                if ((mpfp->get_cpu(lapic.get_cpu_num(*mpfp)).cpu_flags & 2) != 0) {
-                    uint64_t prev_vis = timer_ticks >> 5;
-                    ++timer_ticks;
-                    uint64_t vis = timer_ticks >> 5;
-                    if (prev_vis != vis) {
-                        char str[2] = {characters[vis & 7], 0};
-                        uint8_t pos = 79 - lapic.get_cpu_num(*mpfp);
-                        get_klogger().print_at(pos, 24, &(str[0]));
+            hw_spinlock *aptimer_lock = new hw_spinlock;
+            uint64_t *aptimers = (uint64_t *) malloc(sizeof(aptimers[0]) * mpfp->get_num_cpus());
+            for (int i = 0; i < mpfp->get_num_cpus(); i++) {
+                aptimers[i] = 0;
+            }
+            get_hw_interrupt_handler().add_handler(0, [&lapic, characters, aptimers, aptimer_lock](Interrupt &interrupt) {
+                uint8_t cpu_num = lapic.get_cpu_num(*mpfp);
+                bool is_bootstrap_cpu = (mpfp->get_cpu(cpu_num).cpu_flags & 2) != 0;
+                uint64_t prev_vis = 0;
+                uint64_t vis = 0;
+
+                {
+                    std::lock_guard lock{*aptimer_lock};
+
+                    prev_vis = (is_bootstrap_cpu ? timer_ticks : aptimers[cpu_num]) >> 5;
+                    if (is_bootstrap_cpu) {
+                        ++timer_ticks;
+                    } else {
+                        ++aptimers[cpu_num];
                     }
+                    vis = (is_bootstrap_cpu ? timer_ticks : aptimers[cpu_num]) >> 5;
+                }
+                if (prev_vis != vis) {
+                    char str[2] = {characters[vis & 7], 0};
+                    uint8_t pos = 79 - cpu_num;
+                    get_klogger().print_at(pos, 24, &(str[0]));
                 }
             });
 
