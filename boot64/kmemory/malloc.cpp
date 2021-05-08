@@ -5,6 +5,7 @@
 #include <new>
 #include <strings.h>
 #include <core/malloc.h>
+#include <klogger.h>
 #include "mallocator.h"
 
 extern "C" {
@@ -31,7 +32,11 @@ extern "C" {
     static MallocImpl wild_malloc_struct{};
 
     void *malloc(uint32_t size) {
-        return impl->malloc(size);
+        void *ptr = impl->malloc(size);
+        if (ptr == nullptr) {
+            wild_panic("Out of memory");
+        }
+        return ptr;
     }
 
     void free(void *ptr) {
