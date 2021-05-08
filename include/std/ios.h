@@ -63,17 +63,17 @@ namespace std {
 
     };
 
-    ios_base &dec(ios_base &ios) {
+    inline ios_base &dec(ios_base &ios) {
         ios.flags((ios.flags() & ~ios_base::basefield) | ios_base::dec);
         return ios;
     }
 
-    ios_base &oct(ios_base &ios) {
+    inline ios_base &oct(ios_base &ios) {
         ios.flags((ios.flags() & ~ios_base::basefield) | ios_base::oct);
         return ios;
     }
 
-    ios_base &hex(ios_base &ios) {
+    inline ios_base &hex(ios_base &ios) {
         ios.flags((ios.flags() & ~ios_base::basefield) | ios_base::hex);
         return ios;
     }
