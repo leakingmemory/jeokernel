@@ -53,12 +53,14 @@ extern "C" {
         idt->install();
 
         lapic.enable_apic();
+        get_klogger() << "AP init timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << "\n";
         lapic.set_lint0_int(0x21, false);
         lapic.set_lint1_int(0x22, false);
 
         uint64_t lapic_100ms = get_lapic_100ms();
 
-        lapic.set_timer_count((uint32_t) (lapic_100ms));
+        lapic.set_timer_div(0x3);
+        lapic.set_timer_count((uint32_t) (lapic_100ms / 10));
 
         {
             std::stringstream stream{};
@@ -70,8 +72,9 @@ extern "C" {
 
         get_klogger() << "AP enable interrupts\n";
 
-        asm("sti");
+        lapic.eio();
 
+        asm("sti");
 
         while (1) {
             asm("hlt");
