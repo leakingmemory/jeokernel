@@ -8,8 +8,8 @@
 #include <loaderconfig.h>
 #include <pagetable.h>
 
-#define TSS_GD(cpu) (cpu + 4)
-#define TSS_MAX_CPUS (GDT_SIZE - 4)
+#define TSS_GD(cpu) (((cpu) * 2) + 4)
+#define TSS_MAX_CPUS ((GDT_SIZE - 4) / 2)
 
 class GlobalDescriptorTable {
 private:
@@ -35,7 +35,7 @@ public:
     }
 
     void reload() {
-        uint64_t gdt64 = GDT_ADDR;
+        uint64_t gdt64 = GDT_ADDR + (GDT_SIZE * 8);
         asm("lgdt (%0)" :: "r"(gdt64));
     }
 };

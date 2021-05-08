@@ -8,7 +8,14 @@
 #include <pagetable.h>
 #include <pagealloc.h>
 
+static hw_spinlock *ap_start_lock = nullptr;
+
+hw_spinlock *get_ap_start_lock() {
+    return ap_start_lock;
+}
+
 const uint32_t *install_ap_bootstrap() {
+    ap_start_lock = new hw_spinlock();
     vmem vm{4096};
     vm.page(0).rwmap(0x8000);
     uint8_t *bootstrap_location = (uint8_t *) vm.pointer();

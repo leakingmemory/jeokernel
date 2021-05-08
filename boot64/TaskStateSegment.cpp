@@ -38,7 +38,7 @@ int TaskStateSegment::install_cpu(GlobalDescriptorTable &gdt, int cpu_n) {
 
     uint16_t selector = gdt.get_selector(sel_idx);
 
-    asm("mov %0, %%ax; ltr %%ax" :: "r"(selector));
+    asm("mov %0, %%ax; ltr %%ax" :: "r"(selector) : "%ax");
 
     return sel_idx;
 }

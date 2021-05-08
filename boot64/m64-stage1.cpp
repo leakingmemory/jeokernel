@@ -32,12 +32,13 @@
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
 static GlobalDescriptorTable *gdt = nullptr;
-static TaskStateSegment *tss = nullptr;
-static InterruptTaskState *int_task_state = nullptr;
+static TaskStateSegment *glob_tss[TSS_MAX_CPUS] = {};
+static InterruptTaskState *glob_int_task_state[TSS_MAX_CPUS] = {};
 static InterruptDescriptorTable *idt = nullptr;
 static KernelElf *kernel_elf = nullptr;
 static uint64_t timer_ticks = 0;
 static uint64_t lapic_100ms = 0;
+static cpu_mpfp *mpfp;
 
 extern "C" {
     uint64_t bootstrap_stackptr = 0;
@@ -57,6 +58,37 @@ const MultibootInfoHeader &get_multiboot2(vmem &vm) {
 const KernelElf &get_kernel_elf() {
     return *kernel_elf;
 }
+
+void set_tss(int cpun, struct TaskStateSegment *tss) {
+    glob_tss[cpun] = tss;
+}
+TaskStateSegment *get_tss(int cpun) {
+    return glob_tss[cpun];
+}
+
+void set_its(int cpun, struct InterruptTaskState *its) {
+    glob_int_task_state[cpun] = its;
+}
+InterruptTaskState *get_its(int cpun) {
+    return glob_int_task_state[cpun];
+}
+
+cpu_mpfp *get_mpfp() {
+    return mpfp;
+}
+
+GlobalDescriptorTable *get_gdt() {
+    return gdt;
+}
+
+InterruptDescriptorTable *get_idt() {
+    return idt;
+}
+
+uint64_t get_lapic_100ms() {
+    return lapic_100ms;
+}
+
 
 #define _get_pml4t()  (*((pagetable *) 0x1000))
 
@@ -257,24 +289,42 @@ done_with_mem_extension:
             get_klogger() << "Reserved memory range " << base_addr << " - " << end_addr << "\n";
         }
 
+        create_hw_interrupt_handler();
+        mpfp = new cpu_mpfp{reserved_mem};
+        LocalApic lapic{*mpfp};
+
         gdt = new GlobalDescriptorTable;
-        tss = new TaskStateSegment;
-        int_task_state = new InterruptTaskState(*tss);
-        tss->install(*gdt, 0);
+
+        for (int i = 0; i < mpfp->get_num_cpus(); i++) {
+            get_klogger() << "Creating TSS ";
+            TaskStateSegment *tss = new TaskStateSegment;
+            set_tss(i, tss);
+            get_klogger() << (uint64_t) &(tss->get_entry()) << " its:";
+            InterruptTaskState *int_task_state = new InterruptTaskState(*tss);
+            set_its(i, int_task_state);
+            get_klogger() << (uint64_t) int_task_state << " for cpu " << (uint8_t) i << " to gdt sel ";
+            get_klogger() << (uint16_t) tss->install(*gdt, i) << "\n";
+        }
+        int cpu_num = lapic.get_cpu_num(*mpfp);
+
+        get_klogger() << "Loading TSS/ITS for CPU "<< (uint8_t) cpu_num << "\n";
+        TaskStateSegment *tss = get_tss(cpu_num);
+        InterruptTaskState *int_task_state = get_its(cpu_num);
 
         uint64_t *gdt_ptr = (uint64_t *) &(gdt->get_descriptor(0));
         get_klogger() << "GDT at " << ((uint64_t) gdt_ptr) << "\n";
-        /*for (int i = 0; i < 6; i++) {
-            get_klogger() << gdt_ptr[i << 1] << " " << gdt_ptr[(i << 1) + 1] << "\n";
+        /*for (int i = 0; i < 9; i++) {
+            get_klogger() << gdt_ptr[i << 2] << " " << gdt_ptr[(i << 2) + 1] << " " << gdt_ptr[(i << 2) + 2] << " " << gdt_ptr[(i << 2) + 3] << "\n";
         }*/
+        gdt->reload();
 
         uint64_t *tss_ptr = (uint64_t *) &(tss->get_entry());
-        get_klogger() << "TSS at " << ((uint64_t) tss_ptr) << "\n";
-        /*for (int i = 0; i < 16; i++) {
+        /*get_klogger() << "TSS at " << ((uint64_t) tss_ptr) << "\n";
+        for (int i = 0; i < 16; i++) {
             get_klogger() << tss_ptr[i << 1] << " " << tss_ptr[(i << 1) + 1] << "\n";
         }*/
 
-        tss->install_cpu(*gdt, 0);
+        tss->install_cpu(*gdt, cpu_num);
 
         idt = new InterruptDescriptorTable;
         idt->interrupt_handler(0x00, 0x8, (uint64_t) interrupt_imm00_handler, 0, 0xF, 0);
@@ -570,13 +620,9 @@ done_with_mem_extension:
         }
 #endif
 
-        create_hw_interrupt_handler();
-        cpu_mpfp mpfp{reserved_mem};
-        LocalApic lapic{mpfp};
-
         {
 
-            int cpu_idx = lapic.get_cpu_num(mpfp);
+            int cpu_idx = lapic.get_cpu_num(*mpfp);
 
             get_klogger() << "Current cpu lapic reg " << lapic.get_lapic_id() << " num=" << (uint8_t) cpu_idx << "\n";
 
@@ -584,7 +630,7 @@ done_with_mem_extension:
                 wild_panic("cpu configuration was not found or recongized");
             }
 
-            auto &cpu = mpfp.get_cpu(cpu_idx);
+            auto &cpu = mpfp->get_cpu(cpu_idx);
 
             if ((cpu.features & 0x200) == 0) {
                 wild_panic("system lacks apic support");
@@ -599,7 +645,7 @@ done_with_mem_extension:
             lapic.set_lint0_int(0x21, false);
             lapic.set_lint1_int(0x22, false);
 
-            IOApic ioApic{mpfp};
+            IOApic ioApic{*mpfp};
 
             uint8_t vectors = ioApic.get_num_vectors();
             get_klogger() << "ioapic vectors " << vectors << "\n";
@@ -638,23 +684,31 @@ done_with_mem_extension:
 
             timer_ticks = 0;
             const char *characters = "|/-\\|/-\\";
-            get_hw_interrupt_handler().add_handler(0, [&lapic, &mpfp, characters](Interrupt &interrupt) {
-                uint64_t prev_vis = timer_ticks >> 5;
-                ++timer_ticks;
-                uint64_t vis = timer_ticks >> 5;
-                if (prev_vis != vis) {
-                    char str[2] = {characters[vis & 7], 0};
-                    uint8_t pos = 79 - lapic.get_cpu_num(mpfp);
-                    get_klogger().print_at(pos, 24, &(str[0]));
+            get_hw_interrupt_handler().add_handler(0, [&lapic, characters](Interrupt &interrupt) {
+                if ((mpfp->get_cpu(lapic.get_cpu_num(*mpfp)).cpu_flags & 2) != 0) {
+                    uint64_t prev_vis = timer_ticks >> 5;
+                    ++timer_ticks;
+                    uint64_t vis = timer_ticks >> 5;
+                    if (prev_vis != vis) {
+                        char str[2] = {characters[vis & 7], 0};
+                        uint8_t pos = 79 - lapic.get_cpu_num(*mpfp);
+                        get_klogger().print_at(pos, 24, &(str[0]));
+                    }
                 }
             });
 
             const uint32_t *ap_count = install_ap_bootstrap();
-            for (int i = 0; i < mpfp.get_num_cpus(); i++) {
-                if (i != lapic.get_cpu_num(mpfp)) {
+            for (int i = 0; i < mpfp->get_num_cpus(); i++) {
+                if (i != lapic.get_cpu_num(*mpfp)) {
                     uint32_t apc = *ap_count;
                     uint32_t exp_apc = apc + 1;
-                    uint8_t lapic_id = mpfp.get_cpu(i).local_apic_id;
+                    uint8_t lapic_id = mpfp->get_cpu(i).local_apic_id;
+
+                    /*
+                     * AP needs the bootstrap stack, so enforce only one at a time
+                     */
+                    get_ap_start_lock()->lock();
+
                     get_klogger() << "Starting cpu"<<((uint8_t) i)<<" "<<lapic_id<<"\n";
                     lapic.send_init_ipi(lapic_id);
                     calib_timer.delay(10000); //10ms
@@ -672,7 +726,6 @@ done_with_mem_extension:
                         }
                         get_klogger() << "Failed to start cpu"<<((uint8_t) i)<<" "<<lapic_id<<"\n";
                     }
-                    break;
                 }
             }
         }
