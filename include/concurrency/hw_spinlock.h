@@ -9,7 +9,9 @@
 
 class hw_spinlock {
 private:
+    uint32_t _before_cacheline[16];
     uint32_t cacheline[16];
+    uint32_t _after_cacheline[16];
 public:
     hw_spinlock();
 

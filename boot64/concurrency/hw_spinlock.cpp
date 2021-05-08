@@ -6,6 +6,11 @@
 #include <cstdint>
 
 hw_spinlock::hw_spinlock() : cacheline() {
+    for (int i = 0; i < 16; i++) {
+        cacheline[i] = i;
+        _before_cacheline[i] = i - 1;
+        _after_cacheline[i] = cacheline[i] ^ _before_cacheline[i];
+    }
     cacheline[0] = 0;
     cacheline[1] = 0;
 }
