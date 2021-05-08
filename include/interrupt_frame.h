@@ -134,6 +134,23 @@ public:
 
     void apply_error_code_correction();
 
+    const InterruptCpuFrame &get_cpu_frame() const {
+        return *_cpu_frame;
+    }
+    void set_cpu_frame(InterruptCpuFrame &frame) {
+        _cpu_frame->rflags = frame.rflags;
+        _cpu_frame->cs = frame.cs;
+        _cpu_frame->rip = frame.rip;
+        _cpu_frame->rsp = frame.rsp;
+        _cpu_frame->ss = frame.ss;
+    }
+    InterruptStackFrame &get_cpu_state() {
+        return *_frame;
+    }
+    x86_fpu_state &get_fpu_state() {
+        return *_fpu;
+    }
+
     uint64_t rax() const {
         return _frame->rax;
     }
