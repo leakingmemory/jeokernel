@@ -187,6 +187,7 @@ extern "C" {
                 break;
             }
             case 0xE: {
+                interrupt.apply_error_code_correction();
                 PageFault trap{interrupt};
                 trap.handle();
                 break;
