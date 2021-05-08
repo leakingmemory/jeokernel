@@ -11,6 +11,21 @@
 #include <new>
 
 namespace std {
+
+    template <class Class> struct vector_container_element {
+        Class element;
+
+        vector_container_element(const Class &cp) : element(cp) {
+        }
+        vector_container_element(Class &&mv) : element(move(mv)) {
+        }
+    } __attribute__((__packed__));
+    template <class Class> struct vector_container_element<Class *> {
+        Class *element;
+
+        vector_container_element(Class *ptr) : element(ptr) {}
+    } __attribute__((__packed__));
+
     template <class T> class vector_iterator;
 
     template <class T> class vector_iterator_base {
@@ -87,13 +102,14 @@ namespace std {
         typedef vector_iterator<const T> const_iterator;
     private:
         struct vector_container : Allocator {
-            T *_data;
+            vector_container_element<T> *_data;
             size_type _size;
             size_type _capacity;
 
             vector_container() : Allocator(), _data(nullptr), _size(0), _capacity(0) {
             }
         };
+        static_assert(sizeof(vector_container_element<T>) == sizeof(T));
 
         vector_container c;
 
@@ -103,7 +119,7 @@ namespace std {
     public:
 
         constexpr const T *data() const noexcept {
-            return c._data;
+            return (T *) (void *) c._data;
         }
 
         constexpr size_type size() const noexcept {
@@ -119,53 +135,89 @@ namespace std {
         }
 
         constexpr iterator begin() noexcept {
-            return iterator(c._data);
+            return iterator((T *) (void *) c._data);
         }
         constexpr iterator end() noexcept {
-            return iterator(c._data + c._size);
+            return iterator(((T *) (void *) c._data) + c._size);
         }
         constexpr const_iterator begin() const noexcept {
-            return const_iterator(c._data);
+            return const_iterator((T *) (void *) c._data);
         }
         constexpr const_iterator end() const noexcept {
-            return const_iterator(c._data + c._size);
+            return const_iterator(((T *) (void *) c._data) + c._size);
         }
         constexpr const_iterator cbegin() const noexcept {
-            return const_iterator(c._data);
+            return const_iterator(((T *) (void *) c._data));
         }
         constexpr const_iterator cend() const noexcept {
-            return const_iterator(c._data + c._size);
+            return const_iterator(((T *) (void *) c._data) + c._size);
         }
 
         vector() : c() {
+        }
+        vector(const vector &cp) : c() {
+            reserve(cp.size());
+            for (const auto &cp_elem : cp) {
+                push_back(cp_elem);
+            }
+        }
+        vector(vector &&mv) : c(mv.c) {
+            mv.c._data = nullptr;
+            mv.c._size = 0;
+            mv.c._capacity = 0;
         }
 
         ~vector() {
             if (c._data != nullptr) {
                 for (size_type i = 0; i < c._size; i++) {
-                    c._data[i].~T();
+                    c._data[i].~vector_container_element<T>();
                 }
-                get_allocator().deallocate(c._data, c._capacity);
+                get_allocator().deallocate((T *) (void *) c._data, c._capacity);
                 c._data = nullptr;
                 c._capacity = 0;
                 c._size = 0;
             }
         }
 
+        vector &operator =(const vector &cp) {
+            for (size_type i = 0; i < c._size; i++) {
+                c._data[i].~vector_container_element<T>();
+            }
+            c._size = 0;
+            if (c._capacity < cp.size()) {
+                reserve(cp.size());
+            }
+            for (const auto &cp_elem : cp) {
+                push_back(cp_elem);
+            }
+            return *this;
+        }
+        vector &operator =(vector &&mv) {
+            for (size_type i = 0; i < c._size; i++) {
+                c._data[i].~vector_container_element<T>();
+            }
+            get_allocator().deallocate((T *) (void *) c._data, c._capacity);
+            c = mv.c;
+            mv.c._data = nullptr;
+            mv.c._capacity = 0;
+            mv.c._size = 0;
+            return *this;
+        }
+
         constexpr void reserve(size_type new_cap) {
             if (c._data != nullptr) {
                 if (c._capacity < new_cap) {
-                    T *new_ptr = get_allocator().allocate(new_cap);
+                    vector_container_element<T> *new_ptr = (vector_container_element<T> *) (void *) get_allocator().allocate(new_cap);
                     for (size_type i = 0; i < c._size; i++) {
-                        new ((void *) &new_ptr[i]) T(move(c._data[i]));
-                        c._data[i].~T();
+                        new ((void *) &new_ptr[i]) vector_container_element<T>(move(c._data[i]));
+                        c._data[i].~vector_container_element<T>();
                     }
-                    get_allocator().deallocate(c._data, c._capacity);
+                    get_allocator().deallocate((T *) (void *) c._data, c._capacity);
                     c._data = new_ptr;
                     c._capacity = new_cap;
                 }
             } else {
-                c._data = get_allocator().allocate(new_cap);
+                c._data = (vector_container_element<T> *) (void *) get_allocator().allocate(new_cap);
                 c._capacity = new_cap;
             }
         }
@@ -224,7 +276,7 @@ namespace std {
             if (exp >= c._capacity) {
                 reserve(exp);
             }
-            new ((void *) &(c._data[c._size])) T(cp);
+            new ((void *) &(c._data[c._size])) vector_container_element<T>(cp);
             c._size = exp;
         }
 
@@ -233,7 +285,7 @@ namespace std {
             if (exp >= c._capacity) {
                 reserve(exp);
             }
-            new ((void *) &(c._data[c._size])) T(std::move(mv));
+            new ((void *) &(c._data[c._size])) vector_container_element<T>(std::move(mv));
             c._size = exp;
         }
 
@@ -250,7 +302,7 @@ namespace std {
 
         iterator erase(const_iterator position) {
             uint64_t index = &(*position) - &(*begin());
-            c._data[index].~T();
+            c._data[index].~vector_container_element<T>();
             c._size--;
             for (uint64_t del = index; del < c._size; del++) {
                 c._data[del] = c._data[del + 1];
