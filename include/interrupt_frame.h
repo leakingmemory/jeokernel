@@ -95,10 +95,10 @@ struct InterruptStackFrame {
     uint64_t rcx;
     uint64_t rbx;
     uint64_t rax;
+} __attribute__((__packed__));
 
-    uint32_t alignment_padding;
+struct InterruptCpuFrame {
     uint32_t error_code;
-
     uint64_t rip;
     uint64_t cs;
     uint64_t rflags;
@@ -123,11 +123,12 @@ struct caller_stack {
 
 class Interrupt {
 private:
+    InterruptCpuFrame *_cpu_frame;
     InterruptStackFrame *_frame;
     x86_fpu_state *_fpu;
     uint8_t _interrupt;
 public:
-    Interrupt(InterruptStackFrame *frame, x86_fpu_state *fpu, uint8_t interrupt) : _frame(frame), _fpu(fpu), _interrupt(interrupt) {
+    Interrupt(InterruptCpuFrame *cpu_frame, InterruptStackFrame *frame, x86_fpu_state *fpu, uint8_t interrupt) : _cpu_frame(cpu_frame), _frame(frame), _fpu(fpu), _interrupt(interrupt) {
     }
 
     uint64_t rax() const {
@@ -192,23 +193,23 @@ public:
     bool has_error_code() const;
 
     uint32_t error_code() const {
-        return _frame->error_code;
+        return _cpu_frame->error_code;
     }
 
     uint16_t cs() const {
-        return _frame->cs;
+        return _cpu_frame->cs;
     }
     uint64_t rip() const {
-        return _frame->rip;
+        return _cpu_frame->rip;
     }
     uint64_t rflags() const {
-        return _frame->rflags;
+        return _cpu_frame->rflags;
     }
     uint64_t rsp() const {
-        return _frame->rsp;
+        return _cpu_frame->rsp;
     }
     uint16_t ss() const {
-        return _frame->ss;
+        return _cpu_frame->ss;
     }
 
     uint64_t xmm0_low() const {

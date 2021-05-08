@@ -82,8 +82,8 @@ std::vector<std::tuple<size_t,uint64_t>> Interrupt::unwind_stack() const {
 caller_stack Interrupt::get_caller_stack() const {
     caller_stack stack{};
     uint8_t *ptr;
-    ptr = (uint8_t *) ((void *) &(_frame->ss));
-    ptr += sizeof(_frame->ss);
+    ptr = (uint8_t *) ((void *) &(_cpu_frame->ss));
+    ptr += sizeof(_cpu_frame->ss);
     stack.pointer = ptr;
 
     uint64_t start = (uint64_t) stack.pointer;
@@ -129,7 +129,8 @@ bool Interrupt::has_error_code() const {
 
 extern "C" {
     void interrupt_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame, x86_fpu_state *fpusse) {
-        Interrupt interrupt{stack_frame, fpusse, (uint8_t) interrupt_vector};
+        InterruptCpuFrame *cpuFrame = (InterruptCpuFrame *) (void *) (((uint8_t *) stack_frame) + (sizeof(*stack_frame) - 4)/*error-code-norm-not-avail*/);
+        Interrupt interrupt{cpuFrame, stack_frame, fpusse, (uint8_t) interrupt_vector};
         switch (interrupt_vector) {
             case 0: {
                 CpuExceptionTrap trap{"division by zero", interrupt};

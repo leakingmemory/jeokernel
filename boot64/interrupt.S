@@ -67,18 +67,6 @@
 .endm
 
 .macro intpush
-    // Error code stack alignment
-    test $7,%rsp
-    //jnz error_code
-    .byte 0x75
-    .byte 0x04
-    //sub $8,%rsp
-    .byte 0x48
-    .byte 0x83
-    .byte 0xEC
-    .byte 0x08
-//error_code:
-    and $0xFFFFFFFFFFFFFFF8,%rsp
 
     push %rax
     mov $0x10, %rax
@@ -114,7 +102,6 @@
    add $0x10, %rsp
    add $512, %rsp
    popaq
-   add $8, %rsp
 .endm
 
 .globl interrupt_imm00_handler
