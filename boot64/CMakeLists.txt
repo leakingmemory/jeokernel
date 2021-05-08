@@ -9,6 +9,7 @@ enable_language(C ASM)
 add_subdirectory(textconsole)
 add_subdirectory(kmemory)
 add_subdirectory(concurrency)
+add_subdirectory(tasks)
 
 add_library(bootstrap bootstrap.S)
 
@@ -20,3 +21,4 @@ target_link_libraries(kernel PRIVATE bootstrap)
 target_link_libraries(kernel PRIVATE textconsole)
 target_link_libraries(kernel PRIVATE kmemory)
 target_link_libraries(kernel PRIVATE concurrency)
+target_link_libraries(kernel PRIVATE tasks)

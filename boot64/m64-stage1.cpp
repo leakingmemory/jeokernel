@@ -29,6 +29,7 @@
 #include "HardwareInterrupts.h"
 #include "vmem.h"
 #include "start_ap.h"
+#include <core/scheduler.h>
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -40,6 +41,7 @@ static KernelElf *kernel_elf = nullptr;
 static uint64_t timer_ticks = 0;
 static uint64_t lapic_100ms = 0;
 static cpu_mpfp *mpfp;
+static tasklist *scheduler;
 
 extern "C" {
     uint64_t bootstrap_stackptr = 0;
@@ -88,6 +90,10 @@ InterruptDescriptorTable *get_idt() {
 
 uint64_t get_lapic_100ms() {
     return lapic_100ms;
+}
+
+tasklist *get_scheduler() {
+    return scheduler;
 }
 
 
@@ -360,24 +366,24 @@ done_with_mem_extension:
         idt->interrupt_handler(0x1D, 0x8, (uint64_t) interrupt_imm1D_handler, 0, 0xF, 0);
         idt->interrupt_handler(0x1E, 0x8, (uint64_t) interrupt_imm1E_handler, 0, 0xF, 0);
         idt->interrupt_handler(0x1F, 0x8, (uint64_t) interrupt_imm1F_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x20, 0x8, (uint64_t) interrupt_imm20_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x21, 0x8, (uint64_t) interrupt_imm21_handler, 0, 0xF, 0);
+        idt->interrupt_handler(0x20, 0x8, (uint64_t) interrupt_imm20_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x21, 0x8, (uint64_t) interrupt_imm21_handler, 0, 0xE, 0);
         idt->interrupt_handler(0x22, 0x8, (uint64_t) interrupt_imm22_handler, 0, 0xE, 0);
-        idt->interrupt_handler(0x23, 0x8, (uint64_t) interrupt_imm23_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x24, 0x8, (uint64_t) interrupt_imm24_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x25, 0x8, (uint64_t) interrupt_imm25_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x26, 0x8, (uint64_t) interrupt_imm26_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x27, 0x8, (uint64_t) interrupt_imm27_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x28, 0x8, (uint64_t) interrupt_imm28_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x29, 0x8, (uint64_t) interrupt_imm29_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x2A, 0x8, (uint64_t) interrupt_imm2A_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x2B, 0x8, (uint64_t) interrupt_imm2B_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x2C, 0x8, (uint64_t) interrupt_imm2C_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x2D, 0x8, (uint64_t) interrupt_imm2D_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x2E, 0x8, (uint64_t) interrupt_imm2E_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x2F, 0x8, (uint64_t) interrupt_imm2F_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x30, 0x8, (uint64_t) interrupt_imm30_handler, 0, 0xF, 0);
-        idt->interrupt_handler(0x31, 0x8, (uint64_t) interrupt_imm31_handler, 0, 0xF, 0);
+        idt->interrupt_handler(0x23, 0x8, (uint64_t) interrupt_imm23_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x24, 0x8, (uint64_t) interrupt_imm24_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x25, 0x8, (uint64_t) interrupt_imm25_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x26, 0x8, (uint64_t) interrupt_imm26_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x27, 0x8, (uint64_t) interrupt_imm27_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x28, 0x8, (uint64_t) interrupt_imm28_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x29, 0x8, (uint64_t) interrupt_imm29_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x2A, 0x8, (uint64_t) interrupt_imm2A_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x2B, 0x8, (uint64_t) interrupt_imm2B_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x2C, 0x8, (uint64_t) interrupt_imm2C_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x2D, 0x8, (uint64_t) interrupt_imm2D_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x2E, 0x8, (uint64_t) interrupt_imm2E_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x2F, 0x8, (uint64_t) interrupt_imm2F_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x30, 0x8, (uint64_t) interrupt_imm30_handler, 0, 0xE, 0);
+        idt->interrupt_handler(0x31, 0x8, (uint64_t) interrupt_imm31_handler, 0, 0xE, 0);
         idt->interrupt_handler(0x32, 0x8, (uint64_t) interrupt_imm32_handler, 0, 0xE, 0);
         idt->interrupt_handler(0x33, 0x8, (uint64_t) interrupt_imm33_handler, 0, 0xE, 0);
         idt->interrupt_handler(0x34, 0x8, (uint64_t) interrupt_imm34_handler, 0, 0xE, 0);
@@ -621,6 +627,12 @@ done_with_mem_extension:
         }
 #endif
 
+        scheduler = new tasklist;
+        {
+            int cpu_idx = lapic.get_cpu_num(*mpfp);
+            scheduler->create_current_idle_task(cpu_idx);
+        }
+
         {
 
             int cpu_idx = lapic.get_cpu_num(*mpfp);
@@ -712,6 +724,10 @@ done_with_mem_extension:
                     uint8_t pos = 79 - cpu_num;
                     get_klogger().print_at(pos, 24, &(str[0]));
                 }
+            });
+
+            get_hw_interrupt_handler().add_handler(0, [&lapic] (Interrupt &intr) {
+                scheduler->switch_tasks(intr, lapic.get_cpu_num(*mpfp));
             });
 
             const uint32_t *ap_count = install_ap_bootstrap();

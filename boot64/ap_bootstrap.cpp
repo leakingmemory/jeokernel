@@ -10,6 +10,7 @@
 #include "cpu_mpfp.h"
 #include "LocalApic.h"
 #include "InterruptDescriptorTable.h"
+#include <core/scheduler.h>
 
 TaskStateSegment *get_tss(int cpun);
 cpu_mpfp *get_mpfp();
@@ -69,6 +70,8 @@ extern "C" {
             get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << info.c_str()
                           << "\n";
         }
+
+        get_scheduler()->create_current_idle_task(cpu_num);
 
         get_klogger() << "AP enable interrupts\n";
 
