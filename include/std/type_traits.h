@@ -6,6 +6,16 @@
 #define JEOKERNEL_TYPE_TRAITS_H
 
 namespace std {
+    template< class T, T v >
+    struct integral_constant {
+        static constexpr T value = v;
+    };
+
+    typedef integral_constant<bool, false> false_type;
+    typedef integral_constant<bool, true> true_type;
+
+    template <bool Value> using bool_constant = integral_constant<bool, Value>;
+
     template<class T>
     struct remove_reference {
         typedef T type;
@@ -19,8 +29,45 @@ namespace std {
         typedef T type;
     };
 
+    template <class T> struct remove_pointer {
+        typedef T type;
+    };
+    template <class T> struct remove_pointer<T *> {
+        typedef T type;
+    };
+    template <class T> struct remove_pointer<T const *> {
+        typedef T type;
+    };
+    template <class T> struct remove_pointer<T volatile *> {
+        typedef T type;
+    };
+    template <class T> struct remove_pointer<T const volatile *> {
+        typedef T type;
+    };
+
     template< class T >
     using remove_reference_t = typename remove_reference<T>::type;
+
+    template <class T> struct remove_cv {
+        typedef T type;
+    };
+    template <class T> struct remove_cv<const T> {
+        typedef T type;
+    };
+    template <class T> struct remove_cv<volatile T> {
+        typedef T type;
+    };
+    template <class T> struct remove_cv<const volatile T> {
+        typedef T type;
+    };
+
+    template <class T> using remove_cv_t = typename remove_cv<T>::type;
+
+    template <class T> struct is_pointer_helper : false_type {};
+    template <class T> struct is_pointer_helper<T *> : true_type {};
+    template <class T> struct is_pointer : is_pointer_helper<typename remove_cv<T>::type> {};
+
+    template <class Boolish> struct negation : bool_constant<!bool(Boolish::value)> {};
 
     template<bool B, class T = void> struct enable_if {};
 
