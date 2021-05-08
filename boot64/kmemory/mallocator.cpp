@@ -3,9 +3,14 @@
 //
 
 #include <pagealloc.h>
+#include <concurrency/critical_section.h>
+#include <mutex>
 #include "mallocator.h"
 
 void *MemoryAllocator::sm_allocate(uint32_t size) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
     void *ptr = memoryArea.alloctable.sm_allocate(size);
     if (ptr != nullptr) {
         uint64_t vmem = (uint64_t) ptr;
@@ -27,6 +32,20 @@ void *MemoryAllocator::sm_allocate(uint32_t size) {
     }
     return ptr;
 }
+
+void MemoryAllocator::sm_free(void *ptr) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    memoryArea.alloctable.sm_free(ptr);
+}
+uint32_t MemoryAllocator::sm_sizeof(void *ptr) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    return memoryArea.alloctable.sm_sizeof(ptr);
+}
+
 
 MemoryAllocator::~MemoryAllocator() {
     uint64_t pageaddr_end = ((uint64_t) this) + sizeof(*this);

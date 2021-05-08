@@ -150,15 +150,12 @@ struct SmallUnitMemoryArea {
  * Allocate virtual memory space for it and physical the first two pages
  */
 struct MemoryAllocator {
+    hw_spinlock _lock;
     SmallUnitMemoryArea memoryArea;
 
     void *sm_allocate(uint32_t size);
-    void sm_free(void *ptr) {
-        memoryArea.alloctable.sm_free(ptr);
-    }
-    uint32_t sm_sizeof(void *ptr) {
-        return memoryArea.alloctable.sm_sizeof(ptr);
-    }
+    void sm_free(void *ptr);
+    uint32_t sm_sizeof(void *ptr);
     MemoryAllocator() {
         memoryArea.alloctable = {};
     }
