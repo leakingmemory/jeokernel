@@ -27,7 +27,7 @@ struct task_bits {
     uint8_t cpu;
     uint64_t reserved : 48;
 
-    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), points(0), cpu(0), reserved(0) {
+    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), points(0), cpu(0), reserved(0) {
     }
 } __attribute__((__packed__));
 
