@@ -16,8 +16,9 @@ namespace std {
         struct thread_start_context {
             hw_spinlock _lock;
             bool done;
+            bool detached;
 
-            thread_start_context() : _lock(), done(false) {
+            thread_start_context() : _lock(), done(false), detached(false) {
             }
             thread_start_context(const thread_start_context &) = delete;
             thread_start_context(thread_start_context &&) = delete;
@@ -32,6 +33,8 @@ namespace std {
             }
             virtual void invoke() {
             }
+            virtual void detach() {
+            }
         };
         template <class Function> struct thread_start_context_impl : thread_start_context {
             Function f;
@@ -42,9 +45,28 @@ namespace std {
             void invoke() override {
                 f();
 
-                critical_section cli{};
-                std::lock_guard lock(this->_lock);
-                this->done = true;
+                bool detached = false;
+                {
+                    critical_section cli{};
+                    std::lock_guard lock(this->_lock);
+                    this->done = true;
+                    detached = this->detached;
+                }
+                if (detached) {
+                    delete this;
+                }
+            }
+            void detach() override {
+                bool done = false;
+                {
+                    critical_section cli{};
+                    std::lock_guard lock(this->_lock);
+                    done = this->done;
+                    this->detached = true;
+                }
+                if (done) {
+                    delete this;
+                }
             }
         };
     }
@@ -69,6 +91,7 @@ namespace std {
         }
 
         void join();
+        void detach();
     };
 }
 

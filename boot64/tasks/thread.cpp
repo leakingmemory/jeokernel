@@ -36,4 +36,11 @@ namespace std {
     void thread::join() {
         get_scheduler()->join(id);
     }
+
+    void thread::detach() {
+        if (start_context != nullptr) {
+            start_context->detach();
+            start_context = nullptr;
+        }
+    }
 }
