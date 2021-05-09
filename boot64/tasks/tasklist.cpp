@@ -7,6 +7,7 @@
 #include <klogger.h>
 #include <core/scheduler.h>
 #include <stack.h>
+#include <sstream>
 
 class task_stack_resource : public task_resource {
 private:
@@ -71,6 +72,12 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
         task_pool = next_task_pool;
     }
     if (task_pool.empty()) {
+        std::stringstream str{};
+        str << std::dec << "For cpu " << (unsigned int) cpu << " no viable tasks to pick\n" << std::hex;
+        for (auto &t : tasks) {
+            str << std::hex << (uint64_t) (&t) << ": " << (t.is_running() ? "R" : "S") << (t.is_blocked() ? "B" : "A") << std::dec << " cpu"<< (unsigned int) t.get_cpu() << (((&t) == current_task) ? "*" : "") << "\n";
+        }
+        get_klogger() << str.str().c_str();
         wild_panic("Task lists are empty");
     }
     bool in_current_pool = false;
