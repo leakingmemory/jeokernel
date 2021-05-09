@@ -6,6 +6,22 @@
 #include <mutex>
 #include <klogger.h>
 #include <core/scheduler.h>
+#include <stack.h>
+
+class task_stack_resource : public task_resource {
+private:
+    normal_stack stack;
+public:
+    task_stack_resource() : task_resource(), stack() {
+    }
+
+    ~task_stack_resource() override {
+    }
+
+    uint64_t get_address() {
+        return stack.get_addr();
+    }
+};
 
 void tasklist::create_current_idle_task(uint8_t cpu) {
     critical_section cli{};
@@ -90,4 +106,41 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
         win->set_running(true);
         win->set_cpu(cpu);
     }
+}
+
+void tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
+                        uint64_t r9, const std::vector<task_resource *> &resources) {
+    std::vector<task_resource *> my_resources{};
+    for (auto resource : resources) {
+        my_resources.push_back(resource);
+    }
+    x86_fpu_state fpusse_state{};
+    InterruptStackFrame cpu_state{
+        .ds = 0x10,
+        .es = 0x10,
+        .fs = 0x10,
+        .gs = 0x10,
+        .rdi = rdi,
+        .rsi = rsi,
+        .rcx = rcx,
+        .r8 = r8,
+        .r9 = r9
+    };
+    InterruptCpuFrame cpu_frame{
+        .ss = 0x10,
+        .rip = rip,
+        .cs = cs,
+        .rflags = 0x202
+    };
+    task_stack_resource *stack_resource = new task_stack_resource;
+    cpu_state.rbp = stack_resource->get_address();
+    cpu_frame.rsp = cpu_state.rbp;
+
+    my_resources.push_back(stack_resource);
+
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    task &t = tasks.emplace_back(cpu_frame, cpu_state, fpusse_state, my_resources);
+    t.set_blocked(false);
 }

@@ -31,14 +31,31 @@ struct task_bits {
     }
 } __attribute__((__packed__));
 
+class task_resource {
+public:
+    task_resource() {
+    }
+    task_resource(const task_resource &) = delete;
+    task_resource(task_resource &&) = delete;
+    task_resource &operator =(const task_resource &) = delete;
+    task_resource &operator =(task_resource &&) = delete;
+
+    virtual ~task_resource() {
+    };
+};
+
 class task {
 private:
     InterruptCpuFrame cpu_frame;
     InterruptStackFrame cpu_state;
     x86_fpu_state fpu_sse_state;
     task_bits bits;
+    std::vector<task_resource *> resources;
 public:
-    task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL) {
+    task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL), resources() {
+    }
+    task(const InterruptCpuFrame &cpuFrame, const InterruptStackFrame &stackFrame, const x86_fpu_state &fpusse_state, const std::vector<task_resource *> resources)
+    : cpu_frame(cpuFrame), cpu_state(stackFrame), fpu_sse_state(fpusse_state), bits(PRIO_GROUP_NORMAL), resources(resources) {
     }
 
     void set_running(bool running) {
@@ -92,6 +109,10 @@ public:
     }
     void create_current_idle_task(uint8_t cpu);
     void switch_tasks(Interrupt &interrupt, uint8_t cpu);
+
+    void new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi,
+                  uint64_t rdx, uint64_t rcx, uint64_t r8, uint64_t r9,
+                  const std::vector<task_resource *> &resources);
 };
 
 tasklist *get_scheduler();

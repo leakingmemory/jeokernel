@@ -30,6 +30,7 @@
 #include "vmem.h"
 #include "start_ap.h"
 #include <core/scheduler.h>
+#include <thread>
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -764,6 +765,16 @@ done_with_mem_extension:
         }
 
         asm("sti");
+
+        std::thread test_thread{[] () {
+            uint64_t counter = 0;
+            while (true) {
+                std::stringstream countstr{};
+                countstr << std::dec << counter;
+                get_klogger().print_at(0, 0, countstr.str().c_str());
+                ++counter;
+            }
+        }};
 
         while (1) {
             asm("hlt");
