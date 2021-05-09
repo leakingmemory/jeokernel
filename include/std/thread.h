@@ -51,15 +51,24 @@ namespace std {
     class thread {
     private:
         threadimpl::thread_start_context *start_context;
+        uint32_t id;
 
-        void start();
+        uint32_t start();
     public:
-        thread() : start_context(nullptr) {
+        thread() : start_context(nullptr), id(0) {
         }
         template <class Function> thread(Function && f) : thread() {
             start_context = new threadimpl::thread_start_context_impl<Function>(f);
-            start();
+            id = start();
         }
+        ~thread() {
+            if (start_context != nullptr) {
+                delete start_context;
+                start_context = nullptr;
+            }
+        }
+
+        void join();
     };
 }
 

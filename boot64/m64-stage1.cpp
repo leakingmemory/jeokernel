@@ -766,12 +766,36 @@ done_with_mem_extension:
 
         asm("sti");
 
-        std::thread test_thread{[] () {
+        std::thread joining_thread{[] () {
             uint64_t counter = 0;
+            {
+                std::thread test_thread{[]() {
+                    uint64_t counter = 0;
+                    while (counter < 1000000) {
+                        std::stringstream countstr{};
+                        countstr << std::dec << counter;
+                        get_klogger().print_at(0, 0, countstr.str().c_str());
+                        ++counter;
+                    }
+                }};
+                while (counter < 200000) {
+                    std::stringstream countstr{};
+                    countstr << std::dec << counter;
+                    get_klogger().print_at(30, 0, countstr.str().c_str());
+                    ++counter;
+                }
+                test_thread.join();
+                while (counter < 500000) {
+                    std::stringstream countstr{};
+                    countstr << std::dec << counter;
+                    get_klogger().print_at(30, 0, countstr.str().c_str());
+                    ++counter;
+                }
+            }
             while (counter < 1000000) {
                 std::stringstream countstr{};
                 countstr << std::dec << counter;
-                get_klogger().print_at(0, 0, countstr.str().c_str());
+                get_klogger().print_at(30, 0, countstr.str().c_str());
                 ++counter;
             }
         }};

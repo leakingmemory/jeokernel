@@ -25,9 +25,10 @@ struct task_bits {
     bool end : 1;
     uint8_t points : 3;
     uint8_t cpu;
-    uint64_t reserved : 48;
+    uint16_t reserved;
+    uint32_t id;
 
-    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), points(0), cpu(0), reserved(0) {
+    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), points(0), cpu(0), reserved(0), id(0) {
     }
 } __attribute__((__packed__));
 
@@ -44,6 +45,19 @@ public:
     };
 };
 
+#define TASK_EVENT_EXIT     0
+
+class task_event_handler {
+public:
+    task_event_handler() {
+    }
+    virtual ~task_event_handler() {
+    }
+
+    virtual void event(uint64_t v1, uint64_t v2, uint64_t v3) {
+    }
+};
+
 class task {
 private:
     InterruptCpuFrame cpu_frame;
@@ -51,11 +65,12 @@ private:
     x86_fpu_state fpu_sse_state;
     task_bits bits;
     std::vector<task_resource *> resources;
+    std::vector<task_event_handler *> event_handlers;
 public:
-    task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL), resources() {
+    task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL), resources(), event_handlers() {
     }
     task(const InterruptCpuFrame &cpuFrame, const InterruptStackFrame &stackFrame, const x86_fpu_state &fpusse_state, const std::vector<task_resource *> resources)
-    : cpu_frame(cpuFrame), cpu_state(stackFrame), fpu_sse_state(fpusse_state), bits(PRIO_GROUP_NORMAL), resources(resources) {
+    : cpu_frame(cpuFrame), cpu_state(stackFrame), fpu_sse_state(fpusse_state), bits(PRIO_GROUP_NORMAL), resources(resources), event_handlers() {
     }
 
     void set_running(bool running) {
@@ -105,23 +120,70 @@ public:
     bool is_end() {
         return bits.end;
     }
+
+    void set_id(uint32_t id) {
+        bits.id = id;
+    }
+    uint32_t get_id() {
+        return bits.id;
+    }
+
+    void event(uint64_t v1, uint64_t v2, uint64_t v3) {
+        /*
+         * Because event handlers may remove themselves from the
+         * list. First copy the list, then call the handlers.
+         */
+        if (event_handlers.empty()) {
+            return;
+        }
+        std::vector<task_event_handler *> event_handlers{};
+        event_handlers.reserve(this->event_handlers.size());
+        for (task_event_handler *eh : this->event_handlers) {
+            event_handlers.push_back(eh);
+        }
+        for (task_event_handler *eh : event_handlers) {
+            eh->event(v1, v2, v3);
+        }
+    }
+
+    void add_event_handler(task_event_handler *eh) {
+        event_handlers.push_back(eh);
+    }
+    void remove_event_handler(task_event_handler *eh) {
+        auto iterator = event_handlers.begin();
+        while (iterator != event_handlers.end()) {
+            if (*iterator == eh) {
+                event_handlers.erase(iterator);
+                return;
+            }
+        }
+    }
 };
 
 class tasklist {
 private:
     hw_spinlock _lock;
+    uint32_t serial;
     std::vector<task> tasks;
+private:
+    uint32_t get_next_id();
 public:
     tasklist() : _lock(), tasks() {
     }
     void create_current_idle_task(uint8_t cpu);
     void switch_tasks(Interrupt &interrupt, uint8_t cpu);
 
-    void new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi,
+    uint32_t new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi,
                   uint64_t rdx, uint64_t rcx, uint64_t r8, uint64_t r9,
                   const std::vector<task_resource *> &resources);
 
     void exit(uint8_t cpu);
+
+    uint32_t get_current_task_id();
+    void join(uint32_t task_id);
+
+    task &get_task_with_lock(uint32_t task_id);
+    task &get_current_task_with_lock();
 };
 
 tasklist *get_scheduler();

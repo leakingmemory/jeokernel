@@ -6,6 +6,8 @@
 #include <core/scheduler.h>
 #include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
+#include <std/thread.h>
+
 
 extern "C" {
     void thread_trampoline(std::threadimpl::thread_start_context *ctx) {
@@ -23,12 +25,15 @@ extern "C" {
 
 namespace std {
 
-    void thread::start() {
+    uint32_t thread::start() {
         tasklist *scheduler = get_scheduler();
         {
             std::vector<task_resource *> resources{};
-            scheduler->new_task((uint64_t) thread_trampoline, 0x8, (uint64_t) start_context, 0, 0, 0, 0, 0, resources);
+            return scheduler->new_task((uint64_t) thread_trampoline, 0x8, (uint64_t) start_context, 0, 0, 0, 0, 0, resources);
         }
     }
 
+    void thread::join() {
+        get_scheduler()->join(id);
+    }
 }

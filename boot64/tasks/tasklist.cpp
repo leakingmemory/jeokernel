@@ -8,6 +8,8 @@
 #include <core/scheduler.h>
 #include <stack.h>
 #include <sstream>
+#include <core/cpu_mpfp.h>
+#include <core/LocalApic.h>
 
 class task_stack_resource : public task_resource {
 private:
@@ -29,6 +31,7 @@ void tasklist::create_current_idle_task(uint8_t cpu) {
     std::lock_guard lock{_lock};
 
     task &t = tasks.emplace_back();
+    t.set_id(get_next_id());
     t.set_running(true);
     t.set_blocked(false);
     t.set_cpu(cpu);
@@ -135,7 +138,7 @@ evicted_task:
     }
 }
 
-void tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
+uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
                         uint64_t r9, const std::vector<task_resource *> &resources) {
     std::vector<task_resource *> my_resources{};
     for (auto resource : resources) {
@@ -169,7 +172,9 @@ void tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi, u
     std::lock_guard lock{_lock};
 
     task &t = tasks.emplace_back(cpu_frame, cpu_state, fpusse_state, my_resources);
+    t.set_id(get_next_id());
     t.set_blocked(false);
+    return t.get_id();
 }
 
 void tasklist::exit(uint8_t cpu) {
@@ -191,6 +196,12 @@ void tasklist::exit(uint8_t cpu) {
         }
 
         current_task->set_end(true);
+
+        for (auto &t : tasks) {
+            if ((&t) != current_task) {
+                t.event(TASK_EVENT_EXIT, current_task->get_id(), 0);
+            }
+        }
     }
 
     /*
@@ -199,4 +210,128 @@ void tasklist::exit(uint8_t cpu) {
     while (true) {
         asm("hlt");
     }
+}
+
+uint32_t tasklist::get_next_id() {
+    while (true) {
+        uint32_t id = ++serial;
+        bool found = false;
+        for (auto &t : tasks) {
+            if (id == t.get_id()) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return id;
+        }
+    }
+}
+
+class task_join_handler : public task_event_handler {
+private:
+    uint32_t current_task_id;
+    uint32_t other_task_id;
+public:
+    task_join_handler(uint32_t current_task_id, uint32_t other_task_id) :
+    task_event_handler(),
+    current_task_id(current_task_id), other_task_id(other_task_id) {
+    }
+
+    ~task_join_handler() {
+    }
+
+    void event(uint64_t event_id, uint64_t pid, uint64_t ignored) override {
+        if (event_id == TASK_EVENT_EXIT && pid == other_task_id) {
+            task &t = get_scheduler()->get_task_with_lock(current_task_id);
+            t.set_blocked(false);
+            t.remove_event_handler(this);
+            delete this;
+        }
+    }
+};
+
+void tasklist::join(uint32_t task_id) {
+    {
+        critical_section cli{};
+        std::lock_guard lock{_lock};
+
+        task &t = get_current_task_with_lock();
+        t.add_event_handler(new task_join_handler(t.get_id(), task_id));
+        t.set_blocked(true);
+    }
+    while (true) {
+        {
+            critical_section cli{};
+            std::lock_guard lock{_lock};
+            task &t = get_current_task_with_lock();
+            if (!t.is_blocked()) {
+                return;
+            }
+        }
+        for (int i = 0; i < 10; i++) {
+            asm("pause");
+        }
+    }
+}
+
+uint32_t tasklist::get_current_task_id() {
+    uint8_t cpu_num = 0;
+    {
+        cpu_mpfp *mpfp = get_mpfp();
+        LocalApic localApic{*mpfp};
+        cpu_num = localApic.get_cpu_num(*mpfp);
+    }
+
+    task *current_task;
+
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    for (auto &t : tasks) {
+        if (t.get_cpu() == cpu_num && t.is_running()) {
+            current_task = &t;
+        }
+    }
+
+    if (current_task == nullptr) {
+        wild_panic("No current task found");
+    }
+
+    return current_task->get_id();
+}
+
+task &tasklist::get_task_with_lock(uint32_t task_id) {
+    for (task &t : tasks) {
+        if (t.get_id() == task_id) {
+            return t;
+        }
+    }
+    wild_panic("Task not found");
+    while (true) {
+        asm("hlt");
+    }
+}
+
+task &tasklist::get_current_task_with_lock() {
+    uint8_t cpu_num = 0;
+    {
+        cpu_mpfp *mpfp = get_mpfp();
+        LocalApic localApic{*mpfp};
+        cpu_num = localApic.get_cpu_num(*mpfp);
+    }
+
+    task *current_task;
+
+    for (auto &t : tasks) {
+        if (t.get_cpu() == cpu_num && t.is_running()) {
+            current_task = &t;
+        }
+    }
+
+    if (current_task == nullptr) {
+        wild_panic("No current task found");
+    }
+
+    return *current_task;
 }
