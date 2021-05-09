@@ -3,8 +3,8 @@
 //
 
 #include <klogger.h>
-#include "cpu_mpfp.h"
-#include "vmem.h"
+#include <core/cpu_mpfp.h>
+#include <core/vmem.h>
 #include <cpuid.h>
 
 static mp_floating_pointer *search_page(void *ptr, size_t size) {

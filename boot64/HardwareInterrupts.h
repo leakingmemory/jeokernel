@@ -10,7 +10,7 @@
 #include <vector>
 #include <functional>
 #include <interrupt_frame.h>
-#include "LocalApic.h"
+#include <core/LocalApic.h>
 
 #define HW_INT_N 0x30
 

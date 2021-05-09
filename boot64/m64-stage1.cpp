@@ -9,8 +9,8 @@
 #include "InterruptDescriptorTable.h"
 #include "interrupt.h"
 #include "KernelElf.h"
-#include "cpu_mpfp.h"
-#include "LocalApic.h"
+#include <core/cpu_mpfp.h>
+#include <core/LocalApic.h>
 #include "Pic.h"
 #include "IOApic.h"
 #include <pagealloc.h>
@@ -27,7 +27,7 @@
 #include <mutex>
 #include "PITTimerCalib.h"
 #include "HardwareInterrupts.h"
-#include "vmem.h"
+#include <core/vmem.h>
 #include "start_ap.h"
 #include <core/scheduler.h>
 #include <thread>
@@ -768,7 +768,7 @@ done_with_mem_extension:
 
         std::thread test_thread{[] () {
             uint64_t counter = 0;
-            while (true) {
+            while (counter < 1000000) {
                 std::stringstream countstr{};
                 countstr << std::dec << counter;
                 get_klogger().print_at(0, 0, countstr.str().c_str());

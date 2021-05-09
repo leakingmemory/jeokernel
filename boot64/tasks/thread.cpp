@@ -4,10 +4,20 @@
 
 #include <thread>
 #include <core/scheduler.h>
+#include <core/cpu_mpfp.h>
+#include <core/LocalApic.h>
 
 extern "C" {
     void thread_trampoline(std::threadimpl::thread_start_context *ctx) {
         ctx->invoke();
+        uint8_t cpu_num{0};
+        {
+            cpu_mpfp *mpfp = get_mpfp();
+            LocalApic lapic{*mpfp};
+            cpu_num = lapic.get_cpu_num(*mpfp);
+        }
+        tasklist *scheduler = get_scheduler();
+        scheduler->exit(cpu_num);
     }
 }
 

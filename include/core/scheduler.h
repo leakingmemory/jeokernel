@@ -98,6 +98,13 @@ public:
     uint8_t get_points() {
         return bits.points;
     }
+
+    void set_end(bool end) {
+        bits.end = end ? true : false;
+    }
+    bool is_end() {
+        return bits.end;
+    }
 };
 
 class tasklist {
@@ -113,6 +120,8 @@ public:
     void new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi,
                   uint64_t rdx, uint64_t rcx, uint64_t r8, uint64_t r9,
                   const std::vector<task_resource *> &resources);
+
+    void exit(uint8_t cpu);
 };
 
 tasklist *get_scheduler();

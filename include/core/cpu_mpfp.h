@@ -184,5 +184,6 @@ public:
     }
 };
 
+cpu_mpfp *get_mpfp();
 
 #endif //JEOKERNEL_CPU_MPFP_H

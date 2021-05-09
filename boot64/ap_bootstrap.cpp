@@ -7,13 +7,12 @@
 #include <sstream>
 #include "start_ap.h"
 #include "TaskStateSegment.h"
-#include "cpu_mpfp.h"
-#include "LocalApic.h"
+#include <core/cpu_mpfp.h>
+#include <core/LocalApic.h>
 #include "InterruptDescriptorTable.h"
 #include <core/scheduler.h>
 
 TaskStateSegment *get_tss(int cpun);
-cpu_mpfp *get_mpfp();
 GlobalDescriptorTable *get_gdt();
 InterruptDescriptorTable *get_idt();
 uint64_t get_lapic_100ms();

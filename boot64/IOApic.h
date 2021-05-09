@@ -6,8 +6,8 @@
 #define JEOKERNEL_IOAPIC_H
 
 #include <cstdint>
-#include "vmem.h"
-#include "cpu_mpfp.h"
+#include <core/vmem.h>
+#include <core/cpu_mpfp.h>
 
 class IOApicReg {
 private:

@@ -3,26 +3,26 @@
 //
 
 #include <klogger.h>
-#include "LocalApic.h"
+#include <core/LocalApic.h>
 
 LocalApic::LocalApic(const cpu_mpfp &mpc) : vm(0x2000) {
     uint64_t paddr = mpc.get_local_apic_addr();
-    get_klogger() << "lapic at addr " << paddr;
+    //get_klogger() << "lapic at addr " << paddr;
     uint64_t offset = paddr & 0xFFF;
     uint64_t end_addr = paddr + 0x3FF;
     paddr -= offset;
-    get_klogger() << " -> " << paddr << "+" << offset << " ";
+    //get_klogger() << " -> " << paddr << "+" << offset << " ";
     uint64_t next_page = paddr + 0x1000;
     vm.page(0).rwmap(paddr);
-    get_klogger() << "M";
+    //get_klogger() << "M";
     if (end_addr >= next_page) {
-        get_klogger() << "M";
+        //get_klogger() << "M";
         vm.page(1).rwmap(next_page);
     }
     uint8_t *ptr = (uint8_t *) vm.pointer();
-    get_klogger() << " v-> " << (uint64_t) ptr;
+    //get_klogger() << " v-> " << (uint64_t) ptr;
     ptr += offset;
-    get_klogger() << "->"<<(uint64_t) ptr << "\n";
+    //get_klogger() << "->"<<(uint64_t) ptr << "\n";
     this->pointer = (uint32_t *) (void *) ptr;
 }
 

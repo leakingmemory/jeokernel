@@ -2,7 +2,7 @@
 // Created by sigsegv on 01.05.2021.
 //
 
-#include "vmem.h"
+#include <core/vmem.h>
 #include <pagealloc.h>
 
 vmem::vmem(uint64_t size) {

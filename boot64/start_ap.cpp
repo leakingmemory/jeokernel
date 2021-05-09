@@ -3,7 +3,7 @@
 //
 
 #include "start_ap.h"
-#include "vmem.h"
+#include <core/vmem.h>
 #include <cstdint>
 #include <pagetable.h>
 #include <pagealloc.h>
