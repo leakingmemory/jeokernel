@@ -147,17 +147,17 @@ void tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi, u
         .es = 0x10,
         .fs = 0x10,
         .gs = 0x10,
-        .rdi = rdi,
-        .rsi = rsi,
-        .rcx = rcx,
+        .r9 = r9,
         .r8 = r8,
-        .r9 = r9
+        .rsi = rsi,
+        .rdi = rdi,
+        .rcx = rcx
     };
     InterruptCpuFrame cpu_frame{
-        .ss = 0x10,
         .rip = rip,
         .cs = cs,
-        .rflags = 0x202
+        .rflags = 0x202,
+        .ss = 0x10
     };
     task_stack_resource *stack_resource = new task_stack_resource;
     cpu_state.rbp = stack_resource->get_address();
