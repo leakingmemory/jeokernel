@@ -7,6 +7,9 @@
 #include <string.h>
 #include <loaderconfig.h>
 
+//#define DEBUG_ELF_ATTRIBUTES
+//#define DEBUG_ELF_ATTRIBUTES_BRAKE_VAL 100000000
+
 extern "C" {
 
 void __text_start();
@@ -139,7 +142,7 @@ void boot_stage1(void *multiboot_header_addr) {
     vga.display(0, 0, "/");
 
     // Our stack is at pt2[511]
-    for (uint16_t i = 502; i < 511; i++) {
+    for (uint16_t i = 502; i < 512; i++) {
         pt2[i].os_phys_avail = 0;
         pt2[i].os_virt_avail = 0;
     }
@@ -314,9 +317,6 @@ void boot_stage1(void *multiboot_header_addr) {
                             pageentr *phys_pe = get_pageentr64(pml4t, phaddr);
                             phys_pe->os_phys_avail = 0;
                             uint32_t page_ppn = phaddr / 4096;
-                            vga.display(ln, 0, "pagemap ");
-                            hexstr((char (&)[8]) *hex, vaddr);
-                            vga.display(ln, 8, hex);
                             pageentr *pe = get_pageentr64(pml4t, vaddr);
 
                             /*
@@ -327,36 +327,22 @@ void boot_stage1(void *multiboot_header_addr) {
 
                             pe->os_virt_avail = 0;
                             pe->os_virt_start = 1;
-                            hexstr((char (&)[8]) *hex, pe->page_ppn);
-                            vga.display(ln, 17, hex);
                             pe->page_ppn = page_ppn;
-                            vga.display(ln, 26, " -> ");
-                            hexstr((char (&)[8]) *hex, pe->page_ppn);
-                            vga.display(ln, 30, hex);
-                            ln++;
-
-                            if (ln > 25) {
-                                ln = 0;
-                            }
 
                             vaddr += 4096;
                             phaddr += 4096;
                         }
                     } else {
+                        uint32_t cp = ph.p_filesz;
                         while (vaddr < vaddr_end) {
-                            for (uint32_t phdataaddr = 0x100000; phdataaddr < 0x200000; phdataaddr += 0x1000) {
+                            for (uint32_t phdataaddr = 0x200000; phdataaddr < 0x300000; phdataaddr += 0x1000) {
                                 pageentr *phys_pe = get_pageentr64(pml4t, phdataaddr);
                                 if (phys_pe->os_phys_avail) {
                                     phys_pe->os_phys_avail = 0;
                                     uint32_t page_ppn = phdataaddr / 4096;
-                                    vga.display(ln, 0, "pagzmap ");
-                                    hexstr((char (&)[8]) *hex, vaddr);
-                                    vga.display(ln, 8, hex);
                                     pageentr *pe = get_pageentr64(pml4t, vaddr);
-                                    hexstr((char (&)[8]) *hex, pe->page_ppn);
                                     pe->os_virt_avail = 0;
                                     pe->os_virt_start = 1;
-                                    vga.display(ln, 17, hex);
 
                                     /*
                                      * Default read-only and non-exec
@@ -365,18 +351,22 @@ void boot_stage1(void *multiboot_header_addr) {
                                     pe->execution_disabled = 1;
 
                                     pe->page_ppn = page_ppn;
-                                    vga.display(ln, 26, " -> ");
-                                    hexstr((char (&)[8]) *hex, pe->page_ppn);
-                                    vga.display(ln, 30, hex);
-                                    ln++;
-
-                                    if (ln > 25) {
-                                        ln = 0;
-                                    }
 
                                     {
-                                        uint8_t *z = (uint8_t *) vaddr;
-                                        for (int i = 0; i < 4096; i++) {
+                                        uint8_t *z = (uint8_t *) phdataaddr;
+                                        int i = 0;
+                                        /*
+                                         * Write data from ELF file if within the file size.
+                                         */
+                                        for (; cp > 0 && i < 4096; i++) {
+                                            z[i] = *((uint8_t *) phaddr);
+                                            ++phaddr;
+                                            --cp;
+                                        }
+                                        /*
+                                         * Zero if outside file size.
+                                         */
+                                        for (; i < 4096; i++) {
                                             z[i] = 0;
                                         }
                                     }
@@ -398,17 +388,44 @@ good_data_page_alloc:
             for (uint16_t i = 0; i < elf64_header.e_shnum; i++) {
                 const auto &section = elf64_header.get_section_entry(i);
                 if (section.sh_addr != 0 && section.sh_size != 0) {
+#ifdef DEBUG_ELF_ATTRIBUTES
+                    hexstr((char (&)[8]) *hex, section.sh_addr);
+                    vga.display(22, 40, "Sec ");
+                    vga.display(22, 44, &(hex[0]));
+                    hexstr((char (&)[8]) *hex, section.sh_size);
+                    vga.display(22, 53, &(hex[0]));
+                    vga.display(23, 40, "                               ");
+                    for (int delay = 0; delay < DEBUG_ELF_ATTRIBUTES_BRAKE_VAL; delay++) {
+                        asm("nop");
+                    }
+#endif
                     uint32_t vaddr = (uint32_t) section.sh_addr;
                     uint32_t end_vaddr = vaddr + ((uint32_t) section.sh_size);
                     vaddr = vaddr & 0xFFFFF000;
                     for (; vaddr < end_vaddr; vaddr += 0x1000) {
                         pageentr *pe = get_pageentr64(pml4t, vaddr);
+#ifdef DEBUG_ELF_ATTRIBUTES
+                        hexstr((char (&)[8]) *hex, vaddr);
+                        vga.display(23, 40, "Page ");
+                        vga.display(23, 45, &(hex[0]));
+#endif
                         if (section.sh_flags & SHF_WRITE) {
+#ifdef DEBUG_ELF_ATTRIBUTES
+                            vga.display(23, 54, "W");
+#endif
                             pe->writeable = 1;
                         }
                         if (section.sh_flags & SHF_EXECINSTR) {
+#ifdef DEBUG_ELF_ATTRIBUTES
+                            vga.display(23, 55, "E");
+#endif
                             pe->execution_disabled = 0;
                         }
+#ifdef DEBUG_ELF_ATTRIBUTES
+                        for (int delay = 0; delay < DEBUG_ELF_ATTRIBUTES_BRAKE_VAL; delay++) {
+                            asm("nop");
+                        }
+#endif
                     }
                 }
             }
