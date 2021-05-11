@@ -204,6 +204,15 @@ namespace std {
             return *this;
         }
 
+        constexpr void clear() noexcept {
+            if (c._data != nullptr) {
+                for (size_type i = 0; i < c._size; i++) {
+                    c._data[i].~vector_container_element<T>();
+                }
+                c._size = 0;
+            }
+        }
+
         constexpr void reserve(size_type new_cap) {
             if (c._data != nullptr) {
                 if (c._capacity < new_cap) {
