@@ -80,6 +80,17 @@ public:
     : cpu_frame(cpuFrame), cpu_state(stackFrame), fpu_sse_state(fpusse_state), bits(PRIO_GROUP_NORMAL), resources(resources), event_handlers() {
     }
 
+    task(const task &) = delete;
+
+    task(task &&mv) : cpu_frame(mv.cpu_frame), cpu_state(mv.cpu_state),
+                      fpu_sse_state(mv.fpu_sse_state), bits(mv.bits),
+                      resources(std::move(mv.resources)), event_handlers(std::move(mv.event_handlers)) {
+        mv.resources.clear();
+        mv.event_handlers.clear();
+    }
+
+    task &operator =(const task &) = delete;
+
     void set_running(bool running) {
         bits.running = running ? true : false;
     }
