@@ -32,10 +32,11 @@ struct task_bits {
      * blow the interrupt stack still running the return.
      */
     bool stack_quarantine : 1;
-    uint16_t reserved : 15;
+    bool cpu_pinned : 1;
+    uint16_t reserved : 14;
     uint32_t id;
 
-    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), points(0), cpu(0), stack_quarantine(false), reserved(0), id(0) {
+    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), points(0), cpu(0), stack_quarantine(false), cpu_pinned(false), reserved(0), id(0) {
     }
 } __attribute__((__packed__));
 
@@ -156,8 +157,16 @@ public:
         bits.stack_quarantine = quar ? true : false;
     }
 
-    bool is_stack_quarantined() {
+    bool is_stack_quarantined() const {
         return bits.stack_quarantine;
+    }
+
+    void set_cpu_pinned(bool pinned) {
+        bits.cpu_pinned = pinned ? true : false;
+    }
+
+    bool is_cpu_pinned() const {
+        return bits.cpu_pinned;
     }
 
     void event(uint64_t v1, uint64_t v2, uint64_t v3) {

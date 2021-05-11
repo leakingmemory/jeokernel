@@ -36,6 +36,7 @@ void tasklist::create_current_idle_task(uint8_t cpu) {
     t->set_blocked(false);
     t->set_cpu(cpu);
     t->set_priority_group(PRIO_GROUP_IDLE);
+    t->set_cpu_pinned(true);
     tasks.push_back(t);
 }
 
@@ -57,7 +58,10 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
             } else if (t->is_running()) {
                 current_task = t;
             }
+        } else if (t->is_cpu_pinned()) {
+            continue;
         }
+
         if (t->get_priority_group() == PRIO_GROUP_REALTIME && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
             task_pool.push_back(t);
         } else if (t->get_priority_group() == PRIO_GROUP_NORMAL && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())){
@@ -69,6 +73,9 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     }
     if (task_pool.empty()) {
         for (task *t : tasks) {
+            if (t->is_cpu_pinned() && t->get_cpu() != cpu) {
+                continue;
+            }
             if (t->get_priority_group() == PRIO_GROUP_LOW && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
                 task_pool.push_back(t);
             } else if (t->get_priority_group() == PRIO_GROUP_IDLE && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())){
