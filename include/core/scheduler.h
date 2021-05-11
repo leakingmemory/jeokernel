@@ -25,10 +25,17 @@ struct task_bits {
     bool end : 1;
     uint8_t points : 3;
     uint8_t cpu;
-    uint16_t reserved;
+    /*
+     * Wait one cycle before releasing a task to be switched to another cpu. This will probably
+     * pin tasks that are continously running to one single core, but the point is that if
+     * a kernel task is preempted and immediately switched to another cpucore that'll probably
+     * blow the interrupt stack still running the return.
+     */
+    bool stack_quarantine : 1;
+    uint16_t reserved : 15;
     uint32_t id;
 
-    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), points(0), cpu(0), reserved(0), id(0) {
+    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), points(0), cpu(0), stack_quarantine(false), reserved(0), id(0) {
     }
 } __attribute__((__packed__));
 
@@ -128,6 +135,14 @@ public:
         return bits.id;
     }
 
+    void set_stack_quarantine(bool quar) {
+        bits.stack_quarantine = quar ? true : false;
+    }
+
+    bool is_stack_quarantined() {
+        return bits.stack_quarantine;
+    }
+
     void event(uint64_t v1, uint64_t v2, uint64_t v3) {
         /*
          * Because event handlers may remove themselves from the
@@ -164,7 +179,7 @@ class tasklist {
 private:
     hw_spinlock _lock;
     uint32_t serial;
-    std::vector<task> tasks;
+    std::vector<task *> tasks;
 private:
     uint32_t get_next_id();
 public:

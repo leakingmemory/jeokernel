@@ -30,12 +30,13 @@ void tasklist::create_current_idle_task(uint8_t cpu) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
-    task &t = tasks.emplace_back();
-    t.set_id(get_next_id());
-    t.set_running(true);
-    t.set_blocked(false);
-    t.set_cpu(cpu);
-    t.set_priority_group(PRIO_GROUP_IDLE);
+    task *t = new task();
+    t->set_id(get_next_id());
+    t->set_running(true);
+    t->set_blocked(false);
+    t->set_cpu(cpu);
+    t->set_priority_group(PRIO_GROUP_IDLE);
+    tasks.push_back(t);
 }
 
 void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
@@ -49,25 +50,29 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
-    for (auto &t : tasks) {
-        if (t.get_cpu() == cpu && t.is_running()) {
-            current_task = &t;
+    for (task *t : tasks) {
+        if (t->get_cpu() == cpu) {
+            if (t->is_stack_quarantined()) {
+                t->set_stack_quarantine(false);
+            } else if (t->is_running()) {
+                current_task = t;
+            }
         }
-        if (t.get_priority_group() == PRIO_GROUP_REALTIME && !t.is_blocked() && !t.is_end() && ((&t) == current_task || !t.is_running())) {
-            task_pool.push_back(&t);
-        } else if (t.get_priority_group() == PRIO_GROUP_NORMAL && !t.is_blocked() && !t.is_end() && ((&t) == current_task || !t.is_running())){
-            next_task_pool.push_back(&t);
+        if (t->get_priority_group() == PRIO_GROUP_REALTIME && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
+            task_pool.push_back(t);
+        } else if (t->get_priority_group() == PRIO_GROUP_NORMAL && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())){
+            next_task_pool.push_back(t);
         }
     }
     if (task_pool.empty()) {
         task_pool = next_task_pool;
     }
     if (task_pool.empty()) {
-        for (auto &t : tasks) {
-            if (t.get_priority_group() == PRIO_GROUP_LOW && !t.is_blocked() && !t.is_end() && ((&t) == current_task || !t.is_running())) {
-                task_pool.push_back(&t);
-            } else if (t.get_priority_group() == PRIO_GROUP_IDLE && !t.is_blocked() && !t.is_end() && ((&t) == current_task || !t.is_running())){
-                next_task_pool.push_back(&t);
+        for (task *t : tasks) {
+            if (t->get_priority_group() == PRIO_GROUP_LOW && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
+                task_pool.push_back(t);
+            } else if (t->get_priority_group() == PRIO_GROUP_IDLE && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())){
+                next_task_pool.push_back(t);
             }
         }
     }
@@ -77,8 +82,8 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     if (task_pool.empty()) {
         std::stringstream str{};
         str << std::dec << "For cpu " << (unsigned int) cpu << " no viable tasks to pick\n" << std::hex;
-        for (auto &t : tasks) {
-            str << std::hex << (uint64_t) (&t) << ": " << (t.is_running() ? "R" : "S") << (t.is_blocked() ? "B" : "A") << std::dec << " cpu"<< (unsigned int) t.get_cpu() << (((&t) == current_task) ? "*" : "") << "\n";
+        for (task *t : tasks) {
+            str << std::hex << (uint64_t) (t) << ": " << (t->is_running() ? "R" : "S") << (t->is_blocked() ? "B" : "A") << std::dec << " cpu"<< (unsigned int) t->get_cpu() << ((t == current_task) ? "*" : "") << "\n";
         }
         get_klogger() << str.str().c_str();
         wild_panic("Task lists are empty");
@@ -112,6 +117,7 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     if (win != current_task) {
         current_task->set_running(false);
         if (!current_task->is_end()) {
+            current_task->set_stack_quarantine(true);
             current_task->save_state(interrupt);
         }
         win->restore_state(interrupt);
@@ -120,12 +126,13 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
         if (current_task->is_end()) {
             auto iterator = tasks.begin();
             while (iterator != tasks.end()) {
-                task &t = *iterator;
-                if (&t == current_task) {
+                task *t = *iterator;
+                if (t == current_task) {
                     tasks.erase(iterator);
+                    delete t;
+                    goto evicted_task;
                 }
                 ++iterator;
-                goto evicted_task;
             }
             wild_panic("Unable to find current<ending> task in list");
 evicted_task:
@@ -171,10 +178,11 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rs
     critical_section cli{};
     std::lock_guard lock{_lock};
 
-    task &t = tasks.emplace_back(cpu_frame, cpu_state, fpusse_state, my_resources);
-    t.set_id(get_next_id());
-    t.set_blocked(false);
-    return t.get_id();
+    task *t = new task(cpu_frame, cpu_state, fpusse_state, my_resources);
+    tasks.push_back(t);
+    t->set_id(get_next_id());
+    t->set_blocked(false);
+    return t->get_id();
 }
 
 void tasklist::exit(uint8_t cpu) {
@@ -184,9 +192,9 @@ void tasklist::exit(uint8_t cpu) {
         critical_section cli{};
         std::lock_guard lock{_lock};
 
-        for (auto &t : tasks) {
-            if (t.get_cpu() == cpu && t.is_running()) {
-                current_task = &t;
+        for (task *t : tasks) {
+            if (t->get_cpu() == cpu && t->is_running()) {
+                current_task = t;
                 break;
             }
         }
@@ -197,9 +205,9 @@ void tasklist::exit(uint8_t cpu) {
 
         current_task->set_end(true);
 
-        for (auto &t : tasks) {
-            if ((&t) != current_task) {
-                t.event(TASK_EVENT_EXIT, current_task->get_id(), 0);
+        for (task *t : tasks) {
+            if (t != current_task) {
+                t->event(TASK_EVENT_EXIT, current_task->get_id(), 0);
             }
         }
     }
@@ -216,8 +224,8 @@ uint32_t tasklist::get_next_id() {
     while (true) {
         uint32_t id = ++serial;
         bool found = false;
-        for (auto &t : tasks) {
-            if (id == t.get_id()) {
+        for (task *t : tasks) {
+            if (id == t->get_id()) {
                 found = true;
                 break;
             }
@@ -288,9 +296,9 @@ uint32_t tasklist::get_current_task_id() {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
-    for (auto &t : tasks) {
-        if (t.get_cpu() == cpu_num && t.is_running()) {
-            current_task = &t;
+    for (task *t : tasks) {
+        if (t->get_cpu() == cpu_num && t->is_running()) {
+            current_task = t;
         }
     }
 
@@ -302,9 +310,9 @@ uint32_t tasklist::get_current_task_id() {
 }
 
 task &tasklist::get_task_with_lock(uint32_t task_id) {
-    for (task &t : tasks) {
-        if (t.get_id() == task_id) {
-            return t;
+    for (task *t : tasks) {
+        if (t->get_id() == task_id) {
+            return *t;
         }
     }
     wild_panic("Task not found");
@@ -323,9 +331,9 @@ task &tasklist::get_current_task_with_lock() {
 
     task *current_task;
 
-    for (auto &t : tasks) {
-        if (t.get_cpu() == cpu_num && t.is_running()) {
-            current_task = &t;
+    for (task *t : tasks) {
+        if (t->get_cpu() == cpu_num && t->is_running()) {
+            current_task = t;
         }
     }
 
