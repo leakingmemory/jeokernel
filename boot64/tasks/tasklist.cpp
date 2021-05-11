@@ -343,3 +343,62 @@ task &tasklist::get_current_task_with_lock() {
 
     return *current_task;
 }
+
+void tasklist::event(uint64_t v0, uint64_t v1, uint64_t v2) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    if (v0 == TASK_EVENT_TIMER100HZ) {
+        tick_counter = v1;
+    }
+    for (task *t : tasks) {
+        t->event(v0, v1, v2);
+    }
+}
+
+class task_timer100hz_handler : public task_event_handler {
+private:
+    uint64_t wakeup_time;
+    uint32_t current_task_id;
+public:
+    task_timer100hz_handler(uint32_t current_task_id, uint64_t wakeup_time) :
+    task_event_handler(), current_task_id(current_task_id), wakeup_time(wakeup_time) {
+    }
+
+    ~task_timer100hz_handler() {
+    }
+
+    void event(uint64_t event_id, uint64_t currect_tick, uint64_t ignored) override {
+        if (event_id == TASK_EVENT_TIMER100HZ && currect_tick >= wakeup_time) {
+            task &t = get_scheduler()->get_task_with_lock(current_task_id);
+            t.set_blocked(false);
+            t.remove_event_handler(this);
+            delete this;
+        }
+    }
+};
+
+void tasklist::millisleep(uint64_t ms) {
+    uint64_t ticks100hz = (ms / 10) + 1;
+    {
+        critical_section cli{};
+        std::lock_guard lock{_lock};
+
+        task &t = get_current_task_with_lock();
+        t.add_event_handler(new task_timer100hz_handler(t.get_id(), tick_counter + ticks100hz));
+        t.set_blocked(true);
+    }
+    while (true) {
+        {
+            critical_section cli{};
+            std::lock_guard lock{_lock};
+            task &t = get_current_task_with_lock();
+            if (!t.is_blocked()) {
+                return;
+            }
+        }
+        for (int i = 0; i < 1000; i++) {
+            asm("pause");
+        }
+    }
+}
