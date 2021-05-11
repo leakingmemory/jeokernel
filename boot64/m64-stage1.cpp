@@ -773,6 +773,63 @@ done_with_mem_extension:
         asm("sti");
 
         std::thread joining_thread{[] () {
+            {
+                std::thread nanosleep_thread{[]() {
+                    uint64_t counter = 0;
+                    while (counter < 1000000) {
+                        std::stringstream countstr{};
+                        countstr << std::dec << counter;
+                        std::string str = countstr.str();
+                        get_klogger().print_at(60, 0, str.c_str());
+                        ++counter;
+                        get_scheduler()->nanosleep(1);
+                    }
+                }};
+                nanosleep_thread.detach();
+            }
+            {
+                std::thread usleep_thread{[]() {
+                    uint64_t counter = 0;
+                    while (counter < 1000000) {
+                        std::stringstream countstr{};
+                        countstr << std::dec << counter;
+                        std::string str = countstr.str();
+                        get_klogger().print_at(0, 1, str.c_str());
+                        ++counter;
+                        get_scheduler()->usleep(1);
+                    }
+                }};
+                usleep_thread.detach();
+            }
+            {
+                std::thread msleep_thread{[]() {
+                    uint64_t counter = 0;
+                    while (counter < 1000000) {
+                        std::stringstream countstr{};
+                        countstr << std::dec << counter;
+                        std::string str = countstr.str();
+                        get_klogger().print_at(20, 1, str.c_str());
+                        ++counter;
+                        get_scheduler()->millisleep(1);
+                    }
+                }};
+                msleep_thread.detach();
+            }
+            {
+                std::thread sleep_thread{[]() {
+                    uint64_t counter = 0;
+                    while (counter < 1000000) {
+                        std::stringstream countstr{};
+                        countstr << std::dec << counter;
+                        std::string str = countstr.str();
+                        get_klogger().print_at(40, 1, str.c_str());
+                        ++counter;
+                        get_scheduler()->sleep(1);
+                    }
+                }};
+                sleep_thread.detach();
+            }
+
             uint64_t counter = 0;
             {
                 {
@@ -781,7 +838,8 @@ done_with_mem_extension:
                         while (counter < 1000000) {
                             std::stringstream countstr{};
                             countstr << std::dec << counter;
-                            get_klogger().print_at(40, 0, countstr.str().c_str());
+                            std::string str = countstr.str();
+                            get_klogger().print_at(40, 0, str.c_str());
                             ++counter;
                         }
                     }};
@@ -792,28 +850,33 @@ done_with_mem_extension:
                     while (counter < 1000000) {
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
-                        get_klogger().print_at(0, 0, countstr.str().c_str());
+                        std::string str = countstr.str();
+                        get_klogger().print_at(0, 0, str.c_str());
                         ++counter;
                     }
                 }};
                 while (counter < 200000) {
                     std::stringstream countstr{};
                     countstr << std::dec << counter;
-                    get_klogger().print_at(20, 0, countstr.str().c_str());
+                    std::string str = countstr.str();
+                    get_klogger().print_at(20, 0, str.c_str());
                     ++counter;
                 }
                 test_thread.join();
                 while (counter < 500000) {
                     std::stringstream countstr{};
                     countstr << std::dec << counter;
-                    get_klogger().print_at(20, 0, countstr.str().c_str());
+                    std::string str = countstr.str();
+                    get_klogger().print_at(20, 0, str.c_str());
                     ++counter;
                 }
             }
+
             while (counter < 1000000) {
                 std::stringstream countstr{};
                 countstr << std::dec << counter;
-                get_klogger().print_at(20, 0, countstr.str().c_str());
+                std::string str = countstr.str();
+                get_klogger().print_at(20, 0, str.c_str());
                 ++counter;
             }
         }};
