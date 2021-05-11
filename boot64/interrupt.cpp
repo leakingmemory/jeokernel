@@ -161,6 +161,7 @@ extern "C" {
                 break;
             }
             case 8: {
+                interrupt.apply_error_code_correction();
                 CpuExceptionTrap trap{"double fault", interrupt};
                 trap.handle();
                 break;
