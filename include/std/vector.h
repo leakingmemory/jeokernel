@@ -19,7 +19,7 @@ namespace std {
         }
         vector_container_element(Class &&mv) : element(move(mv)) {
         }
-    } __attribute__((__packed__));
+    };
     template <class Class> struct vector_container_element<Class *> {
         Class *element;
 
