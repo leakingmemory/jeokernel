@@ -61,6 +61,11 @@ public:
     virtual ~task_event_handler() {
     }
 
+    task_event_handler(const task_event_handler &) = delete;
+    task_event_handler(task_event_handler &&) = delete;
+    task_event_handler & operator =(const task_event_handler &) = delete;
+    task_event_handler & operator =(task_event_handler &&) = delete;
+
     virtual void event(uint64_t v1, uint64_t v2, uint64_t v3) {
     }
 };
