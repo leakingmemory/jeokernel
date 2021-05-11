@@ -37,13 +37,19 @@ std::optional<pageentr> get_pageentr(uint64_t addr) {
     }
 }
 
-bool update_pageentr(uint64_t addr, const pageentr &pe_update) {
+bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update) {
     critical_section cli{};
     std::lock_guard lock{*pagetables_lock};
 
     pageentr *pe = get_pageentr64(_get_pml4t(), addr);
     if (pe != nullptr) {
-        *pe = pe_update;
+        pe->present = pe_vmem_update.present;
+        pe->writeable = pe_vmem_update.writeable;
+        pe->execution_disabled = pe_vmem_update.execution_disabled;
+        pe->user_access = pe_vmem_update.user_access;
+        pe->accessed = pe_vmem_update.accessed;
+        pe->dirty = pe_vmem_update.dirty;
+        pe->page_ppn = pe_vmem_update.page_ppn;
         return true;
     } else {
         return false;

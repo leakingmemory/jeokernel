@@ -145,7 +145,15 @@ hw_spinlock &get_pagetables_lock();
 
 uint64_t get_phys_from_virt(uint64_t vaddr);
 std::optional<pageentr> get_pageentr(uint64_t addr);
-bool update_pageentr(uint64_t addr, const pageentr &pe);
+/**
+ * Update the vmem properties of the pageentr. Any allocation
+ * bits, reserved bits, and similar will be left unchanged.
+ *
+ * @param addr
+ * @param pe_vmem_update
+ * @return True on success.
+ */
+bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update);
 
 #endif
 #endif //JEOKERNEL_PAGETABLE_H
