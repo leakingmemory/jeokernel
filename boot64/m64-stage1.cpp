@@ -708,17 +708,23 @@ done_with_mem_extension:
                 bool is_bootstrap_cpu = (mpfp->get_cpu(cpu_num).cpu_flags & 2) != 0;
                 uint64_t prev_vis = 0;
                 uint64_t vis = 0;
+                uint64_t ticks = 0;
+
+                reload_pagetables();
 
                 {
                     std::lock_guard lock{*aptimer_lock};
 
                     prev_vis = (is_bootstrap_cpu ? timer_ticks : aptimers[cpu_num]) >> 5;
                     if (is_bootstrap_cpu) {
-                        ++timer_ticks;
+                        ticks = ++timer_ticks;
                     } else {
-                        ++aptimers[cpu_num];
+                        ticks = ++aptimers[cpu_num];
                     }
-                    vis = (is_bootstrap_cpu ? timer_ticks : aptimers[cpu_num]) >> 5;
+                    vis = ticks >> 5;
+                }
+                if (is_bootstrap_cpu) {
+                    scheduler->event(TASK_EVENT_TIMER100HZ, ticks, 0);
                 }
                 if (prev_vis != vis) {
                     char str[2] = {characters[vis & 7], 0};
