@@ -5,6 +5,7 @@
 #include <klogger.h>
 #include <interrupt_frame.h>
 #include <string>
+#include <core/scheduler.h>
 #include "PageFault.h"
 #include "CpuExceptionTrap.h"
 #include "KernelElf.h"
@@ -222,6 +223,21 @@ extern "C" {
                 CpuExceptionTrap trap{"security exception", interrupt};
                 trap.handle();
                 break;
+            }
+            case 0xFE: {
+                /* Voluntary task switch vector */
+                uint8_t cpu{0};
+                {
+                    cpu_mpfp *mpfp = get_mpfp();
+                    LocalApic lapic{*mpfp};
+                    cpu = lapic.get_cpu_num(*mpfp);
+                }
+                get_scheduler()->switch_tasks(interrupt, cpu);
+                return;
+            }
+            case 0xFF: {
+                /* send the spurious irqs here */
+                return; // ignore
             }
         }
         if (interrupt_vector >= 0x20 && interrupt_vector < (0x20 + HW_INT_N)) {

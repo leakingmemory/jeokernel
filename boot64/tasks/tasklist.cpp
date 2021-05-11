@@ -219,6 +219,7 @@ void tasklist::exit(uint8_t cpu) {
         }
     }
 
+    asm("int $0xFE"); // Request task switch now.
     /*
      * Wait for being evicted
      */
@@ -275,6 +276,9 @@ void tasklist::join(uint32_t task_id) {
         t.add_event_handler(new task_join_handler(t.get_id(), task_id));
         t.set_blocked(true);
     }
+
+    asm("int $0xFE"); // Request task switch now.
+
     while (true) {
         {
             critical_section cli{};
@@ -395,6 +399,9 @@ void tasklist::millisleep(uint64_t ms) {
         t.add_event_handler(new task_timer100hz_handler(t.get_id(), tick_counter + ticks100hz));
         t.set_blocked(true);
     }
+
+    asm("int $0xFE"); // Request task switch now.
+
     while (true) {
         {
             critical_section cli{};
