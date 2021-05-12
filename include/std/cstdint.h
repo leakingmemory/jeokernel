@@ -8,6 +8,9 @@
 #include <stdint.h>
 
 namespace std {
+    typedef int64_t intmax_t;
+    typedef uint64_t uintmax_t;
+
     typedef size_t size_t;
     typedef ssize_t ssize_t;
     typedef void *pointer;

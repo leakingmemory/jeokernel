@@ -32,6 +32,7 @@
 #include <core/scheduler.h>
 #include <thread>
 #include <core/nanotime.h>
+#include <chrono>
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -781,6 +782,8 @@ done_with_mem_extension:
 
         asm("sti");
 
+        using namespace std::literals::chrono_literals;
+
         std::thread clock_thread{[] () {
             while (true) {
                 std::stringstream clocktxt{};
@@ -804,7 +807,7 @@ done_with_mem_extension:
                 }
                 clocktxt << sec << " ";
                 get_klogger().print_at(60, 0, clocktxt.str().c_str());
-                get_scheduler()->usleep(20000);
+                std::this_thread::sleep_for(20ms);
             }
         }};
         clock_thread.detach();
@@ -819,7 +822,7 @@ done_with_mem_extension:
                         std::string str = countstr.str();
                         get_klogger().print_at(0, 1, str.c_str());
                         ++counter;
-                        get_scheduler()->nanosleep(1);
+                        std::this_thread::sleep_for(1ns);
                     }
                 }};
                 nanosleep_thread.detach();
@@ -833,7 +836,7 @@ done_with_mem_extension:
                         std::string str = countstr.str();
                         get_klogger().print_at(20, 1, str.c_str());
                         ++counter;
-                        get_scheduler()->usleep(1);
+                        std::this_thread::sleep_for(1us);
                     }
                 }};
                 usleep_thread.detach();
@@ -847,7 +850,7 @@ done_with_mem_extension:
                         std::string str = countstr.str();
                         get_klogger().print_at(40, 1, str.c_str());
                         ++counter;
-                        get_scheduler()->millisleep(1);
+                        std::this_thread::sleep_for(1ms);
                     }
                 }};
                 msleep_thread.detach();
@@ -861,7 +864,7 @@ done_with_mem_extension:
                         std::string str = countstr.str();
                         get_klogger().print_at(60, 1, str.c_str());
                         ++counter;
-                        get_scheduler()->sleep(1);
+                        std::this_thread::sleep_for(1s);
                     }
                 }};
                 sleep_thread.detach();

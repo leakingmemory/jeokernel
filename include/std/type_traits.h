@@ -6,6 +6,14 @@
 #define JEOKERNEL_TYPE_TRAITS_H
 
 namespace std {
+    template <class T> struct type_identity {
+        using type = T;
+    };
+}
+
+#include <std/declval.h>
+
+namespace std {
     template< class T, T v >
     struct integral_constant {
         static constexpr T value = v;
@@ -76,6 +84,14 @@ namespace std {
     template<bool B, class T, class F> struct conditional { typedef T type; };
 
     template<class T, class F> struct conditional<false, T, F> { typedef F type; };
+
+    template <class...> struct common_type {};
+
+    template <class T> struct common_type<T> : common_type<T, T> {};
+
+    template <class T1, class T2> struct common_type<T1, T2> {
+        using type = typename std::remove_reference<decltype(false ? declval<T1>() : declval<T2>())>::type;
+    };
 }
 
 #endif //JEOKERNEL_TYPE_TRAITS_H

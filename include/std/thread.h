@@ -10,6 +10,8 @@
 #include <concurrency/critical_section.h>
 #include <mutex>
 #include <klogger.h>
+#include <core/scheduler.h>
+#include <chrono>
 
 namespace std {
     namespace threadimpl {
@@ -93,6 +95,36 @@ namespace std {
         void join();
         void detach();
     };
+
+    namespace this_thread {
+
+        template<class Rep, class Period>
+        void sleep_for(const std::chrono::duration<Rep, Period>& sleep_duration) {
+            {
+                std::chrono::seconds seconds = std::chrono::duration_cast < std::chrono::seconds > (sleep_duration);
+                if (seconds.count() > 120) {
+                    get_scheduler()->sleep(seconds.count());
+                    return;
+                }
+            }
+            {
+                std::chrono::milliseconds ms = std::chrono::duration_cast<std::chrono::milliseconds>(sleep_duration);
+                if (ms.count() > 1000) {
+                    get_scheduler()->millisleep(ms.count());
+                    return;
+                }
+            }
+            {
+                std::chrono::microseconds us = std::chrono::duration_cast<std::chrono::microseconds>(sleep_duration);
+                if (us.count() > 1000) {
+                    get_scheduler()->usleep(us.count());
+                    return;
+                }
+            }
+            std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds> (sleep_duration);
+            get_scheduler()->nanosleep(ns.count());
+        }
+    }
 }
 
 #endif //JEOKERNEL_THREAD_H
