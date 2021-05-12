@@ -31,6 +31,7 @@
 #include "start_ap.h"
 #include <core/scheduler.h>
 #include <thread>
+#include <core/nanotime.h>
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -680,12 +681,19 @@ done_with_mem_extension:
             {
                 lapic_100ms = (uint64_t) 0x00FFFFFFFF;
                 lapic.set_timer_count((uint32_t) lapic_100ms);
+                set_nanotime_ref(0);
                 for (int i = 0; i < 10; i++) {
                     calib_timer.delay(10000);
                 }
                 lapic.set_timer_int_mode(0x20, 0x10000); // Disable
                 lapic_100ms -= lapic.get_timer_value();
                 lapic.set_timer_count((uint32_t) (lapic_100ms / 10));
+                set_nanotime_ref(100000000);
+            }
+            {
+                std::stringstream sstr{};
+                sstr << std::dec << "TSC frequency " << (get_tsc_frequency() / 1000) << "KHz, uptime nanos " << get_nanotime_ref() << "\n";
+                get_klogger() << sstr.str().c_str();
             }
 
             {
@@ -694,6 +702,7 @@ done_with_mem_extension:
                 std::string info = stream.str();
                 get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << info.c_str()
                               << "\n";
+                lapic.set_timer_count((uint32_t) (lapic_100ms / 10));
             }
 
             timer_ticks = 0;
@@ -772,6 +781,34 @@ done_with_mem_extension:
 
         asm("sti");
 
+        std::thread clock_thread{[] () {
+            while (true) {
+                std::stringstream clocktxt{};
+                clocktxt << std::dec << " T+";
+                uint64_t tm = get_nanotime_ref();
+                uint64_t sec = tm / 1000000000;
+                uint64_t mins = sec / 60;
+                sec = sec % 60;
+                uint64_t hours = mins / 60;
+                mins = mins % 60;
+                if (hours < 10) {
+                    clocktxt << "0";
+                }
+                clocktxt << hours << ":";
+                if (mins < 10) {
+                    clocktxt << "0";
+                }
+                clocktxt << mins << ":";
+                if (sec < 10) {
+                    clocktxt << "0";
+                }
+                clocktxt << sec << " ";
+                get_klogger().print_at(60, 0, clocktxt.str().c_str());
+                get_scheduler()->usleep(20000);
+            }
+        }};
+        clock_thread.detach();
+
         std::thread joining_thread{[] () {
             {
                 std::thread nanosleep_thread{[]() {
@@ -780,7 +817,7 @@ done_with_mem_extension:
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(60, 0, str.c_str());
+                        get_klogger().print_at(0, 1, str.c_str());
                         ++counter;
                         get_scheduler()->nanosleep(1);
                     }
@@ -794,7 +831,7 @@ done_with_mem_extension:
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(0, 1, str.c_str());
+                        get_klogger().print_at(20, 1, str.c_str());
                         ++counter;
                         get_scheduler()->usleep(1);
                     }
@@ -808,7 +845,7 @@ done_with_mem_extension:
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(20, 1, str.c_str());
+                        get_klogger().print_at(40, 1, str.c_str());
                         ++counter;
                         get_scheduler()->millisleep(1);
                     }
@@ -822,7 +859,7 @@ done_with_mem_extension:
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(40, 1, str.c_str());
+                        get_klogger().print_at(60, 1, str.c_str());
                         ++counter;
                         get_scheduler()->sleep(1);
                     }
