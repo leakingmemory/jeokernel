@@ -13,6 +13,10 @@ bool is_nanotime_available() {
     return tsc_offset > 0 && tsc_frequency > 0;
 }
 
+bool is_nanotime_reliable() {
+    return is_nanotime_available();
+}
+
 uint64_t read_tsc() {
     uint64_t high;
     uint64_t low;

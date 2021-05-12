@@ -8,10 +8,16 @@
 #include <cstdint>
 
 /**
- * Nanoseconds time source is reliable?
+ * Nanoseconds time source is available?
  * @return
  */
 bool is_nanotime_available();
+
+/**
+ * Nanoseconds time source is reliable?
+ * @return
+ */
+bool is_nanotime_reliable();
 
 /**
  * Nanoseconds since boot.

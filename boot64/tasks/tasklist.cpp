@@ -10,6 +10,7 @@
 #include <sstream>
 #include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
+#include <core/nanotime.h>
 
 class task_stack_resource : public task_resource {
 private:
@@ -51,7 +52,13 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
+    bool nanos_avail = is_nanotime_available();
+    uint64_t nanos{nanos_avail ? get_nanotime_ref() : 0};
+
     for (task *t : tasks) {
+        if (nanos_avail) {
+            t->event(TASK_EVENT_NANOTIME, nanos, cpu);
+        }
         if (t->get_cpu() == cpu) {
             if (t->is_stack_quarantined()) {
                 t->set_stack_quarantine(false);
@@ -367,6 +374,28 @@ void tasklist::event(uint64_t v0, uint64_t v1, uint64_t v2) {
     }
 }
 
+class task_nanos_handler : public task_event_handler {
+private:
+    uint64_t wakeup_time;
+    uint32_t current_task_id;
+public:
+    task_nanos_handler(uint32_t current_task_id, uint64_t wakeup_time) :
+            task_event_handler(), current_task_id(current_task_id), wakeup_time(wakeup_time) {
+    }
+
+    ~task_nanos_handler() {
+    }
+
+    void event(uint64_t event_id, uint64_t nanos, uint64_t cpu) override {
+        if (event_id == TASK_EVENT_NANOTIME && nanos >= wakeup_time) {
+            task &t = get_scheduler()->get_task_with_lock(current_task_id);
+            t.set_blocked(false);
+            t.remove_event_handler(this);
+            delete this;
+        }
+    }
+};
+
 class task_timer100hz_handler : public task_event_handler {
 private:
     uint64_t wakeup_time;
@@ -389,7 +418,7 @@ public:
     }
 };
 
-void tasklist::millisleep(uint64_t ms) {
+void tasklist::ticks_millisleep(uint64_t ms) {
     uint64_t ticks100hz = (ms / 10) + 1;
     {
         critical_section cli{};
@@ -414,5 +443,58 @@ void tasklist::millisleep(uint64_t ms) {
         for (int i = 0; i < 1000; i++) {
             asm("pause");
         }
+    }
+}
+
+void tasklist::tsc_nanosleep(uint64_t nanos) {
+    nanos += get_nanotime_ref() + 1;
+    {
+        critical_section cli{};
+        std::lock_guard lock{_lock};
+
+        task &t = get_current_task_with_lock();
+        t.add_event_handler(new task_nanos_handler(t.get_id(), nanos));
+        t.set_blocked(true);
+    }
+
+    asm("int $0xFE"); // Request task switch now.
+
+    while (true) {
+        {
+            critical_section cli{};
+            std::lock_guard lock{_lock};
+            task &t = get_current_task_with_lock();
+            if (!t.is_blocked()) {
+                return;
+            }
+        }
+        for (int i = 0; i < 1000; i++) {
+            asm("pause");
+        }
+    }
+}
+
+void tasklist::millisleep(uint64_t ms) {
+    if (ms > 1000000000 || !is_nanotime_reliable()) {
+        ticks_millisleep(ms);
+    } else {
+        tsc_nanosleep(ms * 1000000);
+    }
+}
+
+void tasklist::usleep(uint64_t us) {
+    if (us > 1000000000000 || !is_nanotime_reliable()) {
+        if (us % 1000)
+        ticks_millisleep((us / 1000) + ((us % 1000) > 0 ? 1 : 0));
+    } else {
+        tsc_nanosleep(us * 1000);
+    }
+}
+
+void tasklist::nanosleep(uint64_t nanos) {
+    if (is_nanotime_reliable()) {
+        tsc_nanosleep(nanos);
+    } else {
+        millisleep((nanos / 1000000) + ((nanos % 1000000) > 0 ? 1 : 0));
     }
 }

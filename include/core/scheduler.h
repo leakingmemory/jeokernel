@@ -55,6 +55,7 @@ public:
 
 #define TASK_EVENT_EXIT         0
 #define TASK_EVENT_TIMER100HZ   1
+#define TASK_EVENT_NANOTIME     2
 
 class task_event_handler {
 public:
@@ -209,6 +210,8 @@ private:
     std::vector<task *> tasks;
 private:
     uint32_t get_next_id();
+    void ticks_millisleep(uint64_t ms);
+    void tsc_nanosleep(uint64_t nanos);
 public:
     tasklist() : _lock(), tick_counter(0), serial(0), tasks() {
     }
@@ -234,22 +237,8 @@ public:
     void sleep(uint64_t seconds) {
         millisleep(seconds * 1000);
     }
-    void usleep(uint64_t us) {
-        uint64_t inc = us % 1000000;
-        uint64_t ms = us /  1000000;
-        if (inc > 0) {
-            ++ms;
-        }
-        millisleep(ms);
-    }
-    void nanosleep(uint64_t us) {
-        uint64_t inc = us % 1000000000;
-        uint64_t ms = us /  1000000000;
-        if (inc > 0) {
-            ++ms;
-        }
-        millisleep(ms);
-    }
+    void usleep(uint64_t us);
+    void nanosleep(uint64_t us);
 };
 
 tasklist *get_scheduler();
