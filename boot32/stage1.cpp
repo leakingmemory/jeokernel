@@ -431,6 +431,9 @@ good_data_page_alloc:
             }
 
             /*
+             * TODO - Hardcoded to search for space in pt2 page table, the second
+             * leaf table (table 2M-4M, search area 3M-4M).
+             *
              * The stack at will remain available for Additional Processors to
              * bootstrap. See ap_trampoline.S / ap_started.S / ap_bootstrap.cpp
              */
@@ -440,27 +443,28 @@ good_data_page_alloc:
             for (int i = 256; i < 511; i++) {
                 int j = 0;
                 while (j < stack_pages && (i+j) < 512) {
-                    if (!pt[i+j].os_virt_avail || !pt[i+j].os_phys_avail || pt[i+j].page_ppn != (i+j)) {
+                    if (!pt2[i+j].os_virt_avail || !pt2[i+j].os_phys_avail) {
                         break;
                     }
                     j++;
                 }
                 if (stack_pages == j) {
-                    stack_ptr = i;
+                    stack_ptr = 512 + i;
                     stack_ptr = (stack_ptr << 12) + (stack_pages * 4096);
-                    pt[i].os_virt_avail = 0;
-                    pt[i].os_virt_start = 1;
-                    pt[i].writeable = 0;
-                    pt[i].present = 0;
-                    pt[i].accessed = 0;
+                    pt2[i].os_virt_avail = 0;
+                    pt2[i].os_virt_start = 1;
+                    pt2[i].writeable = 0;
+                    pt2[i].present = 0;
+                    pt2[i].accessed = 0;
                     for (int j = 1; j < stack_pages; j++) {
-                        pt[i+j].os_phys_avail = 0;
-                        pt[i+j].os_virt_avail = 0;
-                        pt[i+j].os_virt_start = 0;
-                        pt[i+j].writeable = 1;
-                        pt[i+j].present = 1;
-                        pt[i+j].accessed = 0;
-                        pt[i+j].execution_disabled = 1;
+                        pt2[i+j].os_phys_avail = 0;
+                        pt2[i+j].os_virt_avail = 0;
+                        pt2[i+j].os_virt_start = 0;
+                        pt2[i+j].page_ppn = 512 + i + j;
+                        pt2[i+j].writeable = 1;
+                        pt2[i+j].present = 1;
+                        pt2[i+j].accessed = 0;
+                        pt2[i+j].execution_disabled = 1;
                     }
                     goto stack_allocated;
                 }
