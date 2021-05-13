@@ -22,6 +22,7 @@ public:
 
 private:
     uint32_t create_ticket() noexcept;
+    bool try_acquire_ticket(uint32_t ticket) noexcept;
     void release_ticket() noexcept;
 public:
     bool try_lock() noexcept;

@@ -21,18 +21,28 @@ uint32_t hw_spinlock::create_ticket() noexcept {
     return ticket;
 }
 
+bool hw_spinlock::try_acquire_ticket(uint32_t ticket) noexcept {
+    uint64_t t64{ticket};
+    asm(""
+        "mov %1, %%rax;"
+        "mov %%rax, %%rcx;"
+        "dec %%rax;"
+        "lock cmpxchgl %%ecx, %0;"
+        "jnz unsuccessful_hw_try_lock;"
+        "inc %%rax;"
+        "unsuccessful_hw_try_lock:"
+        "mov %%rax, %1"
+        : "+m"(cacheline[0]), "=rm"(t64) :: "%rax", "%rcx"
+        );
+    return ((uint32_t) t64) == ticket;
+}
+
 void hw_spinlock::release_ticket() noexcept {
     asm("lock incl %0" : "+m"(cacheline[1]));
 }
 
 bool hw_spinlock::try_lock() noexcept {
-    uint32_t ticket = create_ticket();
-    if (ticket == cacheline[1]) {
-        return true;
-    } else {
-        release_ticket();
-        return false;
-    }
+    return try_acquire_ticket(cacheline[1]);
 }
 
 void hw_spinlock::lock() noexcept {
