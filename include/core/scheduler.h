@@ -191,14 +191,16 @@ public:
     void add_event_handler(task_event_handler *eh) {
         event_handlers.push_back(eh);
     }
-    void remove_event_handler(task_event_handler *eh) {
+    bool remove_event_handler(task_event_handler *eh) {
         auto iterator = event_handlers.begin();
         while (iterator != event_handlers.end()) {
             if (*iterator == eh) {
                 event_handlers.erase(iterator);
-                return;
+                return true;
             }
+            ++iterator;
         }
+        return false;
     }
 };
 
