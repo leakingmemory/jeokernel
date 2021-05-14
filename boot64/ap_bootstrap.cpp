@@ -91,6 +91,15 @@ extern "C" {
 
         while (1) {
             asm("hlt");
+
+            /* The return from interrupt-ed hlt goes here, the return is
+             * complete, so stack quarantines for this cpu can be cleared.
+             * THis is the idle task, and pinned to this cpu, so cpu_num
+             * should be valid.
+             * */
+            if (get_scheduler()->clear_stack_quarantines(cpu_num)) {
+                asm("int $0xFE");
+            }
         }
     }
 }

@@ -520,3 +520,21 @@ void tasklist::set_blocked(bool blocked) {
     task &t = get_current_task_with_lock();
     t.set_blocked(blocked);
 }
+
+bool tasklist::clear_stack_quarantines(uint8_t cpu) {
+    bool runnable{false};
+
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    for (task *t : tasks) {
+        if (t->get_cpu() == cpu && t->is_stack_quarantined()) {
+            t->set_stack_quarantine(false);
+        }
+        if (!t->is_running() && !t->is_blocked() && !t->is_end() && (!t->is_stack_quarantined() || t->get_cpu() == cpu)) {
+            runnable = true;
+        }
+    }
+
+    return runnable;
+}

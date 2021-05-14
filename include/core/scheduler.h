@@ -253,6 +253,15 @@ public:
     }
     void usleep(uint64_t us);
     void nanosleep(uint64_t us);
+
+    /**
+     * Returns true when tasks are now runnable for _current_ cpu. If
+     * true call int 0xFE to switch tasks.
+     *
+     * @param cpu
+     * @return
+     */
+    bool clear_stack_quarantines(uint8_t cpu);
 };
 
 tasklist *get_scheduler();
