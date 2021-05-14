@@ -114,10 +114,10 @@ struct caller_stack {
         return (void *) (((uint8_t *) pointer) + size);
     }
     size_t length() {
-        return size / 8;
+        return size;
     }
     uint64_t operator [] (size_t i) {
-        return ((uint64_t *) pointer)[i];
+        return (i+7) < size ? *((uint64_t *) (void *) &(((uint8_t *) pointer)[i])) : 0;
     }
 };
 

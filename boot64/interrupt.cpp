@@ -56,8 +56,8 @@ void Interrupt::print_debug() const {
             get_klogger() << name << "+0x" << offset;
         }
         get_klogger() << " (";
-        for (size_t par = std::get<0>(value) + 1; par < (3 + std::get<0>(value)) && par < stack.length(); par++) {
-            if (par != (std::get<0>(value) + 1)) {
+        for (size_t par = std::get<0>(value) + 8; par < (3 + std::get<0>(value)) && par < stack.length(); par += 8) {
+            if (par != (std::get<0>(value) + 8)) {
                 get_klogger() << ", ";
             }
             get_klogger() << stack[par];
@@ -73,8 +73,9 @@ std::vector<std::tuple<size_t,uint64_t>> Interrupt::unwind_stack() const {
     uint64_t stack_end = (uint64_t) stack.end();
     uint64_t rbp = this->rbp();
     while (rbp > stack_start && rbp < stack_end) {
-        size_t stack_off = (rbp - stack_start) / 8;
-        rbp = stack[stack_off++];
+        size_t stack_off = rbp - stack_start;
+        rbp = stack[stack_off];
+        stack_off += 8;
         calls.push_back(std::make_tuple<size_t,uint64_t>(stack_off, stack[stack_off]));
     }
     return calls;
