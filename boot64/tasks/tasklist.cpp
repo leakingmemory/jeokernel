@@ -304,6 +304,8 @@ void tasklist::join(uint32_t task_id) {
 }
 
 uint32_t tasklist::get_current_task_id() {
+    critical_section cli{};
+
     uint8_t cpu_num = 0;
     {
         cpu_mpfp *mpfp = get_mpfp();
@@ -313,12 +315,12 @@ uint32_t tasklist::get_current_task_id() {
 
     task *current_task;
 
-    critical_section cli{};
     std::lock_guard lock{_lock};
 
     for (task *t : tasks) {
         if (t->get_cpu() == cpu_num && t->is_running()) {
             current_task = t;
+            break;
         }
     }
 
