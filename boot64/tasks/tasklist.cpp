@@ -11,6 +11,7 @@
 #include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
 #include <core/nanotime.h>
+#include <pagealloc.h>
 
 class task_stack_resource : public task_resource {
 private:
