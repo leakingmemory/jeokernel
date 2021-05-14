@@ -6,6 +6,7 @@
 #define JEOKERNEL_SCHEDULER_H
 
 #include <interrupt_frame.h>
+#include <klogger.h>
 
 /*
  * Hard grouping: Realtime always first, normal always before low and idle,
@@ -56,6 +57,8 @@ public:
 #define TASK_EVENT_EXIT         0
 #define TASK_EVENT_TIMER100HZ   1
 #define TASK_EVENT_NANOTIME     2
+#define TASK_EVENT_MUTEX        3
+#define TASK_EVENT_CLEAR_WAIT_MUTEX 4
 
 class task_event_handler {
 public:
@@ -231,6 +234,15 @@ public:
 
     task &get_task_with_lock(uint32_t task_id);
     task &get_current_task_with_lock();
+
+    void add_task_event_handler(task_event_handler *handler);
+    /**
+     * Consider using critical_section to disable interrupts while
+     * if the blocked state is not completely assured yet.
+     *
+     * @param blocked
+     */
+    void set_blocked(bool blocked);
 
     void event(uint64_t v0, uint64_t v1, uint64_t v2);
 

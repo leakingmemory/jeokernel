@@ -5,6 +5,8 @@
 #ifndef JEOKERNEL_MUTEX_H
 #define JEOKERNEL_MUTEX_H
 
+#include <concurrency/mutex.h>
+
 namespace std {
     template <class Mutex> class lock_guard {
     private:

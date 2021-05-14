@@ -504,3 +504,19 @@ void tasklist::nanosleep(uint64_t nanos) {
         millisleep((nanos / 1000000) + ((nanos % 1000000) > 0 ? 1 : 0));
     }
 }
+
+void tasklist::add_task_event_handler(task_event_handler *handler) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    task &t = get_current_task_with_lock();
+    t.add_event_handler(handler);
+}
+
+void tasklist::set_blocked(bool blocked) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    task &t = get_current_task_with_lock();
+    t.set_blocked(blocked);
+}

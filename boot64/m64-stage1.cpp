@@ -783,8 +783,9 @@ done_with_mem_extension:
         asm("sti");
 
         using namespace std::literals::chrono_literals;
+        std::mutex cons_mtx{};
 
-        std::thread clock_thread{[] () {
+        std::thread clock_thread{[&cons_mtx] () {
             while (true) {
                 std::stringstream clocktxt{};
                 clocktxt << std::dec << " T+";
@@ -806,21 +807,27 @@ done_with_mem_extension:
                     clocktxt << "0";
                 }
                 clocktxt << sec << " ";
-                get_klogger().print_at(60, 0, clocktxt.str().c_str());
+                {
+                    std::lock_guard lock{cons_mtx};
+                    get_klogger().print_at(60, 0, clocktxt.str().c_str());
+                }
                 std::this_thread::sleep_for(20ms);
             }
         }};
         clock_thread.detach();
 
-        std::thread joining_thread{[] () {
+        std::thread joining_thread{[&cons_mtx] () {
             {
-                std::thread nanosleep_thread{[]() {
+                std::thread nanosleep_thread{[&cons_mtx]() {
                     uint64_t counter = 0;
                     while (counter < 1000000) {
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(0, 1, str.c_str());
+                        {
+                            std::lock_guard lock{cons_mtx};
+                            get_klogger().print_at(0, 1, str.c_str());
+                        }
                         ++counter;
                         std::this_thread::sleep_for(1ns);
                     }
@@ -828,13 +835,16 @@ done_with_mem_extension:
                 nanosleep_thread.detach();
             }
             {
-                std::thread usleep_thread{[]() {
+                std::thread usleep_thread{[&cons_mtx]() {
                     uint64_t counter = 0;
                     while (counter < 1000000) {
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(20, 1, str.c_str());
+                        {
+                            std::lock_guard lock{cons_mtx};
+                            get_klogger().print_at(20, 1, str.c_str());
+                        }
                         ++counter;
                         std::this_thread::sleep_for(1us);
                     }
@@ -842,13 +852,16 @@ done_with_mem_extension:
                 usleep_thread.detach();
             }
             {
-                std::thread msleep_thread{[]() {
+                std::thread msleep_thread{[&cons_mtx]() {
                     uint64_t counter = 0;
                     while (counter < 1000000) {
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(40, 1, str.c_str());
+                        {
+                            std::lock_guard lock{cons_mtx};
+                            get_klogger().print_at(40, 1, str.c_str());
+                        }
                         ++counter;
                         std::this_thread::sleep_for(1ms);
                     }
@@ -856,13 +869,16 @@ done_with_mem_extension:
                 msleep_thread.detach();
             }
             {
-                std::thread sleep_thread{[]() {
+                std::thread sleep_thread{[&cons_mtx]() {
                     uint64_t counter = 0;
                     while (counter < 1000000) {
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(60, 1, str.c_str());
+                        {
+                            std::lock_guard lock{cons_mtx};
+                            get_klogger().print_at(60, 1, str.c_str());
+                        }
                         ++counter;
                         std::this_thread::sleep_for(1s);
                     }
@@ -873,25 +889,31 @@ done_with_mem_extension:
             uint64_t counter = 0;
             {
                 {
-                    std::thread detach_thread{[] () {
+                    std::thread detach_thread{[&cons_mtx] () {
                         uint64_t counter = 0;
                         while (counter < 1000000) {
                             std::stringstream countstr{};
                             countstr << std::dec << counter;
                             std::string str = countstr.str();
-                            get_klogger().print_at(40, 0, str.c_str());
+                            {
+                                std::lock_guard lock{cons_mtx};
+                                get_klogger().print_at(40, 0, str.c_str());
+                            }
                             ++counter;
                         }
                     }};
                     detach_thread.detach();
                 }
-                std::thread test_thread{[]() {
+                std::thread test_thread{[&cons_mtx]() {
                     uint64_t counter = 0;
                     while (counter < 1000000) {
                         std::stringstream countstr{};
                         countstr << std::dec << counter;
                         std::string str = countstr.str();
-                        get_klogger().print_at(0, 0, str.c_str());
+                        {
+                            std::lock_guard lock{cons_mtx};
+                            get_klogger().print_at(0, 0, str.c_str());
+                        }
                         ++counter;
                     }
                 }};
@@ -899,7 +921,10 @@ done_with_mem_extension:
                     std::stringstream countstr{};
                     countstr << std::dec << counter;
                     std::string str = countstr.str();
-                    get_klogger().print_at(20, 0, str.c_str());
+                    {
+                        std::lock_guard lock{cons_mtx};
+                        get_klogger().print_at(20, 0, str.c_str());
+                    }
                     ++counter;
                 }
                 test_thread.join();
@@ -907,7 +932,10 @@ done_with_mem_extension:
                     std::stringstream countstr{};
                     countstr << std::dec << counter;
                     std::string str = countstr.str();
-                    get_klogger().print_at(20, 0, str.c_str());
+                    {
+                        std::lock_guard lock{cons_mtx};
+                        get_klogger().print_at(20, 0, str.c_str());
+                    }
                     ++counter;
                 }
             }
@@ -916,7 +944,10 @@ done_with_mem_extension:
                 std::stringstream countstr{};
                 countstr << std::dec << counter;
                 std::string str = countstr.str();
-                get_klogger().print_at(20, 0, str.c_str());
+                {
+                    std::lock_guard lock{cons_mtx};
+                    get_klogger().print_at(20, 0, str.c_str());
+                }
                 ++counter;
             }
         }};
