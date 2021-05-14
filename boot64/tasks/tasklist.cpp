@@ -175,6 +175,7 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rs
         .r8 = r8,
         .rsi = rsi,
         .rdi = rdi,
+        .rdx = rdx,
         .rcx = rcx
     };
     InterruptCpuFrame cpu_frame{
