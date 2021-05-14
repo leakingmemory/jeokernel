@@ -367,6 +367,8 @@ void tasklist::event(uint64_t v0, uint64_t v1, uint64_t v2) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
+    reload_pagetables();
+
     if (v0 == TASK_EVENT_TIMER100HZ) {
         tick_counter = v1;
     }
