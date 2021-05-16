@@ -13,6 +13,9 @@
 #include <core/nanotime.h>
 #include <pagealloc.h>
 
+#define CONTINUE_RUNNING_BIAS 12
+#define RESOURCE_PRIORITY_BIAS 12
+
 class task_stack_resource : public task_resource {
 private:
     normal_stack stack;
@@ -125,7 +128,22 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     }
     task *win = nullptr;
     for (task *t : task_pool) {
-        if (win == nullptr || (t->get_points() < win->get_points())) {
+        auto points = t->get_points();
+        if (t == current_task) {
+            if (points > CONTINUE_RUNNING_BIAS) {
+                points -= CONTINUE_RUNNING_BIAS;
+            } else {
+                points = 0;
+            }
+        }
+        if (t->get_resources() > 0) {
+            if (points > RESOURCE_PRIORITY_BIAS) {
+                points -= RESOURCE_PRIORITY_BIAS;
+            } else {
+                points = 0;
+            }
+        }
+        if (win == nullptr || (points < win->get_points())) {
             win = t;
         }
     }
@@ -366,7 +384,7 @@ task &tasklist::get_current_task_with_lock() {
     return *current_task;
 }
 
-void tasklist::event(uint64_t v0, uint64_t v1, uint64_t v2) {
+void tasklist::event(uint64_t v0, uint64_t v1, uint64_t v2, int8_t res_acq) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
@@ -377,6 +395,9 @@ void tasklist::event(uint64_t v0, uint64_t v1, uint64_t v2) {
     }
     for (task *t : tasks) {
         t->event(v0, v1, v2);
+    }
+    if (res_acq != 0) {
+        get_current_task_with_lock().resource_acq(res_acq);
     }
 }
 
@@ -513,12 +534,13 @@ void tasklist::add_task_event_handler(task_event_handler *handler) {
     t.add_event_handler(handler);
 }
 
-void tasklist::set_blocked(bool blocked) {
+void tasklist::set_blocked(bool blocked, int8_t res_acq) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
     task &t = get_current_task_with_lock();
     t.set_blocked(blocked);
+
 }
 
 bool tasklist::clear_stack_quarantines(uint8_t cpu) {

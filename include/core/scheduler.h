@@ -17,15 +17,14 @@
 #define PRIO_GROUP_NORMAL 2
 #define PRIO_GROUP_REALTIME 3
 
-#define MAX_POINTS 7
+#define MAX_POINTS 31
+#define MAX_RESOURCES 7
 
 struct task_bits {
     uint8_t priority_group : 2;
     bool running : 1;
     bool blocked : 1;
     bool end : 1;
-    uint8_t points : 3;
-    uint8_t cpu;
     /*
      * Wait one cycle before releasing a task to be switched to another cpu. This will probably
      * pin tasks that are continously running to one single core, but the point is that if
@@ -34,10 +33,14 @@ struct task_bits {
      */
     bool stack_quarantine : 1;
     bool cpu_pinned : 1;
-    uint16_t reserved : 14;
+    uint8_t reserved1 : 1;
+    uint8_t cpu;
+    uint8_t points : 5;
+    uint8_t resources: 3;
+    uint8_t reserved2;
     uint32_t id;
 
-    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), points(0), cpu(0), stack_quarantine(false), cpu_pinned(false), reserved(0), id(0) {
+    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), stack_quarantine(false), cpu_pinned(false), reserved1(0), cpu(0), points(0), resources(0), reserved2(0), id(0) {
     }
 } __attribute__((__packed__));
 
@@ -205,6 +208,20 @@ public:
         }
         return false;
     }
+
+    void resource_acq(int8_t res_acq) {
+        res_acq += this->bits.resources;
+        if (res_acq < 0) {
+            res_acq = 0;
+        }
+        if (res_acq > MAX_RESOURCES) {
+            res_acq = MAX_RESOURCES;
+        }
+        this->bits.resources = res_acq;
+    }
+    uint8_t get_resources() {
+        return this->bits.resources;
+    }
 };
 
 class tasklist {
@@ -242,9 +259,9 @@ public:
      *
      * @param blocked
      */
-    void set_blocked(bool blocked);
+    void set_blocked(bool blocked, int8_t resource_acq = 0);
 
-    void event(uint64_t v0, uint64_t v1, uint64_t v2);
+    void event(uint64_t v0, uint64_t v1, uint64_t v2, int8_t res_acq = 0);
 
     void millisleep(uint64_t ms);
 

@@ -44,6 +44,7 @@ public:
                  */
                 if (ticket == ticket_number) {
                     t.set_blocked(false);
+                    t.resource_acq(1);
                 }
                 if (t.remove_event_handler(this)) {
                     delete this;
@@ -124,12 +125,16 @@ namespace std {
                         scheduler->set_blocked(false);
                 }
             }
-            if (ticket != current_ticket()) {
-                asm("int $0xFE"); // Task switch request
+            asm("int $0xFE"); // Task switch request
+            while (ticket != current_ticket()) {
+                asm("pause; int $0xFE"); // Task switch request
             }
-            while (ticket != cacheline[1]) {
-                asm("pause");
-            }
+            //while (ticket != current_ticket()) {
+            //    asm("pause");
+            //}
+            scheduler->event(TASK_EVENT_CLEAR_WAIT_MUTEX, 0, 0);
+        } else {
+            get_scheduler()->set_blocked(false, 1);
         }
     }
 
@@ -138,7 +143,6 @@ namespace std {
 #ifdef DEBUG_LOCK_UNLOCK
         get_klogger() << "Lock next ticket " << next_ticket << "\n";
 #endif
-        get_scheduler()->event(TASK_EVENT_CLEAR_WAIT_MUTEX, 0, 0);
-        get_scheduler()->event(TASK_EVENT_MUTEX, (uint64_t) this, next_ticket);
+        get_scheduler()->event(TASK_EVENT_MUTEX, (uint64_t) this, next_ticket, -1);
     }
 }
