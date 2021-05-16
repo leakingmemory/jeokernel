@@ -33,6 +33,10 @@
 #include <thread>
 #include <core/nanotime.h>
 #include <chrono>
+#include <concurrency/raw_semaphore.h>
+
+#define FULL_SPEED_TESTS
+#define SEMAPHORE_TEST
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -816,7 +820,15 @@ done_with_mem_extension:
         }};
         clock_thread.detach();
 
-        std::thread joining_thread{[&cons_mtx] () {
+#ifdef SEMAPHORE_TEST
+        raw_semaphore semaphore1{-1000};
+        raw_semaphore semaphore2{2000};
+#endif
+        std::thread joining_thread{[&cons_mtx
+#ifdef SEMAPHORE_TEST
+                                    , &semaphore1, &semaphore2
+#endif
+                                    ] () {
             {
                 std::thread nanosleep_thread{[&cons_mtx]() {
                     uint64_t counter = 0;
@@ -852,7 +864,11 @@ done_with_mem_extension:
                 usleep_thread.detach();
             }
             {
-                std::thread msleep_thread{[&cons_mtx]() {
+                std::thread msleep_thread{[&cons_mtx
+#ifdef SEMAPHORE_TEST
+                                           , &semaphore1, &semaphore2
+#endif
+                                           ]() {
                     uint64_t counter = 0;
                     while (counter < 1000000) {
                         std::stringstream countstr{};
@@ -864,6 +880,11 @@ done_with_mem_extension:
                         }
                         ++counter;
                         std::this_thread::sleep_for(1ms);
+
+#ifdef SEMAPHORE_TEST
+                        semaphore1.release();
+                        semaphore2.release();
+#endif
                     }
                 }};
                 msleep_thread.detach();
@@ -885,7 +906,42 @@ done_with_mem_extension:
                 }};
                 sleep_thread.detach();
             }
+#ifdef SEMAPHORE_TEST
+            {
+                std::thread sem1_thread{[&cons_mtx, &semaphore1]() {
+                    uint64_t counter = 0;
+                    while (counter < 1000000) {
+                        semaphore1.acquire();
+                        std::stringstream countstr{};
+                        countstr << std::dec << counter;
+                        std::string str = countstr.str();
+                        {
+                            std::lock_guard lock{cons_mtx};
+                            get_klogger().print_at(0, 2, str.c_str());
+                        }
+                        ++counter;
+                    }
+                }};
+                std::thread sem2_thread{[&cons_mtx, &semaphore2]() {
+                    uint64_t counter = 0;
+                    while (counter < 1000000) {
+                        semaphore2.acquire();
+                        std::stringstream countstr{};
+                        countstr << std::dec << counter;
+                        std::string str = countstr.str();
+                        {
+                            std::lock_guard lock{cons_mtx};
+                            get_klogger().print_at(20, 2, str.c_str());
+                        }
+                        ++counter;
+                    }
+                }};
+                sem1_thread.detach();
+                sem2_thread.detach();
+            }
+#endif
 
+#ifdef FULL_SPEED_TESTS
             uint64_t counter = 0;
             {
                 {
@@ -950,6 +1006,7 @@ done_with_mem_extension:
                 }
                 ++counter;
             }
+#endif
         }};
 
         while (1) {

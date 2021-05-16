@@ -62,6 +62,8 @@ public:
 #define TASK_EVENT_NANOTIME     2
 #define TASK_EVENT_MUTEX        3
 #define TASK_EVENT_CLEAR_WAIT_MUTEX 4
+#define TASK_EVENT_SEMAPHORE    5
+#define TASK_EVENT_CLEAR_WAIT_SEMAPHORE 6
 
 class task_event_handler {
 public:
