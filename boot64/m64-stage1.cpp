@@ -35,8 +35,11 @@
 #include <chrono>
 #include <concurrency/raw_semaphore.h>
 
-#define FULL_SPEED_TESTS
-#define SEMAPHORE_TEST
+//#define THREADING_TESTS // Master switch
+//#define FULL_SPEED_TESTS
+//#define MICROSLEEP_TESTS
+//#define SLEEP_TESTS
+//#define SEMAPHORE_TEST // depends on sleep tests
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -820,15 +823,21 @@ done_with_mem_extension:
         }};
         clock_thread.detach();
 
+#ifdef THREADING_TESTS
+#ifdef SLEEP_TESTS
 #ifdef SEMAPHORE_TEST
         raw_semaphore semaphore1{-1000};
         raw_semaphore semaphore2{2000};
 #endif
+#endif
         std::thread joining_thread{[&cons_mtx
+#ifdef SLEEP_TESTS
 #ifdef SEMAPHORE_TEST
                                     , &semaphore1, &semaphore2
 #endif
+#endif
                                     ] () {
+#ifdef MICROSLEEP_TESTS
             {
                 std::thread nanosleep_thread{[&cons_mtx]() {
                     uint64_t counter = 0;
@@ -863,6 +872,8 @@ done_with_mem_extension:
                 }};
                 usleep_thread.detach();
             }
+#endif
+#ifdef SLEEP_TESTS
             {
                 std::thread msleep_thread{[&cons_mtx
 #ifdef SEMAPHORE_TEST
@@ -940,6 +951,7 @@ done_with_mem_extension:
                 sem2_thread.detach();
             }
 #endif
+#endif
 
 #ifdef FULL_SPEED_TESTS
             uint64_t counter = 0;
@@ -1008,6 +1020,7 @@ done_with_mem_extension:
             }
 #endif
         }};
+#endif
 
         while (1) {
             asm("hlt");
