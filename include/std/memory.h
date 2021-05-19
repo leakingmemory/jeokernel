@@ -24,6 +24,51 @@ namespace std {
             free(p);
         }
     };
+
+    template <class T> struct default_delete {
+        constexpr default_delete() noexcept = default;
+        default_delete &operator () (T *ptr) {
+            delete ptr;
+            return *this;
+        }
+    };
+
+    template <class T, class Deleter = std::default_delete<T>> class unique_ptr {
+    public:
+        typedef T *pointer;
+    private:
+        pointer ptr;
+    public:
+        constexpr unique_ptr() noexcept : ptr(nullptr) {
+        }
+        explicit unique_ptr(pointer ptr) noexcept : ptr(ptr) {
+        }
+
+        ~unique_ptr() {
+            if (ptr != nullptr) {
+                Deleter deleter{};
+                deleter(ptr);
+                ptr = nullptr;
+            }
+        }
+        unique_ptr &operator = (unique_ptr &&mv) noexcept {
+            if (ptr != nullptr) {
+                Deleter deleter{};
+                deleter(ptr);
+            }
+            ptr = mv.ptr;
+            mv.ptr = nullptr;
+            return *this;
+        }
+
+        T &operator * () const {
+            return *ptr;
+        }
+
+        pointer operator->() const noexcept {
+            return ptr;
+        }
+    };
 }
 
 #endif //JEOKERNEL_MEMORY_H
