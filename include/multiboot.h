@@ -5,9 +5,13 @@
 #ifndef JEOKERNEL_MULTIBOOT_H
 #define JEOKERNEL_MULTIBOOT_H
 
+#include <acpi/ACPI.h>
+
 struct MultibootInfoHeader;
 struct MultibootModuleInfo;
 struct MultibootMemoryMap;
+struct MultibootRsdp1;
+struct MultibootRsdp2;
 
 struct MultibootInfoHeaderPart {
     uint32_t type;
@@ -21,6 +25,8 @@ struct MultibootInfoHeaderPart {
 
     const MultibootModuleInfo &get_type3() const;
     const MultibootMemoryMap &get_type6() const;
+    const MultibootRsdp1 &get_type14() const;
+    const MultibootRsdp2 &get_type15() const;
 };
 
 struct MultibootInfoHeader {
@@ -86,6 +92,16 @@ struct MultibootMemoryMap {
         }
         return get_entries_ptr()[n];
     }
+} __attribute__((__packed__));
+
+struct MultibootRsdp1 {
+    MultibootInfoHeaderPart part_header;
+    RSDPv1descriptor rsdp;
+} __attribute__((__packed__));
+
+struct MultibootRsdp2 {
+    MultibootInfoHeaderPart part_header;
+    RSDPv2descriptor rsdp;
 } __attribute__((__packed__));
 
 const MultibootInfoHeader &get_multiboot2();

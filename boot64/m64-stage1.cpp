@@ -29,6 +29,7 @@
 #include "HardwareInterrupts.h"
 #include <core/vmem.h>
 #include "start_ap.h"
+#include "AcpiBoot.h"
 #include <core/scheduler.h>
 #include <thread>
 #include <core/nanotime.h>
@@ -822,6 +823,8 @@ done_with_mem_extension:
             }
         }};
         clock_thread.detach();
+
+        AcpiBoot acpi_boot{multiboot2};
 
 #ifdef THREADING_TESTS
 #ifdef SLEEP_TESTS

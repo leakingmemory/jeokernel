@@ -54,4 +54,12 @@ const MultibootMemoryMap &MultibootInfoHeaderPart::get_type6() const {
     return *((MultibootMemoryMap *) this);
 }
 
+const MultibootRsdp1 &MultibootInfoHeaderPart::get_type14() const {
+    return *((const MultibootRsdp1 *) this);
+}
+
+const MultibootRsdp2 &MultibootInfoHeaderPart::get_type15() const {
+    return *((const MultibootRsdp2 *) this);
+}
+
 #endif //JEOKERNEL_MULTIBOOT_IMPL_H
