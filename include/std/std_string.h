@@ -33,6 +33,15 @@ namespace std {
             }
             return i;
         }
+
+        static constexpr int compare(const char_type *s1, const char_type *s2, std::size_t length) {
+            for (std::size_t i = 0; i < length; i++) {
+                char_type diff = s1[i] - s2[i];
+                if (diff != 0) {
+                    return diff;
+                }
+            }
+        }
     };
 
     template<class CharT, class string_pointer>
@@ -436,10 +445,32 @@ namespace std {
                 c.shrt.set_empty();
             }
         }
+
+        constexpr int compare( const basic_string& str ) const noexcept {
+            bool equal_s{false};
+            bool larger{false};
+            std::size_t comp = size();
+            if (comp == str.size()) {
+                equal_s = true;
+            } else if (comp > str.size()) {
+                larger = true;
+                comp = str.size();
+            }
+            int diff = Traits::compare(data(), str.data(), comp);
+            if (diff == 0 && !equal_s) {
+                return larger ? 1 : -1;
+            }
+            return diff;
+        }
     };
 
     typedef basic_string<char> string;
+}
 
+template< class CharT, class Traits, class Alloc >
+constexpr bool operator==( const std::basic_string<CharT,Traits,Alloc>& lhs,
+                           const std::basic_string<CharT,Traits,Alloc>& rhs ) noexcept {
+    return lhs.compare(rhs) == 0;
 }
 
 #endif //JEOKERNEL_STD_STRING_H
