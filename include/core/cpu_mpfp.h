@@ -182,6 +182,14 @@ public:
     const mp_ioapic_entry &get_ioapic(int idx) const {
         return ioapic[idx];
     }
+
+    int get_num_bus() const {
+        return nbus;
+    }
+
+    const mp_bus_entry &get_bus(int idx) {
+        return bus[idx];
+    }
 };
 
 cpu_mpfp *get_mpfp();

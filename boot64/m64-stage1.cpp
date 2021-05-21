@@ -30,11 +30,13 @@
 #include <core/vmem.h>
 #include "start_ap.h"
 #include "AcpiBoot.h"
+#include "pci/pci.h"
 #include <core/scheduler.h>
 #include <thread>
 #include <core/nanotime.h>
 #include <chrono>
 #include <concurrency/raw_semaphore.h>
+#include <devices/devices.h>
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -824,7 +826,11 @@ done_with_mem_extension:
         }};
         clock_thread.detach();
 
+        init_devices();
+
         AcpiBoot acpi_boot{multiboot2};
+
+        detect_root_pcis();
 
 #ifdef THREADING_TESTS
 #ifdef SLEEP_TESTS
