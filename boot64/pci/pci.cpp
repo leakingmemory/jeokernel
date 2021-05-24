@@ -35,23 +35,31 @@ void pci::ProbeDevices() {
         std::optional<PciDeviceInformation> opt = probeDevice(i);
         if (opt) {
             get_klogger() << "PCI device " << opt->vendor_id << ":" << opt->device_id << " CL " << opt->device_class << ":" << opt->device_subclass << ":" << opt->prog_if  << " rev " << opt->revision_id << " header  " << opt->header_type << (opt->multifunction ? " MFD\n" : "\n");
+            if (opt->multifunction) {
+                for (uint8_t func = 1; func < 8; func++) {
+                    std::optional<PciDeviceInformation> mfd = probeDevice(i, func);
+                    if (mfd) {
+                        get_klogger() << "PCI device " << mfd->vendor_id << ":" << mfd->device_id << " CL " << mfd->device_class << ":" << mfd->device_subclass << ":" << mfd->prog_if  << " rev " << mfd->revision_id << " header  " << mfd->header_type << (mfd->multifunction ? " MFD\n" : "\n");
+                    }
+                }
+            }
         }
     }
 }
 
-std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr) {
-    uint32_t reg0 = read_pci_config(bus, addr, 0, 0);
+std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func) {
+    uint32_t reg0 = read_pci_config(bus, addr, func, 0);
     uint16_t device_id = (uint16_t) (reg0 >> 16);
     uint16_t vendor_id = (uint16_t) (reg0 & 0xFFFF);
     if (vendor_id == 0xFFFF) {
         return {};
     }
-    uint32_t reg2 = read_pci_config(bus, addr, 0, 8);
+    uint32_t reg2 = read_pci_config(bus, addr, func, 8);
     uint8_t class_id = (uint8_t) (reg2 >> 24);
     uint8_t subclass_id = (uint8_t) ((reg2 >> 16) & 0xFF);
     uint8_t prog_if = (uint8_t) ((reg2 >> 8) & 0xFF);
     uint8_t revision_id = (uint8_t) (reg2 & 0xFF);
-    uint32_t reg3 = read_pci_config(bus, addr, 0, 0xC);
+    uint32_t reg3 = read_pci_config(bus, addr, func, 0xC);
     uint8_t mfd = (uint8_t) ((reg3 >> 16) & 0x80);
     uint8_t header_type = (uint8_t) ((reg3 >> 16) & 0x7F);
     PciDeviceInformation info{};

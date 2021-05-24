@@ -34,7 +34,7 @@ public:
     pci(uint16_t bus) : Bus("pci"), bus(bus) {
     }
     virtual void ProbeDevices() override;
-    std::optional<PciDeviceInformation> probeDevice(uint8_t addr);
+    std::optional<PciDeviceInformation> probeDevice(uint8_t addr, uint8_t func=0);
 };
 
 void detect_root_pcis();
