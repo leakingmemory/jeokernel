@@ -5,11 +5,14 @@
 #include "pci.h"
 #include <cpuio.h>
 #include <thread>
+#include <mutex>
 #include <core/cpu_mpfp.h>
 #include <devices/drivers.h>
 
 #define PCI_CONFIG_ADDRESS  0xCF8
 #define PCI_CONFIG_DATA     0xCFC
+
+static std::mutex *pci_bus_mtx = nullptr;
 
 uint32_t read_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset) {
     if (slot > 0x1F || func > 7) {
@@ -26,6 +29,7 @@ uint32_t read_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset
     addr |= func;
     addr = addr << 8;
     addr |= offset;
+    std::lock_guard lock(*pci_bus_mtx);
     outportl(PCI_CONFIG_ADDRESS, addr);
     return inportl(PCI_CONFIG_DATA);
 }
@@ -83,6 +87,7 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
 }
 
 void detect_root_pcis() {
+    pci_bus_mtx = new std::mutex;
     cpu_mpfp *mpfp = get_mpfp();
     if (mpfp != nullptr) {
         for (int i = 0; i < mpfp->get_num_bus(); i++) {

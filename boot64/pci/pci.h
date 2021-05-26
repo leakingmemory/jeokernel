@@ -39,6 +39,7 @@ public:
     std::optional<PciDeviceInformation> probeDevice(uint8_t addr, uint8_t func=0);
 };
 
+uint32_t read_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset);
 void detect_root_pcis();
 
 #endif //JEOKERNEL_PCI_H

@@ -32,6 +32,7 @@
 #include "AcpiBoot.h"
 #include "pci/pci.h"
 #include "display/vga.h"
+#include "pci/pci_bridge.h"
 #include <core/scheduler.h>
 #include <thread>
 #include <core/nanotime.h>
@@ -830,6 +831,7 @@ done_with_mem_extension:
 
         init_devices();
         get_drivers().AddDriver(new vga_driver());
+        get_drivers().AddDriver(new pci_bridge_driver());
 
         AcpiBoot acpi_boot{multiboot2};
 
