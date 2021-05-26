@@ -9,6 +9,9 @@
 #include <optional>
 
 struct PciDeviceInformation : public DeviceInformation {
+    uint8_t bus;
+    uint8_t func : 3;
+    uint8_t slot : 5;
     uint8_t revision_id;
     bool multifunction : 1;
     uint8_t header_type : 7;
@@ -23,13 +26,12 @@ struct PciDeviceInformation : public DeviceInformation {
     PciDeviceInformation & operator = (PciDeviceInformation &&) = default;
     PciDeviceInformation & operator = (const PciDeviceInformation &cp) = default;
 
-
-    PciDeviceInformation *GetPciInformation() override;
+    virtual PciDeviceInformation *GetPciInformation() override;
 };
 
 class pci : public Bus {
 private:
-    uint16_t bus;
+    uint8_t bus;
 public:
     pci(uint16_t bus) : Bus("pci"), bus(bus) {
     }

@@ -31,12 +31,14 @@
 #include "start_ap.h"
 #include "AcpiBoot.h"
 #include "pci/pci.h"
+#include "display/vga.h"
 #include <core/scheduler.h>
 #include <thread>
 #include <core/nanotime.h>
 #include <chrono>
 #include <concurrency/raw_semaphore.h>
 #include <devices/devices.h>
+#include <devices/drivers.h>
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -827,6 +829,7 @@ done_with_mem_extension:
         clock_thread.detach();
 
         init_devices();
+        get_drivers().AddDriver(new vga_driver());
 
         AcpiBoot acpi_boot{multiboot2};
 

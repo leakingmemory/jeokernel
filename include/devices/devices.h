@@ -7,12 +7,14 @@
 
 #include <string>
 #include <vector>
+#include <mutex>
 
 class Bus;
 
 class Device {
 private:
     std::string device_type;
+    int device_id;
     Bus *bus;
 public:
     Device(std::string device_type) : device_type(device_type), bus(nullptr) {}
@@ -23,6 +25,14 @@ public:
     }
     std::string DeviceType() {
         return device_type;
+    }
+    int DeviceId() {
+        return device_id;
+    }
+    void SetDeviceId(int id) {
+        device_id = id;
+    }
+    virtual void init() {
     }
     virtual bool IsBus() {
         return false;
@@ -76,11 +86,13 @@ struct DeviceGroup {
         slot.id = serial;
         slot.device = &device;
         devices.push_back(slot);
+        device.SetDeviceId(serial);
     }
 };
 
 class Devices {
 private:
+    std::mutex mtx;
     std::vector<DeviceGroup> deviceGroups;
 public:
     Devices();

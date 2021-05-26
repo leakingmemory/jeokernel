@@ -2,6 +2,6 @@ include(../toolchain.cmake)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_library(devices OBJECT devices.cpp)
+add_library(devices OBJECT devices.cpp drivers.cpp)
 
 target_include_directories(devices PRIVATE ../../include)

@@ -6,6 +6,7 @@
 #include <cpuio.h>
 #include <thread>
 #include <core/cpu_mpfp.h>
+#include <devices/drivers.h>
 
 #define PCI_CONFIG_ADDRESS  0xCF8
 #define PCI_CONFIG_DATA     0xCFC
@@ -34,11 +35,15 @@ void pci::ProbeDevices() {
     for (uint8_t i = 0; i < 0x20; i++) {
         std::optional<PciDeviceInformation> opt = probeDevice(i);
         if (opt) {
-            get_klogger() << "PCI device " << opt->vendor_id << ":" << opt->device_id << " CL " << opt->device_class << ":" << opt->device_subclass << ":" << opt->prog_if  << " rev " << opt->revision_id << " header  " << opt->header_type << (opt->multifunction ? " MFD\n" : "\n");
+            if (!get_drivers().probe(*this, *opt)) {
+                get_klogger() << "PCI device " << opt->vendor_id << ":" << opt->device_id << " CL " << opt->device_class
+                              << ":" << opt->device_subclass << ":" << opt->prog_if << " rev " << opt->revision_id
+                              << " header  " << opt->header_type << (opt->multifunction ? " MFD\n" : "\n");
+            }
             if (opt->multifunction) {
                 for (uint8_t func = 1; func < 8; func++) {
                     std::optional<PciDeviceInformation> mfd = probeDevice(i, func);
-                    if (mfd) {
+                    if (mfd && !get_drivers().probe(*this, *mfd)) {
                         get_klogger() << "PCI device " << mfd->vendor_id << ":" << mfd->device_id << " CL " << mfd->device_class << ":" << mfd->device_subclass << ":" << mfd->prog_if  << " rev " << mfd->revision_id << " header  " << mfd->header_type << (mfd->multifunction ? " MFD\n" : "\n");
                     }
                 }
@@ -68,6 +73,9 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
     info.device_subclass = subclass_id;
     info.device_class = class_id;
     info.prog_if = prog_if;
+    info.bus = bus;
+    info.slot = addr;
+    info.func = func;
     info.revision_id = revision_id;
     info.multifunction = mfd == 0x80;
     info.header_type = header_type;
