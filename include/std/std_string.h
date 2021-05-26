@@ -41,6 +41,7 @@ namespace std {
                     return diff;
                 }
             }
+            return 0;
         }
     };
 
