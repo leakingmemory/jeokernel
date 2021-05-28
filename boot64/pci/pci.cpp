@@ -31,8 +31,34 @@ uint32_t read_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset
     addr = addr << 8;
     addr |= offset;
     std::lock_guard lock(*pci_bus_mtx);
-    outportl(PCI_CONFIG_ADDRESS, addr);
-    return inportl(PCI_CONFIG_DATA);
+    {
+        critical_section cli{}; // No context switches between
+        outportl(PCI_CONFIG_ADDRESS, addr);
+        return inportl(PCI_CONFIG_DATA);
+    }
+}
+
+void write_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t value) {
+    if (slot > 0x1F || func > 7) {
+        asm("ud2");
+    }
+    if ((offset & 3) != 0) {
+        asm("ud2");
+    }
+    uint32_t addr = bus;
+    addr |= 0x8000;
+    addr = addr << 5;
+    addr |= slot;
+    addr = addr << 3;
+    addr |= func;
+    addr = addr << 8;
+    addr |= offset;
+    std::lock_guard lock(*pci_bus_mtx);
+    {
+        critical_section cli{}; // No context switches between
+        outportl(PCI_CONFIG_ADDRESS, addr);
+        outportl(PCI_CONFIG_DATA, value);
+    }
 }
 
 void pci::ProbeDevices() {
@@ -118,4 +144,40 @@ void detect_root_pcis() {
 
 PciDeviceInformation *PciDeviceInformation::GetPciInformation() {
     return this;
+}
+
+PciBaseAddressRegister PciDeviceInformation::readBaseAddressRegister(uint8_t index) {
+    uint8_t offset{index};
+    offset = (offset << 2) + 0x10;
+    PciBaseAddressRegister bar{
+        .dev_info = *this,
+        .value = read_pci_config(this->bus, this->slot, this->func, offset),
+        .offset = offset
+    };
+    return bar;
+}
+
+uint64_t PciBaseAddressRegister::addr64() {
+    uint64_t addr = (uint64_t) read_pci_config(dev_info.bus, dev_info.slot, dev_info.func, offset + 4);
+    addr = addr << 32;
+    addr += (uint64_t) (value & 0xFFFFFFF0);
+    return addr;
+}
+
+uint32_t PciBaseAddressRegister::read32() {
+    return read_pci_config(dev_info.bus, dev_info.slot, dev_info.func, offset);
+}
+
+void PciBaseAddressRegister::write32(uint32_t value) {
+    write_pci_config(dev_info.bus, dev_info.slot, dev_info.func, offset, value);
+}
+
+uint32_t PciBaseAddressRegister::memory_size() {
+    write32(0xFFFFFFFF);
+    uint32_t size = ~(read32() & 0xFFFFFFF0);
+    write32(value);
+    if (read32() != value) {
+        asm("ud2");
+    }
+    return size + 1;
 }

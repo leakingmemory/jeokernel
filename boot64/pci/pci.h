@@ -10,6 +10,41 @@
 
 //#define USE_APIC_FOR_PCI_BUSES
 
+struct PciBaseAddressRegister {
+    PciDeviceInformation &dev_info;
+    uint32_t value;
+    uint8_t offset;
+
+    bool is_memory() {
+        return (value & 1) == 0;
+    }
+    bool is_io() {
+        return (value & 1) != 0;
+    }
+
+    bool is_32bit() {
+        return (value & 6) == 0;
+    }
+    bool is_64bit() {
+        return (value & 6) == (2 << 1);
+    }
+
+    uint32_t addr32() {
+        if (is_memory()) {
+            return value & 0xFFFFFFF0;
+        } else {
+            return value & 0xFFFFFFFC;
+        }
+    }
+
+    uint64_t addr64();
+
+    uint32_t read32();
+    void write32(uint32_t value);
+
+    uint32_t memory_size();
+};
+
 struct PciDeviceInformation : public DeviceInformation {
     uint8_t bus;
     uint8_t func : 3;
@@ -29,6 +64,8 @@ struct PciDeviceInformation : public DeviceInformation {
     PciDeviceInformation & operator = (const PciDeviceInformation &cp) = default;
 
     virtual PciDeviceInformation *GetPciInformation() override;
+
+    PciBaseAddressRegister readBaseAddressRegister(uint8_t index);
 };
 
 class pci : public Bus {
@@ -42,6 +79,7 @@ public:
 };
 
 uint32_t read_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset);
+void write_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t value);
 void detect_root_pcis();
 
 #endif //JEOKERNEL_PCI_H
