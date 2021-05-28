@@ -40,6 +40,7 @@
 #include <concurrency/raw_semaphore.h>
 #include <devices/devices.h>
 #include <devices/drivers.h>
+#include "usb/usb_hcis.h"
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -832,6 +833,10 @@ done_with_mem_extension:
         init_devices();
         get_drivers().AddDriver(new vga_driver());
         get_drivers().AddDriver(new pci_bridge_driver());
+        get_drivers().AddDriver(new uhci_driver());
+        get_drivers().AddDriver(new ohci_driver());
+        get_drivers().AddDriver(new ehci_driver());
+        get_drivers().AddDriver(new xhci_driver());
 
         AcpiBoot acpi_boot{multiboot2};
 

@@ -14,6 +14,7 @@ add_subdirectory(concurrency)
 add_subdirectory(tasks)
 add_subdirectory(acpi)
 add_subdirectory(display)
+add_subdirectory(usb)
 
 add_library(bootstrap bootstrap.S)
 
@@ -30,4 +31,5 @@ target_link_libraries(kernel PRIVATE concurrency)
 target_link_libraries(kernel PRIVATE tasks)
 target_link_libraries(kernel PRIVATE acpi)
 target_link_libraries(kernel PRIVATE display)
+target_link_libraries(kernel PRIVATE usb)
 
