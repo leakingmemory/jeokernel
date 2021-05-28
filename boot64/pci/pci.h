@@ -8,6 +8,8 @@
 #include <devices/devices.h>
 #include <optional>
 
+//#define USE_APIC_FOR_PCI_BUSES
+
 struct PciDeviceInformation : public DeviceInformation {
     uint8_t bus;
     uint8_t func : 3;

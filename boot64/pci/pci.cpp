@@ -8,6 +8,7 @@
 #include <mutex>
 #include <core/cpu_mpfp.h>
 #include <devices/drivers.h>
+#include <sstream>
 
 #define PCI_CONFIG_ADDRESS  0xCF8
 #define PCI_CONFIG_DATA     0xCFC
@@ -88,6 +89,7 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
 
 void detect_root_pcis() {
     pci_bus_mtx = new std::mutex;
+#ifdef USE_APIC_FOR_PCI_BUSES
     cpu_mpfp *mpfp = get_mpfp();
     if (mpfp != nullptr) {
         for (int i = 0; i < mpfp->get_num_bus(); i++) {
@@ -104,6 +106,14 @@ void detect_root_pcis() {
             }
         }
     }
+#else
+    pci *pcibus = new pci(0);
+    devices().add(*pcibus);
+    std::stringstream msg{};
+    msg << pcibus->DeviceType() << (unsigned int) pcibus->DeviceId() << ": root bus\n";
+    get_klogger() << msg.str().c_str();
+    pcibus->ProbeDevices();
+#endif
 }
 
 PciDeviceInformation *PciDeviceInformation::GetPciInformation() {
