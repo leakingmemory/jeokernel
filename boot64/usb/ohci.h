@@ -17,6 +17,8 @@
 #define OHCI_CTRL_HCFS_OPERATIONAL (2 << 6)
 #define OHCI_CTRL_HCFS_SUSPEND     (3 << 6)
 
+#define OHCI_CMD_OCR 8
+
 
 struct ohci_registers {
     uint32_t HcRevision;

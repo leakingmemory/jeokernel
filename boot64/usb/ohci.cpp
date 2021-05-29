@@ -6,6 +6,7 @@
 #include <sstream>
 #include <klogger.h>
 #include <core/vmem.h>
+#include <thread>
 #include "ohci.h"
 
 Device *ohci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
@@ -54,15 +55,33 @@ void ohci::init() {
             physaddr += 0x1000;
         }
     }
+    using namespace std::literals::chrono_literals;
     ohciRegisters = (ohci_registers *) mapped_registers_vm->pointer();
     if ((ohciRegisters->HcControl & OHCI_CTRL_IR) != 0){
-        get_klogger() << "OHCI SMM active\n";
+        //get_klogger() << "OHCI SMM active\n";
+        ohciRegisters->HcCommandStatus = OHCI_CMD_OCR;
+        do {
+            std::this_thread::sleep_for(10ms);
+        } while ((ohciRegisters->HcControl & OHCI_CTRL_IR) != 0);
+        get_klogger() << "OHCI SMM disabled\n";
     } else if ((ohciRegisters->HcControl & OHCI_CTRL_HCFS_MASK) == OHCI_CTRL_HCFS_OPERATIONAL) {
         get_klogger() << "OHCI BIOS/Firmware driver operational\n";
     } else if ((ohciRegisters->HcControl & OHCI_CTRL_HCFS_MASK) != OHCI_CTRL_HCFS_RESET) {
-        get_klogger() << "OHCI BIOS/Firmware driver not operational\n";
+        get_klogger() << "OHCI BIOS/Firmware driver not operational - wait for resume..\n";
+        {
+            uint32_t ctrl{ohciRegisters->HcControl};
+            ctrl = ctrl & (~OHCI_CTRL_HCFS_MASK);
+            ctrl |= OHCI_CTRL_HCFS_RESUME;
+            ohciRegisters->HcControl = ctrl;
+        }
+        do {
+            std::this_thread::sleep_for(10ms);
+        } while ((ohciRegisters->HcControl & OHCI_CTRL_HCFS_MASK) != OHCI_CTRL_HCFS_OPERATIONAL);
+        get_klogger() << "OHCI resumed\n";
+        std::this_thread::sleep_for(10ms);
     } else {
         get_klogger() << "OHCI cold start\n";
+        std::this_thread::sleep_for(2ms);
     }
     {
         std::stringstream msg;
