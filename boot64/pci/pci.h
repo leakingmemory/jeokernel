@@ -29,6 +29,14 @@ struct PciBaseAddressRegister {
         return (value & 6) == (2 << 1);
     }
 
+    /**
+     * If prefetchable, read has no side effects. You can use write trhough instead of no cache.
+     * @return True if reads has no side effects.
+     */
+    bool is_prefetchable() {
+        return ((value & 8) != 0);
+    }
+
     uint32_t addr32() {
         if (is_memory()) {
             return value & 0xFFFFFFF0;
