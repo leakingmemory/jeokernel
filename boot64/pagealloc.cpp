@@ -296,6 +296,8 @@ uint64_t alloc_stack(uint64_t size) {
                 pe->page_ppn = page_ppn;
                 pe->present = 1;
                 pe->writeable = 1;
+                pe->write_through = 0;
+                pe->cache_disabled = 0;
                 pe->execution_disabled = 1;
                 update_pageentr(vaddr_start + offset, *pe);
             }
@@ -420,6 +422,8 @@ void *pagealloc(uint64_t size) {
                 pe->present = 1;
                 pe->writeable = 1;
                 pe->execution_disabled = 1;
+                pe->write_through = 0;
+                pe->cache_disabled = 0;
                 update_pageentr(vpages + offset, *pe);
             }
 

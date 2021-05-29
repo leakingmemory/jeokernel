@@ -47,6 +47,8 @@ KernelElf::KernelElf(const MultibootInfoHeader &multibootInfoHeader) : ptr(nullp
         pe->writeable = 0;
         pe->accessed = 0;
         pe->user_access = 0;
+        pe->write_through = 0;
+        pe->cache_disabled = 0;
         pe->execution_disabled = 1;
         pe->dirty = 0;
         pe->present = 1;

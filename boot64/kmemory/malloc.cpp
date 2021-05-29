@@ -75,6 +75,8 @@ void setup_simplest_malloc_impl() {
             pe->page_ppn = ppage >> 12;
             pe->writeable = 1;
             pe->execution_disabled = 1;
+            pe->write_through = 0;
+            pe->cache_disabled = 0;
             pe->accessed = 0;
             pe->present = 1;
             update_pageentr((uint64_t) memoryAllocatorP, *pe);
@@ -85,6 +87,8 @@ void setup_simplest_malloc_impl() {
             pe->page_ppn = ppage >> 12;
             pe->writeable = 1;
             pe->execution_disabled = 1;
+            pe->write_through = 0;
+            pe->cache_disabled = 0;
             pe->accessed = 0;
             pe->present = 1;
             update_pageentr(((uint64_t) memoryAllocatorP) + 4096, *pe);

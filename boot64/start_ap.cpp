@@ -17,7 +17,7 @@ hw_spinlock *get_ap_start_lock() {
 const uint32_t *install_ap_bootstrap() {
     ap_start_lock = new hw_spinlock();
     vmem vm{4096};
-    vm.page(0).rwmap(0x8000);
+    vm.page(0).rwmap(0x8000, true);
     uint8_t *bootstrap_location = (uint8_t *) vm.pointer();
     uint8_t *bootstrap_ptr = (uint8_t *) (void *) ap_trampoline;
     uint8_t *bootstrap_end = (uint8_t *) (void *) ap_trampoline_end;

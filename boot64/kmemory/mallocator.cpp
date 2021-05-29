@@ -24,6 +24,8 @@ void *MemoryAllocator::sm_allocate(uint32_t size) {
                 pe->writeable = 1;
                 pe->user_access = 0;
                 pe->execution_disabled = 1;
+                pe->write_through = 0;
+                pe->cache_disabled = 0;
                 pe->accessed = 0;
                 update_pageentr(vmem, *pe);
             }

@@ -15,7 +15,7 @@ public:
     }
 
     void rmap(uint64_t paddr);
-    void rwmap(uint64_t paddr);
+    void rwmap(uint64_t paddr, bool write_through = false, bool cache_disabled = false);
     void unmap();
 };
 

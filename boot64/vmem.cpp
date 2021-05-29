@@ -40,6 +40,8 @@ void vmem_page::rmap(uint64_t paddr) {
     pe->writeable = 0;
     pe->accessed = 0;
     pe->user_access = 0;
+    pe->write_through = 0;
+    pe->cache_disabled = 0;
     pe->page_ppn = paddr >> 12;
     pe->present = 1;
     update_pageentr(addr, *pe);
@@ -51,13 +53,15 @@ void vmem_page::unmap() {
     update_pageentr(addr, *pe);
 }
 
-void vmem_page::rwmap(uint64_t paddr) {
+void vmem_page::rwmap(uint64_t paddr, bool write_through, bool cache_disabled) {
     std::optional<pageentr> pe = get_pageentr(addr);
     pe->dirty = 0;
     pe->execution_disabled = 1;
     pe->writeable = 1;
     pe->accessed = 0;
     pe->user_access = 0;
+    pe->write_through = write_through ? 1 : 0;
+    pe->cache_disabled = cache_disabled ? 1 : 0;
     pe->page_ppn = paddr >> 12;
     pe->present = 1;
     update_pageentr(addr, *pe);

@@ -13,11 +13,11 @@ LocalApic::LocalApic(const cpu_mpfp &mpc) : vm(0x2000) {
     paddr -= offset;
     //get_klogger() << " -> " << paddr << "+" << offset << " ";
     uint64_t next_page = paddr + 0x1000;
-    vm.page(0).rwmap(paddr);
+    vm.page(0).rwmap(paddr, true, true);
     //get_klogger() << "M";
     if (end_addr >= next_page) {
         //get_klogger() << "M";
-        vm.page(1).rwmap(next_page);
+        vm.page(1).rwmap(next_page, true, true);
     }
     uint8_t *ptr = (uint8_t *) vm.pointer();
     //get_klogger() << " v-> " << (uint64_t) ptr;
