@@ -6,6 +6,7 @@
 #define JEOKERNEL_MEMORY_H
 
 #include <core/malloc.h>
+#include <std/cstdint.h>
 
 namespace std {
     template<class T> class allocator {
@@ -69,6 +70,10 @@ namespace std {
             return ptr;
         }
     };
+
+    template<class T, class... Args> unique_ptr<T> make_unique(Args&&... args) {
+        return unique_ptr<T>(new T(args...));
+    }
 }
 
 #endif //JEOKERNEL_MEMORY_H
