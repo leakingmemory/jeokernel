@@ -11,6 +11,7 @@
 class uhci : public Device {
 private:
     PciDeviceInformation pciDeviceInformation;
+    uint32_t iobase;
 public:
     uhci(Bus &bus, PciDeviceInformation &deviceInformation) : Device("uhci", &bus), pciDeviceInformation(deviceInformation) {}
     void init() override;
