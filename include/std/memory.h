@@ -69,6 +69,10 @@ namespace std {
         pointer operator->() const noexcept {
             return ptr;
         }
+
+        explicit constexpr operator bool () const {
+            return ptr != nullptr;
+        }
     };
 
     template<class T, class... Args> unique_ptr<T> make_unique(Args&&... args) {
