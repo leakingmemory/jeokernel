@@ -5,6 +5,7 @@
 #include <sstream>
 #include <klogger.h>
 #include <cpuio.h>
+#include <thread>
 #include "ehci.h"
 
 
@@ -20,6 +21,8 @@ Device *ehci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
         return nullptr;
     }
 }
+
+#define DEBUG_EHCI_INIT_OWNER
 
 void ehci::init() {
     {
@@ -37,31 +40,46 @@ void ehci::init() {
             } else if (bar0.is_32bit()) {
                 addr = (uint64_t) bar0.addr32();
             } else {
-                get_klogger() << "USB ohci controller is invalid (invalid BAR0, invalid record)\n";
+                get_klogger() << "USB ehci controller is invalid (invalid BAR0, invalid record)\n";
                 return;
             }
             size = bar0.memory_size();
             if (size == 0) {
-                get_klogger() << "USB ohci controller is invalid (invalid BAR0, invalid size)\n";
+                get_klogger() << "USB ehci controller is invalid (invalid BAR0, invalid size)\n";
                 return;
             }
             prefetch = bar0.is_prefetchable();
         }
-        mapped_registers_vm = std::make_unique<vmem>(size);
+#ifdef DEBUG_EHCI_INIT_OWNER
         {
-            uint64_t physaddr{addr};
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": memory mapped registers at 0x" << std::hex << addr << " size 0x" << size << "\n";
+            get_klogger() << msg.str().c_str();
+        }
+#endif
+        uint64_t pg_offset{addr & 0xFFF};
+        mapped_registers_vm = std::make_unique<vmem>(size + pg_offset);
+        {
+            uint64_t physaddr{addr & 0xFFFFF000};
             std::size_t pages = mapped_registers_vm->npages();
             for (std::size_t page = 0; page < pages; page++) {
                 mapped_registers_vm->page(page).rwmap(physaddr, true, !prefetch);
                 physaddr += 0x1000;
             }
         }
-        caps = (ehci_capabilities *) mapped_registers_vm->pointer();
+        caps = (ehci_capabilities *) (void *) (((uint8_t *) mapped_registers_vm->pointer()) + pg_offset);
         regs = caps->opregs();
     }
     {
         uint8_t eecp1_off = (uint8_t) ((caps->hccparams & 0x0000FF00) >> 8);
         if (eecp1_off >= 0x40) {
+#ifdef DEBUG_EHCI_INIT_OWNER
+            {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": Reading ver 0x"<<std::hex<<(unsigned int) caps->hciversion << " par 0x" << caps->hccparams <<"\n";
+                get_klogger() << msg.str().c_str();
+            }
+#endif
             std::unique_ptr<EECP> eecp = std::make_unique<EECP>(pciDeviceInformation, eecp1_off);
             do {
                 if (eecp->capability_id == 1) {
@@ -74,12 +92,35 @@ void ehci::init() {
                             get_klogger() << msg.str().c_str();
                         }
                         do {
+                            using namespace std::literals::chrono_literals;
+                            std::this_thread::sleep_for(10ms);
                             eecp->refresh();
                         } while ((eecp->value & EHCI_LEGACY_OWNED) == 0 || (eecp->value & EHCI_LEGACY_BIOS) != 0);
                         {
                             std::stringstream msg;
                             msg << DeviceType() << (unsigned int) DeviceId() << ": Disabled legacy support\n";
                             get_klogger() << msg.str().c_str();
+                        }
+                    } else if ((eecp->refresh().value & EHCI_LEGACY_OWNED) == 0) {
+                        std::stringstream msg;
+                        msg << DeviceType() << (unsigned int) DeviceId() << ": Legacy was off 0x"<<std::hex<<eecp->value<<", claiming ownership - ";
+                        get_klogger() << msg.str().c_str();
+
+                        eecp->write8(3, 1);
+
+                        uint8_t timeout = 100;
+                        do {
+                            if (--timeout == 0) {
+                                break;
+                            }
+                            using namespace std::literals::chrono_literals;
+                            std::this_thread::sleep_for(10ms);
+                            eecp->refresh();
+                        } while ((eecp->value & EHCI_LEGACY_OWNED) == 0 || (eecp->value & EHCI_LEGACY_BIOS) != 0);
+                        if (timeout != 0) {
+                            get_klogger() << "ownership claimed\n";
+                        } else {
+                            get_klogger() << "ownership claim timeout\n";
                         }
                     } else {
                         std::stringstream msg;

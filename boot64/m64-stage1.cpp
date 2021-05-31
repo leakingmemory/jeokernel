@@ -840,7 +840,12 @@ done_with_mem_extension:
 
         AcpiBoot acpi_boot{multiboot2};
 
-        detect_root_pcis();
+        {
+            std::thread pci_scan_thread{[]() {
+                detect_root_pcis();
+            }};
+            pci_scan_thread.detach();
+        }
 
 #ifdef THREADING_TESTS
 #ifdef SLEEP_TESTS

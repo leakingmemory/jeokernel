@@ -79,6 +79,9 @@ struct EECP {
     void write(uint32_t value) {
         write_pci_config(pciDeviceInformation.bus, pciDeviceInformation.slot, pciDeviceInformation.func, offset, value);
     }
+    void write8(uint8_t offset, uint8_t value) {
+        write8_pci_config(pciDeviceInformation.bus, pciDeviceInformation.slot, pciDeviceInformation.func, this->offset + offset, value);
+    }
 };
 
 #define EHCI_LEGACY_BIOS  0x00010000
