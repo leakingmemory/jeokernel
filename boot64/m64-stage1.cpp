@@ -841,8 +841,12 @@ done_with_mem_extension:
         AcpiBoot acpi_boot{multiboot2};
 
         {
-            std::thread pci_scan_thread{[]() {
+            std::thread pci_scan_thread{[&acpi_boot]() {
                 detect_root_pcis();
+                acpi_boot.join();
+                if (acpi_boot.has_8042()) {
+                    get_klogger() << "Ready to start PS/2\n";
+                }
             }};
             pci_scan_thread.detach();
         }

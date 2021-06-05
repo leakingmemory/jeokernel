@@ -4,7 +4,7 @@
 
 #include "AcpiBoot.h"
 
-AcpiBoot::AcpiBoot(const MultibootInfoHeader &multiboot) : acpi_thread([this, &multiboot] () {
+AcpiBoot::AcpiBoot(const MultibootInfoHeader &multiboot) : has8042(false), acpi_thread([this, &multiboot] () {
     if (!multiboot.has_parts()) {
         return;
     }
@@ -36,7 +36,6 @@ AcpiBoot::AcpiBoot(const MultibootInfoHeader &multiboot) : acpi_thread([this, &m
 
 void AcpiBoot::acpi_boot(const RSDPv1descriptor *rsdp1) {
     ACPI acpi{rsdp1};
-    bool has8042{false};
     if (acpi.fadt2 != nullptr) {
         if ((acpi.fadt2->BootArchitectureFlags & 2) != 0) {
             get_klogger() << "ACPI indicates PS/2 8042 chip available\n";
@@ -52,4 +51,12 @@ void AcpiBoot::acpi_boot(const RSDPv1descriptor *rsdp1) {
 
 AcpiBoot::~AcpiBoot() {
     acpi_thread.join();
+}
+
+void AcpiBoot::join() {
+    acpi_thread.join();
+}
+
+bool AcpiBoot::has_8042() {
+    return has8042;
 }
