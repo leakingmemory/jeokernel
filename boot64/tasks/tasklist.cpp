@@ -300,6 +300,10 @@ void tasklist::join(uint32_t task_id) {
         std::lock_guard lock{_lock};
 
         task &t = get_current_task_with_lock();
+        task *joining = get_nullable_task_with_lock(task_id);
+        if (joining == nullptr || joining->is_end()) {
+            return;
+        }
         t.add_event_handler(new task_join_handler(t.get_id(), task_id));
         t.set_blocked(true);
     }
@@ -359,6 +363,15 @@ task &tasklist::get_task_with_lock(uint32_t task_id) {
     while (true) {
         asm("hlt");
     }
+}
+
+task *tasklist::get_nullable_task_with_lock(uint32_t task_id) {
+    for (task *t : tasks) {
+        if (t->get_id() == task_id) {
+            return t;
+        }
+    }
+    return nullptr;
 }
 
 task &tasklist::get_current_task_with_lock() {

@@ -35,6 +35,9 @@ namespace std {
             }
             virtual void invoke() {
             }
+            virtual bool is_done() {
+                return false;
+            }
             virtual void detach() {
             }
         };
@@ -57,6 +60,11 @@ namespace std {
                 if (detached) {
                     delete this;
                 }
+            }
+            bool is_done() override {
+                critical_section cli{};
+                std::lock_guard lock(this->_lock);
+                return done;
             }
             void detach() override {
                 bool done = false;

@@ -252,6 +252,7 @@ public:
     void join(uint32_t task_id);
 
     task &get_task_with_lock(uint32_t task_id);
+    task *get_nullable_task_with_lock(uint32_t task_id);
     task &get_current_task_with_lock();
 
     void add_task_event_handler(task_event_handler *handler);

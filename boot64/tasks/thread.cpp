@@ -36,6 +36,9 @@ namespace std {
     }
 
     void thread::join() {
+        if (start_context != nullptr && start_context->is_done()) {
+            return;
+        }
         get_scheduler()->join(id);
     }
 
