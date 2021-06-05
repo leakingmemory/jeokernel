@@ -5,9 +5,13 @@
 #ifndef JEOKERNEL_XHCI_H
 #define JEOKERNEL_XHCI_H
 
+#ifndef UNIT_TESTING
 #include <devices/drivers.h>
 #include <core/vmem.h>
 #include "../pci/pci.h"
+#endif
+
+#include <memory>
 
 struct HostControllerPortRegisters {
     uint32_t portStatusControl;
@@ -34,6 +38,31 @@ struct xhci_operational_registers {
 } __attribute__((__packed__));
 
 static_assert(sizeof(xhci_operational_registers) == 0x410);
+
+union xhci_legsup_cap {
+    uint32_t value;
+    struct {
+        uint16_t cap;
+        uint8_t bios_owned;
+        uint8_t os_owned;
+    };
+
+    uint8_t get_os_own() {
+        uint32_t os_own = value >> 24;
+        return (uint8_t) os_own;
+    }
+    void assert_os_own() {
+        os_owned = get_os_own() | 1;
+    }
+    bool is_owned() {
+        uint32_t semas = value >> 16;
+        if ((semas & 1) == 0 && (semas & 0x100) != 0) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+};
 
 struct xhci_ext_cap {
     uint32_t *pointer;
@@ -62,12 +91,20 @@ struct xhci_ext_cap {
 
     std::optional<xhci_ext_cap> next() {
         if (next_ptr != 0) {
-            uint32_t *ptr = (uint32_t *) (void *) pointer;
+            uint32_t *ptr = pointer;
             uint16_t off = next_ptr;
             ptr += off;
             return { xhci_ext_cap(ptr) };
         } else {
             return { };
+        }
+    }
+
+    xhci_legsup_cap *legsup() {
+        if (cap_id == 1) {
+            return (xhci_legsup_cap *) (void *) pointer;
+        } else {
+            return nullptr;
         }
     }
 };

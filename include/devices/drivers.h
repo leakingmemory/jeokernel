@@ -6,7 +6,10 @@
 #define JEOKERNEL_DRIVERS_H
 
 #include <mutex>
+
+#ifndef UNIT_TESTING
 #include <devices/devices.h>
+#endif
 
 class Driver {
 public:

@@ -5,7 +5,10 @@
 #ifndef JEOKERNEL_PCI_H
 #define JEOKERNEL_PCI_H
 
+#ifndef UNIT_TESTING
 #include <devices/devices.h>
+#endif
+
 #include <optional>
 
 //#define USE_APIC_FOR_PCI_BUSES
