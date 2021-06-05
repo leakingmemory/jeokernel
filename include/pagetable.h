@@ -136,8 +136,10 @@ pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr);
 #ifndef LOADER
 
 #include <optional>
-#include <std/optional.h>
+
+#ifndef UNIT_TESTING
 #include <concurrency/hw_spinlock.h>
+#endif
 
 void initialize_pagetable_control();
 

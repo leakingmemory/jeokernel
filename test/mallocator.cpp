@@ -4,6 +4,7 @@
 
 #include "tests.h"
 #include <stdint.h>
+#include "../include/concurrency/hw_spinlock.h"
 #include "../include/pagetable.h"
 #include "../include/pagealloc.h"
 #include "../boot64/kmemory/mallocator.h"
