@@ -4,6 +4,8 @@
 
 #include <sstream>
 #include <klogger.h>
+#include <chrono>
+#include <thread>
 #include "xhci.h"
 
 Device *xhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
@@ -67,7 +69,21 @@ void xhci::init() {
     {
         std::optional<xhci_ext_cap> extcap = capabilities->extcap();
         while (extcap)  {
-            {
+            if (extcap->cap_id == 1) {
+                auto *legsup = extcap->legsup();
+                if (!legsup->is_owned()) {
+                    {
+                        std::stringstream msg;
+                        msg << DeviceType() << (unsigned int) DeviceId() << ": disabling legacy support\n";
+                        get_klogger() << msg.str().c_str();
+                    }
+                    legsup->assert_os_own();
+                    while (!legsup->is_owned()) {
+                        using namespace std::literals::chrono_literals;
+                        std::this_thread::sleep_for(20ms);
+                    }
+                }
+            } else {
                 std::stringstream msg;
                 msg << DeviceType() << (unsigned int) DeviceId() << ": ext cap type " << (unsigned int) extcap->cap_id << " value " << std::hex << extcap->value << "\n";
                 get_klogger() << msg.str().c_str();
