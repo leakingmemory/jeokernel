@@ -87,14 +87,53 @@ void ps2::init() {
         command(PS2_ENABLE_PORT2);
         config |= PS2_CONFIG_PORT2_IRQ;
     }
-    while (status_output_full(status())) {
-        input();
-    }
     if (port1) {
-        iface1.reset();
+        drain_input();
+        bool successful_initial_reset{iface1.reset()};
+        drain_input();
+        if (successful_initial_reset) {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 1 reset successful\n";
+            get_klogger() << msg.str().c_str();
+        } else {
+            port1 = false;
+        }
     }
     if (port2) {
-        iface2.reset();
+        drain_input();
+        bool successful_initial_reset{iface2.reset()};
+        drain_input();
+        if (successful_initial_reset) {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 2 reset successful\n";
+            get_klogger() << msg.str().c_str();
+        }
+    } else {
+        port2 = false;
+    }
+    if (port1) {
+        std::optional<uint16_t> ident = iface1.identify();
+        if (ident) {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 1 identified " << std::hex << (unsigned int) *ident << "\n";
+            get_klogger() << msg.str().c_str();
+        } else {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 1 not responding\n";
+            get_klogger() << msg.str().c_str();
+        }
+    }
+    if (port2) {
+        std::optional<uint16_t> ident = iface2.identify();
+        if (ident) {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 2 identified " << std::hex << (unsigned int) *ident << "\n";
+            get_klogger() << msg.str().c_str();
+        } else {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 2 not responding\n";
+            get_klogger() << msg.str().c_str();
+        }
     }
 }
 
@@ -133,6 +172,20 @@ void ps2::wait_ready_for_input() {
     }
 }
 
+void ps2::drain_input() {
+    using namespace std::literals::chrono_literals;
+    if (status_output_full(status())) {
+        input();
+        std::this_thread::sleep_for(10ms);
+    } else {
+        std::this_thread::sleep_for(10ms);
+    }
+    while (status_output_full(status())) {
+        input();
+        std::this_thread::sleep_for(10ms);
+    }
+}
+
 void ps2_device_interface::send(uint8_t data) {
     if (port2) {
         ps2bus->command(PS2_SEND_TO_PORT2);
@@ -140,8 +193,8 @@ void ps2_device_interface::send(uint8_t data) {
     ps2bus->output(data);
 }
 
-void ps2_device_interface::reset() {
-    send(0xFF);
+bool ps2_device_interface::reset() {
+    send(PS2_DEVICE_RESET);
     uint8_t timeout = 0xFF;
     while (!ps2bus->status_output_full(ps2bus->status())) {
         using namespace std::literals::chrono_literals;
@@ -152,10 +205,8 @@ void ps2_device_interface::reset() {
     }
     if (timeout > 0) {
         uint8_t result = ps2bus->input();
-        if (result == 0xFA) {
-            std::stringstream msg;
-            msg << ps2bus->DeviceType() << (unsigned int) ps2bus->DeviceId() << ": Port " << (port2 ? "2" : "1") << " reset successful\n";
-            get_klogger() << msg.str().c_str();
+        if (result == PS2_DEVICE_SUCCESS) {
+            return true;
         } else {
             std::stringstream msg;
             msg << ps2bus->DeviceType() << (unsigned int) ps2bus->DeviceId() << ": Port " << (port2 ? "2" : "1") << " error " << std::hex << (unsigned int) result << "\n";
@@ -165,5 +216,64 @@ void ps2_device_interface::reset() {
         std::stringstream msg;
         msg << ps2bus->DeviceType() << (unsigned int) ps2bus->DeviceId() << ": Port " << (port2 ? "2" : "1") << " timeout\n";
         get_klogger() << msg.str().c_str();
+    }
+    return false;
+}
+
+std::optional<uint16_t> ps2_device_interface::identify() {
+    const uint8_t bits = 16;
+    uint8_t shift = 0;
+    uint16_t value{0};
+    send(PS2_DEVICE_IDENT);
+    {
+        uint8_t timeout = 0xFF;
+        while (--timeout > 0) {
+            if (ps2bus->status_output_full(ps2bus->status())) {
+                uint8_t result = ps2bus->input();
+                if (result != PS2_DEVICE_SUCCESS) {
+                    std::stringstream msg;
+                    msg << ps2bus->DeviceType() << (unsigned int) ps2bus->DeviceId() << ": Ident error code " << std::hex << (unsigned int) result << "\n";
+                    get_klogger() << msg.str().c_str();
+                    return { };
+                }
+                break;
+            }
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+        }
+        if (timeout == 0) {
+            std::stringstream msg;
+            msg << ps2bus->DeviceType() << (unsigned int) ps2bus->DeviceId() << ": Ident timeout\n";
+            get_klogger() << msg.str().c_str();
+            return { };
+        }
+    }
+    bool received{true};
+    while (received) {
+        received = false;
+        uint8_t timeout = 0xFF;
+        while (--timeout > 0) {
+            if (ps2bus->status_output_full(ps2bus->status())) {
+                uint16_t incoming = ps2bus->input();
+                if (shift < bits) {
+                    incoming = incoming << shift;
+                    value |= incoming;
+                    shift += 8;
+                } else {
+                    std::stringstream msg;
+                    msg << ps2bus->DeviceType() << (unsigned int) ps2bus->DeviceId() << ": Ident overrun bits " << std::hex << (unsigned int) incoming << "\n";
+                    get_klogger() << msg.str().c_str();
+                }
+                received = true;
+                break;
+            }
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+        }
+    }
+    if (shift > 0) {
+        return { value };
+    } else {
+        return { };
     }
 }

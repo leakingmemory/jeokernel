@@ -30,6 +30,11 @@
 #define PS2_CONFIG_PORT2_CLOCK_OFF   0x20
 #define PS2_CONFIG_PORT1_TRANSLATION 0x40
 
+#define PS2_DEVICE_IDENT    0xF2
+#define PS2_DEVICE_RESET    0xFF
+
+#define PS2_DEVICE_SUCCESS 0xFA
+
 class ps2;
 
 class ps2_device_interface {
@@ -39,7 +44,8 @@ private:
 public:
     ps2_device_interface(ps2 *ps2bus, bool port2) : ps2bus(ps2bus), port2(port2) {}
     void send(uint8_t data);
-    void reset();
+    bool reset();
+    std::optional<uint16_t> identify();
 };
 
 class ps2 : public Device {
@@ -55,6 +61,7 @@ public:
     uint8_t input();
     void output(uint8_t data);
     void wait_ready_for_input();
+    void drain_input();
     bool IsBus() override {
         return true;
     }
