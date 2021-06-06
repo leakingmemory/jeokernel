@@ -8,6 +8,7 @@
 #include <chrono>
 #include <thread>
 #include "ps2.h"
+#include "ps2kbd.h"
 
 void ps2::init() {
     command(PS2_DISABLE_PORT1);
@@ -111,30 +112,7 @@ void ps2::init() {
     } else {
         port2 = false;
     }
-    if (port1) {
-        std::optional<uint16_t> ident = iface1.identify();
-        if (ident) {
-            std::stringstream msg;
-            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 1 identified " << std::hex << (unsigned int) *ident << "\n";
-            get_klogger() << msg.str().c_str();
-        } else {
-            std::stringstream msg;
-            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 1 not responding\n";
-            get_klogger() << msg.str().c_str();
-        }
-    }
-    if (port2) {
-        std::optional<uint16_t> ident = iface2.identify();
-        if (ident) {
-            std::stringstream msg;
-            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 2 identified " << std::hex << (unsigned int) *ident << "\n";
-            get_klogger() << msg.str().c_str();
-        } else {
-            std::stringstream msg;
-            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 2 not responding\n";
-            get_klogger() << msg.str().c_str();
-        }
-    }
+    ProbeDevices();
 }
 
 void ps2::command(uint8_t cmd) {
@@ -184,6 +162,52 @@ void ps2::drain_input() {
         input();
         std::this_thread::sleep_for(10ms);
     }
+}
+
+bool ps2::spawn(ps2_device_interface &dev) {
+    if (dev.device_id == 0x83AB) {
+        ps2kbd *kbd = new ps2kbd(*this, dev);
+        devices().add(*kbd);
+        kbd->init();
+        return true;
+    }
+    return false;
+}
+
+void ps2::ProbeDevices() {
+    if (port1) {
+        std::optional<uint16_t> ident = iface1.identify();
+        if (ident) {
+            iface1.device_id = *ident;
+            if (!spawn(iface1)) {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": Port 1 identified " << std::hex
+                    << (unsigned int) *ident << "\n";
+                get_klogger() << msg.str().c_str();
+            }
+        } else {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 1 not responding\n";
+            get_klogger() << msg.str().c_str();
+        }
+    }
+    if (port2) {
+        std::optional<uint16_t> ident = iface2.identify();
+        if (ident) {
+            iface2.device_id = *ident;
+            if (!spawn(iface2)) {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": Port 2 identified " << std::hex
+                    << (unsigned int) *ident << "\n";
+                get_klogger() << msg.str().c_str();
+            }
+        } else {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": Port 2 not responding\n";
+            get_klogger() << msg.str().c_str();
+        }
+    }
+    Bus::ProbeDevices();
 }
 
 void ps2_device_interface::send(uint8_t data) {

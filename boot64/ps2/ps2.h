@@ -6,6 +6,7 @@
 #define JEOKERNEL_PS2_H
 
 #include <devices/drivers.h>
+#include <optional>
 
 #define PS2_DATA 0x60
 #define PS2_COMMAND_STATUS 0x64
@@ -38,23 +39,30 @@
 class ps2;
 
 class ps2_device_interface {
+    friend ps2;
 private:
     ps2 *ps2bus;
-    bool port2;
+    uint16_t device_id;
+    bool port2 : 8;
 public:
     ps2_device_interface(ps2 *ps2bus, bool port2) : ps2bus(ps2bus), port2(port2) {}
     void send(uint8_t data);
     bool reset();
     std::optional<uint16_t> identify();
+
+    constexpr uint8_t IrqNum() const {
+        return port2 ? 12 : 1;
+    }
 };
 
-class ps2 : public Device {
+class ps2 : public Bus {
 private:
     bool port1, port2;
     ps2_device_interface iface1, iface2;
 public:
-    ps2() : Device("ps"), port1(false), port2(false), iface1(this, false), iface2(this, true) {}
+    ps2() : Bus("ps"), port1(false), port2(false), iface1(this, false), iface2(this, true) {}
     void init() override;
+    void ProbeDevices() override;
     void command(uint8_t cmd);
     void command(uint8_t cmd, uint8_t data);
     uint8_t status();
@@ -62,6 +70,7 @@ public:
     void output(uint8_t data);
     void wait_ready_for_input();
     void drain_input();
+    bool spawn(ps2_device_interface &dev);
     bool IsBus() override {
         return true;
     }
