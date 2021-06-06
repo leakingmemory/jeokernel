@@ -50,6 +50,12 @@ public:
         uint32_t newval = (val & 0xFFFFFF00) | intr;
         (*this)[reg] = newval;
     }
+
+    void enable(uint8_t vector, uint8_t destination_id, bool enable = true, bool logical_destination = false, uint8_t delivery_mode = 0, bool active_low = false, bool level_triggered = false);
+
+    void send_eoi(uint8_t vector) {
+        (*this)[0x40] = (uint32_t) vector;
+    }
 };
 
 

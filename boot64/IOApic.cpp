@@ -3,6 +3,7 @@
 //
 
 #include <klogger.h>
+#include <sstream>
 #include "IOApic.h"
 
 IOApic::IOApic(const cpu_mpfp &mpc) : vm(0x2000) {
@@ -29,4 +30,38 @@ IOApic::IOApic(const cpu_mpfp &mpc) : vm(0x2000) {
     ptr += offset;
     get_klogger() << "->"<<(uint64_t) ptr << "\n";
     this->pointer = (uint32_t *) (void *) ptr;
+}
+
+void
+IOApic::enable(uint8_t vector, uint8_t destination_id, bool enable, bool logical_destination, uint8_t delivery_mode, bool active_low,
+               bool level_triggered) {
+    uint32_t mask = 0xFFFE50FF;
+    uint32_t set = delivery_mode;
+    if (logical_destination) {
+        set |= 1 << 3;
+    }
+    if (active_low) {
+        set |= 1 << 5;
+    }
+    if (level_triggered) {
+        set |= 1 << 7;
+    }
+    if (!enable) {
+        set |= 1 << 8;
+    }
+    set = set << 8;
+    uint8_t reg = (vector * 2) + 0x10;
+    uint32_t prev_value = (*this)[reg];
+    uint32_t value{prev_value & mask};
+    value |= set;
+    uint32_t prev_value2 = (*this)[reg+1];
+    uint32_t value2{prev_value2 & 0x00FFFFFF};
+    value2 |= ((uint32_t) destination_id) << 24;
+    (*this)[reg] = value;
+    (*this)[reg+1] = value2;
+
+    std::stringstream msg;
+    msg << "IOApic int set " << std::hex << (unsigned int) vector << " " << prev_value << ":" << prev_value2
+        << " -> " << value << ":" << value2 << "\n";
+    get_klogger() << msg.str().c_str();
 }
