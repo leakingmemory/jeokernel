@@ -41,6 +41,7 @@
 #include <devices/devices.h>
 #include <devices/drivers.h>
 #include "usb/usb_hcis.h"
+#include "ps2/ps2.h"
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -845,7 +846,9 @@ done_with_mem_extension:
                 detect_root_pcis();
                 acpi_boot.join();
                 if (acpi_boot.has_8042()) {
-                    get_klogger() << "Ready to start PS/2\n";
+                    ps2 *ps2dev = new ps2();
+                    devices().add(*ps2dev);
+                    ps2dev->init();
                 }
             }};
             pci_scan_thread.detach();

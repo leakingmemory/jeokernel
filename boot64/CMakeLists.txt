@@ -15,6 +15,7 @@ add_subdirectory(tasks)
 add_subdirectory(acpi)
 add_subdirectory(display)
 add_subdirectory(usb)
+add_subdirectory(ps2)
 
 add_library(bootstrap bootstrap.S)
 
@@ -32,4 +33,5 @@ target_link_libraries(kernel PRIVATE tasks)
 target_link_libraries(kernel PRIVATE acpi)
 target_link_libraries(kernel PRIVATE display)
 target_link_libraries(kernel PRIVATE usb)
+target_link_libraries(kernel PRIVATE ps2)
 
