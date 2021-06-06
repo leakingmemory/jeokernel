@@ -190,6 +190,14 @@ public:
     const mp_bus_entry &get_bus(int idx) {
         return bus[idx];
     }
+
+    int get_num_ioapic_ints() {
+        return n_ioapic_int;
+    }
+
+    const mp_ioapic_interrupt_entry &get_ioapic_int(int idx) {
+        return ioapic_ints[idx];
+    }
 };
 
 cpu_mpfp *get_mpfp();
