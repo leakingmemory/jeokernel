@@ -301,3 +301,20 @@ std::optional<uint16_t> ps2_device_interface::identify() {
         return { };
     }
 }
+
+void ps2_device_interface::EnableIrq(bool enable) {
+    std::lock_guard lock(ps2bus->mtx);
+    ps2bus->command(PS2_READ_BYTE00);
+    uint8_t config = ps2bus->input();
+    uint8_t flag{PS2_CONFIG_PORT1_IRQ};
+    if (port2) {
+        flag = PS2_CONFIG_PORT2_IRQ;
+    }
+    if (enable) {
+        config |= flag;
+    } else {
+        config &= ~flag;
+    }
+    ps2bus->command(PS2_WRITE_BYTE00, config);
+    ps2bus->drain_input();
+}

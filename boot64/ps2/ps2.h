@@ -7,6 +7,7 @@
 
 #include <devices/drivers.h>
 #include <optional>
+#include <mutex>
 
 #define PS2_DATA 0x60
 #define PS2_COMMAND_STATUS 0x64
@@ -49,18 +50,25 @@ public:
     void send(uint8_t data);
     bool reset();
     std::optional<uint16_t> identify();
+    void EnableIrq(bool enable = true);
 
     constexpr uint8_t IrqNum() const {
         return port2 ? 12 : 1;
     }
+
+    constexpr ps2 &Bus() const {
+        return *ps2bus;
+    }
 };
 
 class ps2 : public Bus {
+    friend ps2_device_interface;
 private:
+    std::mutex mtx;
     bool port1, port2;
     ps2_device_interface iface1, iface2;
 public:
-    ps2() : Bus("ps"), port1(false), port2(false), iface1(this, false), iface2(this, true) {}
+    ps2() : Bus("ps"), mtx(), port1(false), port2(false), iface1(this, false), iface2(this, true) {}
     void init() override;
     void ProbeDevices() override;
     void command(uint8_t cmd);
