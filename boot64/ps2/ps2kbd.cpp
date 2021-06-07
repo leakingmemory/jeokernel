@@ -6,8 +6,11 @@
 #include <klogger.h>
 #include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
+#include <thread>
 #include "ps2kbd.h"
 #include "../HardwareInterrupts.h"
+
+//#define DEBUG_BUFFER
 
 void ps2kbd::init() {
     {
@@ -51,13 +54,63 @@ void ps2kbd::init() {
     ioapic = std::make_unique<IOApic>(*mpfp);
 
     get_hw_interrupt_handler().add_handler(4, [this, ioapic_intn] (Interrupt &intr) {
-        get_klogger() << "Keyboard interrupt! ";
-        ps2dev.Bus().input();
+        bool dispatch{false};
+        {
+            std::lock_guard lock{spinlock};
+            uint8_t ch = ps2dev.Bus().input();
+            uint32_t newpos = (inspos + 1) & RD_RING_BUFSIZE_MASK;
+#ifdef DEBUG_BUFFER
+            std::stringstream msg{};
+#endif
+            if (newpos != outpos) {
+#ifdef DEBUG_BUFFER
+                msg << " (" << std::hex << (unsigned int) inspos << "/" << outpos << ")<=" << (unsigned int) ch;
+#endif
+                buffer[inspos] = ch;
+                inspos = newpos;
+                dispatch = true;
+            }
+#ifdef DEBUG_BUFFER
+            get_klogger() << msg.str().c_str();
+#endif
+        }
+        if (dispatch) {
+            sema.release();
+        }
         ioapic->send_eoi(ioapic_intn);
         lapic->eio();
-        get_klogger() << "Keyboard proceed\n";
     });
 
     ioapic->enable(ioapic_intn, lapic->get_cpu_num(*mpfp));
     ioapic->send_eoi(ioapic_intn);
+}
+
+void ps2kbd::extractor() {
+    while (true) {
+        sema.acquire();
+        uint8_t ch{0};
+
+#ifdef DEBUG_BUFFER
+        std::stringstream msg{};
+#endif
+        {
+            critical_section cli{};
+            std::lock_guard lock{spinlock};
+            if (stop) {
+                return;
+            }
+#ifdef DEBUG_BUFFER
+            msg << " (" << std::hex << (unsigned int) outpos << ")=>";
+#endif
+            ch = buffer[outpos];
+#ifdef DEBUG_BUFFER
+            msg << (unsigned int) ch;
+#endif
+            outpos = (outpos + 1) & RD_RING_BUFSIZE_MASK;
+        }
+#ifdef DEBUG_BUFFER
+        get_klogger() << msg.str().c_str();
+#endif
+        get_klogger() << ch;
+    }
 }
