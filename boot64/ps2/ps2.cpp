@@ -318,3 +318,7 @@ void ps2_device_interface::EnableIrq(bool enable) {
     ps2bus->command(PS2_WRITE_BYTE00, config);
     ps2bus->drain_input();
 }
+
+std::mutex &ps2_device_interface::Mtx() {
+    return Bus().mtx;
+}

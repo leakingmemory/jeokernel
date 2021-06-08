@@ -20,17 +20,30 @@ class ps2kbd : public Device {
 private:
     hw_spinlock spinlock;
     raw_semaphore sema;
+    raw_semaphore command_sema;
     bool stop;
     std::thread extractor_thread;
     ps2_device_interface &ps2dev;
     std::unique_ptr<IOApic> ioapic;
     std::unique_ptr<LocalApic> lapic;
     uint8_t buffer[RD_RING_BUFSIZE];
-    uint32_t inspos, outpos;
+    uint16_t inspos, outpos;
+    bool capslock : 2;
+    bool scrolllock : 2;
+    bool numlock : 4;
+    uint8_t cmd_length;
+    uint8_t ignore_length;
+    uint8_t recorded_length;
+    uint8_t cmd[2];
+    uint8_t ignore_codes[2];
+#define REC_BUFFER_SIZE 7
+    uint8_t recorded_codes[REC_BUFFER_SIZE];
 public:
     ps2kbd(ps2 &ps2, ps2_device_interface &ps2dev) : Device("ps2kbd", &ps2),
-    spinlock(), sema(-1), stop(false), extractor_thread([this] () { this->extractor(); }),
-    ps2dev(ps2dev), ioapic(), lapic(), buffer(), inspos(0), outpos(0) {}
+    spinlock(), sema(-1), command_sema(0), stop(false),
+    extractor_thread([this] () { this->extractor(); }), ps2dev(ps2dev), ioapic(), lapic(),
+    buffer(), inspos(0), outpos(0), capslock(false), scrolllock(false), numlock(false),
+    cmd_length(0), cmd(), ignore_length(0), ignore_codes(), recorded_codes(), recorded_length(0) {}
     ~ps2kbd() {
         {
             critical_section cli{};
@@ -42,6 +55,8 @@ public:
     }
     void init() override;
     void extractor();
+    void SetLeds(bool capslock, bool scrolllock, bool numlock);
+    void keycode(uint16_t code);
 };
 
 

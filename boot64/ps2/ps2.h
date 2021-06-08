@@ -59,6 +59,8 @@ public:
     constexpr ps2 &Bus() const {
         return *ps2bus;
     }
+
+    std::mutex &Mtx();
 };
 
 class ps2 : public Bus {
