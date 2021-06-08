@@ -17,4 +17,26 @@
 #define KEYBOARD_CODE_PRINTSCREEN 0x0200
 #define KEYBOARD_CODE_PAUSE       (0x0201 | KEYBOARD_CODE_BIT_RELEASE)
 
+#include <cstdint>
+
+class keyboard_type2_state_machine {
+private:
+    bool capslock : 2;
+    bool scrolllock : 2;
+    bool numlock : 4;
+    uint8_t ignore_length;
+    uint8_t recorded_length;
+    uint8_t ignore_codes[2];
+#define REC_BUFFER_SIZE 7
+    uint8_t recorded_codes[REC_BUFFER_SIZE];
+public:
+    keyboard_type2_state_machine() :
+    capslock(false), scrolllock(false), numlock(false), ignore_length(0), recorded_length(0),
+    ignore_codes(), recorded_codes()
+    {}
+    virtual void SetLeds(bool capslock, bool scrolllock, bool numlock);
+    virtual void keycode(uint16_t code) {}
+    void raw_code(uint8_t ch);
+};
+
 #endif //JEOKERNEL_KEYBOARD_H

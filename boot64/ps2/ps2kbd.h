@@ -11,13 +11,29 @@
 #include <memory>
 #include <concurrency/hw_spinlock.h>
 #include <concurrency/raw_semaphore.h>
+#include <keyboard/keyboard.h>
 
 #define RD_RING_BUFSIZE_BITS 4
 #define RD_RING_BUFSIZE      (1 << RD_RING_BUFSIZE_BITS)
 #define RD_RING_BUFSIZE_MASK (RD_RING_BUFSIZE - 1)
 
-class ps2kbd : public Device {
+class ps2kbd;
+
+class ps2kbd_type2_state_machine : public keyboard_type2_state_machine {
 private:
+    ps2kbd &kbd;
+public:
+    explicit ps2kbd_type2_state_machine(ps2kbd &kbd);
+
+    void SetLeds(bool capslock, bool scrolllock, bool numlock) override;
+
+    void keycode(uint16_t code) override;
+};
+
+class ps2kbd : public Device {
+    friend ps2kbd_type2_state_machine;
+private:
+    ps2kbd_type2_state_machine code_state_machine;
     hw_spinlock spinlock;
     raw_semaphore sema;
     raw_semaphore command_sema;
@@ -28,22 +44,14 @@ private:
     std::unique_ptr<LocalApic> lapic;
     uint8_t buffer[RD_RING_BUFSIZE];
     uint16_t inspos, outpos;
-    bool capslock : 2;
-    bool scrolllock : 2;
-    bool numlock : 4;
     uint8_t cmd_length;
-    uint8_t ignore_length;
-    uint8_t recorded_length;
     uint8_t cmd[2];
-    uint8_t ignore_codes[2];
-#define REC_BUFFER_SIZE 7
-    uint8_t recorded_codes[REC_BUFFER_SIZE];
 public:
     ps2kbd(ps2 &ps2, ps2_device_interface &ps2dev) : Device("ps2kbd", &ps2),
+    code_state_machine(*this),
     spinlock(), sema(-1), command_sema(0), stop(false),
     extractor_thread([this] () { this->extractor(); }), ps2dev(ps2dev), ioapic(), lapic(),
-    buffer(), inspos(0), outpos(0), capslock(false), scrolllock(false), numlock(false),
-    cmd_length(0), cmd(), ignore_length(0), ignore_codes(), recorded_codes(), recorded_length(0) {}
+    buffer(), inspos(0), outpos(0), cmd_length(0), cmd() {}
     ~ps2kbd() {
         {
             critical_section cli{};
