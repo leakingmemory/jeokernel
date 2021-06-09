@@ -9,8 +9,10 @@
 #define KEYBOARD_CODE_BIT_SCROLLLOCK 0x4000
 #define KEYBOARD_CODE_BIT_CAPSLOCK   0x2000
 #define KEYBOARD_CODE_BIT_NUMLOCK    0x1000
+#define KEYBOARD_CODE_BIT_LCONTROL   0x0800
+#define KEYBOARD_CODE_BIT_RCONTROL   0x0400
 
-#define KEYBOARD_CODE_MASK           0x0FFF
+#define KEYBOARD_CODE_MASK           0x03FF
 
 #define KEYBOARD_CODE_EXTENDED    0x0100
 
@@ -21,6 +23,7 @@
 
 class keyboard_type2_state_machine {
 private:
+    uint16_t state;
     bool capslock : 2;
     bool scrolllock : 2;
     bool numlock : 4;
@@ -31,11 +34,12 @@ private:
     uint8_t recorded_codes[REC_BUFFER_SIZE];
 public:
     keyboard_type2_state_machine() :
-    capslock(false), scrolllock(false), numlock(false), ignore_length(0), recorded_length(0),
+    state(0), capslock(false), scrolllock(false), numlock(false), ignore_length(0), recorded_length(0),
     ignore_codes(), recorded_codes()
     {}
     virtual void SetLeds(bool capslock, bool scrolllock, bool numlock);
     virtual void keycode(uint16_t code) {}
+    void layer2_keycode(uint16_t code);
     void raw_code(uint8_t ch);
 };
 

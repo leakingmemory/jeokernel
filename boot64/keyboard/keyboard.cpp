@@ -80,7 +80,7 @@ void keyboard_type2_state_machine::raw_code(uint8_t ch) {
                         ) {
                     recorded_length = 0;
                     keycode |= KEYBOARD_CODE_PAUSE;
-                    this->keycode(keycode);
+                    this->layer2_keycode(keycode);
                 } else if (numlock) {
                     if (recorded_length == 0) {
                         recorded_codes[0] = ch;
@@ -194,7 +194,7 @@ void keyboard_type2_state_machine::raw_code(uint8_t ch) {
                     keycode += ch;
                 }
                 if (!swallow) {
-                    this->keycode(keycode);
+                    this->layer2_keycode(keycode);
                 }
         }
     }
@@ -204,4 +204,25 @@ void keyboard_type2_state_machine::SetLeds(bool capslock, bool scrolllock, bool 
     this->capslock = capslock;
     this->scrolllock = scrolllock;
     this->numlock = numlock;
+}
+
+void keyboard_type2_state_machine::layer2_keycode(uint16_t code) {
+    uint16_t key = code & KEYBOARD_CODE_MASK;
+    uint16_t bit{0};
+    switch (key) {
+        case 0x14: {
+            bit = KEYBOARD_CODE_BIT_LCONTROL;
+        } break;
+        case 0x114: {
+            bit = KEYBOARD_CODE_BIT_RCONTROL;
+        } break;
+    }
+    if (bit != 0) {
+        if ((code & KEYBOARD_CODE_BIT_RELEASE) == 0) {
+            state |= bit;
+        } else {
+            state &= ~bit;
+        }
+    }
+    this->keycode(code | state);
 }
