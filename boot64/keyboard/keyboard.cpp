@@ -224,5 +224,5 @@ void keyboard_type2_state_machine::layer2_keycode(uint16_t code) {
             state &= ~bit;
         }
     }
-    this->keycode(code | state);
+    this->keycode(((uint32_t) code) | state);
 }

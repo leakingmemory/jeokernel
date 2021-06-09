@@ -23,7 +23,7 @@
 
 class keyboard_type2_state_machine {
 private:
-    uint16_t state;
+    uint32_t state;
     bool capslock : 2;
     bool scrolllock : 2;
     bool numlock : 4;
@@ -38,7 +38,7 @@ public:
     ignore_codes(), recorded_codes()
     {}
     virtual void SetLeds(bool capslock, bool scrolllock, bool numlock);
-    virtual void keycode(uint16_t code) {}
+    virtual void keycode(uint32_t code) {}
     void layer2_keycode(uint16_t code);
     void raw_code(uint8_t ch);
 };

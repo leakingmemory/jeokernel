@@ -150,7 +150,7 @@ void ps2kbd::SetLeds(bool capslock, bool scrolllock, bool numlock) {
     this->ps2dev.send(cmd[0]);
 }
 
-void ps2kbd::keycode(uint16_t code) {
+void ps2kbd::keycode(uint32_t code) {
     get_klogger() << code;
 }
 
@@ -162,6 +162,6 @@ void ps2kbd_type2_state_machine::SetLeds(bool capslock, bool scrolllock, bool nu
     kbd.SetLeds(capslock, scrolllock, numlock);
 }
 
-void ps2kbd_type2_state_machine::keycode(uint16_t code) {
+void ps2kbd_type2_state_machine::keycode(uint32_t code) {
     kbd.keycode(code);
 }

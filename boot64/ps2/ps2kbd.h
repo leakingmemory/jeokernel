@@ -27,7 +27,7 @@ public:
 
     void SetLeds(bool capslock, bool scrolllock, bool numlock) override;
 
-    void keycode(uint16_t code) override;
+    void keycode(uint32_t code) override;
 };
 
 class ps2kbd : public Device {
@@ -64,7 +64,7 @@ public:
     void init() override;
     void extractor();
     void SetLeds(bool capslock, bool scrolllock, bool numlock);
-    void keycode(uint16_t code);
+    void keycode(uint32_t code);
 };
 
 
