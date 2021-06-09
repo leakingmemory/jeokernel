@@ -208,10 +208,22 @@ void keyboard_type2_state_machine::SetLeds(bool capslock, bool scrolllock, bool 
 
 void keyboard_type2_state_machine::layer2_keycode(uint16_t code) {
     uint16_t key = code & KEYBOARD_CODE_MASK;
-    uint16_t bit{0};
+    uint32_t bit{0};
     switch (key) {
+        case 0x11: {
+            bit = KEYBOARD_CODE_BIT_LALT;
+        } break;
+        case 0x12: {
+            bit = KEYBOARD_CODE_BIT_LSHIFT;
+        } break;
         case 0x14: {
             bit = KEYBOARD_CODE_BIT_LCONTROL;
+        } break;
+        case 0x59: {
+            bit = KEYBOARD_CODE_BIT_RSHIFT;
+        } break;
+        case 0x111: {
+            bit = KEYBOARD_CODE_BIT_RALT;
         } break;
         case 0x114: {
             bit = KEYBOARD_CODE_BIT_RCONTROL;
