@@ -13,7 +13,7 @@ void keyboard_type2_state_machine::raw_code(uint8_t ch) {
         }
     }
     if (!ignore) {
-        uint16_t keycode{0};
+        uint32_t keycode{0};
         if (scrolllock) {
             keycode |= KEYBOARD_CODE_BIT_SCROLLLOCK;
         }
@@ -206,8 +206,8 @@ void keyboard_type2_state_machine::SetLeds(bool capslock, bool scrolllock, bool 
     this->numlock = numlock;
 }
 
-void keyboard_type2_state_machine::layer2_keycode(uint16_t code) {
-    uint16_t key = code & KEYBOARD_CODE_MASK;
+void keyboard_type2_state_machine::layer2_keycode(uint32_t code) {
+    uint16_t key = (uint16_t) (code & KEYBOARD_CODE_MASK);
     uint32_t bit{0};
     switch (key) {
         case 0x11: {

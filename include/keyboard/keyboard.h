@@ -5,19 +5,19 @@
 #ifndef JEOKERNEL_KEYBOARD_H
 #define JEOKERNEL_KEYBOARD_H
 
-#define KEYBOARD_CODE_BIT_RELEASE    0x8000
-#define KEYBOARD_CODE_BIT_SCROLLLOCK 0x4000
-#define KEYBOARD_CODE_BIT_CAPSLOCK   0x2000
-#define KEYBOARD_CODE_BIT_NUMLOCK    0x1000
-#define KEYBOARD_CODE_BIT_LCONTROL   0x0800
-#define KEYBOARD_CODE_BIT_RCONTROL   0x0400
+#define KEYBOARD_CODE_BIT_RELEASE    0x0080000
+#define KEYBOARD_CODE_BIT_SCROLLLOCK 0x0040000
+#define KEYBOARD_CODE_BIT_CAPSLOCK   0x0020000
+#define KEYBOARD_CODE_BIT_NUMLOCK    0x0010000
 
-#define KEYBOARD_CODE_BIT_LSHIFT     0x10000
-#define KEYBOARD_CODE_BIT_RSHIFT     0x20000
-#define KEYBOARD_CODE_BIT_LALT       0x40000
-#define KEYBOARD_CODE_BIT_RALT       0x80000
+#define KEYBOARD_CODE_BIT_LSHIFT     0x0100000
+#define KEYBOARD_CODE_BIT_RSHIFT     0x0200000
+#define KEYBOARD_CODE_BIT_LALT       0x0400000
+#define KEYBOARD_CODE_BIT_RALT       0x0800000
+#define KEYBOARD_CODE_BIT_LCONTROL   0x1000000
+#define KEYBOARD_CODE_BIT_RCONTROL   0x2000000
 
-#define KEYBOARD_CODE_MASK           0x03FF
+#define KEYBOARD_CODE_MASK           0xFFFF
 
 #define KEYBOARD_CODE_EXTENDED    0x0100
 
@@ -44,7 +44,7 @@ public:
     {}
     virtual void SetLeds(bool capslock, bool scrolllock, bool numlock);
     virtual void keycode(uint32_t code) {}
-    void layer2_keycode(uint16_t code);
+    void layer2_keycode(uint32_t code);
     void raw_code(uint8_t ch);
 };
 
