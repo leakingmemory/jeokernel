@@ -50,4 +50,11 @@ public:
 
 uint32_t keycode_type2_to_usb(uint32_t keycode);
 
+class keyboard {
+public:
+    void keycode(uint32_t code);
+};
+
+keyboard &Keyboard();
+
 #endif //JEOKERNEL_KEYBOARD_H

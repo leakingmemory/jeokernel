@@ -49,6 +49,8 @@
 //#define SLEEP_TESTS
 //#define SEMAPHORE_TEST // depends on sleep tests
 
+void init_keyboard();
+
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
 static GlobalDescriptorTable *gdt = nullptr;
@@ -832,6 +834,7 @@ done_with_mem_extension:
         clock_thread.detach();
 
         init_devices();
+        init_keyboard();
         get_drivers().AddDriver(new vga_driver());
         get_drivers().AddDriver(new pci_bridge_driver());
         get_drivers().AddDriver(new uhci_driver());

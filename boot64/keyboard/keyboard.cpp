@@ -1,5 +1,6 @@
 
 #include <keyboard/keyboard.h>
+#include <klogger.h>
 
 void keyboard_type2_state_machine::raw_code(uint8_t ch) {
     bool ignore{false};
@@ -489,4 +490,18 @@ constexpr uint32_t _keycode_type2_to_usb(uint32_t keycode) {
 
 uint32_t keycode_type2_to_usb(uint32_t keycode) {
     return _keycode_type2_to_usb(keycode);
+}
+
+static keyboard *kbd = nullptr;
+
+void init_keyboard() {
+    kbd = new keyboard();
+}
+
+keyboard &Keyboard() {
+    return *kbd;
+}
+
+void keyboard::keycode(uint32_t code) {
+    get_klogger() << code;
 }

@@ -151,8 +151,7 @@ void ps2kbd::SetLeds(bool capslock, bool scrolllock, bool numlock) {
 }
 
 void ps2kbd::keycode(uint32_t code) {
-    code = keycode_type2_to_usb(code);
-    get_klogger() << code;
+    Keyboard().keycode(keycode_type2_to_usb(code));
 }
 
 ps2kbd_type2_state_machine::ps2kbd_type2_state_machine(ps2kbd &kbd) : kbd(kbd) {
