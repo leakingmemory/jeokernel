@@ -48,4 +48,6 @@ public:
     void raw_code(uint8_t ch);
 };
 
+uint32_t keycode_type2_to_usb(uint32_t keycode);
+
 #endif //JEOKERNEL_KEYBOARD_H
