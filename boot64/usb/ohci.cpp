@@ -83,9 +83,97 @@ void ohci::init() {
         get_klogger() << "OHCI cold start\n";
         std::this_thread::sleep_for(2ms);
     }
+
+    uint32_t interval = ohciRegisters->HcFmInterval & OHCI_INTERVAL_FI_MASK;
+
+    ohciRegisters->HcInterruptDisable = OHCI_INT_MASK;
+
+    ohciRegisters->HcHCCA = hcca.Addr();
+
+    ohciRegisters->HcControlHeadED = hcca.Addr(&(hcca.ControlED()));
+
+    ohciRegisters->HcBulkHeadED = hcca.Addr(&(hcca.BulkED()));
+
+    {
+        uint32_t ctrl = ohciRegisters->HcControl;
+        ctrl &= ~OHCI_CTRL_CBSR_MASK;
+        ctrl |= OHCI_CTRL_CBSR_1_4 | OHCI_CTRL_PLE | OHCI_CTRL_IE | OHCI_CTRL_CLE | OHCI_CTRL_BLE;
+        ohciRegisters->HcControl = ctrl;
+    }
+
+    {
+        uint32_t max_full_speed_packet = (interval - 210) * 6 / 7;
+        /* Flip the FIT-bit */
+        uint32_t fmInterval = (ohciRegisters->HcFmInterval & OHCI_INTERVAL_FIT) ^ OHCI_INTERVAL_FIT;
+        fmInterval |= (max_full_speed_packet << 16) | interval;
+        ohciRegisters->HcFmInterval = fmInterval;
+    }
+
+    ohciRegisters->HcRhStatus = OHCI_HC_LPSC;
+
+    {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(70ms);
+    }
+
+    uint16_t retries = 20;
+    while (no_ports == 0 || no_ports > 15) {
+        if (--retries == 0) {
+            break;
+        }
+        {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+        }
+        ohci_descriptor_a desc_a{ohciRegisters->HcRhDescriptorA};
+        no_ports = desc_a.no_ports;
+        power_on_port_delay_ms = desc_a.potpgt;
+        power_on_port_delay_ms = power_on_port_delay_ms << 1;
+    }
+
     {
         std::stringstream msg;
-        msg << DeviceType() << (unsigned int) DeviceId() << ": USB controller, memory registers 0x" << std::hex << addr << " size " << std::dec << size << "\n";
+        //msg << DeviceType() << (unsigned int) DeviceId() << ": USB controller, memory registers 0x" << std::hex << addr << " size " << std::dec << size << " ports x" << (unsigned int) no_ports << "power on p. delay " << (unsigned int) power_on_port_delay_ms << "ms\n";
+        msg << DeviceType() << (unsigned int) DeviceId() << ": USB controller, ports x" << (unsigned int) no_ports << " power on port " << (unsigned int) power_on_port_delay_ms << "ms\n";
         get_klogger() << msg.str().c_str();
     }
+}
+
+OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {
+    for (int i = 0; i < 0x3F; i++) {
+        hcca_ed_ptrs[i].ed = &(hcca->hcca_with_eds.eds[i]);
+        hcca->hcca_with_eds.eds[i].HcControl = 0;
+        hcca->hcca_with_eds.eds[i].HeadP = 0;
+        hcca->hcca_with_eds.eds[i].TailP = 0;
+    }
+    for (int i = 0; i < 0x20; i++) {
+        int j = (i >> 1) + 0x20;
+        hcca->hcca_with_eds.eds[i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
+    }
+    for (int i = 0; i < 0x10; i++) {
+        int j = (i >> 1) + 0x30;
+        hcca->hcca_with_eds.eds[0x20 + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
+    }
+    for (int i = 0; i < 8; i++) {
+        int j = (i >> 1) + 0x38;
+        hcca->hcca_with_eds.eds[0x30 + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
+    }
+    for (int i = 0; i < 4; i++) {
+        int j = (i >> 1) + 0x3C;
+        hcca->hcca_with_eds.eds[0x38 + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
+    }
+    for (int i = 0; i < 2; i++) {
+        hcca->hcca_with_eds.eds[0x3C + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[0x3E]));
+    }
+    hcca->hcca_with_eds.eds[0x3E].NextED = 0;
+
+    hcca->hc_control_ed.NextED = 0;
+    hcca->hc_control_ed.TailP = 0;
+    hcca->hc_control_ed.HeadP = 0;
+    hcca->hc_control_ed.HcControl = 0;
+
+    hcca->hc_bulk_ed.NextED = 0;
+    hcca->hc_bulk_ed.TailP = 0;
+    hcca->hc_bulk_ed.HeadP = 0;
+    hcca->hc_bulk_ed.HcControl = 0;
 }
