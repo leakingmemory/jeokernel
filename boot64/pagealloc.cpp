@@ -145,6 +145,69 @@ uint64_t ppagealloc(uint64_t size) {
     }
     return 0;
 }
+uint32_t ppagealloc32(uint32_t size) {
+    critical_section cli{};
+    std::lock_guard lock{get_pagetables_lock()};
+
+    if ((size & 4095) != 0) {
+        size += 4096;
+    }
+    size /= 4096;
+    pagetable &pml4t = _get_pml4t();
+    uint32_t starting_addr = 0;
+    uint32_t count = 0;
+    if (pml4t[0].present) {
+        auto &pdpt = pml4t[0].get_subtable();
+        for (int j = 0; j < 4; j++) {
+            if (pdpt[j].present) {
+                auto &pdt = pdpt[j].get_subtable();
+                for (int k = 0; k < 512; k++) {
+                    if (pdt[k].present) {
+                        auto &pt = pdt[k].get_subtable();
+                        for (int l = 0; l < 512; l++) {
+                            /* the page acquire check */
+                            if (pt[l].os_phys_avail) {
+                                if (starting_addr != 0) {
+                                    count++;
+                                    if (count == size) {
+                                        uint32_t ending_addr = starting_addr + (count * 4096);
+                                        for (uint32_t addr = starting_addr; addr < ending_addr; addr += 4096) {
+                                            pageentr *pe = get_pageentr64(pml4t, addr);
+                                            pe->os_phys_avail = 0; // GRAB
+                                        }
+                                        return starting_addr;
+                                    }
+                                } else {
+                                    starting_addr = j;
+                                    starting_addr = starting_addr << 9;
+                                    starting_addr |= k;
+                                    starting_addr = starting_addr << 9;
+                                    starting_addr |= l;
+                                    starting_addr = starting_addr << 12;
+                                    if (size == 1) {
+                                        pt[l].os_phys_avail = 0; // GRAB
+                                        return starting_addr;
+                                    } else {
+                                        count = 1;
+                                    }
+                                }
+                            } else {
+                                starting_addr = 0;
+                            }
+                        }
+                    } else {
+                        starting_addr = 0;
+                    }
+                }
+            } else {
+                starting_addr = 0;
+            }
+        }
+    } else {
+        starting_addr = 0;
+    }
+    return 0;
+}
 uint64_t vpagefree(uint64_t addr) {
     critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
