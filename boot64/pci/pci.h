@@ -56,6 +56,20 @@ struct PciBaseAddressRegister {
     uint32_t memory_size();
 };
 
+struct PciRegisterF {
+    union {
+        uint32_t value;
+        struct {
+            uint8_t InterruptLine; // PIC INT#
+            uint8_t InterruptPin; // A/B/C/D
+            uint8_t MinGrant;
+            uint8_t MaxLatency;
+        };
+    };
+
+    PciRegisterF(uint32_t value) : value(value) {}
+};
+
 struct PciDeviceInformation : public DeviceInformation {
     uint8_t bus;
     uint8_t func : 3;
@@ -77,6 +91,8 @@ struct PciDeviceInformation : public DeviceInformation {
     virtual PciDeviceInformation *GetPciInformation() override;
 
     PciBaseAddressRegister readBaseAddressRegister(uint8_t index);
+    uint32_t readStatusRegister();
+    PciRegisterF readRegF();
 };
 
 class pci : public Bus {

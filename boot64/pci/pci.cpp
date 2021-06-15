@@ -177,6 +177,16 @@ PciBaseAddressRegister PciDeviceInformation::readBaseAddressRegister(uint8_t ind
     return bar;
 }
 
+uint32_t PciDeviceInformation::readStatusRegister() {
+    uint8_t offset{(1 << 2)};
+    return read_pci_config(this->bus, this->slot, this->func, offset);
+}
+
+PciRegisterF PciDeviceInformation::readRegF() {
+    uint8_t offset{(0xF << 2)};
+    return read_pci_config(this->bus, this->slot, this->func, offset);
+}
+
 uint64_t PciBaseAddressRegister::addr64() {
     uint64_t addr = (uint64_t) read_pci_config(dev_info.bus, dev_info.slot, dev_info.func, offset + 4);
     addr = addr << 32;
