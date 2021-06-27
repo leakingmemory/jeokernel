@@ -11,7 +11,7 @@ if(USE_CLANG)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -target x86_64-pc-none-elf -g -nostdinc -mno-red-zone -nostdlib -ffreestanding -fno-sanitize=all -DCLANG")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target x86_64-pc-none-elf -g -nostdinc -mno-red-zone -nostdlib -ffreestanding -fno-sanitize=all -DCLANG")
 
-    set(CMAKE_CXX_LINK_EXECUTABLE "clang++-11 -target x86_64-pc-none-elf -Wl,-no-pie -mno-red-zone -nostdinc -nostdlib -fuse-ld=lld -ffreestanding -T ${CMAKE_SOURCE_DIR}/kernel.ld <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES> -lgcc -lgcc_eh -lsupc++")
+    set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_COMPILER} -target x86_64-pc-none-elf -Wl,-no-pie -mno-red-zone -nostdinc -nostdlib -fuse-ld=lld -ffreestanding -T ${CMAKE_SOURCE_DIR}/kernel.ld <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES> -lgcc -lgcc_eh -lsupc++")
 else(USE_CLANG)
 
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -m64 -march=x86-64 -nostdinc -mno-red-zone -nostdlib -ffreestanding")

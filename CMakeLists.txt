@@ -2,8 +2,18 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
 if(DEFINED ENV{USE_CLANG})
         set(USE_CLANG true)
-        set(CMAKE_C_COMPILER clang-11)
-        set(CMAKE_CXX_COMPILER clang++-11)
+
+        execute_process(COMMAND "clang++-12" "--version" RESULT_VARIABLE clang12_avail)
+
+        if (${clang12_avail} EQUAL "0")
+                message("Found clang 12")
+                set(CMAKE_C_COMPILER clang-12)
+                set(CMAKE_CXX_COMPILER clang++-12)
+        else()
+                message("Trying clang 11")
+                set(CMAKE_C_COMPILER clang-11)
+                set(CMAKE_CXX_COMPILER clang++-11)
+        endif()
 endif(DEFINED ENV{USE_CLANG})
 
 cmake_minimum_required(VERSION 3.16)
