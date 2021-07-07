@@ -77,6 +77,10 @@ void boot_stage1(void *multiboot_header_addr) {
     pageentr (&pt3)[512] = (pageentr (&)[512]) pt_raw3;
     uint64_t (&pt_raw4)[512] = *((uint64_t (*)[512]) 0x7000);
     pageentr (&pt4)[512] = (pageentr (&)[512]) pt_raw4;
+    uint64_t (&pt_raw5)[512] = *((uint64_t (*)[512]) 0xa000);
+    pageentr (&pt5)[512] = (pageentr (&)[512]) pt_raw5;
+    uint64_t (&pt_raw6)[512] = *((uint64_t (*)[512]) 0xb000);
+    pageentr (&pt6)[512] = (pageentr (&)[512]) pt_raw6;
 
     for (uint16_t i = 0; i < 512; i++) {
         pml4t_raw[i] = 0;
@@ -86,6 +90,8 @@ void boot_stage1(void *multiboot_header_addr) {
         pt_raw2[i] = 0;
         pt_raw3[i] = 0;
         pt_raw4[i] = 0;
+        pt_raw5[i] = 0;
+        pt_raw6[i] = 0;
     }
 
     pml4t[0].page_ppn = 0x2000 / 4096;
@@ -112,6 +118,14 @@ void boot_stage1(void *multiboot_header_addr) {
     pdt[3].writeable = 1;
     pdt[3].present = 1;
     pdt[3].os_virt_avail = 1;
+    pdt[4].page_ppn = 0xa000 / 4096;
+    pdt[4].writeable = 1;
+    pdt[4].present = 1;
+    pdt[4].os_virt_avail = 1;
+    pdt[5].page_ppn = 0xb000 / 4096;
+    pdt[5].writeable = 1;
+    pdt[5].present = 1;
+    pdt[5].os_virt_avail = 1;
     /*
      * Make first 2MiB adressable,writable,execable
      */
@@ -127,9 +141,11 @@ void boot_stage1(void *multiboot_header_addr) {
         pt2[i].os_virt_avail = 1;
         pt3[i].os_virt_avail = 1;
         pt4[i].os_virt_avail = 1;
+        pt5[i].os_virt_avail = 1;
+        pt6[i].os_virt_avail = 1;
     }
     /*
-     * Make second half, and next, allocateable
+     * Make second half, and next five, allocateable
      */
     for (uint16_t i = 0; i < 512; i++) {
         if (i >= 256) {
@@ -138,16 +154,28 @@ void boot_stage1(void *multiboot_header_addr) {
         }
         pt2[i].os_phys_avail = 1;
         pt2[i].os_virt_avail = 1;
+        pt3[i].os_phys_avail = 1;
+        pt3[i].os_virt_avail = 1;
+        pt4[i].os_phys_avail = 1;
+        pt4[i].os_virt_avail = 1;
+        pt5[i].os_phys_avail = 1;
+        pt5[i].os_virt_avail = 1;
+        pt6[i].os_phys_avail = 1;
+        pt6[i].os_virt_avail = 1;
     }
     vga.display(0, 0, "/");
 
-    // Our stack is at pt2[511]
+    // Our stack is at pt6[511]
     for (uint16_t i = 502; i < 512; i++) {
-        pt2[i].os_phys_avail = 0;
-        pt2[i].os_virt_avail = 0;
+        pt6[i].os_phys_avail = 0;
+        pt6[i].os_virt_avail = 0;
+        pt6[i].writeable = 1;
+        pt6[i].present = 1;
+        pt6[i].execution_disabled = 1;
+        pt6[i].page_ppn = 0xa00 + i;
     }
-    pt2[502].os_virt_start = 1;
-    pt2[502].present = 0; // Crash barrier
+    pt6[502].os_virt_start = 1;
+    pt6[502].present = 0; // Crash barrier
 
     hexstr((char (&)[8]) *hex, (uint32_t) multiboot_header_addr);
     vga.display(2, 13, "multiboot=");
@@ -335,7 +363,7 @@ void boot_stage1(void *multiboot_header_addr) {
                     } else {
                         uint32_t cp = ph.p_filesz;
                         while (vaddr < vaddr_end) {
-                            for (uint32_t phdataaddr = 0x200000; phdataaddr < 0x300000; phdataaddr += 0x1000) {
+                            for (uint32_t phdataaddr = 0x200000; phdataaddr < 0xb00000; phdataaddr += 0x1000) {
                                 pageentr *phys_pe = get_pageentr64(pml4t, phdataaddr);
                                 if (phys_pe->os_phys_avail) {
                                     phys_pe->os_phys_avail = 0;
@@ -431,8 +459,8 @@ good_data_page_alloc:
             }
 
             /*
-             * TODO - Hardcoded to search for space in pt2 page table, the second
-             * leaf table (table 2M-4M, search area 3M-4M).
+             * TODO - Hardcoded to search for space in pt6 page table, the sixth
+             * leaf table (table 2M-12M, search area 11M-12M).
              *
              * The stack at will remain available for Additional Processors to
              * bootstrap. See ap_trampoline.S / ap_started.S / ap_bootstrap.cpp
@@ -443,28 +471,28 @@ good_data_page_alloc:
             for (int i = 256; i < 511; i++) {
                 int j = 0;
                 while (j < stack_pages && (i+j) < 512) {
-                    if (!pt2[i+j].os_virt_avail || !pt2[i+j].os_phys_avail) {
+                    if (!pt6[i+j].os_virt_avail || !pt6[i+j].os_phys_avail) {
                         break;
                     }
                     j++;
                 }
                 if (stack_pages == j) {
-                    stack_ptr = 512 + i;
+                    stack_ptr = 0xa00 + i;
                     stack_ptr = (stack_ptr << 12) + (stack_pages * 4096);
-                    pt2[i].os_virt_avail = 0;
-                    pt2[i].os_virt_start = 1;
-                    pt2[i].writeable = 0;
-                    pt2[i].present = 0;
-                    pt2[i].accessed = 0;
+                    pt6[i].os_virt_avail = 0;
+                    pt6[i].os_virt_start = 1;
+                    pt6[i].writeable = 0;
+                    pt6[i].present = 0;
+                    pt6[i].accessed = 0;
                     for (int j = 1; j < stack_pages; j++) {
-                        pt2[i+j].os_phys_avail = 0;
-                        pt2[i+j].os_virt_avail = 0;
-                        pt2[i+j].os_virt_start = 0;
-                        pt2[i+j].page_ppn = 512 + i + j;
-                        pt2[i+j].writeable = 1;
-                        pt2[i+j].present = 1;
-                        pt2[i+j].accessed = 0;
-                        pt2[i+j].execution_disabled = 1;
+                        pt6[i+j].os_phys_avail = 0;
+                        pt6[i+j].os_virt_avail = 0;
+                        pt6[i+j].os_virt_start = 0;
+                        pt6[i+j].page_ppn = 0xa00 + i + j;
+                        pt6[i+j].writeable = 1;
+                        pt6[i+j].present = 1;
+                        pt6[i+j].accessed = 0;
+                        pt6[i+j].execution_disabled = 1;
                     }
                     goto stack_allocated;
                 }

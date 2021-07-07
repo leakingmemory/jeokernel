@@ -53,8 +53,8 @@ stackTop:
 
 _start:
 bootstrap:
-    mov $0x400000, %esp
-    mov $0x400000, %ebp
+    mov $0xc00000, %esp
+    mov $0xc00000, %ebp
     push %ebx
     mov %ebx,%edi
     call boot_stage1
