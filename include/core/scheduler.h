@@ -285,5 +285,6 @@ public:
 };
 
 tasklist *get_scheduler();
+uint64_t get_ticks();
 
 #endif //JEOKERNEL_SCHEDULER_H

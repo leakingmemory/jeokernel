@@ -58,6 +58,7 @@ static TaskStateSegment *glob_tss[TSS_MAX_CPUS] = {};
 static InterruptTaskState *glob_int_task_state[TSS_MAX_CPUS] = {};
 static InterruptDescriptorTable *idt = nullptr;
 static KernelElf *kernel_elf = nullptr;
+static hw_spinlock *aptimer_lock = nullptr;
 static uint64_t timer_ticks = 0;
 static uint64_t lapic_100ms = 0;
 static cpu_mpfp *mpfp;
@@ -114,6 +115,15 @@ uint64_t get_lapic_100ms() {
 
 tasklist *get_scheduler() {
     return scheduler;
+}
+
+uint64_t get_ticks() {
+    uint64_t ticks{0};
+    {
+        std::lock_guard lock{*aptimer_lock};
+        ticks = timer_ticks;
+    }
+    return ticks;
 }
 
 
@@ -725,12 +735,12 @@ done_with_mem_extension:
 
             timer_ticks = 0;
             const char *characters = "|/-\\|/-\\";
-            hw_spinlock *aptimer_lock = new hw_spinlock;
+            aptimer_lock = new hw_spinlock;
             uint64_t *aptimers = (uint64_t *) malloc(sizeof(aptimers[0]) * mpfp->get_num_cpus());
             for (int i = 0; i < mpfp->get_num_cpus(); i++) {
                 aptimers[i] = 0;
             }
-            get_hw_interrupt_handler().add_handler(0, [&lapic, characters, aptimers, aptimer_lock](Interrupt &interrupt) {
+            get_hw_interrupt_handler().add_handler(0, [&lapic, characters, aptimers](Interrupt &interrupt) {
                 uint8_t cpu_num = lapic.get_cpu_num(*mpfp);
                 bool is_bootstrap_cpu = (mpfp->get_cpu(cpu_num).cpu_flags & 2) != 0;
                 uint64_t prev_vis = 0;
