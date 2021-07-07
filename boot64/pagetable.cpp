@@ -61,9 +61,10 @@ bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update) {
 uint64_t get_phys_from_virt(uint64_t vaddr) {
     std::optional<pageentr> pe = get_pageentr(vaddr);
     if (pe) {
+        uint64_t offset = vaddr & 0x0FFF;
         uint64_t paddr = (*pe).page_ppn;
         paddr = paddr << 12;
-        return paddr;
+        return paddr + offset;
     } else {
         return 0;
     }
