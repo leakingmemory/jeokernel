@@ -105,7 +105,7 @@ class OhciHcca {
 private:
     Phys32Page page;
     ohci_hcca_and_eds *hcca;
-    ohci_endpoint_descriptor_pointer hcca_ed_ptrs[0x1F];
+    ohci_endpoint_descriptor_pointer hcca_ed_ptrs[0x3F];
 public:
     OhciHcca();
     ohci_hcca &Hcca() {
