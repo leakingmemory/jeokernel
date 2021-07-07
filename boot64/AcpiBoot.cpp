@@ -34,6 +34,8 @@ AcpiBoot::AcpiBoot(const MultibootInfoHeader &multiboot) : has8042(false), acpi_
 }) {
 }
 
+void init_acpica(uint64_t root_table_addr);
+
 void AcpiBoot::acpi_boot(const RSDPv1descriptor *rsdp1) {
     ACPI acpi{rsdp1};
     if (acpi.fadt2 != nullptr) {
@@ -47,6 +49,8 @@ void AcpiBoot::acpi_boot(const RSDPv1descriptor *rsdp1) {
         get_klogger() << "ACPI FADT v1\n";
         has8042 = true;
     }
+
+    init_acpica(get_phys_from_virt((uint64_t) rsdp1));
 }
 
 AcpiBoot::~AcpiBoot() {

@@ -1,5 +1,7 @@
 include(../../toolchain.cmake)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DACPI_MACHINE_WIDTH=64 -D_LINUX -DACPI_USE_SYSTEM_CLIBRARY -DACPI_DISASSEMBLER -DACPI_ASL_COMPILER")
+
 set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory(acpica-unix-20210604/source/common)
@@ -15,7 +17,7 @@ add_subdirectory(acpica-unix-20210604/source/components/resources)
 add_subdirectory(acpica-unix-20210604/source/components/tables)
 add_subdirectory(acpica-unix-20210604/source/components/utilities)
 
-add_library(acpica STATIC acpica.cpp)
+add_library(acpica STATIC acpica.cpp acpica_impl.cpp)
 
 target_link_libraries(acpica PRIVATE acpica-common)
 target_link_libraries(acpica PRIVATE acpica-compiler)
@@ -30,4 +32,5 @@ target_link_libraries(acpica PRIVATE acpica-resources)
 target_link_libraries(acpica PRIVATE acpica-tables)
 target_link_libraries(acpica PRIVATE acpica-utilities)
 
-#add_custom_command(TARGET acpica PRE_BUILD COMMAND ${CMAKE_SOURCE_DIR}/boot64/acpi/acpica/build.sh ${CMAKE_SOURCE_DIR}/boot64/acpi/acpica/acpica-unix-20210604.tar_0.gz)
+target_include_directories(acpica PUBLIC ../../../include)
+target_include_directories(acpica PRIVATE acpica-unix-20210604/source/include)
