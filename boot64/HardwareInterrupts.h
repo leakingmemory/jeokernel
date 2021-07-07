@@ -12,7 +12,7 @@
 #include <interrupt_frame.h>
 #include <core/LocalApic.h>
 
-#define HW_INT_N 0x30
+#define HW_INT_N 0x60
 
 class HardwareInterrupts {
 private:
