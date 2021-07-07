@@ -17,10 +17,12 @@ add_subdirectory(display)
 add_subdirectory(usb)
 add_subdirectory(ps2)
 add_subdirectory(keyboard)
+add_subdirectory(strutil)
+add_subdirectory(fstreams)
 
 add_library(bootstrap bootstrap.S)
 
-add_executable(kernel m64-stage1.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp stack.cpp GlobalDescriptorTable.cpp GlobalDescriptorTable.h InterruptDescriptorTable.cpp InterruptDescriptorTable.h TaskStateSegment.cpp TaskStateSegment.h InterruptTaskState.cpp InterruptTaskState.h interrupt.S interrupt.cpp PageFault.cpp PageFault.h elf.cpp KernelElf.cpp KernelElf.h vmem.cpp cpu_mpfp.cpp LocalApic.cpp Pic.cpp Pic.h IOApic.cpp IOApic.h HardwareInterrupts.cpp HardwareInterrupts.h PITTimerCalib.cpp PITTimerCalib.h ap_trampoline.S start_ap.cpp start_ap.h ap_started.S ap_bootstrap.cpp nanotime.cpp AcpiBoot.cpp AcpiBoot.h)
+add_executable(kernel m64-stage1.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp stack.cpp GlobalDescriptorTable.cpp GlobalDescriptorTable.h InterruptDescriptorTable.cpp InterruptDescriptorTable.h TaskStateSegment.cpp TaskStateSegment.h InterruptTaskState.cpp InterruptTaskState.h interrupt.S interrupt.cpp PageFault.cpp PageFault.h elf.cpp KernelElf.cpp KernelElf.h vmem.cpp cpu_mpfp.cpp LocalApic.cpp Pic.cpp Pic.h IOApic.cpp IOApic.h HardwareInterrupts.cpp HardwareInterrupts.h PITTimerCalib.cpp PITTimerCalib.h ap_trampoline.S start_ap.cpp start_ap.h ap_started.S ap_bootstrap.cpp nanotime.cpp AcpiBoot.cpp AcpiBoot.h link_stubs.cpp ctime.cpp perror.cpp)
 
 target_include_directories(kernel PRIVATE ../include)
 
@@ -36,3 +38,5 @@ target_link_libraries(kernel PRIVATE display)
 target_link_libraries(kernel PRIVATE usb)
 target_link_libraries(kernel PRIVATE ps2)
 target_link_libraries(kernel PRIVATE keyboard)
+target_link_libraries(kernel PRIVATE strutil)
+target_link_libraries(kernel PRIVATE fstreams)

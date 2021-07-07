@@ -15,13 +15,18 @@ extern "C" {
     int strcmp(const char *str1, const char *str2);
     void *memset(void *ptr, int c, size_t n);
     size_t strlen(const char *str);
+    size_t strnlen(const char *str, size_t maxlen);
     char *strcpy(char *dst, const char *src);
+    char *strncpy(char *dst, const char *src, size_t n);
     int memcmp(const void *p1, const void *p2, size_t n);
     char *strcat(char *str, const char *src);
+    char *strncat(char *str, const char *src, size_t n);
     char *strtok(char *str, const char *delim);
+    char *strtok_r(char *str, const char *delim, char **saveptr);
     char *strchr(char *str, int c);
     char *strrchr(char *str, int c);
     int strncmp(const char *str1, const char *str2, size_t n);
+    char *strstr(const char *haystack, const char *needle);
 
 #define strerror(errno) ("error (strerror not implemented)")
 

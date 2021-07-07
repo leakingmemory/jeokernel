@@ -15,6 +15,8 @@ extern "C" {
 
     time_t time(time_t *tloc);
 
+    char *ctime(const time_t *timep);
+
 #ifdef __cplusplus
 }
 #endif

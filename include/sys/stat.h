@@ -16,6 +16,8 @@ extern "C" {
     struct stat {
     };
 
+    int stat(const char *pathname, struct stat *statbuf);
+
 #ifdef __cplusplus
 };
 #endif

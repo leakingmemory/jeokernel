@@ -7,4 +7,7 @@
 
 extern int errno;
 
+#define ENOENT 2
+#define EINTR  4
+
 #endif //JEOKERNEL_ERRNO_H

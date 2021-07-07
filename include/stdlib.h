@@ -5,6 +5,12 @@
 #ifndef JEOKERNEL_STDLIB_H
 #define JEOKERNEL_STDLIB_H
 
+#include <core/malloc.h>
+
+#ifndef NULL
+#define NULL ((void *) 0)
+#endif
+
 unsigned long strtoul(const char *nptr, char **endptr, int base);
 
 void exit(int code);
