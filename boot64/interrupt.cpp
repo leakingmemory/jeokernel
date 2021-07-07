@@ -6,6 +6,8 @@
 #include <interrupt_frame.h>
 #include <string>
 #include <core/scheduler.h>
+#include <concurrency/critical_section.h>
+#include <core/nanotime.h>
 #include "PageFault.h"
 #include "CpuExceptionTrap.h"
 #include "KernelElf.h"
@@ -27,6 +29,13 @@ void Interrupt::print_debug() const {
             << " 5 " << xmm5_high() << xmm5_low() << "\n"
             << "xmm6 " << xmm6_high() << xmm6_low()
             << " 7 " << xmm7_high() << xmm7_low() << "\n";
+    if (is_nanotime_available()) {
+        critical_section cli{};
+        uint64_t nanos = get_nanotime_ref() + 2000000000;
+        while (nanos > get_nanotime_ref()) {
+            asm("pause");
+        }
+    }
     get_klogger() << "Stack:\n";
     const KernelElf &kernelElf = get_kernel_elf();
     {
