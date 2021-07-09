@@ -65,6 +65,16 @@ void acpica_lib::bootstrap() {
         }
     }
 
+    Status = AcpiLoadTables();
+    if (ACPI_FAILURE(Status)) {
+        {
+            std::stringstream ss{};
+            ss << "Error code " << Status << " from acpica : " << AcpiFormatException(Status) << "\n";
+            get_klogger() << ss.str().c_str();
+        }
+        wild_panic("Failed to load acpica tables");
+    }
+
     {
         std::stringstream ss{};
         ss << "ACPICA initialized with subsystem and tables\n";
