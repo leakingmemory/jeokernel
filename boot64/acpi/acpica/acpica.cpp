@@ -77,7 +77,23 @@ void acpica_lib::bootstrap() {
 
     {
         std::stringstream ss{};
-        ss << "ACPICA initialized with subsystem and tables\n";
+        ss << "ACPICA initialized with subsystem and tables, enabling\n";
+        get_klogger() << ss.str().c_str();
+    }
+
+    Status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
+    if (ACPI_FAILURE(Status)) {
+        {
+            std::stringstream ss{};
+            ss << "Error code " << Status << " from acpica : " << AcpiFormatException(Status) << "\n";
+            get_klogger() << ss.str().c_str();
+        }
+        wild_panic("Failed to enable acpica subsystem");
+    }
+
+    {
+        std::stringstream ss{};
+        ss << "ACPICA enabled subsystem\n";
         get_klogger() << ss.str().c_str();
     }
 }
@@ -342,6 +358,7 @@ AcpiOsInstallInterruptHandler (
         ACPI_OSD_HANDLER        ServiceRoutine,
         void                    *Context) {
     get_acpica().install_int_handler(InterruptNumber, ServiceRoutine, Context);
+    return AE_OK;
 }
 
 ACPI_STATUS
@@ -349,6 +366,7 @@ AcpiOsRemoveInterruptHandler (
         UINT32                  InterruptNumber,
         ACPI_OSD_HANDLER        ServiceRoutine) {
     get_acpica().remove_int_handler(InterruptNumber, ServiceRoutine);
+    return AE_OK;
 }
 
 void

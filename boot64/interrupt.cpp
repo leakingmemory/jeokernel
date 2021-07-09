@@ -8,10 +8,14 @@
 #include <core/scheduler.h>
 #include <concurrency/critical_section.h>
 #include <core/nanotime.h>
+#include <sstream>
 #include "PageFault.h"
 #include "CpuExceptionTrap.h"
 #include "KernelElf.h"
 #include "HardwareInterrupts.h"
+#include "CpuInterrupts.h"
+
+//#define PRINT_HANDLED_CPU_INTR
 
 void Interrupt::print_debug() const {
     get_klogger() << "Interrupt " << _interrupt << " at " << cs() << ":" << rip() << " rflags " << rflags() << " err " << error_code() << "\n"
@@ -135,6 +139,19 @@ extern "C" {
     void interrupt_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame, x86_fpu_state *fpusse) {
         InterruptCpuFrame *cpuFrame = (InterruptCpuFrame *) (void *) (((uint8_t *) stack_frame) + (sizeof(*stack_frame) - 8)/*error-code-norm-not-avail*/);
         Interrupt interrupt{cpuFrame, stack_frame, fpusse, (uint8_t) interrupt_vector};
+        if (interrupt_vector < 0x20) {
+            bool handled = get_cpu_interrupt_handler().handle(interrupt);
+            if (handled) {
+#ifdef PRINT_HANDLED_CPU_INTR
+                {
+                    std::stringstream ss{};
+                    ss << "Cpu-range intr " << std::hex << (unsigned int) interrupt_vector << " handled\n";
+                    get_klogger() << ss.str().c_str();
+                }
+#endif
+                return;
+            }
+        }
         switch (interrupt_vector) {
             case 0: {
                 CpuExceptionTrap trap{"division by zero", interrupt};

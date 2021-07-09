@@ -14,6 +14,7 @@
 #include <sstream>
 #include "../../HardwareInterrupts.h"
 #include "../../pci/pci.h"
+#include "../../CpuInterrupts.h"
 
 //#define PRINT_ACPICA_MEMMAPS
 //#define DELAY_MEMMAPS
@@ -200,28 +201,54 @@ bool acpica_lib_impl::read_memory(uint64_t addr, uint64_t &value, uint32_t width
 }
 
 void acpica_lib_impl::install_int_handler(uint8_t intr, uint32_t (*handler)(void *), void *ctx) {
-    if (intr < 0x20 || intr >= 0x80) {
+    if (intr < 0x20) {
+        acpica_int_handler *h = new acpica_int_handler;
+        auto &cpu_ints = get_cpu_interrupt_handler();
+        h->handler = handler;
+        h->intr = intr;
+        std::lock_guard lock{int_h_lock};
+        h->handle = cpu_ints.add_handler(intr, [handler, ctx](Interrupt &intr) {
+            handler(ctx);
+        });
+        int_handlers.push_back(h);
+    } else if (intr >= 0x80) {
+        {
+            std::stringstream ss{};
+            ss << "Requested handling of intr " << std::hex << (unsigned int) intr << "\n";
+            get_klogger() << ss.str().c_str();
+        }
         wild_panic("Intr handler setup out of range (0x20 - 0x7F)");
+    } else {
+        acpica_int_handler *h = new acpica_int_handler;
+        auto &hw_ints = get_hw_interrupt_handler();
+        h->handler = handler;
+        h->intr = intr;
+        std::lock_guard lock{int_h_lock};
+        h->handle = hw_ints.add_handler(intr - 0x20, [handler, ctx](Interrupt &intr) {
+            handler(ctx);
+        });
+        int_handlers.push_back(h);
     }
-    acpica_int_handler *h = new acpica_int_handler;
-    auto &hw_ints = get_hw_interrupt_handler();
-    h->handler = handler;
-    h->intr = intr;
-    std::lock_guard lock{int_h_lock};
-    h->handle = hw_ints.add_handler(intr - 0x20, [handler, ctx] (Interrupt &intr) {
-        handler(ctx);
-    });
-    int_handlers.push_back(h);
 }
 
 void acpica_lib_impl::remove_int_handler(uint8_t intr, uint32_t (*handler)(void *)) {
-    auto &hw_ints = get_hw_interrupt_handler();
     std::vector<acpica_int_handler *> remove{};
     std::lock_guard lock{int_h_lock};
-    for (auto *h : int_handlers) {
-        if (h->handler == handler && h->intr == intr) {
-            hw_ints.remove_handler(h->handle);
-            remove.push_back(h);
+    if (intr < 0x20) {
+        auto &cpu_ints = get_cpu_interrupt_handler();
+        for (auto *h : int_handlers) {
+            if (h->handler == handler && h->intr == intr) {
+                cpu_ints.remove_handler(h->handle);
+                remove.push_back(h);
+            }
+        }
+    } else {
+        auto &hw_ints = get_hw_interrupt_handler();
+        for (auto *h : int_handlers) {
+            if (h->handler == handler && h->intr == intr) {
+                hw_ints.remove_handler(h->handle);
+                remove.push_back(h);
+            }
         }
     }
     for (auto *h : remove) {

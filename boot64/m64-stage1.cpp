@@ -27,6 +27,7 @@
 #include <mutex>
 #include "PITTimerCalib.h"
 #include "HardwareInterrupts.h"
+#include "CpuInterrupts.h"
 #include <core/vmem.h>
 #include "start_ap.h"
 #include "AcpiBoot.h"
@@ -327,6 +328,7 @@ done_with_mem_extension:
         }
 
         create_hw_interrupt_handler();
+        create_cpu_interrupt_handler();
         mpfp = new cpu_mpfp{reserved_mem};
         LocalApic lapic{*mpfp};
 
