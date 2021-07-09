@@ -6,11 +6,18 @@
 extern "C" {
     #include <acpi.h>
     #include <acpiosxf.h>
+    #include <acpixf.h>
+    #include <acobject.h>
+    #include <acglobal.h>
 }
 #include <klogger.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <sstream>
+
+//#define INIT_TABLES_WITH_INTS_DISABLED
+#define USE_ACPI_FIND_ROOT
+//#define WARN_NULL_LOCK
 
 acpica_lib::acpica_lib() {
 }
@@ -35,6 +42,33 @@ void acpica_lib::bootstrap() {
             get_klogger() << ss.str().c_str();
         }
         wild_panic("Failed to initialize acpica subsystem");
+    }
+
+    {
+        std::stringstream ss{};
+        ss << "ACPICA initialized subsystem, tables pending\n";
+        get_klogger() << ss.str().c_str();
+    }
+
+    {
+#ifdef INIT_TABLES_WITH_INTS_DISABLED
+        critical_section cli{};
+#endif
+        Status = AcpiInitializeTables((ACPI_TABLE_DESC *) NULL, 32, FALSE);
+        if (ACPI_FAILURE(Status)) {
+            {
+                std::stringstream ss{};
+                ss << "Error code " << Status << " from acpica : " << AcpiFormatException(Status) << "\n";
+                get_klogger() << ss.str().c_str();
+            }
+            wild_panic("Failed to initialize acpica tables");
+        }
+    }
+
+    {
+        std::stringstream ss{};
+        ss << "ACPICA initialized with subsystem and tables\n";
+        get_klogger() << ss.str().c_str();
     }
 }
 
@@ -98,6 +132,9 @@ ACPI_CPU_FLAGS
 AcpiOsAcquireLock(
         ACPI_SPINLOCK Handle) {
     if (Handle == NULL) {
+#ifdef WARN_NULL_LOCK
+        get_klogger() << "Warning: ACPICA tries to lock NULL\n";
+#endif
         return 0;
     }
     return (uint64_t) get_acpica().acquire_lock((void *) Handle);
@@ -373,7 +410,23 @@ AcpiOsGetTimer (
 ACPI_PHYSICAL_ADDRESS
 AcpiOsGetRootPointer (
         void) {
+#ifdef USE_ACPI_FIND_ROOT
+    ACPI_PHYSICAL_ADDRESS root_p;
+    get_klogger() << "Looking for root pointer\n";
+    ACPI_STATUS status = AcpiFindRootPointer(&root_p);
+    if (status != AE_OK) {
+        get_klogger() << "Failed to find root pointer\n";
+        root_p = get_acpica().get_root_addr();
+    }
+    {
+        std::stringstream ss{};
+        ss << "Found root pointer " << std::hex << root_p << "\n";
+        get_klogger() << ss.str().c_str();
+    }
+    return root_p;
+#else
     return get_acpica().get_root_addr();
+#endif
 }
 
 ACPI_STATUS

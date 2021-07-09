@@ -11,8 +11,12 @@
 #include <cpuio.h>
 #include <core/vmem.h>
 #include <pagealloc.h>
+#include <sstream>
 #include "../../HardwareInterrupts.h"
 #include "../../pci/pci.h"
+
+//#define PRINT_ACPICA_MEMMAPS
+//#define DELAY_MEMMAPS
 
 acpica_lib_impl::acpica_lib_impl(uint64_t root_table_addr) : acpica_lib(), int_h_lock(), int_handlers(), root_table_addr(root_table_addr) {
 }
@@ -172,7 +176,7 @@ bool acpica_lib_impl::read_memory(uint64_t addr, uint64_t &value, uint32_t width
     vmem vm{0x1000};
     uint64_t pageaddr = addr & 0xFFFFFFFFFFFFF000;
     uint64_t offset = addr & 0x0FFF;
-    vm.page(0).rwmap(pageaddr, true, false);
+    vm.page(0).rmap(pageaddr);
     uint8_t *cptr = (uint8_t *) vm.pointer();
     cptr += offset;
     void *ptr = (void *) cptr;
@@ -261,6 +265,18 @@ void *acpica_lib_impl::map_memory(uint64_t physaddr, size_t size) {
         update_pageentr(vaddr + addr, *pe);
         addr += 0x1000;
     }
+#ifdef PRINT_ACPICA_MEMMAPS
+    {
+        std::stringstream ss{};
+        ss << "ACPICA map " << std::hex << (uint64_t) physaddr << "(" << (uint64_t) size
+           << ")" << (uint64_t) physpage << " ==> " << (uint64_t) vaddr << "+" << (uint64_t) offset << "\n";
+        get_klogger() << ss.str().c_str();
+    }
+#endif
+    reload_pagetables();
+#ifdef DELAY_MEMMAPS
+    stall_nano(10000000);
+#endif
     vaddr += offset;
     return ((void *) vaddr);
 }
@@ -268,7 +284,15 @@ void *acpica_lib_impl::map_memory(uint64_t physaddr, size_t size) {
 void acpica_lib_impl::unmap_memory(void *addr, size_t size) {
     uint64_t offset = ((uint64_t) addr) & 0x0FFF;
     uint64_t pageaddr = ((uint64_t) addr) - offset;
+#ifdef PRINT_ACPICA_MEMMAPS
+    {
+        std::stringstream ss{};
+        ss << "ACPICA unmap " << std::hex << (uint64_t) addr << " => " << (uint64_t) pageaddr << "\n";
+        get_klogger() << ss.str().c_str();
+    }
+#endif
     vpagefree(pageaddr);
+    reload_pagetables();
 }
 
 bool acpica_lib_impl::write_pci_reg(uint16_t segment, uint16_t bus, uint16_t device, uint16_t function, uint32_t reg,

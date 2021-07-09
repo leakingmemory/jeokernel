@@ -191,8 +191,8 @@ extern "C" {
                     asm("hlt");
                 }
             }
-            uint64_t phys_mem_watermark = 0x400000;
-            uint64_t end_phys_addr = 0x200000;
+            uint64_t phys_mem_watermark = 0xc00000;
+            uint64_t end_phys_addr = 0xc00000;
             {
                 uint64_t phys_mem_added = 0;
                 const auto *part = multiboot2.first_part();
@@ -856,8 +856,8 @@ done_with_mem_extension:
 
         {
             std::thread pci_scan_thread{[&acpi_boot]() {
-                detect_root_pcis();
                 acpi_boot.join();
+                detect_root_pcis();
                 if (acpi_boot.has_8042()) {
                     ps2 *ps2dev = new ps2();
                     devices().add(*ps2dev);

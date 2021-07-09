@@ -11,6 +11,8 @@
 #include <concurrency/hw_spinlock.h>
 #include <functional>
 #include <vector>
+#include <sstream>
+#include <thread>
 
 enum AcpiExecuteType
 {
@@ -55,12 +57,26 @@ public:
         delete ctx;
     }
     void *acquire_lock(void *lock) {
+#if 0
+        {
+            std::stringstream ss{};
+            ss << "Acquire lock " << std::hex << (uint64_t) lock << "\n";
+            get_klogger() << ss.str().c_str();
+        }
+#endif
         hw_spinlock *lck = (hw_spinlock *) lock;
         acpica_lock_context *ctx = acquire_lock(*lck);
         return (void *) ctx;
     }
     void release_lock(void *lock, void *cpuflags) {
         acpica_lock_context *ctx = (acpica_lock_context *) cpuflags;
+#if 0
+        {
+            std::stringstream ss{};
+            ss << "Release lock " << std::hex << (uint64_t) lock <<" ctx=" << (uint64_t) cpuflags << "\n";
+            get_klogger() << ss.str().c_str();
+        }
+#endif
         release_lock(ctx);
     }
     virtual void *create_semaphore(uint32_t max, uint32_t initial) = 0;
