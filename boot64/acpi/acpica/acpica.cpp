@@ -91,9 +91,19 @@ void acpica_lib::bootstrap() {
         wild_panic("Failed to enable acpica subsystem");
     }
 
+    Status = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION);
+    if (ACPI_FAILURE(Status)) {
+        {
+            std::stringstream ss{};
+            ss << "Error code " << Status << " from acpica : " << AcpiFormatException(Status) << "\n";
+            get_klogger() << ss.str().c_str();
+        }
+        wild_panic("Failed to fully initialize acpica objects");
+    }
+
     {
         std::stringstream ss{};
-        ss << "ACPICA enabled subsystem\n";
+        ss << "ACPICA enabled subsystem and objects - completed initialization process\n";
         get_klogger() << ss.str().c_str();
     }
 }
