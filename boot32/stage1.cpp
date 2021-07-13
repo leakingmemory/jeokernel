@@ -81,6 +81,14 @@ void boot_stage1(void *multiboot_header_addr) {
     pageentr (&pt5)[512] = (pageentr (&)[512]) pt_raw5;
     uint64_t (&pt_raw6)[512] = *((uint64_t (*)[512]) 0xb000);
     pageentr (&pt6)[512] = (pageentr (&)[512]) pt_raw6;
+    uint64_t (&pt_raw7)[512] = *((uint64_t (*)[512]) 0xc000);
+    pageentr (&pt7)[512] = (pageentr (&)[512]) pt_raw7;
+    uint64_t (&pt_raw8)[512] = *((uint64_t (*)[512]) 0xd000);
+    pageentr (&pt8)[512] = (pageentr (&)[512]) pt_raw8;
+    uint64_t (&pt_raw9)[512] = *((uint64_t (*)[512]) 0xe000);
+    pageentr (&pt9)[512] = (pageentr (&)[512]) pt_raw9;
+    uint64_t (&pt_raw10)[512] = *((uint64_t (*)[512]) 0xf000);
+    pageentr (&pt10)[512] = (pageentr (&)[512]) pt_raw10;
 
     for (uint16_t i = 0; i < 512; i++) {
         pml4t_raw[i] = 0;
@@ -92,6 +100,10 @@ void boot_stage1(void *multiboot_header_addr) {
         pt_raw4[i] = 0;
         pt_raw5[i] = 0;
         pt_raw6[i] = 0;
+        pt_raw7[i] = 0;
+        pt_raw8[i] = 0;
+        pt_raw9[i] = 0;
+        pt_raw10[i] = 0;
     }
 
     pml4t[0].page_ppn = 0x2000 / 4096;
@@ -126,6 +138,22 @@ void boot_stage1(void *multiboot_header_addr) {
     pdt[5].writeable = 1;
     pdt[5].present = 1;
     pdt[5].os_virt_avail = 1;
+    pdt[6].page_ppn = 0xc000 / 4096;
+    pdt[6].writeable = 1;
+    pdt[6].present = 1;
+    pdt[6].os_virt_avail = 1;
+    pdt[7].page_ppn = 0xd000 / 4096;
+    pdt[7].writeable = 1;
+    pdt[7].present = 1;
+    pdt[7].os_virt_avail = 1;
+    pdt[8].page_ppn = 0xe000 / 4096;
+    pdt[8].writeable = 1;
+    pdt[8].present = 1;
+    pdt[8].os_virt_avail = 1;
+    pdt[9].page_ppn = 0xf000 / 4096;
+    pdt[9].writeable = 1;
+    pdt[9].present = 1;
+    pdt[9].os_virt_avail = 1;
     /*
      * Make first 2MiB adressable,writable,execable
      */
@@ -143,6 +171,10 @@ void boot_stage1(void *multiboot_header_addr) {
         pt4[i].os_virt_avail = 1;
         pt5[i].os_virt_avail = 1;
         pt6[i].os_virt_avail = 1;
+        pt7[i].os_virt_avail = 1;
+        pt8[i].os_virt_avail = 1;
+        pt9[i].os_virt_avail = 1;
+        pt10[i].os_virt_avail = 1;
     }
     /*
      * Make second half, and next five, allocateable
@@ -162,6 +194,14 @@ void boot_stage1(void *multiboot_header_addr) {
         pt5[i].os_virt_avail = 1;
         pt6[i].os_phys_avail = 1;
         pt6[i].os_virt_avail = 1;
+        pt7[i].os_phys_avail = 1;
+        pt7[i].os_virt_avail = 1;
+        pt8[i].os_phys_avail = 1;
+        pt8[i].os_virt_avail = 1;
+        pt9[i].os_phys_avail = 1;
+        pt9[i].os_virt_avail = 1;
+        pt10[i].os_phys_avail = 1;
+        pt10[i].os_virt_avail = 1;
     }
     vga.display(0, 0, "/");
 
