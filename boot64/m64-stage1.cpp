@@ -205,6 +205,7 @@ extern "C" {
                         int num = memoryMap.get_num_entries();
                         uint64_t phys_mem_watermark_next = phys_mem_watermark;
                         bool first_pass = true;
+                        uint64_t memory_extended = 0;
                         do {
                             if (!first_pass) {
                                 get_klogger() << "Adding more physical memory:\n";
@@ -253,7 +254,7 @@ extern "C" {
                                               << ", end " << end_phys_addr << "\n";
                             }
                             uint32_t mem_ext_consumed = 0;
-                            uint64_t memory_extended = 0;
+                            memory_extended = 0;
                             for (int i = 0; i < 512; i++) {
                                 if (pml4t[i].present == 0) {
                                     pagetable *pt = allocate_pageentr();
@@ -309,7 +310,7 @@ done_with_mem_extension:
                                               << mem_ext_consumed << "\n";
                             }
                             first_pass = false;
-                        } while (phys_mem_added > 0);
+                        } while (phys_mem_added > 0 || memory_extended > 0);
                         get_klogger() << "Done with mapping physical memory\n";
                     }
                     if (part->hasNext(multiboot2)) {
