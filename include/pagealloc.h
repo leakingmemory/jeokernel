@@ -13,6 +13,7 @@
 #endif
 
 uint64_t vpagealloc(uint64_t size);
+void pmemcounts();
 uint64_t ppagealloc(uint64_t size);
 uint32_t ppagealloc32(uint32_t size);
 uint64_t vpagefree(uint64_t addr);

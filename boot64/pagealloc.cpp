@@ -7,6 +7,7 @@
 #include <concurrency/hw_spinlock.h>
 #include <concurrency/critical_section.h>
 #include <mutex>
+#include <sstream>
 
 #define _get_pml4t()  (*((pagetable *) 0x1000))
 
@@ -79,7 +80,49 @@ uint64_t vpagealloc(uint64_t size) {
     }
     return 0;
 }
+
+void pmemcounts() {
+    uint64_t scan = 0;
+    uint64_t free_pages = 0;
+    {
+        critical_section cli{};
+        std::lock_guard lock{get_pagetables_lock()};
+
+        pagetable &pml4t = _get_pml4t();
+        uint64_t count = 0;
+        for (int i = 0; i < 512; i++) {
+            if (pml4t[i].present) {
+                auto &pdpt = pml4t[i].get_subtable();
+                for (int j = 0; j < 512; j++) {
+                    if (pdpt[j].present) {
+                        auto &pdt = pdpt[j].get_subtable();
+                        for (int k = 0; k < 512; k++) {
+                            if (pdt[k].present) {
+                                auto &pt = pdt[k].get_subtable();
+                                for (int l = 0; l < 512; l++) {
+                                    ++scan;
+                                    /* the page acquire check */
+                                    if (pt[l].os_phys_avail) {
+                                        ++free_pages;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    get_klogger() << "Ppages " << scan << " pages scanned, " << free_pages << " free encountered\n";
+}
+
+//#define DEBUG_PALLOC_FAILURE
 uint64_t ppagealloc(uint64_t size) {
+#ifdef DEBUG_PALLOC_FAILURE
+    uint64_t scan = 0;
+    uint64_t free_pages = 0;
+    {
+#endif
     critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
 
@@ -100,8 +143,14 @@ uint64_t ppagealloc(uint64_t size) {
                         if (pdt[k].present) {
                             auto &pt = pdt[k].get_subtable();
                             for (int l = 0; l < 512; l++) {
+#ifdef DEBUG_PALLOC_FAILURE
+                                ++scan;
+#endif
                                 /* the page acquire check */
                                 if (pt[l].os_phys_avail) {
+#ifdef DEBUG_PALLOC_FAILURE
+                                    ++free_pages;
+#endif
                                     if (starting_addr != 0) {
                                         count++;
                                         if (count == size) {
@@ -143,6 +192,10 @@ uint64_t ppagealloc(uint64_t size) {
             starting_addr = 0;
         }
     }
+#ifdef DEBUG_PALLOC_FAILURE
+    }
+    get_klogger() << "Ppage allocation failure " << scan << " pages scanned, " << free_pages << " free encountered\n";
+#endif
     return 0;
 }
 uint32_t ppagealloc32(uint32_t size) {
