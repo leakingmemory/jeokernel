@@ -518,6 +518,9 @@ void ppagefree(uint64_t addr, uint64_t size) {
         paddr = paddr >> 9;
         int i = paddr & 511;
         pageentr &pe = pml4t[i].get_subtable()[j].get_subtable()[k].get_subtable()[l];
+        if (pe.os_phys_avail) {
+            wild_panic("PFree pointed at available page");
+        }
         pe.os_phys_avail = 1;
         pe.os_zero = 1;
         ++addr;
