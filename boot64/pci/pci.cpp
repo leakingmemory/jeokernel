@@ -38,6 +38,26 @@ uint32_t read_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset
     }
 }
 
+uint32_t read8_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset) {
+    if (slot > 0x1F || func > 7) {
+        return 0xFFFFFFFF;
+    }
+    uint32_t addr = bus;
+    addr |= 0x8000;
+    addr = addr << 5;
+    addr |= slot;
+    addr = addr << 3;
+    addr |= func;
+    addr = addr << 8;
+    addr |= offset;
+    std::lock_guard lock(*pci_bus_mtx);
+    {
+        critical_section cli{}; // No context switches between
+        outportl(PCI_CONFIG_ADDRESS, addr);
+        return inportb(PCI_CONFIG_DATA);
+    }
+}
+
 void write_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t value) {
     if (slot > 0x1F || func > 7) {
         asm("ud2");
