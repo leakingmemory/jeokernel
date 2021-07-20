@@ -347,7 +347,7 @@ bool acpica_lib_impl::read_pci_reg(uint16_t segment, uint16_t bus, uint16_t devi
                                     uint64_t &value, uint32_t width) {
     switch (width) {
         case 8: {
-            wild_panic("acpica: read pci 8bit reg not implemented");
+            value = read8_pci_config(bus, device, function, reg);
         } break;
         case 16: {
             wild_panic("acpica: read pci 16bit reg not implemented");
