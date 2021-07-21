@@ -59,7 +59,18 @@ void Interrupt::print_debug() const {
     get_klogger() << "\n";*/
     std::vector<std::tuple<size_t,uint64_t>> calls = unwind_stack();
     caller_stack stack = get_caller_stack();
+    uint16_t count = 0;
     for (const std::tuple<size_t,uint64_t> &value : calls) {
+        if (count > 0 && (count % 10) == 0) {
+            if (is_nanotime_available()) {
+                critical_section cli{};
+                uint64_t nanos = get_nanotime_ref() + 2000000000;
+                while (nanos > get_nanotime_ref()) {
+                    asm("pause");
+                }
+            }
+        }
+        ++count;
         {
             uint64_t ripaddr = std::get<1>(value);
             std::tuple<uint64_t,const char *> sym = kernelElf.get_symbol((void *) ripaddr);
