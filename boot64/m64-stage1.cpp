@@ -846,6 +846,7 @@ done_with_mem_extension:
         }};
         clock_thread.detach();
 
+        init_pci();
         init_devices();
         init_keyboard();
         get_drivers().AddDriver(new vga_driver());

@@ -153,8 +153,11 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
     return {info};
 }
 
-void detect_root_pcis() {
+void init_pci() {
     pci_bus_mtx = new std::mutex;
+}
+
+void detect_root_pcis() {
 #ifdef USE_APIC_FOR_PCI_BUSES
     cpu_mpfp *mpfp = get_mpfp();
     if (mpfp != nullptr) {
