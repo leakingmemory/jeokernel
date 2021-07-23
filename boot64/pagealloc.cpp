@@ -261,6 +261,7 @@ uint32_t ppagealloc32(uint32_t size) {
     }
     return 0;
 }
+
 uint64_t vpagefree(uint64_t addr) {
     critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
@@ -301,6 +302,45 @@ uint64_t vpagefree(uint64_t addr) {
     }
     return size << 12;
 }
+
+uint64_t vpagesize(uint64_t addr) {
+    critical_section cli{};
+    std::lock_guard lock{get_pagetables_lock()};
+
+    const pagetable &pml4t = _get_pml4t();
+    addr = addr >> 12;
+    uint64_t first = addr;
+    uint64_t size;
+    while (true) {
+        uint64_t paddr = addr;
+        int l = paddr & 511;
+        paddr = paddr >> 9;
+        int k = paddr & 511;
+        paddr = paddr >> 9;
+        int j = paddr & 511;
+        paddr = paddr >> 9;
+        int i = paddr & 511;
+        if (pml4t[i].present == 0) {
+            break;
+        }
+        const auto &pdpt = pml4t[i].get_subtable();
+        if (pdpt[j].present == 0) {
+            break;
+        }
+        const auto &pdt = pdpt[j].get_subtable();
+        if (pdt[k].present == 0) {
+            break;
+        }
+        const pageentr &pe = pdt[k].get_subtable()[l];
+        if (pe.os_virt_avail || (first != addr && pe.os_virt_start)) {
+            break;
+        }
+        ++addr;
+        ++size;
+    }
+    return size << 12;
+}
+
 
 uint64_t pv_fix_pagealloc(uint64_t size) {
     critical_section cli{};

@@ -7,7 +7,7 @@
 #include <mutex>
 #include "mallocator.h"
 
-void *MemoryAllocator::sm_allocate(uint32_t size) {
+void *BasicMemoryAllocator::sm_allocate(uint32_t size) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
@@ -35,13 +35,13 @@ void *MemoryAllocator::sm_allocate(uint32_t size) {
     return ptr;
 }
 
-void MemoryAllocator::sm_free(void *ptr) {
+void BasicMemoryAllocator::sm_free(void *ptr) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
     memoryArea.alloctable.sm_free(ptr);
 }
-uint32_t MemoryAllocator::sm_sizeof(void *ptr) {
+uint32_t BasicMemoryAllocator::sm_sizeof(void *ptr) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
@@ -49,7 +49,7 @@ uint32_t MemoryAllocator::sm_sizeof(void *ptr) {
 }
 
 
-MemoryAllocator::~MemoryAllocator() {
+BasicMemoryAllocator::~BasicMemoryAllocator() {
     uint64_t pageaddr_end = ((uint64_t) this) + sizeof(*this);
     for (uint64_t pageaddr = (uint64_t) this; pageaddr < pageaddr_end; pageaddr += 0x1000) {
         std::optional<pageentr> pe = get_pageentr(pageaddr);
@@ -62,4 +62,8 @@ MemoryAllocator::~MemoryAllocator() {
         }
     }
     reload_pagetables();
+}
+
+bool BasicMemoryAllocator::sm_owned(void *ptr) {
+    return memoryArea.alloctable.sm_owned(ptr);
 }

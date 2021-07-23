@@ -2,11 +2,13 @@
 // Created by sigsegv on 23.04.2021.
 //
 
-#include <new>
 #include <strings.h>
 #include <core/malloc.h>
 #include <klogger.h>
 #include "mallocator.h"
+#include "ChainedAllocator.h"
+
+#define MAX_NONPAGED_SIZE 8192
 
 extern "C" {
     static MemoryAllocator *memoryAllocator = nullptr;
@@ -20,13 +22,33 @@ extern "C" {
     static const MallocImpl *impl = nullptr;
 
     void *wild_malloc(uint32_t size) {
-        return memoryAllocator->sm_allocate(size);
+        if (size < MAX_NONPAGED_SIZE) {
+            return memoryAllocator->sm_allocate(size);
+        } else {
+            return pagealloc(size);
+        }
     }
     void wild_free(void *ptr) {
-        return memoryAllocator->sm_free(ptr);
+        if (memoryAllocator->sm_owned(ptr)) {
+            return memoryAllocator->sm_free(ptr);
+        } else {
+            uint64_t vaddr = (uint64_t) ptr;
+            if ((vaddr & 0xFFF) != 0) {
+                wild_panic("Invalid pagealloc ptr or not ours to free");
+            }
+            pagefree(ptr);
+        }
     }
     uint32_t wild_sizeof_alloc(void *ptr) {
-        return memoryAllocator->sm_sizeof(ptr);
+        if (memoryAllocator->sm_owned(ptr)) {
+            return memoryAllocator->sm_sizeof(ptr);
+        } else {
+            uint64_t vaddr = (uint64_t) ptr;
+            if ((vaddr & 0xFFF) != 0) {
+                wild_panic("Invalid pagealloc ptr or not ours to sizeof");
+            }
+            return vpagesize(vaddr);
+        }
     }
 
     static MallocImpl wild_malloc_struct{};
@@ -67,40 +89,9 @@ void setup_simplest_malloc_impl() {
     wild_malloc_struct.free = wild_free;
     wild_malloc_struct.sizeof_alloc = wild_sizeof_alloc;
     impl = &wild_malloc_struct;
-    void *memoryAllocatorP = (MemoryAllocator *) vpagealloc(0x41000);
-    {
-        {
-            std::optional<pageentr> pe = get_pageentr((uint64_t) memoryAllocatorP);
-            uint64_t ppage = ppagealloc(4096);
-            pe->page_ppn = ppage >> 12;
-            pe->writeable = 1;
-            pe->execution_disabled = 1;
-            pe->write_through = 0;
-            pe->cache_disabled = 0;
-            pe->accessed = 0;
-            pe->present = 1;
-            update_pageentr((uint64_t) memoryAllocatorP, *pe);
-        }
-        {
-            std::optional<pageentr> pe = get_pageentr(((uint64_t) memoryAllocatorP) + 4096);
-            uint64_t ppage = ppagealloc(4096);
-            pe->page_ppn = ppage >> 12;
-            pe->writeable = 1;
-            pe->execution_disabled = 1;
-            pe->write_through = 0;
-            pe->cache_disabled = 0;
-            pe->accessed = 0;
-            pe->present = 1;
-            update_pageentr(((uint64_t) memoryAllocatorP) + 4096, *pe);
-        }
-    }
-    reload_pagetables();
-    memoryAllocator = new (memoryAllocatorP) MemoryAllocator();
+    memoryAllocator = CreateChainedAllocator();
 }
 
 void destroy_simplest_malloc_impl() {
     memoryAllocator->~MemoryAllocator();
-    vpagefree((uint64_t) memoryAllocator);
-    memoryAllocator = nullptr;
-    reload_pagetables();
 }

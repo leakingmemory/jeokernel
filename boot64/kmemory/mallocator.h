@@ -146,20 +146,32 @@ struct SmallUnitMemoryArea {
     //small_alloc_unit units[4096 * 4];
 };
 
+class MemoryAllocator {
+public:
+    virtual ~MemoryAllocator() {
+    }
+    virtual void *sm_allocate(uint32_t size) = 0;
+    virtual void sm_free(void *ptr) = 0;
+    virtual uint32_t sm_sizeof(void *ptr) = 0;
+    virtual bool sm_owned(void *ptr) = 0;
+};
+
 /*
  * Allocate virtual memory space for it and physical the first two pages
  */
-struct MemoryAllocator {
+class BasicMemoryAllocator : public MemoryAllocator {
+public:
     hw_spinlock _lock;
     SmallUnitMemoryArea memoryArea;
 
-    void *sm_allocate(uint32_t size);
-    void sm_free(void *ptr);
-    uint32_t sm_sizeof(void *ptr);
-    MemoryAllocator() {
+    void *sm_allocate(uint32_t size) override;
+    void sm_free(void *ptr) override;
+    uint32_t sm_sizeof(void *ptr) override;
+    bool sm_owned(void *ptr) override;
+    BasicMemoryAllocator() {
         memoryArea.alloctable = {};
     }
-    ~MemoryAllocator();
+    virtual ~BasicMemoryAllocator();
 };
 
 
