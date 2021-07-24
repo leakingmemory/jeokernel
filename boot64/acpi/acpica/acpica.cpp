@@ -436,7 +436,12 @@ AcpiOsWritePciConfiguration (
         UINT32                  Reg,
         UINT64                  Value,
         UINT32                  Width) {
-    get_acpica().write_pci_reg(PciId->Segment, PciId->Bus, PciId->Device, PciId->Function, Reg, Value, Width);
+    bool success = get_acpica().write_pci_reg(PciId->Segment, PciId->Bus, PciId->Device, PciId->Function, Reg, Value, Width);
+    if (success) {
+        return AE_OK;
+    } else {
+        return AE_BAD_ADDRESS;
+    }
 }
 
 void
