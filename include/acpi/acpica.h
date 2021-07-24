@@ -13,6 +13,7 @@
 #include <vector>
 #include <sstream>
 #include <thread>
+#include <acpi/acpica_types.h>
 
 enum AcpiExecuteType
 {
@@ -39,12 +40,43 @@ template <class lck> struct acpica_lock_context_impl : acpica_lock_context {
     }
 };
 
+class acpibuffer {
+public:
+    void *ptr;
+    size_t length;
+    acpibuffer() : ptr(nullptr), length(0) {
+    }
+    acpibuffer(void *e_ptr, size_t length) : ptr(malloc(length)), length(length) {
+        memcpy(ptr, e_ptr, length);
+    }
+    acpibuffer(const acpibuffer &buf) : acpibuffer(buf.ptr, buf.length) {
+    }
+    acpibuffer(acpibuffer &&mv) : ptr(mv.ptr), length(mv.length) {
+        mv.ptr = nullptr;
+    }
+    ~acpibuffer() {
+        if (ptr != nullptr) {
+            free(ptr);
+        }
+    }
+};
+
 class acpica_lib {
 public:
     acpica_lib();
     virtual ~acpica_lib();
 
     void bootstrap();
+
+    bool evaluate_integer(void *acpi_handle, const char *method, uint64_t &value);
+
+    bool find_resources(void *handle, std::function<void (ACPI_RESOURCE *)> wfunc);
+    bool find_pci_bridges(std::function<void (void *handle, ACPI_DEVICE_INFO *dev_info)> wfunc);
+
+    bool determine_pci_id(ACPI_PCI_ID &pciId, void *handle);
+    bool determine_pci_id(ACPI_PCI_ID &pciId, const ACPI_DEVICE_INFO *dev_info, void *handle);
+
+    acpibuffer get_irq_routing_table(void *handle);
 
     virtual void terminate() = 0;
     virtual void *allocate_zeroed(std::size_t size) = 0;

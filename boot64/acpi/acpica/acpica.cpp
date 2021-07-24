@@ -2,7 +2,6 @@
 // Created by sigsegv on 6/15/21.
 //
 
-#include <acpi/acpica.h>
 extern "C" {
     #include <acpi.h>
     #include <acpiosxf.h>
@@ -10,10 +9,12 @@ extern "C" {
     #include <acobject.h>
     #include <acglobal.h>
 }
+#include <acpi/acpica.h>
 #include <klogger.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <sstream>
+#include <pagealloc.h>
 
 //#define INIT_TABLES_WITH_INTS_DISABLED
 #define USE_ACPI_FIND_ROOT
@@ -34,6 +35,7 @@ void acpica_lib::bootstrap() {
     ACPI_STATUS Status;
 
     /* Initialize the ACPICA subsystem */
+    pmemcounts();
     Status = AcpiInitializeSubsystem ();
     if (ACPI_FAILURE (Status)) {
         {
@@ -106,6 +108,170 @@ void acpica_lib::bootstrap() {
         ss << "ACPICA enabled subsystem and objects - completed initialization process\n";
         get_klogger() << ss.str().c_str();
     }
+
+    {
+        ACPI_OBJECT picmode_arg;
+        picmode_arg.Type = ACPI_TYPE_INTEGER;
+        picmode_arg.Integer.Value = 1; /* IOAPIC */
+        ACPI_OBJECT_LIST args;
+        args.Count = 1;
+        args.Pointer = &picmode_arg;
+        ACPI_BUFFER return_value;
+        return_value.Pointer = NULL;
+        return_value.Length = ACPI_ALLOCATE_BUFFER;
+        ACPI_STATUS picstatus = AcpiEvaluateObject(NULL, "\\_PIC", &args, &return_value);
+        if (picstatus == AE_OK || picstatus == AE_NOT_FOUND) {
+            get_klogger() << "ACPI set to IOAPIC mode\n";
+            if (return_value.Pointer != NULL) {
+                ACPI_FREE(return_value.Pointer);
+            }
+        } else {
+            get_klogger() << "ERROR: Failed to set ACPI to IOAPIC mode\n";
+        }
+    }
+    AcpiOsSleep(5000);
+}
+
+bool acpica_lib::evaluate_integer(void *acpi_handle, const char *method, uint64_t &value) {
+    ACPI_OBJECT obj;
+    ACPI_BUFFER buf{
+        .Length = sizeof(obj),
+        .Pointer = &obj
+    };
+    ACPI_STATUS Status = AcpiEvaluateObject((ACPI_HANDLE) acpi_handle, (char *) method, (ACPI_OBJECT_LIST *) NULL, &buf);
+    if (Status == AE_OK) {
+        if (obj.Type == ACPI_TYPE_INTEGER) {
+            value = obj.Integer.Value;
+            return true;
+        }
+        return false;
+    } else {
+        return false;
+    }
+}
+
+typedef std::function<ACPI_STATUS (ACPI_HANDLE, UINT32, void **)> dev_walk_func;
+typedef std::function<ACPI_STATUS (ACPI_RESOURCE *)> res_walk_func;
+
+extern "C" {
+    static ACPI_STATUS wf_dev_walk(
+            ACPI_HANDLE Object,
+            UINT32 NestingLevel,
+            void *Context,
+            void **ReturnValue) {
+        dev_walk_func *func = (dev_walk_func *) Context;
+        return (*func)(Object, NestingLevel, ReturnValue);
+    }
+    static ACPI_STATUS wf_res_walk(
+            ACPI_RESOURCE *resource,
+            void *Context
+            ) {
+        res_walk_func *func = (res_walk_func *) Context;
+        return (*func)(resource);
+    }
+}
+
+bool acpica_lib::find_resources(void *handle, std::function<void (ACPI_RESOURCE *)> wfunc) {
+    res_walk_func func = [wfunc] (ACPI_RESOURCE *resource) mutable -> ACPI_STATUS {
+        wfunc(resource);
+        return AE_OK;
+    };
+    ACPI_STATUS Status = AcpiWalkResources((ACPI_HANDLE) handle, METHOD_NAME__CRS, (ACPI_WALK_RESOURCE_CALLBACK) &wf_res_walk, (void *) &func);
+    return Status == AE_OK;
+}
+
+bool acpica_lib::find_pci_bridges(std::function<void (void *handle, ACPI_DEVICE_INFO *dev_info)> wfunc) {
+    void *retv;
+    dev_walk_func func = [wfunc] (ACPI_HANDLE handle, uint32_t depth, void **retvp) mutable {
+        ACPI_DEVICE_INFO *dev_info;
+        ACPI_STATUS Status = AcpiGetObjectInfo(handle, &dev_info);
+        if (Status == AE_OK) {
+            if (dev_info->HardwareId.Length > 0 && strncmp(dev_info->HardwareId.String, "PNP0A", 5) == 0) {
+                wfunc((void *) handle, dev_info);
+            }
+        }
+        return AE_OK;
+    };
+    ACPI_STATUS Status = AcpiGetDevices((char *) NULL, wf_dev_walk, (void *) &func, &retv);
+    return Status == AE_OK;
+}
+
+bool acpica_lib::determine_pci_id(ACPI_PCI_ID &pciId, void *vhandle) {
+    ACPI_HANDLE handle = (ACPI_HANDLE) vhandle;
+    ACPI_DEVICE_INFO *dev_info;
+    if (AcpiGetObjectInfo(handle, &dev_info) == AE_OK) {
+        return determine_pci_id(pciId, dev_info, vhandle);
+    } else {
+        return false;
+    }
+}
+
+bool acpica_lib::determine_pci_id(ACPI_PCI_ID &pciId, const ACPI_DEVICE_INFO *dev_info, void *vhandle) {
+    ACPI_HANDLE handle = (ACPI_HANDLE) vhandle;
+    pciId.Device = (uint16_t) ((dev_info->Address >> 16) & 0xFFFF);
+    pciId.Function = (uint16_t) (dev_info->Address & 0xFFFF);
+    pciId.Bus = 0;
+    pciId.Segment = 0;
+    if (dev_info->Flags & ACPI_PCI_ROOT_BRIDGE) {
+        uint64_t bnn;
+        if (evaluate_integer(handle, "_BNN", bnn)) {
+            pciId.Bus = (uint16_t) (bnn & 0xFFFF);
+        }
+        uint64_t seg;
+        if (evaluate_integer(handle, "_SEG", seg)) {
+            pciId.Segment = (uint16_t) (seg & 0xFFFF);
+        }
+        return true;
+    }
+    ACPI_HANDLE parent_h;
+    if (AcpiGetParent(handle, &parent_h) == AE_OK) {
+        ACPI_DEVICE_INFO *p_dev_info;
+        if (AcpiGetObjectInfo(handle, &p_dev_info) != AE_OK) {
+            //get_klogger() << "Parent has no dev info\n";
+            return false;
+        }
+        ACPI_PCI_ID ParentPciID;
+        if (determine_pci_id(ParentPciID, p_dev_info, parent_h)) {
+            uint64_t pcival{0};
+            if (AcpiOsReadPciConfiguration(&ParentPciID, 0x0c, &pcival, 32) != AE_OK) {
+                //get_klogger() << "Bridge type read error\n";
+                return false;
+            }
+            uint8_t bridge_type = (uint8_t) ((pcival >> 8) & 0x7F);
+            if (bridge_type == 0 && (p_dev_info->Flags & ACPI_PCI_ROOT_BRIDGE)) {
+                pciId.Segment = ParentPciID.Segment;
+                pciId.Bus = ParentPciID.Bus;
+                return true;
+            }
+            if (bridge_type != 1 && bridge_type != 2) {
+                //get_klogger() << "Bridge type error " << bridge_type << "\n";
+                return false;
+            }
+            if (AcpiOsReadPciConfiguration(&ParentPciID, 0x19, &pcival, 8) != AE_OK) {
+                //get_klogger() << "Bridge bus number cfg error\n";
+                return false;
+            }
+            pciId.Segment = ParentPciID.Segment;
+            pciId.Bus = (uint8_t) (pcival & 0xFF);
+            return true;
+        } else {
+            //get_klogger() << "Not pci bridge\n";
+        }
+    }
+    return false;
+}
+
+acpibuffer acpica_lib::get_irq_routing_table(void *handle) {
+    ACPI_BUFFER buf{
+        .Pointer = 0,
+        .Length = ACPI_ALLOCATE_BUFFER
+    };
+    if (AcpiGetIrqRoutingTable((ACPI_HANDLE) handle, &buf) == AE_OK) {
+        acpibuffer abuf{buf.Pointer, buf.Length};
+        ACPI_FREE(buf.Pointer);
+        return abuf;
+    }
+    return acpibuffer();
 }
 
 static acpica_lib *acpica_lib_singleton = nullptr;
