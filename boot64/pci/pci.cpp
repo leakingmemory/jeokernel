@@ -9,6 +9,7 @@
 #include <core/cpu_mpfp.h>
 #include <devices/drivers.h>
 #include <sstream>
+#include <acpi/acpica.h>
 
 #define PCI_CONFIG_ADDRESS  0xCF8
 #define PCI_CONFIG_DATA     0xCFC
@@ -101,15 +102,50 @@ void write8_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, 
     }
 }
 
+pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bus("pci"), bus(bus), br_bus(br_bus), br_slot(br_slot), br_func(br_func) {
+    if (!get_acpica().find_pci_bridges([this] (void *handle, ACPI_DEVICE_INFO *dev_info) {
+        ACPI_PCI_ID pciId;
+        if (get_acpica().determine_pci_id(pciId, dev_info, handle)) {
+            if (this->br_bus != pciId.Bus || this->br_slot != pciId.Device || this->br_func != pciId.Function) {
+                return;
+            }
+        } else {
+            return;
+        }
+        get_klogger() << "PCI bus bridge resources (";
+        if (dev_info->UniqueId.Length > 0) {
+            get_klogger() << dev_info->UniqueId.String;
+        }
+        get_klogger() << ") ";
+        get_klogger() << pciId.Segment << ":" << pciId.Bus << ":" << pciId.Device << ":" << pciId.Function;
+        get_klogger() << ": \n";
+        if (!get_acpica().find_resources(handle, [] (ACPI_RESOURCE *resource) {
+            get_klogger() << " - ACPICA resource " << resource->Type << "\n";
+        })) {
+            get_klogger() << "error: read acpi PCI bridge resources failed\n";
+        }
+        ReadIrqRouting(handle);
+    })) {
+        get_klogger() << "error: read acpi PCI bridges failed\n";
+    }
+    {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(5s);
+    }
+}
+
 void pci::ProbeDevices() {
     Bus::ProbeDevices();
     for (uint8_t i = 0; i < 0x20; i++) {
         std::optional<PciDeviceInformation> opt = probeDevice(i);
         if (opt) {
-            if (!get_drivers().probe(*this, *opt)) {
-                get_klogger() << "PCI device " << opt->vendor_id << ":" << opt->device_id << " CL " << opt->device_class
-                              << ":" << opt->device_subclass << ":" << opt->prog_if << " rev " << opt->revision_id
-                              << " header  " << opt->header_type << (opt->multifunction ? " MFD\n" : "\n");
+            if (br_bus != bus || br_slot != i || br_func != 0) {
+                if (!get_drivers().probe(*this, *opt)) {
+                    get_klogger() << "PCI device " << opt->vendor_id << ":" << opt->device_id << " CL "
+                                  << opt->device_class
+                                  << ":" << opt->device_subclass << ":" << opt->prog_if << " rev " << opt->revision_id
+                                  << " header  " << opt->header_type << (opt->multifunction ? " MFD\n" : "\n");
+                }
             }
             if (opt->multifunction) {
                 for (uint8_t func = 1; func < 8; func++) {
@@ -153,6 +189,17 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
     return {info};
 }
 
+void pci::ReadIrqRouting(void *acpi_handle) {
+    acpibuffer irqr = get_acpica().get_irq_routing_table(acpi_handle);
+    if (irqr.ptr != nullptr) {
+        get_klogger() << "IRQ routing table of " << (uint16_t) irqr.length << " bytes.\n";
+    } else {
+        get_klogger() << "No IRQ routing table\n";
+    }
+    using namespace std::literals::chrono_literals;
+    std::this_thread::sleep_for(5s);
+}
+
 void init_pci() {
     pci_bus_mtx = new std::mutex;
 }
@@ -176,7 +223,7 @@ void detect_root_pcis() {
         }
     }
 #else
-    pci *pcibus = new pci(0);
+    pci *pcibus = new pci(0, 0, 0, 0);
     devices().add(*pcibus);
     std::stringstream msg{};
     msg << pcibus->DeviceType() << (unsigned int) pcibus->DeviceId() << ": root bus\n";

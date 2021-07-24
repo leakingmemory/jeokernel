@@ -32,7 +32,7 @@ void pci_bridge::init() {
     get_klogger() << msg.str().c_str();
 #ifndef USE_APIC_FOR_PCI_BUSES
     for (uint16_t bus = secondary_bus; bus <= subordinate_bus; bus++) {
-        pci *pcibus = new pci(bus);
+        pci *pcibus = new pci(bus, pciDeviceInformation.bus, pciDeviceInformation.slot, pciDeviceInformation.func);
         devices().add(*pcibus);
         std::stringstream msg{};
         msg << pcibus->DeviceType() << (unsigned int) pcibus->DeviceId() << ": sub bus\n";

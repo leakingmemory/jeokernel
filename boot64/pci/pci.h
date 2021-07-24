@@ -98,11 +98,15 @@ struct PciDeviceInformation : public DeviceInformation {
 class pci : public Bus {
 private:
     uint8_t bus;
+    uint8_t br_bus;
+    uint8_t br_slot;
+    uint8_t br_func;
 public:
-    pci(uint16_t bus) : Bus("pci"), bus(bus) {
-    }
+    pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func);
     virtual void ProbeDevices() override;
     std::optional<PciDeviceInformation> probeDevice(uint8_t addr, uint8_t func=0);
+private:
+    void ReadIrqRouting(void *acpi_handle);
 };
 
 uint32_t read_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset);
