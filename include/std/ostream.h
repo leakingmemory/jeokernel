@@ -32,7 +32,8 @@ namespace std {
             if (value >= 0) {
                 return *this << (unsigned long long) value;
             } else {
-                return *this << "-" << (unsigned long long) (0 - value);
+                this->write("-", 1);
+                return *this << (unsigned long long) (0 - value);
             }
         }
         basic_ostream& operator<<( unsigned long long value ) {
