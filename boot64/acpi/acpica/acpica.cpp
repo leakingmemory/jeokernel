@@ -208,8 +208,8 @@ bool acpica_lib::determine_pci_id(ACPI_PCI_ID &pciId, void *vhandle) {
 
 bool acpica_lib::determine_pci_id(ACPI_PCI_ID &pciId, const ACPI_DEVICE_INFO *dev_info, void *vhandle) {
     ACPI_HANDLE handle = (ACPI_HANDLE) vhandle;
-    pciId.Device = (uint16_t) ((dev_info->Address >> 16) & 0xFFFF);
-    pciId.Function = (uint16_t) (dev_info->Address & 0xFFFF);
+    pciId.Device = 0;
+    pciId.Function = 0;
     pciId.Bus = 0;
     pciId.Segment = 0;
     if (dev_info->Flags & ACPI_PCI_ROOT_BRIDGE) {
@@ -223,6 +223,8 @@ bool acpica_lib::determine_pci_id(ACPI_PCI_ID &pciId, const ACPI_DEVICE_INFO *de
         }
         return true;
     }
+    pciId.Device = (uint16_t) ((dev_info->Address >> 16) & 0xFFFF);
+    pciId.Function = (uint16_t) (dev_info->Address & 0xFFFF);
     ACPI_HANDLE parent_h;
     if (AcpiGetParent(handle, &parent_h) == AE_OK) {
         ACPI_DEVICE_INFO *p_dev_info;
