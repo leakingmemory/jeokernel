@@ -7,40 +7,8 @@
 #include <mutex>
 #include "ChainedAllocator.h"
 
-static MemoryAllocator *CreateMemoryAllocator() {
-    void *memoryAllocatorP = (BasicMemoryAllocator *) vpagealloc(0x41000);
-    {
-        {
-            std::optional<pageentr> pe = get_pageentr((uint64_t) memoryAllocatorP);
-            uint64_t ppage = ppagealloc(4096);
-            pe->page_ppn = ppage >> 12;
-            pe->writeable = 1;
-            pe->execution_disabled = 1;
-            pe->write_through = 0;
-            pe->cache_disabled = 0;
-            pe->accessed = 0;
-            pe->present = 1;
-            update_pageentr((uint64_t) memoryAllocatorP, *pe);
-        }
-        {
-            std::optional<pageentr> pe = get_pageentr(((uint64_t) memoryAllocatorP) + 4096);
-            uint64_t ppage = ppagealloc(4096);
-            pe->page_ppn = ppage >> 12;
-            pe->writeable = 1;
-            pe->execution_disabled = 1;
-            pe->write_through = 0;
-            pe->cache_disabled = 0;
-            pe->accessed = 0;
-            pe->present = 1;
-            update_pageentr(((uint64_t) memoryAllocatorP) + 4096, *pe);
-        }
-    }
-    reload_pagetables();
-    return new (memoryAllocatorP) BasicMemoryAllocator();
-}
-
 ChainedAllocator *CreateChainedAllocator() {
-    auto allocator = CreateMemoryAllocator();
+    auto allocator = CreateBasicMemoryAllocator();
     ChainedAllocator *chainedAllocator = (ChainedAllocator *) allocator->sm_allocate(sizeof(*chainedAllocator));
     chainedAllocator = new ((void *) chainedAllocator) ChainedAllocator(allocator);
     return chainedAllocator;

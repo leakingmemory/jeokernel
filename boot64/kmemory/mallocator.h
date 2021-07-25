@@ -159,20 +159,36 @@ public:
 /*
  * Allocate virtual memory space for it and physical the first two pages
  */
+struct BasicMemoryAllocatorImpl {
+    SmallUnitMemoryArea memoryArea; /* 4K / 1 page */
+    /* Do not add data fields */
+
+    void *sm_allocate(uint32_t size);
+    void sm_free(void *ptr);
+    uint32_t sm_sizeof(void *ptr);
+    bool sm_owned(void *ptr);
+
+    BasicMemoryAllocatorImpl() {
+        memoryArea.alloctable = {};
+    }
+    ~BasicMemoryAllocatorImpl();
+};
+
+static_assert(sizeof(BasicMemoryAllocatorImpl) == 4096);
+
 class BasicMemoryAllocator : public MemoryAllocator {
 public:
     hw_spinlock _lock;
-    SmallUnitMemoryArea memoryArea;
+    BasicMemoryAllocatorImpl *impl;
 
     void *sm_allocate(uint32_t size) override;
     void sm_free(void *ptr) override;
     uint32_t sm_sizeof(void *ptr) override;
     bool sm_owned(void *ptr) override;
-    BasicMemoryAllocator() {
-        memoryArea.alloctable = {};
-    }
-    virtual ~BasicMemoryAllocator();
+    explicit BasicMemoryAllocator(BasicMemoryAllocatorImpl *impl);
+    ~BasicMemoryAllocator() override;
 };
 
+BasicMemoryAllocator *CreateBasicMemoryAllocator();
 
 #endif //JEOKERNEL_MALLOCATOR_H
