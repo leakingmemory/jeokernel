@@ -276,6 +276,27 @@ acpibuffer acpica_lib::get_irq_routing_table(void *handle) {
     return acpibuffer();
 }
 
+std::vector<PciIRQRouting> acpica_lib::get_irq_routing(void *handle) {
+    std::vector<PciIRQRouting> rtvec{};
+    {
+        acpibuffer buf = get_irq_routing_table(handle);
+        if (buf.length > 0) {
+            ACPI_PCI_ROUTING_TABLE *a_rt = (ACPI_PCI_ROUTING_TABLE *) buf.ptr;
+            while (a_rt->Length > 0) {
+                PciIRQRouting irqr{
+                    .Address = a_rt->Address,
+                    .Pin = a_rt->Pin,
+                    .SourceIndex = a_rt->SourceIndex,
+                    .Source{&(a_rt->Source[0])}
+                };
+                rtvec.push_back(irqr);
+                a_rt = (ACPI_PCI_ROUTING_TABLE *) (((uint8_t *) a_rt) + a_rt->Length);
+            }
+        }
+    }
+    return rtvec;
+}
+
 static acpica_lib *acpica_lib_singleton = nullptr;
 
 void init_acpica(uint64_t root_table_addr) {

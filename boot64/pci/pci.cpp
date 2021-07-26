@@ -190,11 +190,10 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
 }
 
 void pci::ReadIrqRouting(void *acpi_handle) {
-    acpibuffer irqr = get_acpica().get_irq_routing_table(acpi_handle);
-    if (irqr.ptr != nullptr) {
-        get_klogger() << "IRQ routing table of " << (uint16_t) irqr.length << " bytes.\n";
-    } else {
-        get_klogger() << "No IRQ routing table\n";
+    std::vector<PciIRQRouting> irqr = get_acpica().get_irq_routing(acpi_handle);
+    for (auto &rt : irqr) {
+        get_klogger() << "IRQr " << rt.Address << " P=" << rt.Pin << " Si=" << rt.SourceIndex << " S="
+                      << rt.Source.c_str() <<"\n";
     }
     using namespace std::literals::chrono_literals;
     std::this_thread::sleep_for(5s);

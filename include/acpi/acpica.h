@@ -14,6 +14,7 @@
 #include <sstream>
 #include <thread>
 #include <acpi/acpica_types.h>
+#include <acpi/pci_irq_rt.h>
 
 enum AcpiExecuteType
 {
@@ -77,6 +78,7 @@ public:
     bool determine_pci_id(ACPI_PCI_ID &pciId, const ACPI_DEVICE_INFO *dev_info, void *handle);
 
     acpibuffer get_irq_routing_table(void *handle);
+    std::vector<PciIRQRouting> get_irq_routing(void *handle);
 
     virtual void terminate() = 0;
     virtual void *allocate_zeroed(std::size_t size) = 0;
