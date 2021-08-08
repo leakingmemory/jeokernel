@@ -152,6 +152,7 @@ bool acpica_lib::evaluate_integer(void *acpi_handle, const char *method, uint64_
 
 typedef std::function<ACPI_STATUS (ACPI_HANDLE, UINT32, void **)> dev_walk_func;
 typedef std::function<ACPI_STATUS (ACPI_RESOURCE *)> res_walk_func;
+typedef std::function<ACPI_STATUS (ACPI_HANDLE, UINT32, void **)> ns_walk_func;
 
 extern "C" {
     static ACPI_STATUS wf_dev_walk(
@@ -168,6 +169,15 @@ extern "C" {
             ) {
         res_walk_func *func = (res_walk_func *) Context;
         return (*func)(resource);
+    }
+    static ACPI_STATUS wf_ns_walk(
+            ACPI_HANDLE object,
+            UINT32 NestingLevel,
+            void *Context,
+            void **ReturnValue
+            ) {
+        ns_walk_func *func = (ns_walk_func *) Context;
+        return (*func)(object, NestingLevel, ReturnValue);
     }
 }
 
@@ -295,6 +305,32 @@ std::vector<PciIRQRouting> acpica_lib::get_irq_routing(void *handle) {
         }
     }
     return rtvec;
+}
+
+bool acpica_lib::walk_namespace(std::function<void(std::string, void *)> wfunc) {
+    return walk_namespace((void *) ACPI_ROOT_OBJECT, wfunc);
+}
+
+bool acpica_lib::walk_namespace(void *handle, std::function<void(std::string, void *)> wfunc) {
+    ns_walk_func descending = [&wfunc] (ACPI_HANDLE h, UINT32 depth, void **rv) -> ACPI_STATUS {
+        acpi_buffer buf{
+            .Pointer = NULL,
+            .Length = ACPI_ALLOCATE_BUFFER
+        };
+        if (AcpiGetName(h, ACPI_FULL_PATHNAME, &buf) == AE_OK) {
+            std::string pathname{(char *) buf.Pointer};
+            ACPI_FREE(buf.Pointer);
+            wfunc(pathname, h);
+        }
+        return AE_OK;
+    };
+    void *rv;
+    auto status = AcpiWalkNamespace(ACPI_TYPE_ANY, (ACPI_HANDLE) handle, 32, wf_ns_walk, (ACPI_WALK_CALLBACK) NULL, (void *) &descending, &rv);
+    if (status == AE_OK) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 static acpica_lib *acpica_lib_singleton = nullptr;

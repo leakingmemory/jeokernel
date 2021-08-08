@@ -190,13 +190,33 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
 }
 
 void pci::ReadIrqRouting(void *acpi_handle) {
-    std::vector<PciIRQRouting> irqr = get_acpica().get_irq_routing(acpi_handle);
+    auto &acpica = get_acpica();
+    bool using_source{false};
+    std::vector<PciIRQRouting> irqr = acpica.get_irq_routing(acpi_handle);
     for (auto &rt : irqr) {
+        if (!using_source && rt.Source.size() > 0) {
+            using_source = true;
+        }
         get_klogger() << "IRQr " << rt.Address << " P=" << rt.Pin << " Si=" << rt.SourceIndex << " S="
                       << rt.Source.c_str() <<"\n";
     }
     using namespace std::literals::chrono_literals;
     std::this_thread::sleep_for(5s);
+    std::vector<std::tuple<std::string,uint8_t>> SourceMap{};
+    if (using_source) {
+        get_klogger() << "Namespace walk:\n";
+        acpica.walk_namespace([&irqr](std::string path, void *) {
+            bool found{false};
+            for (auto &rt : irqr) {
+                if (rt.Source.size() > 0 && rt.Source == path) {
+                    get_klogger() << " - Found " << path.c_str() << "\n";
+                    found = true;
+                    break;
+                }
+            }
+        });
+        std::this_thread::sleep_for(5s);
+    }
 }
 
 void init_pci() {

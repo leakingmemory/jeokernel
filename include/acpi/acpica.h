@@ -74,6 +74,9 @@ public:
     bool find_resources(void *handle, std::function<void (ACPI_RESOURCE *)> wfunc);
     bool find_pci_bridges(std::function<void (void *handle, ACPI_DEVICE_INFO *dev_info)> wfunc);
 
+    bool walk_namespace(void *handle, std::function<void (std::string pathname, void *handle)> wfunc);
+    bool walk_namespace(std::function<void (std::string pathname, void *handle)> wfunc);
+
     bool determine_pci_id(ACPI_PCI_ID &pciId, void *handle);
     bool determine_pci_id(ACPI_PCI_ID &pciId, const ACPI_DEVICE_INFO *dev_info, void *handle);
 
