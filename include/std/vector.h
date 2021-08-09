@@ -180,8 +180,10 @@ namespace std {
         }
 
         vector &operator =(const vector &cp) {
-            for (size_type i = 0; i < c._size; i++) {
-                c._data[i].~vector_container_element<T>();
+            if (c._data != nullptr) {
+                for (size_type i = 0; i < c._size; i++) {
+                    c._data[i].~vector_container_element<T>();
+                }
             }
             c._size = 0;
             if (c._capacity < cp.size()) {
@@ -193,10 +195,12 @@ namespace std {
             return *this;
         }
         vector &operator =(vector &&mv) {
-            for (size_type i = 0; i < c._size; i++) {
-                c._data[i].~vector_container_element<T>();
+            if (c._data != nullptr) {
+                for (size_type i = 0; i < c._size; i++) {
+                    c._data[i].~vector_container_element<T>();
+                }
+                get_allocator().deallocate((T *) (void *) c._data, c._capacity);
             }
-            get_allocator().deallocate((T *) (void *) c._data, c._capacity);
             c = mv.c;
             mv.c._data = nullptr;
             mv.c._capacity = 0;
