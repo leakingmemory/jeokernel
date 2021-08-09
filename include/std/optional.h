@@ -57,6 +57,14 @@ namespace std {
             return *this;
         }
 
+        std::optional<T> & operator = (const T &cp) {
+            if (ptr != nullptr) {
+                ptr->~T();
+            }
+            ptr = new((void *) &(_data[0])) T(cp);
+            return *this;
+        }
+
         T &operator*() const {
             return *ptr;
         }
