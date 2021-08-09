@@ -307,11 +307,11 @@ std::vector<PciIRQRouting> acpica_lib::get_irq_routing(void *handle) {
     return rtvec;
 }
 
-bool acpica_lib::walk_namespace(std::function<void(std::string, void *)> wfunc) {
+bool acpica_lib::walk_namespace(std::function<void(std::string, uint32_t, void *)> wfunc) {
     return walk_namespace((void *) ACPI_ROOT_OBJECT, wfunc);
 }
 
-bool acpica_lib::walk_namespace(void *handle, std::function<void(std::string, void *)> wfunc) {
+bool acpica_lib::walk_namespace(void *handle, std::function<void(std::string, uint32_t, void *)> wfunc) {
     ns_walk_func descending = [&wfunc] (ACPI_HANDLE h, UINT32 depth, void **rv) -> ACPI_STATUS {
         acpi_buffer buf{
             .Pointer = NULL,
@@ -320,7 +320,11 @@ bool acpica_lib::walk_namespace(void *handle, std::function<void(std::string, vo
         if (AcpiGetName(h, ACPI_FULL_PATHNAME, &buf) == AE_OK) {
             std::string pathname{(char *) buf.Pointer};
             ACPI_FREE(buf.Pointer);
-            wfunc(pathname, h);
+
+            ACPI_OBJECT_TYPE objectType{0};
+            AcpiGetType(h, &objectType);
+
+            wfunc(pathname, objectType, h);
         }
         return AE_OK;
     };
@@ -331,6 +335,30 @@ bool acpica_lib::walk_namespace(void *handle, std::function<void(std::string, vo
     } else {
         return false;
     }
+}
+
+std::optional<IRQLink> acpica_lib::get_extended_irq(void *handle) {
+    std::optional<IRQLink> opt{};
+    find_resources(handle, [&opt] (ACPI_RESOURCE *resource) {
+       if (resource->Type == ACPI_RESOURCE_TYPE_EXTENDED_IRQ) {
+           const auto &ei = resource->Data.ExtendedIrq;
+           IRQLink link{
+               .ProducerConsumer = ei.ProducerConsumer,
+               .Triggering = ei.Triggering,
+               .Polarity = ei.Polarity,
+               .Shareable = ei.Shareable,
+               .WakeCapable = ei.WakeCapable,
+               .ResourceSource = ei.ResourceSource.StringPtr != nullptr && ei.ResourceSource.StringLength > 0 ? std::string(ei.ResourceSource.StringPtr) : std::string(),
+               .Interrupts = std::vector<uint8_t>()
+           };
+           link.Interrupts.reserve(ei.InterruptCount);
+           for (int i = 0; i < ei.InterruptCount; i++) {
+               link.Interrupts.push_back(ei.Interrupts[i]);
+           }
+           opt = link;
+       }
+    });
+    return opt;
 }
 
 static acpica_lib *acpica_lib_singleton = nullptr;

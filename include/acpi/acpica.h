@@ -74,14 +74,16 @@ public:
     bool find_resources(void *handle, std::function<void (ACPI_RESOURCE *)> wfunc);
     bool find_pci_bridges(std::function<void (void *handle, ACPI_DEVICE_INFO *dev_info)> wfunc);
 
-    bool walk_namespace(void *handle, std::function<void (std::string pathname, void *handle)> wfunc);
-    bool walk_namespace(std::function<void (std::string pathname, void *handle)> wfunc);
+    bool walk_namespace(void *handle, std::function<void (std::string pathname, uint32_t object_type, void *handle)> wfunc);
+    bool walk_namespace(std::function<void (std::string pathname, uint32_t object_type, void *handle)> wfunc);
 
     bool determine_pci_id(ACPI_PCI_ID &pciId, void *handle);
     bool determine_pci_id(ACPI_PCI_ID &pciId, const ACPI_DEVICE_INFO *dev_info, void *handle);
 
     acpibuffer get_irq_routing_table(void *handle);
     std::vector<PciIRQRouting> get_irq_routing(void *handle);
+
+    std::optional<IRQLink> get_extended_irq(void *handle);
 
     virtual void terminate() = 0;
     virtual void *allocate_zeroed(std::size_t size) = 0;

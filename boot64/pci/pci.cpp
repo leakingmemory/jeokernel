@@ -102,7 +102,7 @@ void write8_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, 
     }
 }
 
-pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bus("pci"), bus(bus), br_bus(br_bus), br_slot(br_slot), br_func(br_func) {
+pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bus("pci"), bus(bus), br_bus(br_bus), br_slot(br_slot), br_func(br_func), irqr(), SourceMap() {
     if (!get_acpica().find_pci_bridges([this] (void *handle, ACPI_DEVICE_INFO *dev_info) {
         ACPI_PCI_ID pciId;
         if (get_acpica().determine_pci_id(pciId, dev_info, handle)) {
@@ -192,7 +192,7 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
 void pci::ReadIrqRouting(void *acpi_handle) {
     auto &acpica = get_acpica();
     bool using_source{false};
-    std::vector<PciIRQRouting> irqr = acpica.get_irq_routing(acpi_handle);
+    irqr = acpica.get_irq_routing(acpi_handle);
     for (auto &rt : irqr) {
         if (!using_source && rt.Source.size() > 0) {
             using_source = true;
@@ -202,14 +202,25 @@ void pci::ReadIrqRouting(void *acpi_handle) {
     }
     using namespace std::literals::chrono_literals;
     std::this_thread::sleep_for(5s);
-    std::vector<std::tuple<std::string,uint8_t>> SourceMap{};
     if (using_source) {
         get_klogger() << "Namespace walk:\n";
-        acpica.walk_namespace([&irqr](std::string path, void *) {
+        acpica.walk_namespace([this, &acpica](std::string path, uint32_t objectType, void *handle) {
             bool found{false};
             for (auto &rt : irqr) {
                 if (rt.Source.size() > 0 && rt.Source == path) {
-                    get_klogger() << " - Found " << path.c_str() << "\n";
+                    get_klogger() << " - Found " << path.c_str() << " type " << objectType << "\n";
+                    auto irq = acpica.get_extended_irq(handle);
+                    if (irq) {
+                        get_klogger() << "   - IRQ# " << (uint8_t) (*irq)[0];
+                        for (int i = 1; i < irq->size(); i++) {
+                            get_klogger() << ", " << (uint8_t) (*irq)[i];
+                        }
+                        get_klogger() << " PC=" << irq->ProducerConsumer << " Trig=" << irq->Triggering
+                        << " Pol=" << irq->Polarity << " Sh=" << irq->Shareable << " Wak="
+                        << irq->WakeCapable << " " << irq->ResourceSource.c_str() << "\n";
+
+                        SourceMap.push_back(std::make_tuple<std::string,IRQLink>(path, *irq));
+                    }
                     found = true;
                     break;
                 }

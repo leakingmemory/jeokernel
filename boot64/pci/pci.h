@@ -10,6 +10,9 @@
 #endif
 
 #include <optional>
+#include <tuple>
+#include <vector>
+#include <acpi/pci_irq_rt.h>
 
 //#define USE_APIC_FOR_PCI_BUSES
 
@@ -101,6 +104,9 @@ private:
     uint8_t br_bus;
     uint8_t br_slot;
     uint8_t br_func;
+
+    std::vector<PciIRQRouting> irqr;
+    std::vector<std::tuple<std::string,IRQLink>> SourceMap;
 public:
     pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func);
     virtual void ProbeDevices() override;
