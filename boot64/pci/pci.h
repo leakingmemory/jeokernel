@@ -7,12 +7,17 @@
 
 #ifndef UNIT_TESTING
 #include <devices/devices.h>
+#include <acpi/pci_irq_rt.h>
+#include <core/LocalApic.h>
+#include "../IOApic.h"
+#include <klogger.h>
 #endif
 
 #include <optional>
 #include <tuple>
 #include <vector>
-#include <acpi/pci_irq_rt.h>
+#include <functional>
+#include <thread>
 
 //#define USE_APIC_FOR_PCI_BUSES
 
@@ -98,6 +103,24 @@ struct PciDeviceInformation : public DeviceInformation {
     PciRegisterF readRegF();
 };
 
+class pci;
+
+class pci_irq {
+private:
+    pci &bus;
+    std::vector<std::function<bool ()>> handlers;
+    uint8_t irq;
+public:
+    pci_irq(pci &bus, uint8_t irq) : bus(bus), handlers(), irq(irq) {}
+    pci_irq(pci &bus, const IRQLink &link, int index);
+    bool invoke();
+    void interrupt(Interrupt &intr);
+
+    uint8_t Irq() {
+        return irq;
+    }
+};
+
 class pci : public Bus {
 private:
     uint8_t bus;
@@ -107,10 +130,26 @@ private:
 
     std::vector<PciIRQRouting> irqr;
     std::vector<std::tuple<std::string,IRQLink>> SourceMap;
+    std::vector<pci_irq*> irqs;
+    std::unique_ptr<IOApic> ioapic;
+    std::unique_ptr<LocalApic> lapic;
+    const cpu_mpfp *mpfp;
 public:
     pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func);
+    ~pci() override;
     virtual void ProbeDevices() override;
     std::optional<PciDeviceInformation> probeDevice(uint8_t addr, uint8_t func=0);
+    pci_irq *GetIrq(uint8_t irqn);
+    virtual void InstallIrqHandler(const IRQLink &link);
+    IOApic &Ioapic() {
+        return *ioapic;
+    }
+    LocalApic &Lapic() {
+        return *lapic;
+    }
+    const cpu_mpfp &Mpfp() {
+        return *mpfp;
+    }
 private:
     void ReadIrqRouting(void *acpi_handle);
 };

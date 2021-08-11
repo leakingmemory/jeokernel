@@ -102,7 +102,10 @@ void write8_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, 
     }
 }
 
-pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bus("pci"), bus(bus), br_bus(br_bus), br_slot(br_slot), br_func(br_func), irqr(), SourceMap() {
+pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bus("pci"), bus(bus), br_bus(br_bus), br_slot(br_slot), br_func(br_func), irqr(), SourceMap(), ioapic(), lapic() {
+    mpfp = get_mpfp();
+    ioapic = std::make_unique<IOApic>(*mpfp);
+    lapic = std::make_unique<LocalApic>(*mpfp);
     if (!get_acpica().find_pci_bridges([this] (void *handle, ACPI_DEVICE_INFO *dev_info) {
         ACPI_PCI_ID pciId;
         if (get_acpica().determine_pci_id(pciId, dev_info, handle)) {
@@ -125,6 +128,40 @@ pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bu
             get_klogger() << "error: read acpi PCI bridge resources failed\n";
         }
         ReadIrqRouting(handle);
+        for (auto &irqent : SourceMap) {
+            InstallIrqHandler(std::get<1>(irqent));
+        }
+        {
+            std::vector<uint8_t> irqns{};
+            for (auto &irq : irqr) {
+                if (irq.Source.size() == 0) {
+                    bool hit{false};
+                    for (uint8_t n : irqns) {
+                        if (n == irq.SourceIndex) {
+                            hit = true;
+                            break;
+                        }
+                    }
+                    if (!hit && GetIrq(irq.SourceIndex) == nullptr) {
+                        irqns.push_back(irq.SourceIndex);
+                    }
+                }
+            }
+            for (uint8_t irq : irqns) {
+                IRQLink link{
+                    .ProducerConsumer = 1,
+                    .Triggering = 0,
+                    .Polarity = 0,
+                    .Shareable = 1,
+                    .WakeCapable = 0,
+                    .InterruptCount = 1,
+                    .ResourceSource = "",
+                    .Interrupts = {}
+                };
+                link.Interrupts.push_back(irq);
+                InstallIrqHandler(link);
+            }
+        }
     })) {
         get_klogger() << "error: read acpi PCI bridges failed\n";
     }
@@ -228,6 +265,38 @@ void pci::ReadIrqRouting(void *acpi_handle) {
         });
         std::this_thread::sleep_for(5s);
     }
+}
+
+pci_irq *pci::GetIrq(uint8_t irqn) {
+    for (auto *irq : irqs) {
+        if (irq->Irq() == irqn) {
+            return irq;
+        }
+    }
+    return nullptr;
+}
+
+void pci::InstallIrqHandler(const IRQLink &link) {
+    for (int i = 0; i < link.Interrupts.size(); i++) {
+        uint8_t irqn = (link.Interrupts.data())[i];
+        if (GetIrq(irqn) == nullptr) {
+            irqs.push_back(new pci_irq(*this, link, i));
+            std::stringstream msg{};
+            msg << "Installed IRQ " << irqn << "\n";
+            get_klogger() << msg.str().c_str();
+        } else {
+            //std::stringstream msg{};
+            //msg << "Info: Duplicate IRQ def for " << irqn << "\n";
+            //get_klogger() << msg.str().c_str();
+        }
+    }
+}
+
+pci::~pci() {
+    for (auto *irq : irqs) {
+        delete irq;
+    }
+    irqs.clear();
 }
 
 void init_pci() {

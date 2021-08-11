@@ -7,6 +7,7 @@
 
 #include <core/vmem.h>
 #include <core/cpu_mpfp.h>
+#include <klogger.h>
 
 #define LAPIC_BASE_MSR 0x1B
 #define LAPIC_MSR_ENABLE 0x800

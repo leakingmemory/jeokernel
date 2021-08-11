@@ -6,7 +6,14 @@
 #define JEOKERNEL_PCI_IRQ_RT_H
 
 struct PciIRQRouting {
-    uint64_t Address;
+    union {
+        uint64_t Address;
+        struct {
+            uint16_t Func;
+            uint16_t Slot;
+            uint32_t res_zero;
+        } __attribute__((__packed__));
+    };
     uint32_t Pin;
     uint32_t SourceIndex;
     std::string Source;
