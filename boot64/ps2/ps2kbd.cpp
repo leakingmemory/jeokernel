@@ -54,7 +54,8 @@ void ps2kbd::init() {
     lapic = std::make_unique<LocalApic>(*mpfp);
     ioapic = std::make_unique<IOApic>(*mpfp);
 
-    get_hw_interrupt_handler().add_handler(4, [this, ioapic_intn] (Interrupt &intr) {
+    /* int pin number + 3 local apic ints below ioapic range */
+    get_hw_interrupt_handler().add_handler(ioapic_intn + 3, [this, ioapic_intn] (Interrupt &intr) {
         bool dispatch{false};
         {
             std::lock_guard lock{spinlock};
