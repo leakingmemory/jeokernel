@@ -20,26 +20,24 @@ pci_irq::pci_irq(pci &bus, const IRQLink &link, int index) : pci_irq(bus, (link.
 }
 
 bool pci_irq::invoke(Interrupt &intr) {
+    bool hit{false};
     {
+        std::lock_guard _lock(lock);
+        for (auto &h : handlers) {
+            if (h()) {
+                hit = true;
+            }
+        }
+    }
+    if (!hit) {
         std::stringstream msg{};
         msg << "IRQ " << irq << "\n";
         get_klogger() << msg.str().c_str();
-    }
-    std::lock_guard _lock(lock);
-    bool hit{false};
-    for (auto &h : handlers) {
-        if (h()) {
-            hit = true;
-        }
     }
     return hit;
 }
 
 void pci_irq::interrupt(Interrupt &intr) {
-    std::stringstream msg{};
-    msg << "PCI IRQ " << irq << "\n";
-    get_klogger() << msg.str().c_str();
-
     invoke(intr);
 }
 

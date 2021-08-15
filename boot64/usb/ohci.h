@@ -210,15 +210,19 @@ private:
     OhciHcca hcca;
     uint16_t power_on_port_delay_ms;
     uint8_t no_ports;
+    bool StartOfFrameReceived;
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         Device("ohci", &bus), pciDeviceInformation(deviceInformation), mapped_registers_vm(),
-        ohciRegisters(nullptr), hcca() {}
+        ohciRegisters(nullptr), hcca(), StartOfFrameReceived(false) {}
     void init() override;
 
     constexpr uint8_t desca_ndp(uint32_t descA) const {
         return (uint8_t) (descA & 0xFF);
     }
+private:
+    bool irq();
+    void StartOfFrame();
 };
 
 class ohci_driver : public Driver {

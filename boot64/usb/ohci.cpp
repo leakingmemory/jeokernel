@@ -122,9 +122,8 @@ void ohci::init() {
             get_klogger() << msg.str().c_str();
         }
         if (irq) {
-            pci->AddIrqHandler(*irq, []() {
-                get_klogger() << "ohci int\n";
-                return true;
+            pci->AddIrqHandler(*irq, [this]() {
+                return this->irq();
             });
         }
     }
@@ -170,6 +169,48 @@ void ohci::init() {
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB controller, ports x" << (unsigned int) no_ports << " power on port " << (unsigned int) power_on_port_delay_ms << "ms\n";
         get_klogger() << msg.str().c_str();
     }
+}
+
+bool ohci::irq() {
+    uint32_t IrqClear{0};
+    uint32_t IrqStatus{ohciRegisters->HcInterruptStatus};
+    if ((IrqStatus & OHCI_INT_SCHEDULING_OVERRUN) != 0) {
+        IrqClear |= OHCI_INT_SCHEDULING_OVERRUN;
+        get_klogger() << "ohci scheduling overrun\n";
+    }
+    if ((IrqStatus & OHCI_INT_SCHEDULING_WRITE_DONE_HEAD) != 0) {
+        IrqClear |= OHCI_INT_SCHEDULING_WRITE_DONE_HEAD;
+        get_klogger() << "ohci write back done head\n";
+    }
+    if ((IrqStatus & OHCI_INT_SCHEDULING_START_OF_FRAME) != 0) {
+        IrqClear |= OHCI_INT_SCHEDULING_START_OF_FRAME;
+        StartOfFrame();
+    }
+    if ((IrqStatus & OHCI_INT_SCHEDULING_RESUME_DETECTED) != 0) {
+        IrqClear |= OHCI_INT_SCHEDULING_RESUME_DETECTED;
+        get_klogger() << "ohci resume detected\n";
+    }
+    if ((IrqStatus & OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR) != 0) {
+        IrqClear |= OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR;
+        get_klogger() << "ohci unrecoverable error\n";
+    }
+    if ((IrqStatus & OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW) != 0) {
+        IrqClear |= OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW;
+        get_klogger() << "ohci frame number overflow\n";
+    }
+    if ((IrqStatus & OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH) != 0) {
+        IrqClear |= OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH;
+        get_klogger() << "ohci root hub status change\n";
+    }
+    ohciRegisters->HcInterruptStatus = IrqClear;
+    return IrqClear != 0;
+}
+
+void ohci::StartOfFrame() {
+    if (!StartOfFrameReceived) {
+        get_klogger() << "OHCI: First start of frame\n";
+    }
+    StartOfFrameReceived = true;
 }
 
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {
