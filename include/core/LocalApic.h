@@ -5,9 +5,11 @@
 #ifndef JEOKERNEL_LOCALAPIC_H
 #define JEOKERNEL_LOCALAPIC_H
 
+#ifndef UNIT_TESTING
 #include <core/vmem.h>
 #include <core/cpu_mpfp.h>
 #include <klogger.h>
+#endif
 
 #define LAPIC_BASE_MSR 0x1B
 #define LAPIC_MSR_ENABLE 0x800
@@ -87,7 +89,9 @@ public:
 
     void enable_apic(bool en = true) {
         uint64_t msr = (get_msr_base_reg() &0x0FFFFFF000) | (en ? LAPIC_MSR_ENABLE : 0);
+#ifndef UNIT_TESTING
         get_klogger() << "Set apic msr " << msr << "\n";
+#endif
         set_msr_base_reg(msr);
         if (en) {
             set_spurious_interrupt_vector(get_spurious_interrupt_vector() | 0x1FF);

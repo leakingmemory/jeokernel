@@ -6,8 +6,10 @@
 #define JEOKERNEL_IOAPIC_H
 
 #include <cstdint>
+#ifndef UNIT_TESTING
 #include <core/vmem.h>
 #include <core/cpu_mpfp.h>
+#endif
 
 class IOApicReg {
 private:

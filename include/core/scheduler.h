@@ -7,6 +7,7 @@
 
 #include <interrupt_frame.h>
 #include <klogger.h>
+#include <concurrency/hw_spinlock.h>
 
 /*
  * Hard grouping: Realtime always first, normal always before low and idle,

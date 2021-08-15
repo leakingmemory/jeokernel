@@ -9,6 +9,12 @@
 #include "../include/core/vmem.h"
 #include "../include/devices/devices.h"
 #include "../include/devices/drivers.h"
+#include "../include/concurrency/hw_spinlock.h"
+#include "../include/acpi/pci_irq_rt.h"
+#include "../include/interrupt_frame.h"
+#include "../include/core/cpu_mpfp.h"
+#include "../boot64/IOApic.h"
+#include "../include/core/LocalApic.h"
 #include "../boot64/pci/pci.h"
 #include "../boot64/usb/xhci.h"
 

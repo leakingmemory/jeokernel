@@ -5,7 +5,9 @@
 #ifndef JEOKERNEL_INTERRUPT_FRAME_H
 #define JEOKERNEL_INTERRUPT_FRAME_H
 
+#ifndef UNIT_TESTING
 #include <pagetable.h>
+#endif
 #include <vector>
 #include <tuple>
 
