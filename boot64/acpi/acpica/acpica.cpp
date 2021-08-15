@@ -275,8 +275,8 @@ bool acpica_lib::determine_pci_id(ACPI_PCI_ID &pciId, const ACPI_DEVICE_INFO *de
 
 acpibuffer acpica_lib::get_irq_routing_table(void *handle) {
     ACPI_BUFFER buf{
-        .Pointer = 0,
-        .Length = ACPI_ALLOCATE_BUFFER
+        .Length = ACPI_ALLOCATE_BUFFER,
+        .Pointer = 0
     };
     if (AcpiGetIrqRoutingTable((ACPI_HANDLE) handle, &buf) == AE_OK) {
         acpibuffer abuf{buf.Pointer, buf.Length};
@@ -314,8 +314,8 @@ bool acpica_lib::walk_namespace(std::function<void(std::string, uint32_t, void *
 bool acpica_lib::walk_namespace(void *handle, std::function<void(std::string, uint32_t, void *)> wfunc) {
     ns_walk_func descending = [&wfunc] (ACPI_HANDLE h, UINT32 depth, void **rv) -> ACPI_STATUS {
         acpi_buffer buf{
-            .Pointer = NULL,
-            .Length = ACPI_ALLOCATE_BUFFER
+            .Length = ACPI_ALLOCATE_BUFFER,
+            .Pointer = NULL
         };
         if (AcpiGetName(h, ACPI_FULL_PATHNAME, &buf) == AE_OK) {
             std::string pathname{(char *) buf.Pointer};
