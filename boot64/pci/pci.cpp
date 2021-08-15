@@ -292,6 +292,60 @@ void pci::InstallIrqHandler(const IRQLink &link) {
     }
 }
 
+const IRQLink *pci::GetLink(const std::string &name) {
+    for (auto &tuple : SourceMap) {
+        std::string SourceName{std::get<0>(tuple)};
+        if (name == SourceName) {
+            return &(std::get<1>(tuple));
+        }
+    }
+}
+
+const PciIRQRouting *pci::GetRouting(const PciDeviceInformation &deviceInformation, uint8_t pin_03) {
+    if (deviceInformation.bus != bus) {
+        return nullptr;
+    }
+    PciIRQRouting *withoutFunc{nullptr};
+    for (auto &irq : irqr) {
+        if (irq.Slot == deviceInformation.slot) {
+            if (irq.Func == deviceInformation.func && irq.Pin == pin_03) {
+                return &irq;
+            } else if (irq.Func == 0xFFFF && irq.Pin == pin_03) {
+                withoutFunc = &irq;
+            }
+        }
+    }
+    return withoutFunc;
+}
+
+std::optional<uint8_t> pci::GetIrqNumber(const PciDeviceInformation &deviceInformation, uint8_t pin_03) {
+    {
+        const PciIRQRouting *IrqRouting{GetRouting(deviceInformation, pin_03)};
+        if (IrqRouting != nullptr) {
+            uint8_t irq{0};
+            if (IrqRouting->Source.size() > 0) {
+                const IRQLink *Source = GetLink(IrqRouting->Source);
+                irq = (Source->Interrupts.data())[IrqRouting->SourceIndex];
+            } else {
+                irq = IrqRouting->SourceIndex;
+            }
+            return irq;
+        }
+    }
+    return {};
+}
+
+bool pci::AddIrqHandler(uint8_t irq, std::function<bool()> h) {
+    {
+        pci_irq *PciIrq = GetIrq(irq);
+        if (PciIrq != nullptr) {
+            PciIrq->add_handler(h);
+            return true;
+        }
+    }
+    return false;
+}
+
 pci::~pci() {
     for (auto *irq : irqs) {
         delete irq;

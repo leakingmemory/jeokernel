@@ -8,6 +8,7 @@
 #include "../HardwareInterrupts.h"
 
 pci_irq::pci_irq(pci &bus, const IRQLink &link, int index) : pci_irq(bus, (link.Interrupts.data())[index]) {
+    /* int pin number + 3 local apic ints below ioapic range */
     get_hw_interrupt_handler().add_handler(irq + 3, [this] (Interrupt &intr) {
         interrupt(intr);
         this->bus.Ioapic().send_eoi(irq);
@@ -18,12 +19,13 @@ pci_irq::pci_irq(pci &bus, const IRQLink &link, int index) : pci_irq(bus, (link.
     bus.Ioapic().send_eoi(irq);
 }
 
-bool pci_irq::invoke() {
+bool pci_irq::invoke(Interrupt &intr) {
     {
         std::stringstream msg{};
         msg << "IRQ " << irq << "\n";
         get_klogger() << msg.str().c_str();
     }
+    std::lock_guard _lock(lock);
     bool hit{false};
     for (auto &h : handlers) {
         if (h()) {
@@ -38,5 +40,10 @@ void pci_irq::interrupt(Interrupt &intr) {
     msg << "PCI IRQ " << irq << "\n";
     get_klogger() << msg.str().c_str();
 
+    invoke(intr);
+}
 
+void pci_irq::add_handler(const std::function<bool()> &h) {
+    std::lock_guard _guard(lock);
+    handlers.push_back(h);
 }

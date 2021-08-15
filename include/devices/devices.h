@@ -37,7 +37,12 @@ public:
     virtual bool IsBus() {
         return false;
     }
+    Bus *GetBus() {
+        return bus;
+    }
 };
+
+class pci;
 
 class Bus : public Device {
 private:
@@ -49,6 +54,12 @@ public:
     }
     bool IsBus() override {
         return true;
+    }
+    virtual bool IsPci() {
+        return false;
+    }
+    virtual pci *GetPci() {
+        return nullptr;
     }
     bool Probed() {
         return have_probed;

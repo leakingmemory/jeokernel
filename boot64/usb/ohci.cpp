@@ -111,17 +111,28 @@ void ohci::init() {
 
     ohciRegisters->HcPeriodicStart = (ohciRegisters->HcPeriodicStart & 0xFFFFC000) | (interval * 9 / 10);
 
+    PciRegisterF regF{pciDeviceInformation.readRegF()};
+    {
+        auto *pci = GetBus()->GetPci();
+        std::optional<uint8_t> irq = pci->GetIrqNumber(pciDeviceInformation, regF.InterruptPin - 1);
+        {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": INT pin " << (unsigned int) regF.InterruptPin
+                << " PIC INT#" << (unsigned int) regF.InterruptLine << " ACPI INT# " << (irq ? *irq : 0) << "\n";
+            get_klogger() << msg.str().c_str();
+        }
+        if (irq) {
+            pci->AddIrqHandler(*irq, []() {
+                get_klogger() << "ohci int\n";
+                return true;
+            });
+        }
+    }
+
     ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_OVERRUN | OHCI_INT_SCHEDULING_WRITE_DONE_HEAD
             | OHCI_INT_SCHEDULING_START_OF_FRAME | OHCI_INT_SCHEDULING_RESUME_DETECTED
             | OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR | OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW
             | OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH | OHCI_INT_MASTER_INTERRUPT;
-
-    PciRegisterF regF{pciDeviceInformation.readRegF()};
-    {
-        std::stringstream msg;
-        msg << DeviceType() << (unsigned int) DeviceId() << ": INT pin " << (unsigned int) regF.InterruptPin << " PIC INT#" << (unsigned int) regF.InterruptLine << "\n";
-        get_klogger() << msg.str().c_str();
-    }
 
     ohciRegisters->HcRhStatus = OHCI_HC_LPSC;
 

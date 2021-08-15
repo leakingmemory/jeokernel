@@ -103,18 +103,18 @@ struct PciDeviceInformation : public DeviceInformation {
     PciRegisterF readRegF();
 };
 
-class pci;
-
 class pci_irq {
 private:
     pci &bus;
     std::vector<std::function<bool ()>> handlers;
     uint8_t irq;
+    hw_spinlock lock;
 public:
-    pci_irq(pci &bus, uint8_t irq) : bus(bus), handlers(), irq(irq) {}
+    pci_irq(pci &bus, uint8_t irq) : bus(bus), handlers(), irq(irq), lock() {}
     pci_irq(pci &bus, const IRQLink &link, int index);
-    bool invoke();
+    bool invoke(Interrupt &intr);
     void interrupt(Interrupt &intr);
+    void add_handler(const std::function<bool ()> &h);
 
     uint8_t Irq() {
         return irq;
@@ -141,6 +141,13 @@ public:
     std::optional<PciDeviceInformation> probeDevice(uint8_t addr, uint8_t func=0);
     pci_irq *GetIrq(uint8_t irqn);
     virtual void InstallIrqHandler(const IRQLink &link);
+private:
+    const PciIRQRouting *GetRouting(const PciDeviceInformation &deviceInformation, uint8_t pin_03);
+    const IRQLink *GetLink(const std::string &name);
+public:
+    virtual std::optional<uint8_t> GetIrqNumber(const PciDeviceInformation &deviceInformation, uint8_t pin_03);
+    virtual bool AddIrqHandler(uint8_t irq, std::function<bool ()> h);
+
     IOApic &Ioapic() {
         return *ioapic;
     }
@@ -149,6 +156,12 @@ public:
     }
     const cpu_mpfp &Mpfp() {
         return *mpfp;
+    }
+    bool IsPci() override {
+        return true;
+    }
+    pci *GetPci() override {
+        return this;
     }
 private:
     void ReadIrqRouting(void *acpi_handle);
