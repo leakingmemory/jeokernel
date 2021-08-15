@@ -134,6 +134,14 @@ void ohci::init() {
             | OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR | OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW
             | OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH | OHCI_INT_MASTER_INTERRUPT;
 
+    /*
+     * Clear interrupt status flags to accept new interrupts.
+     */
+    ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_OVERRUN | OHCI_INT_SCHEDULING_WRITE_DONE_HEAD
+                                       | OHCI_INT_SCHEDULING_START_OF_FRAME | OHCI_INT_SCHEDULING_RESUME_DETECTED
+                                       | OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR | OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW
+                                       | OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH;
+
     ohciRegisters->HcRhStatus = OHCI_HC_LPSC;
 
     {
