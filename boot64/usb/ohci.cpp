@@ -9,6 +9,20 @@
 #include <thread>
 #include "ohci.h"
 
+#define OHCI_PORT_STATUS_CCS    0x000001 // Current Connection Status
+#define OHCI_PORT_STATUS_PES    0x000002 // Port Enable Status
+#define OHCI_PORT_STATUS_PSS    0x000004 // Port Suspend Status
+#define OHCI_PORT_STATUS_POCI   0x000008 // Port Over Current Indicator
+#define OHCI_PORT_STATUS_PRS    0x000010 // Port Reset Status
+#define OHCI_PORT_STATUS_PPS    0x000100 // Port Power Status
+#define OHCI_PORT_STATUS_LSDA   0x000200 // Low Speed Device Attached
+#define OHCI_PORT_STATUS_CSC    0x010000 // Connect Status Change
+#define OHCI_PORT_STATUS_PESC   0x020000 // Port Enable Status Change
+#define OHCI_PORT_STATUS_PSSC   0x040000 // Port Suspend Status Change
+#define OHCI_PORT_STATUS_OCIC   0x080000 // Port Over Current Indicator Change
+#define OHCI_PORT_STATUS_PRSC   0x100000 // Port Reset Status Change
+
+
 Device *ohci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
             deviceInformation.device_class == 0x0C /* serial bus */ &&
@@ -169,6 +183,8 @@ void ohci::init() {
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB controller, ports x" << (unsigned int) no_ports << " power on port " << (unsigned int) power_on_port_delay_ms << "ms\n";
         get_klogger() << msg.str().c_str();
     }
+
+    Run();
 }
 
 bool ohci::irq() {
@@ -211,6 +227,76 @@ void ohci::StartOfFrame() {
         get_klogger() << "OHCI: First start of frame\n";
     }
     StartOfFrameReceived = true;
+}
+
+uint32_t ohci::GetPortStatus(int port) {
+    uint32_t status{ohciRegisters->PortStatus[port]};
+    uint32_t usb{0};
+    if ((status & OHCI_PORT_STATUS_CCS) != 0) {
+        usb |= USB_PORT_STATUS_CCS;
+    }
+    if ((status & OHCI_PORT_STATUS_PES) != 0) {
+        usb |= USB_PORT_STATUS_PES;
+    }
+    if ((status & OHCI_PORT_STATUS_PSS) != 0) {
+        usb |= USB_PORT_STATUS_PSS;
+    }
+    if ((status & OHCI_PORT_STATUS_POCI) != 0) {
+        usb |= USB_PORT_STATUS_POCI;
+    }
+    if ((status & OHCI_PORT_STATUS_PRS) != 0) {
+        usb |= USB_PORT_STATUS_PRS;
+    }
+    if ((status & OHCI_PORT_STATUS_PPS) != 0) {
+        usb |= USB_PORT_STATUS_PPS;
+    }
+    if ((status & OHCI_PORT_STATUS_LSDA) != 0) {
+        usb |= USB_PORT_STATUS_LSDA;
+    }
+    if ((status & OHCI_PORT_STATUS_CSC) != 0) {
+        usb |= USB_PORT_STATUS_CSC;
+    }
+    if ((status & OHCI_PORT_STATUS_PESC) != 0) {
+        usb |= USB_PORT_STATUS_PESC;
+    }
+    if ((status & OHCI_PORT_STATUS_PSSC) != 0) {
+        usb |= USB_PORT_STATUS_PSSC;
+    }
+    if ((status & OHCI_PORT_STATUS_OCIC) != 0) {
+        usb |= USB_PORT_STATUS_OCIC;
+    }
+    if ((status & OHCI_PORT_STATUS_PRSC) != 0) {
+        usb |= USB_PORT_STATUS_PRSC;
+    }
+    return usb;
+}
+
+void ohci::SwitchPortOff(int port) {
+    ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
+}
+
+void ohci::SwitchPortOn(int port) {
+    ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PES;
+}
+
+void ohci::ClearStatusChange(int port, uint32_t statuses) {
+    uint32_t usb{0};
+    if ((statuses & USB_PORT_STATUS_CSC) != 0) {
+        usb |= OHCI_PORT_STATUS_CSC;
+    }
+    if ((statuses & USB_PORT_STATUS_PESC) != 0) {
+        usb |= OHCI_PORT_STATUS_PESC;
+    }
+    if ((statuses & USB_PORT_STATUS_PSSC) != 0) {
+        usb |= OHCI_PORT_STATUS_PSSC;
+    }
+    if ((statuses & USB_PORT_STATUS_OCIC) != 0) {
+        usb |= OHCI_PORT_STATUS_OCIC;
+    }
+    if ((statuses & USB_PORT_STATUS_PRSC) != 0) {
+        usb |= OHCI_PORT_STATUS_PRSC;
+    }
+    ohciRegisters->PortStatus[port] = usb;
 }
 
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {

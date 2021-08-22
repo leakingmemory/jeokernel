@@ -9,6 +9,7 @@
 #include <core/vmem.h>
 #include "../pci/pci.h"
 #include "Phys32Page.h"
+#include "usb_hcd.h"
 
 #define OHCI_CTRL_CBSR_1_1  0x0000
 #define OHCI_CTRL_CBSR_1_2  0x0001
@@ -152,30 +153,6 @@ struct ohci_descriptor_a {
     }
 } __attribute__((__packed__));
 
-struct ohci_port_status {
-    union {
-        uint32_t value;
-        struct {
-            bool CurrentConnectStatus : 1;
-            bool pes : 1;
-            bool pss : 1;
-            bool poci : 1;
-            bool prs : 1;
-            uint8_t reserved1 : 3;
-            bool pps : 1;
-            bool lsda : 1;
-            uint8_t reserved2 : 6;
-            bool csc : 1;
-            bool pesc : 1;
-            bool pssc : 1;
-            bool ocic : 1;
-            bool prsc : 1;
-            uint8_t reserved3 : 3;
-            uint8_t reserved4;
-        } __attribute__((__packed__));
-    } __attribute__((__packed__));
-} __attribute__((__packed__));
-
 struct ohci_registers {
     uint32_t HcRevision;
     uint32_t HcControl;
@@ -202,7 +179,7 @@ struct ohci_registers {
 } __attribute__((__packed__));
 static_assert(sizeof(ohci_registers) == 0x58);
 
-class ohci : public Device {
+class ohci : public Device, public usb_hcd {
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
@@ -213,8 +190,8 @@ private:
     bool StartOfFrameReceived;
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
-        Device("ohci", &bus), pciDeviceInformation(deviceInformation), mapped_registers_vm(),
-        ohciRegisters(nullptr), hcca(), StartOfFrameReceived(false) {}
+        Device("ohci", &bus), usb_hcd(), pciDeviceInformation(deviceInformation),
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), StartOfFrameReceived(false) {}
     void init() override;
 
     constexpr uint8_t desca_ndp(uint32_t descA) const {
@@ -223,6 +200,14 @@ public:
 private:
     bool irq();
     void StartOfFrame();
+public:
+    int GetNumberOfPorts() override {
+        return no_ports;
+    }
+    uint32_t GetPortStatus(int port) override;
+    void SwitchPortOff(int port) override;
+    void SwitchPortOn(int port) override;
+    void ClearStatusChange(int port, uint32_t statuses) override;
 };
 
 class ohci_driver : public Driver {
