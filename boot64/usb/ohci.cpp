@@ -98,7 +98,13 @@ void ohci::init() {
         std::this_thread::sleep_for(2ms);
     }
 
+    // Some drivers do a host controller reset here.
+
     uint32_t interval = ohciRegisters->HcFmInterval & OHCI_INTERVAL_FI_MASK;
+
+    if (!ResetHostController()) {
+        return;
+    }
 
     ohciRegisters->HcInterruptDisable = OHCI_INT_MASK;
 
@@ -297,6 +303,28 @@ void ohci::ClearStatusChange(int port, uint32_t statuses) {
         usb |= OHCI_PORT_STATUS_PRSC;
     }
     ohciRegisters->PortStatus[port] = usb;
+}
+
+bool ohci::ResetHostController() {
+    ohciRegisters->HcCommandStatus = OHCI_CMD_HCR;
+    for (int i = 0; i < 10; i++) {
+        {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10us);
+        }
+        auto cmdStat = ohciRegisters->HcCommandStatus;
+        if ((cmdStat & OHCI_CMD_HCR) == 0) {
+            return true;
+        }
+    }
+
+    {
+        std::stringstream msg;
+        msg << DeviceType() << (unsigned int) DeviceId() << ": Error: Host controller reset timeout\n";
+        get_klogger() << msg.str().c_str();
+    }
+
+    return false;
 }
 
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {

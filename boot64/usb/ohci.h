@@ -30,7 +30,8 @@
 #define OHCI_CTRL_HCFS_OPERATIONAL (2 << 6)
 #define OHCI_CTRL_HCFS_SUSPEND     (3 << 6)
 
-#define OHCI_CMD_OCR 8
+#define OHCI_CMD_HCR 1 // Host Controller Reset
+#define OHCI_CMD_OCR 8 // Ownership Change Request
 
 #define OHCI_INT_SCHEDULING_OVERRUN             0x01
 #define OHCI_INT_SCHEDULING_WRITE_DONE_HEAD     0x02
@@ -198,6 +199,7 @@ public:
         return (uint8_t) (descA & 0xFF);
     }
 private:
+    bool ResetHostController();
     bool irq();
     void StartOfFrame();
 public:
