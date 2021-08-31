@@ -118,6 +118,8 @@ void ohci::init() {
         uint32_t ctrl = ohciRegisters->HcControl;
         ctrl &= ~OHCI_CTRL_CBSR_MASK;
         ctrl |= OHCI_CTRL_CBSR_1_4 | OHCI_CTRL_PLE | OHCI_CTRL_IE | OHCI_CTRL_CLE | OHCI_CTRL_BLE;
+        // Unsuspend controller after HC reset:
+        ctrl |= OHCI_CTRL_HCFS_OPERATIONAL;
         ohciRegisters->HcControl = ctrl;
     }
 
