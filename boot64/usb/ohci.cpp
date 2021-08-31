@@ -98,7 +98,13 @@ void ohci::init() {
         std::this_thread::sleep_for(2ms);
     }
 
-    // Some drivers do a host controller reset here.
+    // HC, etc, reset
+    ohciRegisters->HcControl = OHCI_CTRL_HCFS_RESET;
+
+    {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(100ms);
+    }
 
     uint32_t interval = ohciRegisters->HcFmInterval & OHCI_INTERVAL_FI_MASK;
 
@@ -116,7 +122,7 @@ void ohci::init() {
 
     {
         uint32_t ctrl = ohciRegisters->HcControl;
-        ctrl &= ~(OHCI_CTRL_CBSR_MASK | OHCI_CTRL_HCFS_MASK);
+        ctrl &= ~(OHCI_CTRL_CBSR_MASK | OHCI_CTRL_HCFS_MASK | OHCI_CTRL_ENDPOINTS_MASK | OHCI_CTRL_IR);
         ctrl |= OHCI_CTRL_CBSR_1_4 | OHCI_CTRL_PLE | OHCI_CTRL_IE | OHCI_CTRL_CLE | OHCI_CTRL_BLE;
         // Unsuspend controller after HC reset:
         ctrl |= OHCI_CTRL_HCFS_OPERATIONAL;
