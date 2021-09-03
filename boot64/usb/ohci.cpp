@@ -147,8 +147,32 @@ void ohci::init() {
         ctrl &= ~(OHCI_CTRL_CBSR_MASK | OHCI_CTRL_HCFS_MASK | OHCI_CTRL_ENDPOINTS_MASK | OHCI_CTRL_IR);
         ctrl |= OHCI_CTRL_CBSR_1_4 | OHCI_CTRL_PLE | OHCI_CTRL_IE | OHCI_CTRL_CLE | OHCI_CTRL_BLE;
         // Unsuspend controller after HC reset:
-        ctrl |= OHCI_CTRL_HCFS_OPERATIONAL;
+        ctrl |= OHCI_CTRL_HCFS_RESUME;
         ohciRegisters->HcControl = ctrl;
+    }
+
+    {
+        int timeout = 10;
+        do {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            --timeout;
+        } while (timeout > 0 && (ohciRegisters->HcControl & OHCI_CTRL_HCFS_OPERATIONAL) == 0);
+        if (timeout == 0) {
+            {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": resume timeout\n";
+                get_klogger() << msg.str().c_str();
+            }
+            auto ct = ohciRegisters->HcControl;
+            ct &= ~OHCI_CTRL_HCFS_MASK;
+            ct |= OHCI_CTRL_HCFS_OPERATIONAL;
+        }
+    }
+    {
+        std::stringstream msg;
+        msg << DeviceType() << (unsigned int) DeviceId() << ": started\n";
+        get_klogger() << msg.str().c_str();
     }
 
     {
