@@ -7,6 +7,8 @@
 #include <klogger.h>
 #include <core/vmem.h>
 #include <thread>
+#include <delay.h>
+#include <core/nanotime.h>
 #include "ohci.h"
 
 #define OHCI_PORT_STATUS_CCS    0x000001 // Current Connection Status
@@ -34,6 +36,8 @@ Device *ohci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
         return nullptr;
     }
 }
+
+//#define OHCI_START_VIA_RESUME
 
 void ohci::init() {
     uint64_t addr{0};
@@ -98,22 +102,6 @@ void ohci::init() {
         std::this_thread::sleep_for(2ms);
     }
 
-    // HC, etc, reset
-    ohciRegisters->HcControl = OHCI_CTRL_HCFS_RESET;
-
-    {
-        using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(100ms);
-    }
-
-    uint32_t interval = ohciRegisters->HcFmInterval & OHCI_INTERVAL_FI_MASK;
-
-    if (!ResetHostController()) {
-        return;
-    }
-
-    ohciRegisters->HcInterruptDisable = OHCI_INT_MASK;
-
     PciRegisterF regF{pciDeviceInformation.readRegF()};
     {
         auto *pci = GetBus()->GetPci();
@@ -131,47 +119,78 @@ void ohci::init() {
         }
     }
 
-    ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_OVERRUN | OHCI_INT_SCHEDULING_WRITE_DONE_HEAD
-                                       | OHCI_INT_SCHEDULING_START_OF_FRAME | OHCI_INT_SCHEDULING_RESUME_DETECTED
-                                       | OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR | OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW
-                                       | OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH | OHCI_INT_MASTER_INTERRUPT;
-
-    ohciRegisters->HcHCCA = hcca.Addr();
-
-    ohciRegisters->HcControlHeadED = hcca.Addr(&(hcca.ControlED()));
-
-    ohciRegisters->HcBulkHeadED = hcca.Addr(&(hcca.BulkED()));
+    // HC, etc, reset
+    ohciRegisters->HcControl = OHCI_CTRL_HCFS_RESET;
 
     {
-        uint32_t ctrl = ohciRegisters->HcControl;
-        ctrl &= ~(OHCI_CTRL_CBSR_MASK | OHCI_CTRL_HCFS_MASK | OHCI_CTRL_ENDPOINTS_MASK | OHCI_CTRL_IR);
-        ctrl |= OHCI_CTRL_CBSR_1_4 | OHCI_CTRL_PLE | OHCI_CTRL_IE | OHCI_CTRL_CLE | OHCI_CTRL_BLE;
-        // Unsuspend controller after HC reset:
-        ctrl |= OHCI_CTRL_HCFS_RESUME;
-        ohciRegisters->HcControl = ctrl;
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(100ms);
     }
 
+    uint32_t interval = ohciRegisters->HcFmInterval & OHCI_INTERVAL_FI_MASK;
+
+    uint64_t timing{0};
     {
-        int timeout = 10;
-        do {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
-            --timeout;
-        } while (timeout > 0 && (ohciRegisters->HcControl & OHCI_CTRL_HCFS_OPERATIONAL) == 0);
-        if (timeout == 0) {
-            {
-                std::stringstream msg;
-                msg << DeviceType() << (unsigned int) DeviceId() << ": resume timeout\n";
-                get_klogger() << msg.str().c_str();
-            }
-            auto ct = ohciRegisters->HcControl;
-            ct &= ~OHCI_CTRL_HCFS_MASK;
-            ct |= OHCI_CTRL_HCFS_OPERATIONAL;
+        critical_section cli{};
+
+        uint64_t nanoref = get_nanotime_ref();
+
+        if (!ResetHostController()) {
+            return;
         }
+
+        ohciRegisters->HcInterruptDisable = OHCI_INT_MASK;
+
+        ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_OVERRUN | OHCI_INT_SCHEDULING_WRITE_DONE_HEAD
+                                           | OHCI_INT_SCHEDULING_START_OF_FRAME | OHCI_INT_SCHEDULING_RESUME_DETECTED
+                                           | OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR |
+                                           OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW
+                                           | OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH | OHCI_INT_MASTER_INTERRUPT;
+
+        ohciRegisters->HcHCCA = hcca.Addr();
+
+        ohciRegisters->HcControlHeadED = hcca.Addr(&(hcca.ControlED()));
+
+        ohciRegisters->HcBulkHeadED = hcca.Addr(&(hcca.BulkED()));
+
+        {
+            uint32_t ctrl = ohciRegisters->HcControl;
+            ctrl &= ~(OHCI_CTRL_CBSR_MASK | OHCI_CTRL_HCFS_MASK | OHCI_CTRL_ENDPOINTS_MASK | OHCI_CTRL_IR);
+            ctrl |= OHCI_CTRL_CBSR_1_4 | OHCI_CTRL_PLE | OHCI_CTRL_IE | OHCI_CTRL_CLE | OHCI_CTRL_BLE;
+            // Unsuspend controller after HC reset:
+#ifdef OHCI_START_VIA_RESUME
+            ctrl |= OHCI_CTRL_HCFS_RESUME;
+#else
+            ctrl |= OHCI_CTRL_HCFS_OPERATIONAL;
+#endif
+            ohciRegisters->HcControl = ctrl;
+        }
+
+#ifdef OHCI_START_VIA_RESUME
+        {
+            int timeout = 10;
+            do {
+                delay_nano(10000);
+                --timeout;
+            } while (timeout > 0 && (ohciRegisters->HcControl & OHCI_CTRL_HCFS_OPERATIONAL) == 0);
+            if (timeout == 0) {
+                {
+                    std::stringstream msg;
+                    msg << DeviceType() << (unsigned int) DeviceId() << ": resume timeout\n";
+                    get_klogger() << msg.str().c_str();
+                }
+                auto ct = ohciRegisters->HcControl;
+                ct &= ~OHCI_CTRL_HCFS_MASK;
+                ct |= OHCI_CTRL_HCFS_OPERATIONAL;
+            }
+        }
+#endif
+
+        timing = get_nanotime_ref() - nanoref;
     }
     {
         std::stringstream msg;
-        msg << DeviceType() << (unsigned int) DeviceId() << ": started\n";
+        msg << DeviceType() << (unsigned int) DeviceId() << ": started using total time " << timing << "ns\n";
         get_klogger() << msg.str().c_str();
     }
 
@@ -341,8 +360,7 @@ bool ohci::ResetHostController() {
     ohciRegisters->HcCommandStatus = OHCI_CMD_HCR;
     for (int i = 0; i < 10; i++) {
         {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10us);
+            delay_nano(10000);
         }
         auto cmdStat = ohciRegisters->HcCommandStatus;
         if ((cmdStat & OHCI_CMD_HCR) == 0) {
