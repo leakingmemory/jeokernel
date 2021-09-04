@@ -119,6 +119,8 @@ void ohci::init() {
         }
     }
 
+    dumpregs();
+
     // HC, etc, reset
     ohciRegisters->HcControl = OHCI_CTRL_HCFS_RESET;
 
@@ -126,6 +128,8 @@ void ohci::init() {
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(100ms);
     }
+
+    dumpregs();
 
     uint32_t interval = ohciRegisters->HcFmInterval & OHCI_INTERVAL_FI_MASK;
 
@@ -214,10 +218,14 @@ void ohci::init() {
         get_klogger() << msg.str().c_str();
     }
 
+    dumpregs();
+
     {
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(70ms);
     }
+
+    dumpregs();
 
     uint16_t retries = 20;
     while (no_ports == 0 || no_ports > 15) {
@@ -375,6 +383,18 @@ bool ohci::ResetHostController() {
     }
 
     return false;
+}
+
+void ohci::dumpregs() {
+    std::stringstream str{};
+    str << DeviceType() << (unsigned int) DeviceId()
+        << ": Ctrl=" << std::hex << ohciRegisters->HcControl
+        << " Cmd=" << ohciRegisters->HcCommandStatus << " Int="
+        << ohciRegisters->HcInterruptStatus << " Per="
+        << ohciRegisters->HcPeriodicStart << " FmInt="
+        << ohciRegisters->HcFmInterval << " A=" << ohciRegisters->HcRhDescriptorA
+        << " B=" << ohciRegisters->HcRhDescriptorB << "\n";
+    get_klogger() << str.str().c_str();
 }
 
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {

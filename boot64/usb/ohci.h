@@ -196,6 +196,9 @@ public:
         Device("ohci", &bus), usb_hcd(), pciDeviceInformation(deviceInformation),
         mapped_registers_vm(), ohciRegisters(nullptr), hcca(), StartOfFrameReceived(false) {}
     void init() override;
+private:
+    void dumpregs();
+public:
 
     constexpr uint8_t desca_ndp(uint32_t descA) const {
         return (uint8_t) (descA & 0xFF);
