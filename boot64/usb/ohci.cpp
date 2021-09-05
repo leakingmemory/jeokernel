@@ -346,7 +346,7 @@ void ohci::SwitchPortOff(int port) {
 
 void ohci::SwitchPortOn(int port) {
     if (PortPowerIndividuallyControlled(port)) {
-        ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
+        ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PPS;
     }
 }
 
