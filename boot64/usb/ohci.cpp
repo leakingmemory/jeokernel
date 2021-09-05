@@ -394,12 +394,13 @@ bool ohci::ResetHostController() {
 void ohci::dumpregs() {
     std::stringstream str{};
     str << DeviceType() << (unsigned int) DeviceId()
-        << ": Ctrl=" << std::hex << ohciRegisters->HcControl
-        << " Cmd=" << ohciRegisters->HcCommandStatus << " Int="
+        << ": C=" << std::hex << ohciRegisters->HcControl
+        << " CS=" << ohciRegisters->HcCommandStatus << " Int="
         << ohciRegisters->HcInterruptStatus << " Per="
         << ohciRegisters->HcPeriodicStart << " FmInt="
         << ohciRegisters->HcFmInterval << " A=" << ohciRegisters->HcRhDescriptorA
-        << " B=" << ohciRegisters->HcRhDescriptorB << "\n";
+        << " B=" << ohciRegisters->HcRhDescriptorB
+        << " IE=" << ohciRegisters->HcInterruptEnable << "\n";
     get_klogger() << str.str().c_str();
 }
 
