@@ -249,6 +249,8 @@ void ohci::init() {
         get_klogger() << msg.str().c_str();
     }
 
+    bvalue = ohciRegisters->HcRhDescriptorB;
+
     Run();
 }
 
@@ -337,11 +339,15 @@ uint32_t ohci::GetPortStatus(int port) {
 }
 
 void ohci::SwitchPortOff(int port) {
-    ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
+    if (PortPowerIndividuallyControlled(port)) {
+        ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
+    }
 }
 
 void ohci::SwitchPortOn(int port) {
-    ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PES;
+    if (PortPowerIndividuallyControlled(port)) {
+        ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
+    }
 }
 
 void ohci::ClearStatusChange(int port, uint32_t statuses) {

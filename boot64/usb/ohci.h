@@ -156,6 +156,26 @@ struct ohci_descriptor_a {
     }
 } __attribute__((__packed__));
 
+struct ohci_descriptor_b {
+    union {
+        uint32_t value;
+        struct {
+            uint16_t dr;
+            uint16_t ppcm;
+        } __attribute__((__packed__));
+    } __attribute__((__packed__));
+
+    ohci_descriptor_b(uint32_t value) : value(value) {}
+    ohci_descriptor_b &operator =(const uint32_t &value) {
+        this->value = value;
+        return *this;
+    }
+    ohci_descriptor_b &operator =(uint32_t &&value) {
+        this->value = value;
+        return *this;
+    }
+} __attribute__((__packed__));
+
 struct ohci_registers {
     uint32_t HcRevision;
     uint32_t HcControl;
@@ -188,13 +208,14 @@ private:
     std::unique_ptr<vmem> mapped_registers_vm;
     ohci_registers *ohciRegisters;
     OhciHcca hcca;
+    ohci_descriptor_b bvalue;
     uint16_t power_on_port_delay_ms;
     uint8_t no_ports;
     bool StartOfFrameReceived;
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         Device("ohci", &bus), usb_hcd(), pciDeviceInformation(deviceInformation),
-        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), StartOfFrameReceived(false) {}
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), StartOfFrameReceived(false) {}
     void init() override;
 private:
     void dumpregs();
@@ -202,6 +223,10 @@ public:
 
     constexpr uint8_t desca_ndp(uint32_t descA) const {
         return (uint8_t) (descA & 0xFF);
+    }
+    bool PortPowerIndividuallyControlled(int portno) {
+        uint16_t bit = 2 << portno;
+        return (bvalue.ppcm & bit) != 0;
     }
 private:
     bool ResetHostController();
