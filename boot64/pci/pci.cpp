@@ -150,8 +150,8 @@ pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bu
             for (uint8_t irq : irqns) {
                 IRQLink link{
                     .ProducerConsumer = 1,
-                    .Triggering = 0,
-                    .Polarity = 0,
+                    .Triggering = 1, // level
+                    .Polarity = 1, // low
                     .Shareable = 1,
                     .WakeCapable = 0,
                     .InterruptCount = 1,
