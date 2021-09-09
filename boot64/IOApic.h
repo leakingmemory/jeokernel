@@ -60,7 +60,7 @@ public:
     }
 
     void send_eoi(uint8_t vector) {
-        (*this)[0x40] = (uint32_t) vector;
+        pointer[0x10] = (uint32_t) (vector + 0x23);
     }
 };
 
