@@ -34,6 +34,10 @@ public:
         pointer[0x20 / 4] = lapic_id;
     }
 
+    void set_task_priority(uint32_t tpr) {
+        pointer[0x80 / 4] = tpr;
+    }
+
     int get_cpu_num(const cpu_mpfp &mpc) const {
         uint32_t lapic_id = get_lapic_id() >> 24;
         for (int i = 0; i < mpc.get_num_cpus(); i++) {
@@ -98,6 +102,8 @@ public:
         } else {
             set_spurious_interrupt_vector(get_spurious_interrupt_vector() & ~0x100);
         }
+
+        set_task_priority(0);
     }
 
     uint32_t set_timer_int_mode(uint8_t intr, uint32_t mode) {
