@@ -83,7 +83,7 @@ void ps2kbd::init() {
         lapic->eio();
     });
 
-    ioapic->enable(ioapic_intn, lapic->get_cpu_num(*mpfp));
+    ioapic->enable(ioapic_intn, lapic->get_lapic_id() >> 24);
     ioapic->send_eoi(ioapic_intn);
 
     code_state_machine.SetLeds(true, true, true);

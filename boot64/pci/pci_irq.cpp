@@ -14,7 +14,7 @@ pci_irq::pci_irq(pci &bus, const IRQLink &link, int index) : pci_irq(bus, (link.
         this->bus.Ioapic().send_eoi(irq);
         this->bus.Lapic().eio();
     });
-    bus.Ioapic().enable(irq, this->bus.Lapic().get_cpu_num(this->bus.Mpfp()),
+    bus.Ioapic().enable(irq, this->bus.Lapic().get_lapic_id() >> 24,
                         true, false, 0, link.Polarity, link.Triggering);
     bus.Ioapic().send_eoi(irq);
 }
