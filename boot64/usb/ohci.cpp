@@ -216,7 +216,7 @@ void ohci::init() {
          * Clear interrupt status flags to accept new interrupts.
          */
         ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_OVERRUN | OHCI_INT_SCHEDULING_WRITE_DONE_HEAD
-                                           | OHCI_INT_SCHEDULING_START_OF_FRAME | OHCI_INT_SCHEDULING_RESUME_DETECTED
+                                           /*| OHCI_INT_SCHEDULING_START_OF_FRAME*/ | OHCI_INT_SCHEDULING_RESUME_DETECTED
                                            | OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR | OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW
                                            | OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH;
 
@@ -291,11 +291,10 @@ bool ohci::irq() {
     }
     if ((IrqStatus & OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW) != 0) {
         IrqClear |= OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW;
-        get_klogger() << "ohci frame number overflow\n";
     }
     if ((IrqStatus & OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH) != 0) {
         IrqClear |= OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH;
-        get_klogger() << "ohci root hub status change\n";
+        RootHubStatusChange();
     }
     ohciRegisters->HcInterruptStatus = IrqClear;
     return IrqClear != 0;

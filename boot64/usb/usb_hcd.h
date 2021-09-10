@@ -5,6 +5,9 @@
 #ifndef JEOKERNEL_USB_HCD_H
 #define JEOKERNEL_USB_HCD_H
 
+#include <concurrency/raw_semaphore.h>
+#include "usb_port_connection.h"
+
 #define USB_PORT_STATUS_CCS    0x000001 // Current Connection Status
 #define USB_PORT_STATUS_PES    0x000002 // Port Enable Status
 #define USB_PORT_STATUS_PSS    0x000004 // Port Suspend Status
@@ -19,18 +22,26 @@
 #define USB_PORT_STATUS_PRSC   0x000800 // Port Reset Status Change
 
 class usb_hcd {
+private:
+    raw_semaphore hub_sema;
+    std::vector<usb_port_connection *> connections;
 public:
-    usb_hcd() {}
-    virtual ~usb_hcd() {}
+    usb_hcd() : hub_sema(0), connections() {}
+    virtual ~usb_hcd() {
+        wild_panic("usb_hcd: delete not implemented");
+    }
     virtual int GetNumberOfPorts() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
     virtual void SwitchPortOff(int port) = 0;
     virtual void SwitchPortOn(int port) = 0;
     virtual void ClearStatusChange(int port, uint32_t statuses) = 0;
 private:
-    void BusInit();
+    [[noreturn]] void BusInit();
+    void PortConnected(uint8_t port);
+    void PortDisconnected(uint8_t port);
 public:
     void Run();
+    void RootHubStatusChange();
 };
 
 #endif //JEOKERNEL_USB_HCD_H
