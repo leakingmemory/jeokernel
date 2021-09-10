@@ -129,7 +129,6 @@ void acpica_lib::bootstrap() {
             get_klogger() << "ERROR: Failed to set ACPI to IOAPIC mode\n";
         }
     }
-    AcpiOsSleep(5000);
 }
 
 bool acpica_lib::evaluate_integer(void *acpi_handle, const char *method, uint64_t &value) {

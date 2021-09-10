@@ -165,10 +165,6 @@ pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bu
     })) {
         get_klogger() << "error: read acpi PCI bridges failed\n";
     }
-    {
-        using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(5s);
-    }
 }
 
 void pci::ProbeDevices() {
@@ -237,8 +233,6 @@ void pci::ReadIrqRouting(void *acpi_handle) {
         get_klogger() << "IRQr " << rt.Address << " P=" << rt.Pin << " Si=" << rt.SourceIndex << " S="
                       << rt.Source.c_str() <<"\n";
     }
-    using namespace std::literals::chrono_literals;
-    std::this_thread::sleep_for(5s);
     if (using_source) {
         get_klogger() << "Namespace walk:\n";
         acpica.walk_namespace([this, &acpica](std::string path, uint32_t objectType, void *handle) {
@@ -263,7 +257,6 @@ void pci::ReadIrqRouting(void *acpi_handle) {
                 }
             }
         });
-        std::this_thread::sleep_for(5s);
     }
 }
 
