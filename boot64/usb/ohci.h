@@ -240,6 +240,9 @@ public:
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
+    void EnablePort(int port) override;
+    void DisablePort(int port) override;
+    void ResetPort(int port) override;
 };
 
 class ohci_driver : public Driver {

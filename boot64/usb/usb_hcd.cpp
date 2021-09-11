@@ -58,7 +58,7 @@ void usb_hcd::PortConnected(uint8_t port) {
             return;
         }
     }
-    usb_port_connection *connection = new usb_port_connection(port);
+    usb_port_connection *connection = new usb_port_connection(*this, port);
     connections.push_back(connection);
 }
 
@@ -73,4 +73,12 @@ void usb_hcd::PortDisconnected(uint8_t port) {
         }
         ++iterator;
     }
+}
+
+bool usb_hcd::ResettingPort(int port) {
+    return (GetPortStatus(port) & USB_PORT_STATUS_PRS) != 0;
+}
+
+bool usb_hcd::EnabledPort(int port) {
+    return (GetPortStatus(port) & USB_PORT_STATUS_PES) != 0;
 }

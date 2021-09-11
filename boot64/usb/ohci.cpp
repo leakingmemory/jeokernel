@@ -415,6 +415,18 @@ void ohci::dumpregs() {
     get_klogger() << str.str().c_str();
 }
 
+void ohci::EnablePort(int port) {
+    ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PES;
+}
+
+void ohci::DisablePort(int port) {
+    ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
+}
+
+void ohci::ResetPort(int port) {
+    ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PRS;
+}
+
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {
     for (int i = 0; i < 0x3F; i++) {
         hcca_ed_ptrs[i].ed = &(hcca->hcca_with_eds.eds[i]);

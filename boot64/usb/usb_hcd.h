@@ -21,7 +21,7 @@
 #define USB_PORT_STATUS_OCIC   0x000400 // Port Over Current Indicator Change
 #define USB_PORT_STATUS_PRSC   0x000800 // Port Reset Status Change
 
-class usb_hcd {
+class usb_hcd : usb_hub {
 private:
     raw_semaphore hub_sema;
     std::vector<usb_port_connection *> connections;
@@ -42,6 +42,11 @@ private:
 public:
     void Run();
     void RootHubStatusChange();
+    virtual void EnablePort(int port) override = 0;
+    virtual void DisablePort(int port) override = 0;
+    virtual void ResetPort(int port) override = 0;
+    bool EnabledPort(int port) override;
+    bool ResettingPort(int port) override;
 };
 
 #endif //JEOKERNEL_USB_HCD_H
