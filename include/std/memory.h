@@ -147,7 +147,7 @@ namespace std {
     private:
         shared_ptr_container<T,Deleter> *container;
     public:
-        shared_ptr() : container(new shared_ptr_container<T,Deleter>()) {}
+        shared_ptr() : container(nullptr) {}
         shared_ptr(pointer p) : container(new shared_ptr_container<T,Deleter>(p)) {}
         ~shared_ptr() {
             if (container != nullptr) {
@@ -157,27 +157,48 @@ namespace std {
             }
         }
 
-        shared_ptr(shared_ptr &&mv) : container(mv.container) {
+        shared_ptr(shared_ptr<T,Deleter> &&mv) : container(mv.container) {
             mv.container = nullptr;
         }
-        shared_ptr(const shared_ptr &cp) : container(cp.container) {
+        shared_ptr(const shared_ptr<T,Deleter> &cp) : container(cp.container) {
             container->acquire();
         }
 
         shared_ptr &operator = (shared_ptr &&mv) {
+            if (container != nullptr) {
+                if (container->release() == 0) {
+                    delete container;
+                }
+            }
             container = mv.container;
             mv.container = nullptr;
             return *this;
         }
 
         shared_ptr &operator = (const shared_ptr &cp) {
+            if (container != nullptr) {
+                if (container->release() == 0) {
+                    delete container;
+                }
+            }
             container = cp.container;
-            container->acquire();
+            if (container != nullptr) {
+                container->acquire();
+            }
             return *this;
         }
 
         shared_ptr &operator = (pointer ptr) {
-            *container = ptr;
+            if (container != nullptr) {
+                if (container->release() == 0) {
+                    delete container;
+                }
+            }
+            if (ptr != nullptr) {
+                container = new shared_ptr_container<T, Deleter>(ptr);
+            } else {
+                container = nullptr;
+            }
             return *this;
         }
 
@@ -190,7 +211,16 @@ namespace std {
         }
 
         explicit operator bool () const {
-            return container->isset();
+            return container != nullptr && container->isset();
+        }
+
+        bool operator == (T *ptr) {
+            if (container != nullptr) {
+                T *obj = &(*(*container));
+                return obj == ptr;
+            } else {
+                return ptr == nullptr;
+            }
         }
     };
 
