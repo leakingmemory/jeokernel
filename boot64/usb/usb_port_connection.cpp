@@ -44,6 +44,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub),
         }
     }
     get_klogger() << "USB port enabled and reset\n";
+    std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, BOTH, hub.PortSpeed(port));
     hub.DisablePort(port);
 }
 

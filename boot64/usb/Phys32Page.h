@@ -9,9 +9,12 @@
 #include <core/vmem.h>
 
 class Phys32Page {
+public:
+    typedef uint32_t physaddr_t;
+private:
     vmem vm;
     size_t size;
-    uint32_t physaddr;
+    physaddr_t physaddr;
 public:
     explicit Phys32Page(size_t size);
     ~Phys32Page();

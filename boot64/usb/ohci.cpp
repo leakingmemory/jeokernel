@@ -427,6 +427,17 @@ void ohci::ResetPort(int port) {
     ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PRS;
 }
 
+std::shared_ptr<usb_endpoint>
+ohci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
+                            usb_transfer_direction dir, usb_speed speed) {
+    auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed, CONTROL);
+    return std::shared_ptr<usb_endpoint>(endpoint);
+}
+
+usb_speed ohci::PortSpeed(int port) {
+    return (ohciRegisters->PortStatus[port] & OHCI_PORT_STATUS_LSDA) == 0 ? FULL : LOW;
+}
+
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {
     for (int i = 0; i < 0x3F; i++) {
         hcca_ed_ptrs[i].ed = &(hcca->hcca_with_eds.eds[i]);
@@ -464,4 +475,66 @@ OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()),
     hcca->hc_bulk_ed.TailP = 0;
     hcca->hc_bulk_ed.HeadP = 0;
     hcca->hc_bulk_ed.HcControl = 0;
+}
+
+#define OHCI_ED_DIRECTION_BOTH 0x0000
+#define OHCI_ED_DIRECTION_OUT  0x0800
+#define OHCI_ED_DIRECTION_IN   0x1000
+
+#define OHCI_ED_SPEED_LOW      0x2000
+#define OHCI_ED_SKIP           0x4000
+#define OHCI_ED_ISOC_TD        0x8000
+
+
+ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
+                             usb_transfer_direction dir, usb_speed speed, usb_endpoint_type endpointType) :
+                             ohciRef(ohci),
+                             edPtr(ohci.edPool.Alloc()),
+                             head(new ohci_transfer(ohci)), tail(head),
+                             endpointType(endpointType),
+                             next() {
+    ohci_endpoint_descriptor *ed = edPtr->Pointer();
+    {
+        uint32_t control = ((maxPacketSize & 0x7FF) << 16)
+                           | ((endpointNum & 0x0F) << 7)
+                           | (functionAddr & 0x07F);
+        if (dir == IN) {
+            control |= OHCI_ED_DIRECTION_IN;
+        } else if (dir == OUT) {
+            control |= OHCI_ED_DIRECTION_OUT;
+        }
+        if (speed == LOW) {
+            control |= OHCI_ED_SPEED_LOW;
+        }
+        ed->HcControl = control;
+    }
+    ed->HeadP = head->PhysAddr();
+    ed->TailP = tail->PhysAddr();
+    if (endpointType == CONTROL) {
+        ed->NextED = ohci.ohciRegisters->HcControlHeadED;
+        ohci.ohciRegisters->HcControlHeadED = edPtr->Phys();
+        next = ohci.controlHead;
+        ohci.controlHead = this;
+    }
+}
+
+ohci_endpoint::~ohci_endpoint() {
+    if (endpointType == CONTROL) {
+        std::shared_ptr<ohci_endpoint> endpoint = ohciRef.controlHead;
+        while (endpoint) {
+            if (endpoint->next == this) {
+                endpoint->SetNext(next);
+                ohciRef.destroyEds.emplace_back(edPtr, head);
+            }
+        }
+    }
+}
+
+void ohci_endpoint::SetNext(std::shared_ptr<ohci_endpoint> endpoint) {
+    ohci_endpoint_descriptor *ed = edPtr->Pointer();
+    ed->NextED = endpoint->edPtr->Phys();
+    this->next = endpoint;
+}
+
+ohci_transfer::ohci_transfer(ohci &ohci) : transferPtr(ohci.xPool.Alloc()), next() {
 }

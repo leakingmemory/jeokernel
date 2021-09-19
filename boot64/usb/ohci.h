@@ -10,6 +10,7 @@
 #include "../pci/pci.h"
 #include "Phys32Page.h"
 #include "usb_hcd.h"
+#include "StructPool.h"
 
 #define OHCI_CTRL_CBSR_1_1  0x0000
 #define OHCI_CTRL_CBSR_1_2  0x0001
@@ -58,6 +59,16 @@ struct ohci_endpoint_descriptor {
     uint32_t TailP;
     uint32_t HeadP;
     uint32_t NextED;
+};
+
+struct ohci_transfer_descriptor {
+    uint32_t TdControl;
+    uint32_t CurrentBufferPointer;
+    uint32_t NextTD;
+    uint32_t BufferEnd;
+
+    ohci_transfer_descriptor() : TdControl(0), CurrentBufferPointer(0), NextTD(0), BufferEnd(0) {
+    }
 };
 
 struct ohci_endpoint_descriptor_pointer {
@@ -202,7 +213,46 @@ struct ohci_registers {
 } __attribute__((__packed__));
 static_assert(sizeof(ohci_registers) == 0x58);
 
+class ohci;
+
+class ohci_transfer {
+private:
+    std::shared_ptr<StructPoolPointer<ohci_transfer_descriptor,uint32_t>> transferPtr;
+    std::shared_ptr<ohci_transfer> next;
+public:
+    ohci_transfer(ohci &ohci);
+    uint32_t PhysAddr() {
+        return transferPtr->Phys();
+    }
+};
+
+struct ohci_endpoint_cleanup {
+    std::shared_ptr<StructPoolPointer<ohci_endpoint_descriptor,uint32_t>> ed;
+    std::shared_ptr<ohci_transfer> transfers;
+
+    ohci_endpoint_cleanup(
+            std::shared_ptr<StructPoolPointer<ohci_endpoint_descriptor,uint32_t>> ed,
+            std::shared_ptr<ohci_transfer> transfers
+            ) : ed(ed), transfers(transfers) {}
+};
+
+class ohci_endpoint : public usb_endpoint {
+private:
+    ohci &ohciRef;
+    std::shared_ptr<StructPoolPointer<ohci_endpoint_descriptor,uint32_t>> edPtr;
+    std::shared_ptr<ohci_transfer> head;
+    std::shared_ptr<ohci_transfer> tail;
+    usb_endpoint_type endpointType;
+    std::shared_ptr<ohci_endpoint> next;
+public:
+    ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_transfer_direction dir, usb_speed speed, usb_endpoint_type endpointType);
+    virtual ~ohci_endpoint();
+    void SetNext(std::shared_ptr<ohci_endpoint> endpoint);
+};
+
 class ohci : public Device, public usb_hcd {
+    friend ohci_endpoint;
+    friend ohci_transfer;
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
@@ -211,11 +261,15 @@ private:
     ohci_descriptor_b bvalue;
     uint16_t power_on_port_delay_ms;
     uint8_t no_ports;
+    StructPool<StructPoolAllocator<Phys32Page,ohci_endpoint_descriptor>> edPool;
+    std::vector<ohci_endpoint_cleanup> destroyEds;
+    std::shared_ptr<ohci_endpoint> controlHead;
+    StructPool<StructPoolAllocator<Phys32Page,ohci_transfer_descriptor>> xPool;
     bool StartOfFrameReceived;
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         Device("ohci", &bus), usb_hcd(), pciDeviceInformation(deviceInformation),
-        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), StartOfFrameReceived(false) {}
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlHead(), xPool(), StartOfFrameReceived(false) {}
     void init() override;
 private:
     void dumpregs();
@@ -240,9 +294,11 @@ public:
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
+    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_transfer_direction dir, usb_speed speed) override;
     void EnablePort(int port) override;
     void DisablePort(int port) override;
     void ResetPort(int port) override;
+    usb_speed PortSpeed(int port) override;
 };
 
 class ohci_driver : public Driver {

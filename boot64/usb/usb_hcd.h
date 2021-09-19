@@ -5,6 +5,7 @@
 #ifndef JEOKERNEL_USB_HCD_H
 #define JEOKERNEL_USB_HCD_H
 
+#include <memory>
 #include <concurrency/raw_semaphore.h>
 #include "usb_port_connection.h"
 
@@ -35,6 +36,7 @@ public:
     virtual void SwitchPortOff(int port) = 0;
     virtual void SwitchPortOn(int port) = 0;
     virtual void ClearStatusChange(int port, uint32_t statuses) = 0;
+    virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_transfer_direction dir, usb_speed speed) override = 0;
 private:
     [[noreturn]] void BusInit();
     void PortConnected(uint8_t port);
@@ -47,6 +49,7 @@ public:
     virtual void ResetPort(int port) override = 0;
     bool EnabledPort(int port) override;
     bool ResettingPort(int port) override;
+    virtual usb_speed PortSpeed(int port) override = 0;
 };
 
 #endif //JEOKERNEL_USB_HCD_H
