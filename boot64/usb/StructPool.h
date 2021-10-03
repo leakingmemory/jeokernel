@@ -80,6 +80,7 @@ public:
                 uint32_t bit = 1 << offset;
                 while ((map[i] & bit) != 0) {
                     ++offset;
+                    bit = 1 << offset;
                 }
                 if (offset > 31) {
                     wild_panic("offset > 31");
