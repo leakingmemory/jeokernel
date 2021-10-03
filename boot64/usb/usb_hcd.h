@@ -22,7 +22,7 @@
 #define USB_PORT_STATUS_OCIC   0x000400 // Port Over Current Indicator Change
 #define USB_PORT_STATUS_PRSC   0x000800 // Port Reset Status Change
 
-class usb_hcd : usb_hub {
+class usb_hcd : public usb_hub {
 private:
     raw_semaphore hub_sema;
     std::vector<usb_port_connection *> connections;
@@ -31,6 +31,7 @@ public:
     virtual ~usb_hcd() {
         wild_panic("usb_hcd: delete not implemented");
     }
+    virtual void dumpregs() = 0;
     virtual int GetNumberOfPorts() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
     virtual void SwitchPortOff(int port) = 0;

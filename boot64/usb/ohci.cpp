@@ -158,14 +158,14 @@ void ohci::init() {
         ohciRegisters->HcInterruptDisable = OHCI_INT_MASK;
 
         ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_OVERRUN | OHCI_INT_SCHEDULING_WRITE_DONE_HEAD
-                                           | OHCI_INT_SCHEDULING_START_OF_FRAME | OHCI_INT_SCHEDULING_RESUME_DETECTED
+                                           | OHCI_INT_SCHEDULING_RESUME_DETECTED
                                            | OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR |
                                            OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW
                                            | OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH | OHCI_INT_MASTER_INTERRUPT;
 
         ohciRegisters->HcHCCA = hcca.Addr();
 
-        ohciRegisters->HcControlHeadED = hcca.Addr(&(hcca.ControlED()));
+        ohciRegisters->HcControlHeadED = controlHead->Phys();
 
         ohciRegisters->HcBulkHeadED = hcca.Addr(&(hcca.BulkED()));
 
@@ -267,44 +267,42 @@ void ohci::init() {
 }
 
 bool ohci::irq() {
-    uint32_t IrqClear{0};
-    uint32_t IrqStatus{ohciRegisters->HcInterruptStatus};
-    if ((IrqStatus & OHCI_INT_SCHEDULING_OVERRUN) != 0) {
-        IrqClear |= OHCI_INT_SCHEDULING_OVERRUN;
-        get_klogger() << "ohci scheduling overrun\n";
-    }
-    if ((IrqStatus & OHCI_INT_SCHEDULING_WRITE_DONE_HEAD) != 0) {
-        IrqClear |= OHCI_INT_SCHEDULING_WRITE_DONE_HEAD;
-        get_klogger() << "ohci write back done head\n";
-    }
-    if ((IrqStatus & OHCI_INT_SCHEDULING_START_OF_FRAME) != 0) {
-        IrqClear |= OHCI_INT_SCHEDULING_START_OF_FRAME;
-        StartOfFrame();
-    }
-    if ((IrqStatus & OHCI_INT_SCHEDULING_RESUME_DETECTED) != 0) {
-        IrqClear |= OHCI_INT_SCHEDULING_RESUME_DETECTED;
-        get_klogger() << "ohci resume detected\n";
-    }
-    if ((IrqStatus & OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR) != 0) {
-        IrqClear |= OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR;
-        get_klogger() << "ohci unrecoverable error\n";
-    }
-    if ((IrqStatus & OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW) != 0) {
-        IrqClear |= OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW;
-    }
-    if ((IrqStatus & OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH) != 0) {
-        IrqClear |= OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH;
-        RootHubStatusChange();
-    }
-    ohciRegisters->HcInterruptStatus = IrqClear;
-    return IrqClear != 0;
+    std::lock_guard lock{ohcilock};
+    uint32_t IrqHandled{0};
+    uint32_t IrqStatus{0};
+    do {
+        uint32_t IrqEnabled{ohciRegisters->HcInterruptEnable};
+        IrqStatus = ohciRegisters->HcInterruptStatus & IrqEnabled;
+        if ((IrqStatus & OHCI_INT_SCHEDULING_OVERRUN) != 0) {
+            get_klogger() << "ohci scheduling overrun\n";
+        }
+        if ((IrqStatus & OHCI_INT_SCHEDULING_WRITE_DONE_HEAD) != 0) {
+            get_klogger() << "ohci write back done head\n";
+        }
+        if ((IrqStatus & OHCI_INT_SCHEDULING_START_OF_FRAME) != 0) {
+            IrqStatus = IrqStatus & ~OHCI_INT_SCHEDULING_START_OF_FRAME;
+            ohciRegisters->HcInterruptDisable = OHCI_INT_SCHEDULING_START_OF_FRAME;
+            StartOfFrame();
+        }
+        if ((IrqStatus & OHCI_INT_SCHEDULING_RESUME_DETECTED) != 0) {
+            get_klogger() << "ohci resume detected\n";
+        }
+        if ((IrqStatus & OHCI_INT_SCHEDULING_UNRECOVERABLE_ERR) != 0) {
+            get_klogger() << "ohci unrecoverable error\n";
+        }
+        if ((IrqStatus & OHCI_INT_SCHEDULING_FRAME_NUM_OVERFLOW) != 0) {
+        }
+        if ((IrqStatus & OHCI_INT_SCHEDULING_ROOT_HUB_STATUS_CH) != 0) {
+            RootHubStatusChange();
+        }
+        ohciRegisters->HcInterruptStatus = IrqStatus;
+        IrqHandled |= IrqStatus;
+    } while (IrqStatus != 0);
+    return IrqHandled != 0;
 }
 
 void ohci::StartOfFrame() {
-    if (!StartOfFrameReceived) {
-        get_klogger() << "OHCI: First start of frame\n";
-    }
-    StartOfFrameReceived = true;
+    destroyEds.clear();
 }
 
 uint32_t ohci::GetPortStatus(int port) {
@@ -350,18 +348,24 @@ uint32_t ohci::GetPortStatus(int port) {
 }
 
 void ohci::SwitchPortOff(int port) {
+    critical_section cli{};
+    std::lock_guard lock{ohcilock};
     if (PortPowerIndividuallyControlled(port)) {
         ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
     }
 }
 
 void ohci::SwitchPortOn(int port) {
+    critical_section cli{};
+    std::lock_guard lock{ohcilock};
     if (PortPowerIndividuallyControlled(port)) {
         ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PPS;
     }
 }
 
 void ohci::ClearStatusChange(int port, uint32_t statuses) {
+    critical_section cli{};
+    std::lock_guard lock{ohcilock};
     uint32_t usb{0};
     if ((statuses & USB_PORT_STATUS_CSC) != 0) {
         usb |= OHCI_PORT_STATUS_CSC;
@@ -416,14 +420,20 @@ void ohci::dumpregs() {
 }
 
 void ohci::EnablePort(int port) {
+    critical_section cli{};
+    std::lock_guard lock{ohcilock};
     ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PES;
 }
 
 void ohci::DisablePort(int port) {
+    critical_section cli{};
+    std::lock_guard lock{ohcilock};
     ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
 }
 
 void ohci::ResetPort(int port) {
+    critical_section cli{};
+    std::lock_guard lock{ohcilock};
     ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PRS;
 }
 
@@ -486,13 +496,26 @@ OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()),
 #define OHCI_ED_ISOC_TD        0x8000
 
 
+ohci_endpoint::ohci_endpoint(ohci &ohci, usb_endpoint_type endpointType) :
+        ohciRef(ohci),
+        edPtr(ohci.edPool.Alloc()),
+        head(), tail(),
+        endpointType(endpointType),
+        next(nullptr) {
+    auto *ptr = edPtr->Pointer();
+    ptr->NextED = 0;
+    ptr->TailP = 0;
+    ptr->HeadP = 0;
+    ptr->HcControl = 0;
+}
+
 ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                              usb_transfer_direction dir, usb_speed speed, usb_endpoint_type endpointType) :
                              ohciRef(ohci),
                              edPtr(ohci.edPool.Alloc()),
                              head(new ohci_transfer(ohci)), tail(head),
                              endpointType(endpointType),
-                             next() {
+                             next(nullptr) {
     ohci_endpoint_descriptor *ed = edPtr->Pointer();
     {
         uint32_t control = ((maxPacketSize & 0x7FF) << 16)
@@ -520,20 +543,41 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
 
 ohci_endpoint::~ohci_endpoint() {
     if (endpointType == CONTROL) {
-        std::shared_ptr<ohci_endpoint> endpoint = ohciRef.controlHead;
-        while (endpoint) {
+        ohci_endpoint *endpoint = ohciRef.controlHead;
+        if (endpoint == this) {
+            if (endpoint->next != nullptr) {
+                this->ohciRef.ohciRegisters->HcControlHeadED = endpoint->next->edPtr->Phys();
+                this->ohciRef.controlHead = endpoint->next;
+            } else {
+                this->ohciRef.ohciRegisters->HcControlHeadED = 0;
+                this->ohciRef.controlHead = nullptr;
+            }
+            critical_section cli{};
+            std::lock_guard lock{ohciRef.ohcilock};
+            ohciRef.destroyEds.emplace_back(edPtr, head);
+            this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
+            this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
+        } else while (endpoint) {
             if (endpoint->next == this) {
                 endpoint->SetNext(next);
+                critical_section cli{};
+                std::lock_guard lock{ohciRef.ohcilock};
                 ohciRef.destroyEds.emplace_back(edPtr, head);
+                this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
+                this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
             }
         }
     }
 }
 
-void ohci_endpoint::SetNext(std::shared_ptr<ohci_endpoint> endpoint) {
+void ohci_endpoint::SetNext(ohci_endpoint *endpoint) {
     ohci_endpoint_descriptor *ed = edPtr->Pointer();
     ed->NextED = endpoint->edPtr->Phys();
     this->next = endpoint;
+}
+
+uint32_t ohci_endpoint::Phys() {
+    return edPtr->Phys();
 }
 
 ohci_transfer::ohci_transfer(ohci &ohci) : transferPtr(ohci.xPool.Alloc()), next() {

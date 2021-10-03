@@ -59,6 +59,10 @@ struct ohci_endpoint_descriptor {
     uint32_t TailP;
     uint32_t HeadP;
     uint32_t NextED;
+
+    ~ohci_endpoint_descriptor() {
+        get_klogger() << "ohci endpoint destruction\n";
+    }
 };
 
 struct ohci_transfer_descriptor {
@@ -68,6 +72,9 @@ struct ohci_transfer_descriptor {
     uint32_t BufferEnd;
 
     ohci_transfer_descriptor() : TdControl(0), CurrentBufferPointer(0), NextTD(0), BufferEnd(0) {
+    }
+    ~ohci_transfer_descriptor() {
+        get_klogger() << "ohci transfer destruction\n";
     }
 };
 
@@ -234,6 +241,8 @@ struct ohci_endpoint_cleanup {
             std::shared_ptr<StructPoolPointer<ohci_endpoint_descriptor,uint32_t>> ed,
             std::shared_ptr<ohci_transfer> transfers
             ) : ed(ed), transfers(transfers) {}
+    ~ohci_endpoint_cleanup() {
+    }
 };
 
 class ohci_endpoint : public usb_endpoint {
@@ -243,11 +252,13 @@ private:
     std::shared_ptr<ohci_transfer> head;
     std::shared_ptr<ohci_transfer> tail;
     usb_endpoint_type endpointType;
-    std::shared_ptr<ohci_endpoint> next;
+    ohci_endpoint *next;
 public:
+    ohci_endpoint(ohci &ohci, usb_endpoint_type endpointType);
     ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_transfer_direction dir, usb_speed speed, usb_endpoint_type endpointType);
     virtual ~ohci_endpoint();
-    void SetNext(std::shared_ptr<ohci_endpoint> endpoint);
+    void SetNext(ohci_endpoint *endpoint);
+    uint32_t Phys();
 };
 
 class ohci : public Device, public usb_hcd {
@@ -263,17 +274,17 @@ private:
     uint8_t no_ports;
     StructPool<StructPoolAllocator<Phys32Page,ohci_endpoint_descriptor>> edPool;
     std::vector<ohci_endpoint_cleanup> destroyEds;
-    std::shared_ptr<ohci_endpoint> controlHead;
+    ohci_endpoint controlEndpointEnd;
+    ohci_endpoint *controlHead;
     StructPool<StructPoolAllocator<Phys32Page,ohci_transfer_descriptor>> xPool;
     bool StartOfFrameReceived;
+    hw_spinlock ohcilock;
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         Device("ohci", &bus), usb_hcd(), pciDeviceInformation(deviceInformation),
-        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlHead(), xPool(), StartOfFrameReceived(false) {}
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, CONTROL), controlHead(&controlEndpointEnd), xPool(), StartOfFrameReceived(false), ohcilock() {}
     void init() override;
-private:
-    void dumpregs();
-public:
+    void dumpregs() override;
 
     constexpr uint8_t desca_ndp(uint32_t descA) const {
         return (uint8_t) (descA & 0xFF);

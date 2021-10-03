@@ -27,6 +27,8 @@ public:
 
 class usb_hub {
 public:
+    virtual void dumpregs() = 0;
+    virtual uint32_t GetPortStatus(int port) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_transfer_direction dir, usb_speed speed) = 0;
     virtual void EnablePort(int port) = 0;
     virtual void DisablePort(int port) = 0;
