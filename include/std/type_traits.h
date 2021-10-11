@@ -92,6 +92,29 @@ namespace std {
     template <class T1, class T2> struct common_type<T1, T2> {
         using type = typename std::remove_reference<decltype(false ? declval<T1>() : declval<T2>())>::type;
     };
+
+    namespace impl {
+        template<typename T>
+        struct assignable_struct {
+            T value;
+        };
+
+        template<typename T>
+        auto assignable_f() noexcept -> assignable_struct<T> &;
+    }
+
+    template <typename T, typename V, typename = void> struct is_assignable {
+        static constexpr bool value = false;
+    };
+
+    template <typename T, typename V> struct is_assignable<T, V, decltype(impl::assignable_f<T>().value = declval<V>(), void())> {
+        static constexpr bool value = true;
+    };
+
+    static_assert(is_assignable<int,int>::value);
+    static_assert(is_assignable<long,int>::value);
+    static_assert(is_assignable<void *,int *>::value);
+    static_assert(!is_assignable<char *,int *>::value);
 }
 
 #endif //JEOKERNEL_TYPE_TRAITS_H
