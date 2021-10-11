@@ -9,6 +9,7 @@
 
 #include <core/malloc.h>
 #include <std/cstdint.h>
+#include <utility>
 
 #endif
 
@@ -86,69 +87,83 @@ namespace std {
         return unique_ptr<T>(new T(args...));
     }
 
-    template <class T, class Deleter = std::default_delete<T>> class shared_ptr_container {
-    public:
-        typedef T *pointer;
-    private:
-        pointer ptr;
-        uint32_t ref;
-    public:
-        constexpr shared_ptr_container() noexcept : ptr(nullptr), ref(1) {
-        }
-        explicit shared_ptr_container(pointer ptr) noexcept : ptr(ptr), ref(1) {
-        }
-
-        shared_ptr_container(shared_ptr_container &&mv) = delete;
-        shared_ptr_container(const shared_ptr_container &cp) = delete;
-
-        shared_ptr_container &operator = (shared_ptr_container &&mv) = delete;
-        shared_ptr_container &operator = (const shared_ptr_container &cp) = delete;
-
-        shared_ptr_container &operator = (pointer ptr) {
-            this->ptr = ptr;
-            return *this;
-        }
-
-        ~shared_ptr_container() {
-            if (ptr != nullptr) {
-                Deleter deleter{};
-                deleter(ptr);
-                ptr = nullptr;
+    namespace impl {
+        class shared_ptr_container_typeerasure {
+        private:
+            void *ptr;
+            uint32_t ref;
+        public:
+            constexpr shared_ptr_container_typeerasure() noexcept: ptr(nullptr), ref(1) {
             }
-        }
 
-        void acquire() {
-            asm("lock incl %0;" : "+m"(ref));
-        }
+            explicit shared_ptr_container_typeerasure(void *ptr) noexcept: ptr(ptr), ref(1) {
+            }
 
-        uint32_t release() {
-            uint32_t xref;
-            asm("xor %%rax, %%rax; dec %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ref), "=rm"(xref) :: "%rax");
-            --xref;
-            return xref;
-        }
+            shared_ptr_container_typeerasure(shared_ptr_container_typeerasure &&mv) = delete;
 
-        T &operator * () const {
-            return *ptr;
-        }
+            shared_ptr_container_typeerasure(const shared_ptr_container_typeerasure &cp) = delete;
 
-        pointer operator->() const noexcept {
-            return ptr;
-        }
+            shared_ptr_container_typeerasure &operator=(shared_ptr_container_typeerasure &&mv) = delete;
 
-        bool isset() const {
-            return ptr != nullptr;
-        }
-    };
+            shared_ptr_container_typeerasure &operator=(const shared_ptr_container_typeerasure &cp) = delete;
+
+            virtual ~shared_ptr_container_typeerasure() {}
+
+            void acquire() {
+                asm("lock incl %0;" : "+m"(ref));
+            }
+
+            uint32_t release() {
+                uint32_t xref;
+                asm("xor %%rax, %%rax; dec %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ref), "=rm"(xref)::"%rax");
+                --xref;
+                return xref;
+            }
+
+            void *Ptr() {
+                return ptr;
+            }
+
+            void Ptr(void *newp) {
+                ptr = newp;
+            }
+
+            bool isset() const {
+                return ptr != nullptr;
+            }
+        };
+
+        template<class T, class Deleter = std::default_delete<T>>
+        class shared_ptr_container : public shared_ptr_container_typeerasure {
+        public:
+            typedef T *pointer;
+
+            constexpr shared_ptr_container() noexcept: shared_ptr_container_typeerasure() {
+            }
+
+            explicit shared_ptr_container(pointer ptr) noexcept: shared_ptr_container_typeerasure(ptr) {
+            }
+
+            virtual ~shared_ptr_container() {
+                T *ptr = (T *) Ptr();
+                if (ptr != nullptr) {
+                    Deleter deleter{};
+                    deleter(ptr);
+                    Ptr(nullptr);
+                }
+            }
+        };
+    }
 
     template <class T, class Deleter = std::default_delete<T>> class shared_ptr {
+        friend shared_ptr;
     public:
         typedef T *pointer;
     private:
-        shared_ptr_container<T,Deleter> *container;
+        impl::shared_ptr_container_typeerasure *container;
     public:
         shared_ptr() : container(nullptr) {}
-        shared_ptr(pointer p) : container(new shared_ptr_container<T,Deleter>(p)) {}
+        shared_ptr(pointer p) : container(new impl::shared_ptr_container<T,Deleter>(p)) {}
         ~shared_ptr() {
             if (container != nullptr) {
                 if (container->release() == 0) {
@@ -162,6 +177,14 @@ namespace std {
         }
         shared_ptr(const shared_ptr<T,Deleter> &cp) : container(cp.container) {
             container->acquire();
+        }
+        template <class P,class PDeleter> shared_ptr(const shared_ptr<P,PDeleter> &cp) : container(cp.Container()) {
+            static_assert(is_assignable<T*,P*>::value);
+            container->acquire();
+        };
+
+        impl::shared_ptr_container_typeerasure *Container() const {
+            return container;
         }
 
         shared_ptr &operator = (shared_ptr &&mv) {
@@ -195,7 +218,7 @@ namespace std {
                 }
             }
             if (ptr != nullptr) {
-                container = new shared_ptr_container<T, Deleter>(ptr);
+                container = new impl::shared_ptr_container<T, Deleter>(ptr);
             } else {
                 container = nullptr;
             }
@@ -203,11 +226,11 @@ namespace std {
         }
 
         T &operator * () const {
-            return *container;
+            return *((T *) container->Ptr());
         }
 
         pointer operator->() const noexcept {
-            return &(*(*container));
+            return (pointer) container->Ptr();
         }
 
         explicit operator bool () const {
@@ -216,7 +239,7 @@ namespace std {
 
         bool operator == (T *ptr) {
             if (container != nullptr) {
-                T *obj = &(*(*container));
+                T *obj = container->Ptr();
                 return obj == ptr;
             } else {
                 return ptr == nullptr;
