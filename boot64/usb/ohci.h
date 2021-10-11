@@ -220,16 +220,41 @@ struct ohci_registers {
 } __attribute__((__packed__));
 static_assert(sizeof(ohci_registers) == 0x58);
 
+#define OHCI_TRANSFER_BUFSIZE 64
+
 class ohci;
 
-class ohci_transfer {
+class ohci_buffer : public usb_buffer {
+private:
+    std::shared_ptr<StructPoolPointer<usb_byte_buffer<OHCI_TRANSFER_BUFSIZE>,uint32_t>> bufferPtr;
+public:
+    explicit ohci_buffer(ohci &ohci);
+    void *Pointer() override {
+        return bufferPtr->Pointer();
+    }
+    uint64_t Addr() override {
+        return bufferPtr->Phys();
+    }
+};
+
+class ohci_endpoint;
+
+class ohci_transfer : public usb_transfer {
+    friend ohci_endpoint;
 private:
     std::shared_ptr<StructPoolPointer<ohci_transfer_descriptor,uint32_t>> transferPtr;
+    std::shared_ptr<usb_buffer> buffer;
     std::shared_ptr<ohci_transfer> next;
 public:
     ohci_transfer(ohci &ohci);
+    ohci_transfer_descriptor *TD() {
+        return transferPtr->Pointer();
+    }
     uint32_t PhysAddr() {
         return transferPtr->Phys();
+    }
+    std::shared_ptr<usb_buffer> Buffer() {
+        return buffer;
     }
 };
 
@@ -255,15 +280,25 @@ private:
     ohci_endpoint *next;
 public:
     ohci_endpoint(ohci &ohci, usb_endpoint_type endpointType);
-    ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_transfer_direction dir, usb_speed speed, usb_endpoint_type endpointType);
+    ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType);
     virtual ~ohci_endpoint();
     void SetNext(ohci_endpoint *endpoint);
     uint32_t Phys();
+    bool Addressing64bit() override {
+        return false;
+    }
+private:
+    std::shared_ptr<usb_transfer> CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, uint8_t dataToggle);
+public:
+    std::shared_ptr<usb_transfer> CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, uint8_t dataToggle) override;
+    std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, uint8_t dataToggle) override;
+    std::shared_ptr<usb_buffer> Alloc() override;
 };
 
 class ohci : public Device, public usb_hcd {
     friend ohci_endpoint;
     friend ohci_transfer;
+    friend ohci_buffer;
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
@@ -276,13 +311,14 @@ private:
     std::vector<ohci_endpoint_cleanup> destroyEds;
     ohci_endpoint controlEndpointEnd;
     ohci_endpoint *controlHead;
+    StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<OHCI_TRANSFER_BUFSIZE>>> bufPool;
     StructPool<StructPoolAllocator<Phys32Page,ohci_transfer_descriptor>> xPool;
     bool StartOfFrameReceived;
     hw_spinlock ohcilock;
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         Device("ohci", &bus), usb_hcd(), pciDeviceInformation(deviceInformation),
-        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, CONTROL), controlHead(&controlEndpointEnd), xPool(), StartOfFrameReceived(false), ohcilock() {}
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, CONTROL), controlHead(&controlEndpointEnd), bufPool(), xPool(), StartOfFrameReceived(false), ohcilock() {}
     void init() override;
     void dumpregs() override;
 
@@ -305,7 +341,10 @@ public:
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
-    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_transfer_direction dir, usb_speed speed) override;
+    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
+    size_t TransferBufferSize() override {
+        return OHCI_TRANSFER_BUFSIZE;
+    }
     void EnablePort(int port) override;
     void DisablePort(int port) override;
     void ResetPort(int port) override;

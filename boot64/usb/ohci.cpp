@@ -439,7 +439,7 @@ void ohci::ResetPort(int port) {
 
 std::shared_ptr<usb_endpoint>
 ohci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                            usb_transfer_direction dir, usb_speed speed) {
+                            usb_endpoint_direction dir, usb_speed speed) {
     auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed, CONTROL);
     return std::shared_ptr<usb_endpoint>(endpoint);
 }
@@ -510,7 +510,7 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, usb_endpoint_type endpointType) :
 }
 
 ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                             usb_transfer_direction dir, usb_speed speed, usb_endpoint_type endpointType) :
+                             usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType) :
                              ohciRef(ohci),
                              edPtr(ohci.edPool.Alloc()),
                              head(new ohci_transfer(ohci)), tail(head),
@@ -521,9 +521,9 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
         uint32_t control = ((maxPacketSize & 0x7FF) << 16)
                            | ((endpointNum & 0x0F) << 7)
                            | (functionAddr & 0x07F);
-        if (dir == IN) {
+        if (dir == usb_endpoint_direction::IN) {
             control |= OHCI_ED_DIRECTION_IN;
-        } else if (dir == OUT) {
+        } else if (dir == usb_endpoint_direction::OUT) {
             control |= OHCI_ED_DIRECTION_OUT;
         }
         if (speed == LOW) {
@@ -580,5 +580,71 @@ uint32_t ohci_endpoint::Phys() {
     return edPtr->Phys();
 }
 
-ohci_transfer::ohci_transfer(ohci &ohci) : transferPtr(ohci.xPool.Alloc()), next() {
+std::shared_ptr<usb_transfer>
+ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
+                              uint16_t delayInterrupt, uint8_t dataToggle) {
+    uint32_t ctrl{((uint32_t) (dataToggle & 1)) << 24};
+    if (delayInterrupt == TRANSFER_NO_INTERRUPT) {
+        delayInterrupt = 7;
+    } else if (delayInterrupt > 6) {
+        delayInterrupt = 6;
+    }
+    ctrl |= ((uint32_t) delayInterrupt) << 21;
+    switch (direction) {
+        case usb_transfer_direction::IN:
+            ctrl |= 1 << 19;
+            break;
+        case usb_transfer_direction::OUT:
+             ctrl |= 1 << 20;
+            break;
+    }
+    if (bufferRounding) {
+        ctrl |= 1 << 18;
+    }
+    auto newtd = std::make_shared<ohci_transfer>(ohciRef);
+    {
+        auto *TD = newtd->TD();
+        TD->NextTD = 0;
+        TD->BufferEnd = 0;
+        TD->CurrentBufferPointer = 0;
+        TD->TdControl = 0;
+    }
+    tail->buffer = buffer;
+    auto *TD = tail->TD();
+    TD->TdControl = ctrl;
+    TD->CurrentBufferPointer = buffer->Addr();
+    TD->BufferEnd = TD->CurrentBufferPointer + size;
+    tail->next = newtd;
+    TD->NextTD = newtd->PhysAddr();
+    tail = newtd;
+    ohci_transfer *oht = &(*newtd);
+    usb_transfer *ut = oht;
+    std::shared_ptr<usb_transfer> ref{newtd};
+    return ref;
+}
+
+std::shared_ptr<usb_transfer>
+ohci_endpoint::CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
+                              uint16_t delayInterrupt, uint8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer = Alloc();
+    memcpy(buffer->Pointer(), data, size);
+    return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle);
+}
+
+std::shared_ptr<usb_transfer>
+ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding,
+                              uint16_t delayInterrupt, uint8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer = Alloc();
+    return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle);
+}
+
+std::shared_ptr<usb_buffer> ohci_endpoint::Alloc() {
+    std::shared_ptr<usb_buffer> buffer{std::make_shared<ohci_buffer>(ohciRef)};
+    return buffer;
+}
+
+ohci_transfer::ohci_transfer(ohci &ohci) : transferPtr(ohci.xPool.Alloc()), buffer(), next() {
+}
+
+ohci_buffer::ohci_buffer(ohci &ohci) : bufferPtr(ohci.bufPool.Alloc()) {
 }

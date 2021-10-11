@@ -5,7 +5,17 @@
 #ifndef JEOKERNEL_USB_PORT_CONNECTION_H
 #define JEOKERNEL_USB_PORT_CONNECTION_H
 
-enum usb_transfer_direction {
+template <int n> struct usb_byte_buffer {
+    uint8_t data[n];
+};
+
+enum class usb_transfer_direction {
+    SETUP,
+    IN,
+    OUT
+};
+
+enum class usb_endpoint_direction {
     IN,
     OUT,
     BOTH
@@ -20,16 +30,39 @@ enum usb_endpoint_type {
     CONTROL
 };
 
+class usb_transfer;
+
+#define TRANSFER_NO_INTERRUPT 0xFFFF
+
+class usb_buffer;
+
 class usb_endpoint {
 public:
     virtual ~usb_endpoint() {}
+    virtual bool Addressing64bit() = 0;
+    virtual std::shared_ptr<usb_transfer> CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, uint8_t dataToggle = 0) = 0;
+    virtual std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, uint8_t dataToggle = 0) = 0;
+    virtual std::shared_ptr<usb_buffer> Alloc() = 0;
+};
+
+class usb_buffer {
+public:
+    virtual void *Pointer() = 0;
+    virtual uint64_t Addr() = 0;
+    virtual ~usb_buffer() {}
+};
+
+class usb_transfer {
+public:
+    virtual ~usb_transfer() {}
+    virtual std::shared_ptr<usb_buffer> Buffer() = 0;
 };
 
 class usb_hub {
 public:
     virtual void dumpregs() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
-    virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_transfer_direction dir, usb_speed speed) = 0;
+    virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
     virtual void EnablePort(int port) = 0;
     virtual void DisablePort(int port) = 0;
     virtual void ResetPort(int port) = 0;
