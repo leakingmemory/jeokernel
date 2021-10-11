@@ -17,8 +17,11 @@ namespace std {
     struct add_rvalue_reference : decltype(detail::try_add_rvalue_reference<T>(0)) {
     };
 
+    template <typename T> T&& __declval(int) noexcept;
+    template <typename T> T __declval(long) noexcept;
+
     template<class T>
-    constexpr typename add_rvalue_reference<T>::type declval() noexcept;
+    constexpr auto declval() noexcept -> decltype(__declval<T>(0));
 
 }
 #endif //JEOKERNEL_DECLVAL_H
