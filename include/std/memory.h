@@ -169,6 +169,7 @@ namespace std {
                 if (container->release() == 0) {
                     delete container;
                 }
+                container = nullptr;
             }
         }
 
