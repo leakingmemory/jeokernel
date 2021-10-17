@@ -484,7 +484,7 @@ void ohci::ProcessDoneQueue() {
 std::shared_ptr<usb_transfer> ohci::ExtractDoneQueueItem(uint32_t physaddr) {
     auto iter = transfersInProgress.begin();
     while (iter != transfersInProgress.end()) {
-        std::shared_ptr<usb_transfer> transfer = *iter;
+        std::shared_ptr<usb_transfer> transfer{*iter};
         ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*transfer));
         if (ohciTransfer.PhysAddr() == physaddr) {
             transfersInProgress.erase(iter);
@@ -620,6 +620,7 @@ ohci_endpoint::~ohci_endpoint() {
                 this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
                 this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
             }
+            endpoint = endpoint->next;
         }
     }
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
@@ -686,6 +687,9 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
         ctrl |= 1 << 18;
     }
     auto newtd = std::make_shared<ohci_transfer>(ohciRef, *this);
+
+    critical_section cli{};
+    std::lock_guard lock{ohciRef.ohcilock};
     {
         auto *TD = newtd->TD();
         TD->NextTD = 0;
@@ -698,7 +702,7 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
     TD->TdControl = ctrl;
     TD->CurrentBufferPointer = buffer->Addr();
     TD->BufferEnd = TD->CurrentBufferPointer + size;
-    auto filled = tail;
+    std::shared_ptr<ohci_transfer> filled{tail};
     tail->next = newtd;
     TD->NextTD = newtd->PhysAddr();
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
@@ -710,11 +714,7 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
         get_klogger() << str.str().c_str();
     }
 #endif
-    {
-        critical_section cli{};
-        std::lock_guard lock{ohciRef.ohcilock};
-        ohciRef.transfersInProgress.push_back(tail);
-    }
+    ohciRef.transfersInProgress.push_back(tail);
     tail = newtd;
     edPtr->Pointer()->TailP = newtd->PhysAddr();
     ohciRef.ohciRegisters->HcCommandStatus = OHCI_CMD_CLF;
@@ -752,16 +752,18 @@ ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer
 
 void ohci_transfer::SetDone() {
     usb_transfer::SetDone();
-    if (endpoint.head == this) {
-        endpoint.head = this->next;
-    } else {
-        std::shared_ptr<ohci_transfer> transfer = endpoint.head;
-        while (transfer->next) {
-            if (transfer->next == this) {
-                transfer->next = this->next;
-                return;
+    if (!waitCancelled) {
+        if (endpoint.head == this) {
+            endpoint.head = this->next;
+        } else {
+            std::shared_ptr<ohci_transfer> transfer = endpoint.head;
+            while (transfer->next) {
+                if (transfer->next == this) {
+                    transfer->next = this->next;
+                    return;
+                }
+                transfer = transfer->next;
             }
-            transfer = transfer->next;
         }
     }
 }

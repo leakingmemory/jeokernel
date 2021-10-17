@@ -76,7 +76,13 @@ struct ohci_transfer_descriptor {
     ohci_transfer_descriptor() : TdControl(0), CurrentBufferPointer(0), NextTD(0), BufferEnd(0) {
     }
     ~ohci_transfer_descriptor() {
-        get_klogger() << "ohci transfer destruction\n";
+        {
+            std::stringstream str{};
+            str << std::hex << "Destroying transfer phys c=" << TdControl
+                << " buf=" << CurrentBufferPointer << "/" << BufferEnd
+                << " next=" << NextTD << "\n";
+            get_klogger() << str.str().c_str();
+        }
     }
 };
 
