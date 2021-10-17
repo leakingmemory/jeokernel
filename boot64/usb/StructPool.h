@@ -76,8 +76,8 @@ public:
         }
         for (int i = 0; i <= (ItemsPerPage() / 32); i++) {
             if (map[i] != 0xFFFFFFFF) {
-                PhysPtr offset{1};
-                uint32_t bit = 1 << offset;
+                PhysPtr offset{0};
+                uint32_t bit = 1;
                 while ((map[i] & bit) != 0) {
                     ++offset;
                     bit = 1 << offset;
