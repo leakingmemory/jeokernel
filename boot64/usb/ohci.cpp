@@ -9,6 +9,7 @@
 #include <thread>
 #include <delay.h>
 #include <core/nanotime.h>
+#include <kernelconfig.h>
 #include "ohci.h"
 
 #define OHCI_PORT_STATUS_CCS    0x000001 // Current Connection Status
@@ -277,7 +278,7 @@ bool ohci::irq() {
             get_klogger() << "ohci scheduling overrun\n";
         }
         if ((IrqStatus & OHCI_INT_SCHEDULING_WRITE_DONE_HEAD) != 0) {
-            get_klogger() << "ohci write back done head\n";
+            ProcessDoneQueue();
         }
         if ((IrqStatus & OHCI_INT_SCHEDULING_START_OF_FRAME) != 0) {
             IrqStatus = IrqStatus & ~OHCI_INT_SCHEDULING_START_OF_FRAME;
@@ -448,6 +449,52 @@ usb_speed ohci::PortSpeed(int port) {
     return (ohciRegisters->PortStatus[port] & OHCI_PORT_STATUS_LSDA) == 0 ? FULL : LOW;
 }
 
+void ohci::ProcessDoneQueue() {
+    uint32_t doneHead = hcca.Hcca().HccaDoneHead;
+    while (doneHead != 0) {
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+        {
+            std::stringstream str{};
+            str << std::hex << "Done queue item " << doneHead << "\n";
+            get_klogger() << str.str().c_str();
+        }
+#endif
+        std::shared_ptr<usb_transfer> item = ExtractDoneQueueItem(doneHead);
+        item->SetDone();
+        ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*item));
+        doneHead = ohciTransfer.TD()->NextTD;
+    }
+    auto iter = transfersInProgress.begin();
+    while (iter != transfersInProgress.end()) {
+        std::shared_ptr<usb_transfer> item = *iter;
+        ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*item));
+        if (ohciTransfer.waitCancelled) {
+            if (ohciTransfer.waitCancelledAndWaitedCycle) {
+                transfersInProgress.erase(iter);
+            } else {
+                ohciTransfer.waitCancelledAndWaitedCycle = true;
+                ++iter;
+            }
+        } else {
+            ++iter;
+        }
+    }
+}
+
+std::shared_ptr<usb_transfer> ohci::ExtractDoneQueueItem(uint32_t physaddr) {
+    auto iter = transfersInProgress.begin();
+    while (iter != transfersInProgress.end()) {
+        std::shared_ptr<usb_transfer> transfer = *iter;
+        ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*transfer));
+        if (ohciTransfer.PhysAddr() == physaddr) {
+            transfersInProgress.erase(iter);
+            return transfer;
+        }
+        ++iter;
+    }
+    return {};
+}
+
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {
     for (int i = 0; i < 0x3F; i++) {
         hcca_ed_ptrs[i].ed = &(hcca->hcca_with_eds.eds[i]);
@@ -513,7 +560,7 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
                              usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType) :
                              ohciRef(ohci),
                              edPtr(ohci.edPool.Alloc()),
-                             head(new ohci_transfer(ohci)), tail(head),
+                             head(new ohci_transfer(ohci, *this)), tail(head),
                              endpointType(endpointType),
                              next(nullptr) {
     ohci_endpoint_descriptor *ed = edPtr->Pointer();
@@ -539,6 +586,13 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
         next = ohci.controlHead;
         ohci.controlHead = this;
     }
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+    {
+        std::stringstream str{};
+        str << std::hex << "Endpoint startup status ctrl=" << this->edPtr->Pointer()->HcControl<<" head="<<this->edPtr->Pointer()->HeadP<<" tail="<<this->edPtr->Pointer()->TailP << "\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
 }
 
 ohci_endpoint::~ohci_endpoint() {
@@ -554,7 +608,7 @@ ohci_endpoint::~ohci_endpoint() {
             }
             critical_section cli{};
             std::lock_guard lock{ohciRef.ohcilock};
-            ohciRef.destroyEds.emplace_back(edPtr, head);
+            ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
             this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
             this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
         } else while (endpoint) {
@@ -562,12 +616,41 @@ ohci_endpoint::~ohci_endpoint() {
                 endpoint->SetNext(next);
                 critical_section cli{};
                 std::lock_guard lock{ohciRef.ohcilock};
-                ohciRef.destroyEds.emplace_back(edPtr, head);
+                ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
                 this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
                 this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
             }
         }
     }
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+    get_klogger() << "Transfers:\n";
+#endif
+    {
+        critical_section cli{};
+        std::lock_guard lock{ohciRef.ohcilock};
+        std::shared_ptr<ohci_transfer> transfer = head;
+        while (transfer->next) {
+            transfer->waitCancelled = true;
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+            auto *TD = transfer->TD();
+            {
+                std::stringstream str{};
+                str << std::hex << "Cancelling - c=" << TD->TdControl
+                    << " buf=" << TD->CurrentBufferPointer << "/" << TD->BufferEnd
+                    << " next=" << TD->NextTD << "\n";
+                get_klogger() << str.str().c_str();
+            }
+#endif
+            transfer = transfer->next;
+        }
+    }
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+    {
+        std::stringstream str{};
+        str << std::hex << "Endpoint finalizing status ctrl=" << this->edPtr->Pointer()->HcControl<<" head="<<this->edPtr->Pointer()->HeadP<<" tail="<<this->edPtr->Pointer()->TailP << "\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
 }
 
 void ohci_endpoint::SetNext(ohci_endpoint *endpoint) {
@@ -589,6 +672,7 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
     } else if (delayInterrupt > 6) {
         delayInterrupt = 6;
     }
+    ctrl |= ((uint32_t) 0xF) << 28; // Condition code 0xF - Not accessed
     ctrl |= ((uint32_t) delayInterrupt) << 21;
     switch (direction) {
         case usb_transfer_direction::IN:
@@ -601,7 +685,7 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
     if (bufferRounding) {
         ctrl |= 1 << 18;
     }
-    auto newtd = std::make_shared<ohci_transfer>(ohciRef);
+    auto newtd = std::make_shared<ohci_transfer>(ohciRef, *this);
     {
         auto *TD = newtd->TD();
         TD->NextTD = 0;
@@ -614,12 +698,27 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
     TD->TdControl = ctrl;
     TD->CurrentBufferPointer = buffer->Addr();
     TD->BufferEnd = TD->CurrentBufferPointer + size;
+    auto filled = tail;
     tail->next = newtd;
     TD->NextTD = newtd->PhysAddr();
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+    {
+        std::stringstream str{};
+        str << std::hex << "Adding transfer c=" << TD->TdControl
+        << " buf=" << TD->CurrentBufferPointer << "/" << size
+        << " next=" << TD->NextTD << "\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
+    {
+        critical_section cli{};
+        std::lock_guard lock{ohciRef.ohcilock};
+        ohciRef.transfersInProgress.push_back(tail);
+    }
     tail = newtd;
-    ohci_transfer *oht = &(*newtd);
-    usb_transfer *ut = oht;
-    std::shared_ptr<usb_transfer> ref{newtd};
+    edPtr->Pointer()->TailP = newtd->PhysAddr();
+    ohciRef.ohciRegisters->HcCommandStatus = OHCI_CMD_CLF;
+    std::shared_ptr<usb_transfer> ref{filled};
     return ref;
 }
 
@@ -643,8 +742,90 @@ std::shared_ptr<usb_buffer> ohci_endpoint::Alloc() {
     return buffer;
 }
 
-ohci_transfer::ohci_transfer(ohci &ohci) : transferPtr(ohci.xPool.Alloc()), buffer(), next() {
+ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer(), transferPtr(ohci.xPool.Alloc()), buffer(), next(), endpoint(endpoint), waitCancelled(false), waitCancelledAndWaitedCycle(false) {
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+    std::stringstream str{};
+    str << std::hex << "Transfer descriptor at " << transferPtr->Phys() << "\n";
+    get_klogger() << str.str().c_str();
+#endif
+}
+
+void ohci_transfer::SetDone() {
+    usb_transfer::SetDone();
+    if (endpoint.head == this) {
+        endpoint.head = this->next;
+    } else {
+        std::shared_ptr<ohci_transfer> transfer = endpoint.head;
+        while (transfer->next) {
+            if (transfer->next == this) {
+                transfer->next = this->next;
+                return;
+            }
+            transfer = transfer->next;
+        }
+    }
+}
+
+usb_transfer_status ohci_transfer::GetStatus() {
+    uint32_t status = transferPtr->Pointer()->TdControl;
+    status = status >> 28;
+    switch (status) {
+        case 0:
+            return usb_transfer_status::NO_ERROR;
+        case 1:
+            return usb_transfer_status::CRC;
+        case 2:
+            return usb_transfer_status::BIT_STUFFING;
+        case 3:
+            return usb_transfer_status::DATA_TOGGLE_MISMATCH;
+        case 4:
+            return usb_transfer_status::STALL;
+        case 5:
+            return usb_transfer_status::DEVICE_NOT_RESPONDING;
+        case 6:
+            return usb_transfer_status::PID_CHECK_FAILURE;
+        case 7:
+            return usb_transfer_status::UNEXPECTED_PID;
+        case 8:
+            return usb_transfer_status::DATA_OVERRUN;
+        case 9:
+            return usb_transfer_status::DATA_UNDERRUN;
+        case 12:
+            return usb_transfer_status::BUFFER_OVERRUN;
+        case 13:
+            return usb_transfer_status::BUFFER_UNDERRUN;
+        case 14:
+        case 15:
+            return usb_transfer_status::NOT_ACCESSED;
+        default:
+            return usb_transfer_status::UNKNOWN_ERROR;
+    }
+}
+
+ohci_transfer::~ohci_transfer() {
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+    auto *TD = transferPtr->Pointer();
+    {
+        std::stringstream str{};
+        str << std::hex << "Destroying transfer c=" << TD->TdControl
+            << " buf=" << TD->CurrentBufferPointer << "/" << TD->BufferEnd
+            << " next=" << TD->NextTD << "\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
 }
 
 ohci_buffer::ohci_buffer(ohci &ohci) : bufferPtr(ohci.bufPool.Alloc()) {
+}
+
+ohci_endpoint_cleanup::~ohci_endpoint_cleanup() {
+#ifdef OHCI_DEBUGPRINTS_ENDPOINTS
+    {
+        uint32_t ctrlHeadEd = ohciRef.ohciRegisters->HcControlHeadED;
+        uint32_t ctrlCurrentEd = ohciRef.ohciRegisters->HcControlCurrentED;
+        std::stringstream str{};
+        str << std::hex << "ctrl-h=" << ctrlHeadEd << " cur-ctrl="<<ctrlCurrentEd<<"\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
 }

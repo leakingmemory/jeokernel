@@ -52,12 +52,6 @@ public:
     virtual ~usb_buffer() {}
 };
 
-class usb_transfer {
-public:
-    virtual ~usb_transfer() {}
-    virtual std::shared_ptr<usb_buffer> Buffer() = 0;
-};
-
 class usb_hub {
 public:
     virtual void dumpregs() = 0;

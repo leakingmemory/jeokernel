@@ -11,6 +11,7 @@
 #include "Phys32Page.h"
 #include "usb_hcd.h"
 #include "StructPool.h"
+#include "usb_transfer.h"
 
 #define OHCI_CTRL_CBSR_1_1  0x0000
 #define OHCI_CTRL_CBSR_1_2  0x0001
@@ -34,6 +35,7 @@
 #define OHCI_CTRL_HCFS_SUSPEND     (3 << 6)
 
 #define OHCI_CMD_HCR 1 // Host Controller Reset
+#define OHCI_CMD_CLF 2 // Control List Filled
 #define OHCI_CMD_OCR 8 // Ownership Change Request
 
 #define OHCI_INT_SCHEDULING_OVERRUN             0x01
@@ -240,13 +242,17 @@ public:
 class ohci_endpoint;
 
 class ohci_transfer : public usb_transfer {
+    friend ohci;
     friend ohci_endpoint;
 private:
     std::shared_ptr<StructPoolPointer<ohci_transfer_descriptor,uint32_t>> transferPtr;
     std::shared_ptr<usb_buffer> buffer;
     std::shared_ptr<ohci_transfer> next;
+    ohci_endpoint &endpoint;
+    bool waitCancelled, waitCancelledAndWaitedCycle;
 public:
-    ohci_transfer(ohci &ohci);
+    ohci_transfer(ohci &ohci, ohci_endpoint &endpoint);
+    ~ohci_transfer();
     ohci_transfer_descriptor *TD() {
         return transferPtr->Pointer();
     }
@@ -256,21 +262,25 @@ public:
     std::shared_ptr<usb_buffer> Buffer() {
         return buffer;
     }
+    void SetDone() override;
+    usb_transfer_status GetStatus() override;
 };
 
 struct ohci_endpoint_cleanup {
+    ohci &ohciRef;
     std::shared_ptr<StructPoolPointer<ohci_endpoint_descriptor,uint32_t>> ed;
     std::shared_ptr<ohci_transfer> transfers;
 
     ohci_endpoint_cleanup(
+            ohci &ohciRef,
             std::shared_ptr<StructPoolPointer<ohci_endpoint_descriptor,uint32_t>> ed,
             std::shared_ptr<ohci_transfer> transfers
-            ) : ed(ed), transfers(transfers) {}
-    ~ohci_endpoint_cleanup() {
-    }
+            ) : ohciRef(ohciRef), ed(ed), transfers(transfers) {}
+    ~ohci_endpoint_cleanup();
 };
 
 class ohci_endpoint : public usb_endpoint {
+    friend ohci_transfer;
 private:
     ohci &ohciRef;
     std::shared_ptr<StructPoolPointer<ohci_endpoint_descriptor,uint32_t>> edPtr;
@@ -297,6 +307,7 @@ public:
 
 class ohci : public Device, public usb_hcd {
     friend ohci_endpoint;
+    friend ohci_endpoint_cleanup;
     friend ohci_transfer;
     friend ohci_buffer;
 private:
@@ -313,12 +324,13 @@ private:
     ohci_endpoint *controlHead;
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<OHCI_TRANSFER_BUFSIZE>>> bufPool;
     StructPool<StructPoolAllocator<Phys32Page,ohci_transfer_descriptor>> xPool;
+    std::vector<std::shared_ptr<usb_transfer>> transfersInProgress;
     bool StartOfFrameReceived;
     hw_spinlock ohcilock;
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         Device("ohci", &bus), usb_hcd(), pciDeviceInformation(deviceInformation),
-        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, CONTROL), controlHead(&controlEndpointEnd), bufPool(), xPool(), StartOfFrameReceived(false), ohcilock() {}
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, CONTROL), controlHead(&controlEndpointEnd), bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
     void init() override;
     void dumpregs() override;
 
@@ -333,6 +345,8 @@ private:
     bool ResetHostController();
     bool irq();
     void StartOfFrame();
+    std::shared_ptr<usb_transfer> ExtractDoneQueueItem(uint32_t physaddr);
+    void ProcessDoneQueue();
 public:
     int GetNumberOfPorts() override {
         return no_ports;

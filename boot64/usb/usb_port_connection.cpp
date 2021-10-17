@@ -7,6 +7,7 @@
 #include <sstream>
 #include "usb_port_connection.h"
 #include "usb_control_req.h"
+#include "usb_transfer.h"
 
 usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub), port(port) {
     {
@@ -42,20 +43,46 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub),
     }
     auto speed = hub.PortSpeed(port);
     {
-        std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, usb_endpoint_direction::BOTH, speed);
-        usb_set_address set_addr{1}; // TODO - allocate and set addr
-        std::shared_ptr<usb_transfer> t_setaddr = ctrl_0_0->CreateTransfer((void *) &set_addr, sizeof(set_addr), usb_transfer_direction::SETUP, false, 1);
         uint16_t packetSize{64};
         if (speed == LOW) {
             packetSize = 8;
         } else if (speed == FULL) {
             packetSize = 64;
         }
-        std::shared_ptr<usb_transfer> t_setaddr_status = ctrl_0_0->CreateTransfer(packetSize, usb_transfer_direction::IN, false, 1, 1);
-    }
-    {
-        using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(1s);
+        std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(packetSize, 0, 0, usb_endpoint_direction::BOTH, speed);
+        usb_set_address set_addr{1}; // TODO - allocate and set addr
+        std::shared_ptr<usb_transfer> t_setaddr = ctrl_0_0->CreateTransfer((void *) &set_addr, sizeof(set_addr), usb_transfer_direction::SETUP, false, 1);
+        std::shared_ptr<usb_transfer> t_setaddr_status = ctrl_0_0->CreateTransfer(packetSize, usb_transfer_direction::IN, true, 1, 1);
+
+        {
+            int timeout = 25;
+            while (!t_setaddr->IsDone()) {
+                if (--timeout == 0)
+                    break;
+                using namespace std::literals::chrono_literals;
+                std::this_thread::sleep_for(40ms);
+            }
+        }
+        if (t_setaddr->IsSuccessful()) {
+            int timeout = 25;
+            while (!t_setaddr_status->IsDone()) {
+                if (--timeout == 0)
+                    break;
+                using namespace std::literals::chrono_literals;
+                std::this_thread::sleep_for(40ms);
+            }
+            if (t_setaddr_status->IsSuccessful()) {
+                get_klogger() << "Usb set address success\n";
+            } else {
+                std::stringstream str{};
+                str << "Usb set address (status) failed: " << t_setaddr_status->GetStatusStr() << "\n";
+                get_klogger() << str.str().c_str();
+            }
+        } else {
+            std::stringstream str{};
+            str << "Usb set address failed: " << t_setaddr->GetStatusStr() << "\n";
+            get_klogger() << str.str().c_str();
+        }
     }
     hub.DisablePort(port);
 }
