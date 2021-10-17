@@ -239,7 +239,7 @@ namespace std {
 
         bool operator == (T *ptr) {
             if (container != nullptr) {
-                T *obj = container->Ptr();
+                T *obj = (T *) container->Ptr();
                 return obj == ptr;
             } else {
                 return ptr == nullptr;
