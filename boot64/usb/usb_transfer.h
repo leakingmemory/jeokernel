@@ -33,6 +33,12 @@ private:
 public:
     usb_transfer() : done(false) {}
     virtual ~usb_transfer() {}
+
+    usb_transfer(const usb_transfer &) = delete;
+    usb_transfer(usb_transfer &&) = delete;
+    usb_transfer &operator = (const usb_transfer &) = delete;
+    usb_transfer &operator = (usb_transfer &&) = delete;
+
     virtual std::shared_ptr<usb_buffer> Buffer() = 0;
     virtual void SetDone() { done = true;}
     bool IsDone() { return done; }
