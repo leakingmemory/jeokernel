@@ -173,6 +173,10 @@ namespace std {
             }
         }
 
+        template <class P,class PDeleter> shared_ptr(shared_ptr<T,Deleter> &&mv) : container(mv.container) {
+            static_assert(is_assignable<T*,P*>::value);
+            mv.container = nullptr;
+        }
         shared_ptr(shared_ptr<T,Deleter> &&mv) : container(mv.container) {
             mv.container = nullptr;
         }
@@ -188,6 +192,33 @@ namespace std {
             return container;
         }
 
+        template <class P,class PDeleter> shared_ptr &operator = (shared_ptr<P,PDeleter> &&mv) {
+            static_assert(is_assignable<T*,P*>::value);
+            if (container != nullptr) {
+                if (container->release() == 0) {
+                    delete container;
+                }
+            }
+            container = mv.container;
+            mv.container = nullptr;
+            return *this;
+        }
+
+        template <class P,class PDeleter> shared_ptr &operator = (const shared_ptr<P,PDeleter> &cp) {
+            static_assert(is_assignable<T*,P*>::value);
+            auto *prevContainer = container;
+            container = cp.container;
+            if (container != nullptr) {
+                container->acquire();
+            }
+            if (prevContainer != nullptr) {
+                if (prevContainer->release() == 0) {
+                    delete prevContainer;
+                }
+            }
+            return *this;
+        }
+
         shared_ptr &operator = (shared_ptr &&mv) {
             if (container != nullptr) {
                 if (container->release() == 0) {
@@ -200,14 +231,15 @@ namespace std {
         }
 
         shared_ptr &operator = (const shared_ptr &cp) {
-            if (container != nullptr) {
-                if (container->release() == 0) {
-                    delete container;
-                }
-            }
+            auto *prevContainer = container;
             container = cp.container;
             if (container != nullptr) {
                 container->acquire();
+            }
+            if (prevContainer != nullptr) {
+                if (prevContainer->release() == 0) {
+                    delete prevContainer;
+                }
             }
             return *this;
         }
