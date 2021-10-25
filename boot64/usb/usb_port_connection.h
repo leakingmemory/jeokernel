@@ -40,8 +40,8 @@ class usb_endpoint {
 public:
     virtual ~usb_endpoint() {}
     virtual bool Addressing64bit() = 0;
-    virtual std::shared_ptr<usb_transfer> CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, uint8_t dataToggle = 0) = 0;
-    virtual std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, uint8_t dataToggle = 0) = 0;
+    virtual std::shared_ptr<usb_transfer> CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) = 0;
+    virtual std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) = 0;
     virtual std::shared_ptr<usb_buffer> Alloc() = 0;
 };
 
@@ -50,6 +50,12 @@ public:
     virtual void *Pointer() = 0;
     virtual uint64_t Addr() = 0;
     virtual ~usb_buffer() {}
+    void CopyTo(void *ptr, size_t size) {
+        memcpy(ptr, Pointer(), size);
+    }
+    template <typename T> void CopyTo(T &t) {
+        CopyTo((void *) &t, sizeof(t));
+    }
 };
 
 class usb_hub {
