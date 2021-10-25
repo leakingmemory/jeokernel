@@ -181,11 +181,15 @@ namespace std {
             mv.container = nullptr;
         }
         shared_ptr(const shared_ptr<T,Deleter> &cp) : container(cp.container) {
-            container->acquire();
+            if (container != nullptr) {
+                container->acquire();
+            }
         }
         template <class P,class PDeleter> shared_ptr(const shared_ptr<P,PDeleter> &cp) : container(cp.Container()) {
             static_assert(is_assignable<T*,P*>::value);
-            container->acquire();
+            if (container != nullptr) {
+                container->acquire();
+            }
         };
 
         impl::shared_ptr_container_typeerasure *Container() const {
