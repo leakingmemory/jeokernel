@@ -304,10 +304,10 @@ public:
         return false;
     }
 private:
-    std::shared_ptr<usb_transfer> CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, uint8_t dataToggle);
+    std::shared_ptr<usb_transfer> CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle);
 public:
-    std::shared_ptr<usb_transfer> CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, uint8_t dataToggle) override;
-    std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, uint8_t dataToggle) override;
+    std::shared_ptr<usb_transfer> CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) override;
+    std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) override;
     std::shared_ptr<usb_buffer> Alloc() override;
 };
 

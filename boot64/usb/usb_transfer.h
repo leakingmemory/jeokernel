@@ -41,7 +41,7 @@ public:
 
     virtual std::shared_ptr<usb_buffer> Buffer() = 0;
     virtual void SetDone() { done = true;}
-    bool IsDone() { return done; }
+    bool IsDone() const { return done; }
     virtual usb_transfer_status GetStatus() = 0;
     std::string GetStatusStr();
     bool IsSuccessful() {

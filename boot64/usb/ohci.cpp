@@ -666,8 +666,11 @@ uint32_t ohci_endpoint::Phys() {
 
 std::shared_ptr<usb_transfer>
 ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
-                              uint16_t delayInterrupt, uint8_t dataToggle) {
-    uint32_t ctrl{((uint32_t) (dataToggle & 1)) << 24};
+                              uint16_t delayInterrupt, int8_t dataToggle) {
+    uint32_t ctrl{0};
+    if (dataToggle >= 0) {
+        ctrl |= ((uint32_t) (dataToggle & 1) | 2) << 24;
+    }
     if (delayInterrupt == TRANSFER_NO_INTERRUPT) {
         delayInterrupt = 7;
     } else if (delayInterrupt > 6) {
@@ -677,10 +680,10 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
     ctrl |= ((uint32_t) delayInterrupt) << 21;
     switch (direction) {
         case usb_transfer_direction::IN:
-            ctrl |= 1 << 19;
+            ctrl |= 1 << 20;
             break;
         case usb_transfer_direction::OUT:
-             ctrl |= 1 << 20;
+            ctrl |= 1 << 19;
             break;
     }
     if (bufferRounding) {
@@ -700,8 +703,13 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
     tail->buffer = buffer;
     auto *TD = tail->TD();
     TD->TdControl = ctrl;
-    TD->CurrentBufferPointer = buffer->Addr();
-    TD->BufferEnd = TD->CurrentBufferPointer + size;
+    if (buffer) {
+        TD->CurrentBufferPointer = buffer->Addr();
+        TD->BufferEnd = TD->CurrentBufferPointer + size - 1;
+    } else {
+        TD->CurrentBufferPointer = 0;
+        TD->BufferEnd = 0;
+    }
     std::shared_ptr<ohci_transfer> filled{tail};
     tail->next = newtd;
     TD->NextTD = newtd->PhysAddr();
@@ -724,7 +732,7 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
 
 std::shared_ptr<usb_transfer>
 ohci_endpoint::CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
-                              uint16_t delayInterrupt, uint8_t dataToggle) {
+                              uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer = Alloc();
     memcpy(buffer->Pointer(), data, size);
     return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle);
@@ -732,8 +740,11 @@ ohci_endpoint::CreateTransfer(void *data, uint32_t size, usb_transfer_direction 
 
 std::shared_ptr<usb_transfer>
 ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding,
-                              uint16_t delayInterrupt, uint8_t dataToggle) {
-    std::shared_ptr<usb_buffer> buffer = Alloc();
+                              uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
     return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle);
 }
 
