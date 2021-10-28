@@ -5,6 +5,8 @@
 #ifndef JEOKERNEL_USB_PORT_CONNECTION_H
 #define JEOKERNEL_USB_PORT_CONNECTION_H
 
+#include "usb_control_req.h"
+
 template <int n> struct usb_byte_buffer {
     uint8_t data[n];
 };
@@ -81,6 +83,7 @@ public:
     uint8_t Port() {
         return port;
     }
+    std::shared_ptr<usb_buffer> ControlRequest(usb_endpoint &endpoint, const usb_control_request &request);
 };
 
 #endif //JEOKERNEL_USB_PORT_CONNECTION_H

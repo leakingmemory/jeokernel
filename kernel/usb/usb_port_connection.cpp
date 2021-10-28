@@ -56,72 +56,29 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub),
         std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, usb_endpoint_direction::BOTH, speed);
         {
             usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
-            std::shared_ptr<usb_transfer> t_get_descr0 = ctrl_0_0->CreateTransfer((void *) &get_descr0,
-                                                                                  sizeof(get_descr0),
-                                                                                  usb_transfer_direction::SETUP, true,
-                                                                                  1, 0);
-            std::shared_ptr<usb_transfer> t_get_descr0_result = ctrl_0_0->CreateTransfer(8, usb_transfer_direction::IN,
-                                                                                         true, 1, 1);
-            std::shared_ptr<usb_transfer> t_get_descr0_status = ctrl_0_0->CreateTransfer(0, usb_transfer_direction::OUT,
-                                                                                         true, 1);
-            timeout_wait(*t_get_descr0);
-            if (t_get_descr0->IsSuccessful()) {
-                timeout_wait(*t_get_descr0_result);
-                if (t_get_descr0_result->IsSuccessful()) {
-                    usb_minimum_device_descriptor minDevDesc{};
-                    t_get_descr0_result->Buffer()->CopyTo(minDevDesc);
-                    {
-                        std::stringstream str{};
-                        str << std::hex << "Dev desc len=" << minDevDesc.bLength
-                            << " type=" << minDevDesc.bDescriptorType << " USB=" << minDevDesc.bcdUSB
-                            << " class=" << minDevDesc.bDeviceClass << " sub=" << minDevDesc.bDeviceSubClass
-                            << " proto=" << minDevDesc.bDeviceProtocol << " packet-0=" << minDevDesc.bMaxPacketSize0
-                            << "\n";
-                        get_klogger() << str.str().c_str();
-                    }
-                    timeout_wait(*t_get_descr0_status);
-                    if (t_get_descr0_status->IsSuccessful()) {
-                        std::stringstream str{};
-                        str << "Usb get descr successful\n";
-                        get_klogger() << str.str().c_str();
-                    } else {
-                        std::stringstream str{};
-                        str << "Usb get descr (status): " << t_get_descr0_status->GetStatusStr() << "\n";
-                        get_klogger() << str.str().c_str();
-                    }
-                } else {
+            std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*ctrl_0_0, get_descr0);
+            if (descr0_buf) {
+                usb_minimum_device_descriptor minDevDesc{};
+                descr0_buf->CopyTo(minDevDesc);
+                {
                     std::stringstream str{};
-                    str << "Usb get descr (result): " << t_get_descr0_result->GetStatusStr() << "\n";
+                    str << std::hex << "Dev desc len=" << minDevDesc.bLength
+                        << " type=" << minDevDesc.bDescriptorType << " USB=" << minDevDesc.bcdUSB
+                        << " class=" << minDevDesc.bDeviceClass << " sub=" << minDevDesc.bDeviceSubClass
+                        << " proto=" << minDevDesc.bDeviceProtocol << " packet-0=" << minDevDesc.bMaxPacketSize0
+                        << "\n";
                     get_klogger() << str.str().c_str();
                 }
             } else {
-                std::stringstream str{};
-                str << "Usb get descr: " << t_get_descr0->GetStatusStr() << "\n";
-                get_klogger() << str.str().c_str();
+                get_klogger() << "Dev desc error\n";
             }
         }
         {
             usb_set_address set_addr{1}; // TODO - allocate and set addr
-            std::shared_ptr<usb_transfer> t_setaddr = ctrl_0_0->CreateTransfer((void *) &set_addr, sizeof(set_addr),
-                                                                               usb_transfer_direction::SETUP, false, 1, 0);
-            std::shared_ptr<usb_transfer> t_setaddr_status = ctrl_0_0->CreateTransfer(0,
-                                                                                      usb_transfer_direction::IN, true,
-                                                                                      1, 1);
-
-            timeout_wait(*t_setaddr);
-            if (t_setaddr->IsSuccessful()) {
-                timeout_wait(*t_setaddr_status);
-                if (t_setaddr_status->IsSuccessful()) {
-                    get_klogger() << "Usb set address success\n";
-                } else {
-                    std::stringstream str{};
-                    str << "Usb set address (status) failed: " << t_setaddr_status->GetStatusStr() << "\n";
-                    get_klogger() << str.str().c_str();
-                }
+            if (ControlRequest(*ctrl_0_0, set_addr)) {
+                get_klogger() << "Usb set address success\n";
             } else {
-                std::stringstream str{};
-                str << "Usb set address failed: " << t_setaddr->GetStatusStr() << "\n";
-                get_klogger() << str.str().c_str();
+                get_klogger() << "Usb set address failed\n";
             }
         }
 
@@ -133,4 +90,60 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub),
 
 usb_port_connection::~usb_port_connection() {
     get_klogger() << "USB port disconnected\n";
+}
+
+std::shared_ptr<usb_buffer>
+usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_request &request) {
+    std::shared_ptr<usb_transfer> t_req = endpoint.CreateTransfer(
+                (void *) &request, sizeof(request),
+                usb_transfer_direction::SETUP, true,
+                1, 0
+            );
+    std::shared_ptr<usb_transfer> data_stage{};
+    std::shared_ptr<usb_transfer> status_stage{};
+    if (request.wLength > 0) {
+        data_stage = endpoint.CreateTransfer(
+                request.wLength,
+                usb_transfer_direction::IN, true,
+                1, 1);
+        status_stage = endpoint.CreateTransfer(
+                0,
+                usb_transfer_direction::OUT, true,
+                1, 1
+                );
+    } else {
+        status_stage = endpoint.CreateTransfer(
+                0,
+                usb_transfer_direction::IN, true,
+                1, 1
+        );
+    }
+    timeout_wait(*t_req);
+    if (!t_req->IsSuccessful()) {
+        std::stringstream str{};
+        str << "Usb control transfer failed: " << t_req->GetStatusStr() << "\n";
+        get_klogger() << str.str().c_str();
+        return {};
+    }
+    if (data_stage) {
+        timeout_wait(*data_stage);
+        if (!data_stage->IsSuccessful()) {
+            std::stringstream str{};
+            str << "Usb control transfer failed (data): " << data_stage->GetStatusStr() << "\n";
+            get_klogger() << str.str().c_str();
+            return {};
+        }
+    }
+    timeout_wait(*status_stage);
+    if (!status_stage->IsSuccessful()) {
+        std::stringstream str{};
+        str << "Usb control transfer failed (status): " << status_stage->GetStatusStr() << "\n";
+        get_klogger() << str.str().c_str();
+        return {};
+    }
+    if (data_stage) {
+        return data_stage->Buffer();
+    } else {
+        return t_req->Buffer();
+    }
 }
