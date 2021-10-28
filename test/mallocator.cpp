@@ -7,7 +7,7 @@
 #include "../include/concurrency/hw_spinlock.h"
 #include "../include/pagetable.h"
 #include "../include/pagealloc.h"
-#include "../boot64/kmemory/mallocator.h"
+#include "../kernel/kmemory/mallocator.h"
 #include <string>
 
 std::string hex8(uint32_t num) {

@@ -24,7 +24,7 @@ set(CMAKE_CXX_STANDARD 20)
 enable_language(C ASM)
 
 add_subdirectory(boot32)
-add_subdirectory(boot64)
+add_subdirectory(kernel)
 
 if (NOT DEFINED ENV{DISABLE_TESTS})
         enable_testing()
@@ -33,7 +33,7 @@ endif (NOT DEFINED ENV{DISABLE_TESTS})
 
 #add_executable(jeokernel /dev/null)
 #target_link_libraries(jeokernel boot32)
-#target_link_libraries(jeokernel boot64)
+#target_link_libraries(jeokernel kernel)
 
 #set(CMAKE_CXX_LINK_EXECUTABLE "ld -m elf_i386 -nostdlib -T ${CMAKE_SOURCE_DIR}/linker.ld <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES>")
 

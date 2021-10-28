@@ -13,10 +13,10 @@
 #include "../include/acpi/pci_irq_rt.h"
 #include "../include/interrupt_frame.h"
 #include "../include/core/cpu_mpfp.h"
-#include "../boot64/IOApic.h"
+#include "../kernel/IOApic.h"
 #include "../include/core/LocalApic.h"
-#include "../boot64/pci/pci.h"
-#include "../boot64/usb/xhci.h"
+#include "../kernel/pci/pci.h"
+#include "../kernel/usb/xhci.h"
 
 int main() {
     uint64_t legsup_value = 0x1234567800011201;

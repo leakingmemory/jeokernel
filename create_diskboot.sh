@@ -6,7 +6,7 @@ if grub-file --is-x86-multiboot2  boot32/jeokernel; then
   bzip2 -dc ${CMAKE_SOURCE_DIR}/partimg.img.bz2 > partimg.img &&
   fuse2fs -o fakeroot partimg.img grubimg; then
     if cp -v boot32/jeokernel grubimg/boot/loader &&
-    cp -v boot64/kernel grubimg/boot/kernel &&
+    cp -v kernel/kernel grubimg/boot/kernel &&
     cp -v ${CMAKE_SOURCE_DIR}/grub.cfg grubimg/boot/grub/; then
       echo "Successfully installed files in image"
     else
