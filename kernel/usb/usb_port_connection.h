@@ -60,6 +60,18 @@ public:
     }
 };
 
+class usb_func_addr {
+public:
+    usb_func_addr() { }
+    usb_func_addr(const usb_func_addr &) = delete;
+    usb_func_addr(usb_func_addr &&) = delete;
+    usb_func_addr &operator = (const usb_func_addr &) = delete;
+    usb_func_addr &operator = (usb_func_addr &&) = delete;
+
+    virtual int GetAddr() const = 0;
+    virtual ~usb_func_addr() { }
+};
+
 class usb_hub {
 public:
     virtual void dumpregs() = 0;
@@ -71,18 +83,23 @@ public:
     virtual bool ResettingPort(int port) = 0;
     virtual bool EnabledPort(int port) = 0;
     virtual usb_speed PortSpeed(int port) = 0;
+    virtual std::shared_ptr<usb_func_addr> GetFuncAddr() = 0;
 };
 
 class usb_port_connection {
 private:
     usb_hub &hub;
     uint8_t port;
+    std::shared_ptr<usb_func_addr> addr;
+    std::thread *thread;
+    std::shared_ptr<usb_endpoint> endpoint0;
 public:
     usb_port_connection(usb_hub &hub, uint8_t port);
     ~usb_port_connection();
     uint8_t Port() {
         return port;
     }
+    void start(usb_speed speed, const usb_minimum_device_descriptor &minDesc);
     std::shared_ptr<usb_buffer> ControlRequest(usb_endpoint &endpoint, const usb_control_request &request);
 };
 

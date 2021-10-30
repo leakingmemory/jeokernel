@@ -19,7 +19,10 @@ static void timeout_wait(const usb_transfer &transfer) {
     }
 }
 
-usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub), port(port) {
+usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub), port(port), addr(hub.GetFuncAddr()), thread(nullptr), endpoint0() {
+    if (!addr) {
+        get_klogger() << "Couldn't assign address to usb device\n";
+    }
     {
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(200ms);
@@ -38,11 +41,13 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub),
         if (!resetted) {
             get_klogger() << "USB port failed to reset\n";
             hub.DisablePort(port);
+            addr = {};
             return;
         }
         bool enabled{hub.EnabledPort(port)};
         if (!enabled) {
             get_klogger() << "USB port failed to enable\n";
+            addr = {};
             return;
         }
     }
@@ -51,6 +56,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub),
         str << std::hex << "USB port enabled and reset - status " << hub.GetPortStatus(port) << "\n";
         get_klogger() << str.str().c_str();
     }
+    usb_minimum_device_descriptor minDevDesc{};
     auto speed = hub.PortSpeed(port);
     {
         std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, usb_endpoint_direction::BOTH, speed);
@@ -58,7 +64,6 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub),
             usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
             std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*ctrl_0_0, get_descr0);
             if (descr0_buf) {
-                usb_minimum_device_descriptor minDevDesc{};
                 descr0_buf->CopyTo(minDevDesc);
                 {
                     std::stringstream str{};
@@ -71,24 +76,46 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub),
                 }
             } else {
                 get_klogger() << "Dev desc error\n";
+                addr = {};
+                hub.DisablePort(port);
+                return;
             }
         }
         {
-            usb_set_address set_addr{1}; // TODO - allocate and set addr
+            uint8_t func = addr->GetAddr();
+            usb_set_address set_addr{func};
             if (ControlRequest(*ctrl_0_0, set_addr)) {
-                get_klogger() << "Usb set address success\n";
+                std::stringstream str{};
+                str << std::hex << "Usb set address " << func << " success.\n";
+                get_klogger() << str.str().c_str();
             } else {
                 get_klogger() << "Usb set address failed\n";
+                addr = {};
+                hub.DisablePort(port);
+
+                using namespace std::literals::chrono_literals;
+                std::this_thread::sleep_for(100ms);
+                return;
             }
         }
 
         using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(1s);
+        std::this_thread::sleep_for(100ms);
     }
-    hub.DisablePort(port);
+
+    thread = new std::thread([this, minDevDesc, speed] () {
+        this->start(speed, minDevDesc);
+    });
 }
 
 usb_port_connection::~usb_port_connection() {
+    if (thread != nullptr) {
+        thread->join();
+        delete thread;
+    }
+    if (addr) {
+        hub.DisablePort(port);
+    }
     get_klogger() << "USB port disconnected\n";
 }
 
@@ -146,4 +173,14 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
     } else {
         return t_req->Buffer();
     }
+}
+
+void usb_port_connection::start(usb_speed speed, const usb_minimum_device_descriptor &minDesc) {
+    uint8_t func = addr->GetAddr();
+    {
+        std::stringstream str{};
+        str << std::hex << "Creating endpoint0 for addr " << func << "\n";
+        get_klogger() << str.str().c_str();
+    }
+    endpoint0 = hub.CreateControlEndpoint(minDesc.bMaxPacketSize0, func, 0, usb_endpoint_direction::BOTH, speed);
 }

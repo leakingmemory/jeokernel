@@ -9,6 +9,20 @@
 #include <concurrency/raw_semaphore.h>
 #include "usb_port_connection.h"
 
+class usb_hcd;
+
+class usb_hcd_addr : public usb_func_addr {
+private:
+    usb_hcd &hcd;
+    int addr;
+public:
+    usb_hcd_addr(usb_hcd &hcd, int addr) : usb_func_addr(), hcd(hcd), addr(addr) { }
+    int GetAddr() const override {
+        return addr;
+    }
+    ~usb_hcd_addr() override;
+};
+
 #define USB_PORT_STATUS_CCS    0x000001 // Current Connection Status
 #define USB_PORT_STATUS_PES    0x000002 // Port Enable Status
 #define USB_PORT_STATUS_PSS    0x000004 // Port Suspend Status
@@ -23,11 +37,13 @@
 #define USB_PORT_STATUS_PRSC   0x000800 // Port Reset Status Change
 
 class usb_hcd : public usb_hub {
+    friend usb_hcd_addr;
 private:
     raw_semaphore hub_sema;
     std::vector<usb_port_connection *> connections;
+    uint32_t func_addr_map[4];
 public:
-    usb_hcd() : hub_sema(0), connections() {}
+    usb_hcd() : hub_sema(0), connections(), func_addr_map{1, 0, 0, 0} {}
     virtual ~usb_hcd() {
         wild_panic("usb_hcd: delete not implemented");
     }
@@ -39,6 +55,7 @@ public:
     virtual void ClearStatusChange(int port, uint32_t statuses) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override = 0;
     virtual size_t TransferBufferSize() = 0;
+    virtual hw_spinlock &HcdSpinlock() = 0;
 private:
     [[noreturn]] void BusInit();
     void PortConnected(uint8_t port);
@@ -52,6 +69,20 @@ public:
     bool EnabledPort(int port) override;
     bool ResettingPort(int port) override;
     virtual usb_speed PortSpeed(int port) override = 0;
+private:
+    int AllocateFuncAddr();
+    void ReleaseFuncAddr(int addr);
+public:
+    std::shared_ptr<usb_func_addr> GetFuncAddr() override {
+        int addr = AllocateFuncAddr();
+        if (addr > 0 && addr < 128) {
+            std::shared_ptr<usb_func_addr> faddr{};
+            faddr = std::make_shared<usb_hcd_addr>(*this, addr);
+            return faddr;
+        } else {
+            return {};
+        }
+    }
 };
 
 #endif //JEOKERNEL_USB_HCD_H

@@ -365,6 +365,9 @@ public:
     size_t TransferBufferSize() override {
         return OHCI_TRANSFER_BUFSIZE;
     }
+    hw_spinlock &HcdSpinlock() override {
+        return ohcilock;
+    }
     void EnablePort(int port) override;
     void DisablePort(int port) override;
     void ResetPort(int port) override;

@@ -597,6 +597,8 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
 
 ohci_endpoint::~ohci_endpoint() {
     if (endpointType == CONTROL) {
+        critical_section cli{};
+        std::lock_guard lock{ohciRef.ohcilock};
         ohci_endpoint *endpoint = ohciRef.controlHead;
         if (endpoint == this) {
             if (endpoint->next != nullptr) {
@@ -606,16 +608,12 @@ ohci_endpoint::~ohci_endpoint() {
                 this->ohciRef.ohciRegisters->HcControlHeadED = 0;
                 this->ohciRef.controlHead = nullptr;
             }
-            critical_section cli{};
-            std::lock_guard lock{ohciRef.ohcilock};
             ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
             this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
             this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
         } else while (endpoint) {
             if (endpoint->next == this) {
                 endpoint->SetNext(next);
-                critical_section cli{};
-                std::lock_guard lock{ohciRef.ohcilock};
                 ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
                 this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
                 this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
