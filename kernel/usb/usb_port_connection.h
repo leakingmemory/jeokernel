@@ -53,6 +53,7 @@ class usb_buffer {
 public:
     virtual void *Pointer() = 0;
     virtual uint64_t Addr() = 0;
+    virtual size_t Size() = 0;
     virtual ~usb_buffer() {}
     void CopyTo(void *ptr, size_t size) {
         memcpy(ptr, Pointer(), size);

@@ -124,6 +124,40 @@ usb_port_connection::~usb_port_connection() {
     get_klogger() << "USB port disconnected\n";
 }
 
+class long_usb_buffer : public usb_buffer {
+private:
+    void *buffer;
+    size_t size;
+public:
+    long_usb_buffer(const std::vector<std::shared_ptr<usb_buffer>> &buffers) : buffer(nullptr), size{0} {
+        for (const std::shared_ptr<usb_buffer> &buf : buffers) {
+            size += buf->Size();
+        }
+        buffer = malloc(size);
+        size_t offset{0};
+        for (const std::shared_ptr<usb_buffer> &buf : buffers) {
+            memcpy(((uint8_t *) buffer) + offset, buf->Pointer(), buf->Size());
+            offset += buf->Size();
+        }
+    }
+    ~long_usb_buffer() {
+        if (buffer != nullptr) {
+            free(buffer);
+            buffer = nullptr;
+        }
+    }
+
+    void *Pointer() override {
+        return buffer;
+    }
+    uint64_t Addr() override {
+        return 0;
+    }
+    size_t Size() override {
+        return size;
+    }
+};
+
 std::shared_ptr<usb_buffer>
 usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_request &request) {
     std::shared_ptr<usb_transfer> t_req = endpoint.CreateTransfer(
@@ -131,13 +165,23 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
                 usb_transfer_direction::SETUP, true,
                 1, 0
             );
-    std::shared_ptr<usb_transfer> data_stage{};
+    std::vector<std::shared_ptr<usb_transfer>> data_stage{};
     std::shared_ptr<usb_transfer> status_stage{};
     if (request.wLength > 0) {
-        data_stage = endpoint.CreateTransfer(
-                request.wLength,
-                usb_transfer_direction::IN, true,
-                1, 1);
+        auto remaining = request.wLength;
+        while (remaining > 0) {
+            auto data_stage_tr = endpoint.CreateTransfer(
+                    request.wLength,
+                    usb_transfer_direction::IN, true,
+                    1, 1);
+            data_stage.push_back(data_stage_tr);
+            auto size = data_stage_tr->Buffer()->Size();
+            if (size < remaining) {
+                remaining -= size;
+            } else {
+                remaining = 0;
+            }
+        }
         status_stage = endpoint.CreateTransfer(
                 0,
                 usb_transfer_direction::OUT, true,
@@ -157,13 +201,15 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
         get_klogger() << str.str().c_str();
         return {};
     }
-    if (data_stage) {
-        timeout_wait(*data_stage);
-        if (!data_stage->IsSuccessful()) {
-            std::stringstream str{};
-            str << "Usb control transfer failed (data): " << data_stage->GetStatusStr() << "\n";
-            get_klogger() << str.str().c_str();
-            return {};
+    if (!data_stage.empty()) {
+        for (const auto &stage : data_stage) {
+            timeout_wait(*stage);
+            if (!stage->IsSuccessful()) {
+                std::stringstream str{};
+                str << "Usb control transfer failed (data): " << stage->GetStatusStr() << "\n";
+                get_klogger() << str.str().c_str();
+                return {};
+            }
         }
     }
     timeout_wait(*status_stage);
@@ -173,8 +219,12 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
         get_klogger() << str.str().c_str();
         return {};
     }
-    if (data_stage) {
-        return data_stage->Buffer();
+    if (!data_stage.empty()) {
+        std::vector<std::shared_ptr<usb_buffer>> buffers{};
+        for (const auto &stage : data_stage) {
+            buffers.push_back(stage->Buffer());
+        }
+        return std::shared_ptr(new long_usb_buffer(buffers));
     } else {
         return t_req->Buffer();
     }

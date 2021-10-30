@@ -243,6 +243,9 @@ public:
     uint64_t Addr() override {
         return bufferPtr->Phys();
     }
+    size_t Size() override {
+        return OHCI_TRANSFER_BUFSIZE;
+    }
 };
 
 class ohci_endpoint;

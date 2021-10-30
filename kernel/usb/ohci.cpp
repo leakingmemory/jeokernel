@@ -703,6 +703,9 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
     TD->TdControl = ctrl;
     if (buffer) {
         TD->CurrentBufferPointer = buffer->Addr();
+        if (size > buffer->Size()) {
+            size = buffer->Size();
+        }
         TD->BufferEnd = TD->CurrentBufferPointer + size - 1;
     } else {
         TD->CurrentBufferPointer = 0;
