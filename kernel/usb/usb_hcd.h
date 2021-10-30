@@ -43,7 +43,7 @@ private:
     std::vector<usb_port_connection *> connections;
     uint32_t func_addr_map[4];
 public:
-    usb_hcd() : hub_sema(0), connections(), func_addr_map{1, 0, 0, 0} {}
+    usb_hcd(std::string hcdType, Bus &parentBus) : usb_hub(hcdType, parentBus), hub_sema(0), connections(), func_addr_map{1, 0, 0, 0} {}
     virtual ~usb_hcd() {
         wild_panic("usb_hcd: delete not implemented");
     }

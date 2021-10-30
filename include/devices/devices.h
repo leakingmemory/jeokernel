@@ -49,6 +49,7 @@ private:
     bool have_probed;
 public:
     Bus(std::string device_type) : Device(device_type), have_probed(false) {}
+    Bus(std::string device_type, Bus *bus) : Device(device_type, bus), have_probed(false) {}
     virtual void ProbeDevices() {
         have_probed = true;
     }
@@ -111,6 +112,7 @@ public:
 };
 
 struct PciDeviceInformation;
+struct UsbDeviceInformation;
 
 struct DeviceInformation {
     uint16_t vendor_id;
@@ -126,6 +128,7 @@ struct DeviceInformation {
     DeviceInformation & operator = (DeviceInformation &&) = delete;
 
     virtual PciDeviceInformation *GetPciInformation();
+    virtual UsbDeviceInformation *GetUsbInformation();
 };
 
 void init_devices();

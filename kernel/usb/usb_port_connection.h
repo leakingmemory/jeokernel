@@ -5,7 +5,9 @@
 #ifndef JEOKERNEL_USB_PORT_CONNECTION_H
 #define JEOKERNEL_USB_PORT_CONNECTION_H
 
+#include <devices/devices.h>
 #include "usb_control_req.h"
+#include <thread>
 
 template <int n> struct usb_byte_buffer {
     uint8_t data[n];
@@ -72,8 +74,9 @@ public:
     virtual ~usb_func_addr() { }
 };
 
-class usb_hub {
+class usb_hub : public Bus {
 public:
+    explicit usb_hub(std::string hubType, Bus &parentBus) : Bus(hubType, &parentBus) { }
     virtual void dumpregs() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
@@ -102,6 +105,18 @@ public:
     }
     void start(usb_speed speed, const usb_minimum_device_descriptor &minDesc);
     std::shared_ptr<usb_buffer> ControlRequest(usb_endpoint &endpoint, const usb_control_request &request);
+    void ReadConfigurations();
+};
+
+struct UsbDeviceInformation : public DeviceInformation {
+    usb_port_connection &port;
+
+    explicit UsbDeviceInformation(const usb_device_descriptor &devDesc, usb_port_connection &port);
+    UsbDeviceInformation(const UsbDeviceInformation &cp);
+
+    UsbDeviceInformation *GetUsbInformation() override {
+        return this;
+    }
 };
 
 #endif //JEOKERNEL_USB_PORT_CONNECTION_H

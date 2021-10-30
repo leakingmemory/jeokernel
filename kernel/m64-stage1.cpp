@@ -43,6 +43,7 @@
 #include <devices/drivers.h>
 #include "usb/usb_hcis.h"
 #include "ps2/ps2.h"
+#include "usb/usbifacedev.h"
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -855,6 +856,7 @@ done_with_mem_extension:
         get_drivers().AddDriver(new ohci_driver());
         get_drivers().AddDriver(new ehci_driver());
         get_drivers().AddDriver(new xhci_driver());
+        get_drivers().AddDriver(new usbifacedev_driver());
 
         AcpiBoot acpi_boot{multiboot2};
 

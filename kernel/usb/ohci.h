@@ -311,7 +311,7 @@ public:
     std::shared_ptr<usb_buffer> Alloc() override;
 };
 
-class ohci : public Device, public usb_hcd {
+class ohci : public usb_hcd {
     friend ohci_endpoint;
     friend ohci_endpoint_cleanup;
     friend ohci_transfer;
@@ -335,7 +335,7 @@ private:
     hw_spinlock ohcilock;
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
-        Device("ohci", &bus), usb_hcd(), pciDeviceInformation(deviceInformation),
+        usb_hcd("ohci", bus), pciDeviceInformation(deviceInformation),
         mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, CONTROL), controlHead(&controlEndpointEnd), bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
     void init() override;
     void dumpregs() override;

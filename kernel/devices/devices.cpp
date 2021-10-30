@@ -38,3 +38,6 @@ Devices &devices() {
 PciDeviceInformation *DeviceInformation::GetPciInformation() {
     return nullptr;
 }
+UsbDeviceInformation *DeviceInformation::GetUsbInformation() {
+    return nullptr;
+}

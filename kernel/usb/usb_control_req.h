@@ -69,5 +69,15 @@ struct usb_device_descriptor : usb_minimum_device_descriptor {
 
 static_assert(sizeof(usb_device_descriptor) == 0x12);
 
+struct usb_configuration_descriptor {
+    uint8_t bLength;
+    uint8_t bDescriptorType;
+    uint16_t wTotalLength;
+    uint8_t bNumInterfaces;
+    uint8_t bConfigurationValue;
+    uint8_t iConfiguration;
+    uint8_t bmAttributes;
+    uint8_t bMaxPower;
+};
 
 #endif //JEOKERNEL_USB_CONTROL_REQ_H

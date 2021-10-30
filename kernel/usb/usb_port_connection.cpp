@@ -5,6 +5,7 @@
 #include <klogger.h>
 #include <thread>
 #include <sstream>
+#include <devices/drivers.h>
 #include "usb_port_connection.h"
 #include "usb_control_req.h"
 #include "usb_transfer.h"
@@ -205,8 +206,44 @@ void usb_port_connection::start(usb_speed speed, const usb_minimum_device_descri
                     << " num-conf=" << deviceDescriptor.bNumConfigurations << "\n";
                 get_klogger() << str.str().c_str();
             }
+            UsbDeviceInformation devInfo{deviceDescriptor, *this};
+            get_drivers().probe(hub, devInfo);
         } else {
             get_klogger() << "Failed to get usb device descriptor for device\n";
         }
     }
+}
+
+void usb_port_connection::ReadConfigurations() {
+    usb_configuration_descriptor config{};
+    std::shared_ptr<usb_buffer> buffer = ControlRequest(*endpoint0, usb_get_descriptor(DESCRIPTOR_TYPE_CONFIGURATION, 0, sizeof(config)));
+    if (buffer) {
+        buffer->CopyTo(config);
+        {
+            std::stringstream str{};
+            str << std::hex << "conf len=" << config.bLength << " type=" << config.bDescriptorType
+                << " tot-len=" << config.wTotalLength << " num-iface=" << config.bNumInterfaces
+                << " conf-val=" << config.bConfigurationValue << " i-conf=" << config.iConfiguration
+                << " attr=" << config.bmAttributes << " max-pow=" << config.bMaxPower << "\n";
+            get_klogger() << str.str().c_str();
+        }
+    } else {
+        get_klogger() << "Failed to get config descriptor\n";
+    }
+}
+
+UsbDeviceInformation::UsbDeviceInformation(const usb_device_descriptor &devDesc, usb_port_connection &port) : DeviceInformation(), port(port) {
+    vendor_id = devDesc.idVector;
+    device_id = devDesc.idProduct;
+    device_subclass = devDesc.bDeviceSubClass;
+    device_class = devDesc.bDeviceClass;
+    prog_if = devDesc.bDeviceProtocol;
+}
+
+UsbDeviceInformation::UsbDeviceInformation(const UsbDeviceInformation &cp) : port(cp.port) {
+    vendor_id = cp.vendor_id;
+    device_id = cp.device_id;
+    device_subclass = cp.device_subclass;
+    device_class = cp.device_class;
+    prog_if = cp.prog_if;
 }
