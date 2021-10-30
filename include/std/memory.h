@@ -157,13 +157,14 @@ namespace std {
 
     template <class T, class Deleter = std::default_delete<T>> class shared_ptr {
         friend shared_ptr;
+        template <class W, class X> friend class shared_ptr;
     public:
         typedef T *pointer;
     private:
         impl::shared_ptr_container_typeerasure *container;
     public:
         shared_ptr() : container(nullptr) {}
-        shared_ptr(pointer p) : container(new impl::shared_ptr_container<T,Deleter>(p)) {}
+        explicit shared_ptr(pointer p) : container(new impl::shared_ptr_container<T,Deleter>(p)) {}
         ~shared_ptr() {
             if (container != nullptr) {
                 if (container->release() == 0) {
