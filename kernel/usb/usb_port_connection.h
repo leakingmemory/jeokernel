@@ -93,6 +93,7 @@ private:
     std::shared_ptr<usb_func_addr> addr;
     std::thread *thread;
     std::shared_ptr<usb_endpoint> endpoint0;
+    usb_device_descriptor deviceDescriptor;
 public:
     usb_port_connection(usb_hub &hub, uint8_t port);
     ~usb_port_connection();

@@ -19,7 +19,11 @@ static void timeout_wait(const usb_transfer &transfer) {
     }
 }
 
-usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) : hub(hub), port(port), addr(hub.GetFuncAddr()), thread(nullptr), endpoint0() {
+usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
+        hub(hub), port(port),
+        addr(hub.GetFuncAddr()),
+        thread(nullptr), endpoint0(),
+        deviceDescriptor() {
     if (!addr) {
         get_klogger() << "Couldn't assign address to usb device\n";
     }
@@ -183,4 +187,26 @@ void usb_port_connection::start(usb_speed speed, const usb_minimum_device_descri
         get_klogger() << str.str().c_str();
     }
     endpoint0 = hub.CreateControlEndpoint(minDesc.bMaxPacketSize0, func, 0, usb_endpoint_direction::BOTH, speed);
+    if (minDesc.bLength >= sizeof(deviceDescriptor)) {
+        usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, sizeof(deviceDescriptor)};
+        std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*endpoint0, get_descr0);
+        if (descr0_buf) {
+            descr0_buf->CopyTo(deviceDescriptor);
+            {
+                std::stringstream str{};
+                str << std::hex << "Dev desc len=" << deviceDescriptor.bLength
+                    << " type=" << deviceDescriptor.bDescriptorType << " USB=" << deviceDescriptor.bcdUSB
+                    << " class=" << deviceDescriptor.bDeviceClass << " sub=" << deviceDescriptor.bDeviceSubClass
+                    << " proto=" << deviceDescriptor.bDeviceProtocol << " packet-0=" << deviceDescriptor.bMaxPacketSize0
+                    << "\n";
+                str << std::hex << " id-vec=" << deviceDescriptor.idVector << " id-prod=" << deviceDescriptor.idProduct
+                    << " dev-ver=" << deviceDescriptor.bcdDevice << " manu=" << deviceDescriptor.iManufacturer
+                    << " prod=" << deviceDescriptor.iProduct << " ser=" << deviceDescriptor.iSerialNumber
+                    << " num-conf=" << deviceDescriptor.bNumConfigurations << "\n";
+                get_klogger() << str.str().c_str();
+            }
+        } else {
+            get_klogger() << "Failed to get usb device descriptor for device\n";
+        }
+    }
 }
