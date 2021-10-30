@@ -7,6 +7,11 @@
 #include <klogger.h>
 #include "mallocator.h"
 #include "ChainedAllocator.h"
+#include <kernelconfig.h>
+#include <string>
+#include <concurrency/critical_section.h>
+#include <mutex>
+#include <new>
 
 #define MAX_NONPAGED_SIZE 8192
 
@@ -58,11 +63,48 @@ extern "C" {
         if (ptr == nullptr) {
             wild_panic("Out of memory");
         }
+#ifdef MALLOC_INIT_POISON
+        memset(ptr, 0xDE, size);
+#else
+#ifdef MALLOC_INIT_ZERO
+        bzero(ptr, size);
+#endif
+#endif
         return ptr;
     }
 
+    uint32_t malloc_sizeof(void *ptr);
+
+#ifdef DELAY_FREE_MEM
+    hw_spinlock delaySpin;
+    unsigned long int delayCountMem = 0;
+    void *delayFreeMem[DELAY_FREE_MEM];
+#endif
+
     void free(void *ptr) {
+#ifdef FREE_MEM_POISON
+        memset(ptr, 0xd0, malloc_sizeof(ptr));
+#endif
+#ifndef DISABLE_FREE_MEM
+#ifdef DELAY_FREE_MEM
+        void *freeptr = nullptr;
+        {
+            critical_section cli{};
+            std::lock_guard lock{delaySpin};
+            unsigned long int index = delayCountMem % DELAY_FREE_MEM;
+            if (index < delayCountMem) {
+                freeptr = delayFreeMem[index];
+            }
+            delayFreeMem[index] = ptr;
+            ++delayCountMem;
+        }
+        if (freeptr != nullptr) {
+            impl->free(freeptr);
+        }
+#else
         impl->free(ptr);
+#endif
+#endif
     }
 
     uint32_t malloc_sizeof(void *ptr) {
@@ -85,6 +127,10 @@ extern "C" {
 };
 
 void setup_simplest_malloc_impl() {
+#ifdef DELAY_FREE_MEM
+    hw_spinlock *cr = new (((void *) &delaySpin)) hw_spinlock();
+    int delayCountMem = 0;
+#endif
     wild_malloc_struct.malloc = wild_malloc;
     wild_malloc_struct.free = wild_free;
     wild_malloc_struct.sizeof_alloc = wild_sizeof_alloc;

@@ -15,6 +15,7 @@
 #include "../../HardwareInterrupts.h"
 #include "../../pci/pci.h"
 #include "../../CpuInterrupts.h"
+#include <kernelconfig.h>
 
 //#define PRINT_ACPICA_MEMMAPS
 //#define DELAY_MEMMAPS
@@ -39,7 +40,13 @@ void *acpica_lib_impl::allocate_zeroed(std::size_t size) {
 }
 
 void *acpica_lib_impl::allocate(std::size_t size) {
+#ifdef ACPICA_MALLOC_ZERO
+    void *ptr = malloc(size);
+    memset(ptr, 0, size);
+    return ptr;
+#else
     return malloc(size);
+#endif
 }
 
 static void free_mem(void *ptr) {
