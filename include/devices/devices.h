@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <klogger.h>
 
 class Bus;
 
@@ -100,6 +101,17 @@ struct DeviceGroup {
         devices.push_back(slot);
         device.SetDeviceId(serial);
     }
+    void remove(Device &device) {
+        auto iterator = devices.begin();
+        while (iterator != devices.end()) {
+            auto &slot = *iterator;
+            if (slot.device == &device) {
+                devices.erase(iterator);
+                return;
+            }
+            ++iterator;
+        }
+    }
 };
 
 class Devices {
@@ -109,6 +121,7 @@ private:
 public:
     Devices();
     void add(Device &device);
+    void remove(Device &device);
 };
 
 struct PciDeviceInformation;

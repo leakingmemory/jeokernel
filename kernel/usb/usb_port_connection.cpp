@@ -24,7 +24,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         hub(hub), port(port),
         addr(hub.GetFuncAddr()),
         thread(nullptr), endpoint0(),
-        deviceDescriptor() {
+        deviceDescriptor(), device(nullptr) {
     if (!addr) {
         get_klogger() << "Couldn't assign address to usb device\n";
     }
@@ -114,6 +114,11 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
 }
 
 usb_port_connection::~usb_port_connection() {
+    if (device != nullptr) {
+        devices().remove(*device);
+        delete device;
+        device = nullptr;
+    }
     if (thread != nullptr) {
         thread->join();
         delete thread;

@@ -73,7 +73,7 @@ int fileno(FILE *file);
 
 #define fclose(stream) (-1)
 
-#define remove(pathname) (-1)
+int remove(const char *pathname);
 
 void perror(const char *s);
 

@@ -21,17 +21,7 @@ public:
 
 class usbifacedev_driver : public Driver {
 public:
-    Device *probe(Bus &bus, DeviceInformation &deviceInformation) override {
-        if (
-                deviceInformation.device_class == 0 &&
-                deviceInformation.device_subclass == 0 &&
-                deviceInformation.prog_if == 0 &&
-                deviceInformation.GetUsbInformation() != nullptr
-           ) {
-            return new usbifacedev(bus, *(deviceInformation.GetUsbInformation()));
-        }
-        return nullptr;
-    }
+    Device *probe(Bus &bus, DeviceInformation &deviceInformation) override;
 };
 
 

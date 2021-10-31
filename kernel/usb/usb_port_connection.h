@@ -104,6 +104,7 @@ private:
     std::thread *thread;
     std::shared_ptr<usb_endpoint> endpoint0;
     usb_device_descriptor deviceDescriptor;
+    Device *device;
 public:
     usb_port_connection(usb_hub &hub, uint8_t port);
     ~usb_port_connection();
@@ -111,6 +112,9 @@ public:
         return port;
     }
     void start(usb_speed speed, const usb_minimum_device_descriptor &minDesc);
+    void SetDevice(Device &device) {
+        this->device = &device;
+    }
     std::shared_ptr<usb_buffer> ControlRequest(usb_endpoint &endpoint, const usb_control_request &request);
     void ReadConfigurations();
 };
