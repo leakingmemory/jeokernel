@@ -12,6 +12,7 @@
 #include "usb_hcd.h"
 #include "StructPool.h"
 #include "usb_transfer.h"
+#include <kernelconfig.h>
 
 #define OHCI_CTRL_CBSR_1_1  0x0000
 #define OHCI_CTRL_CBSR_1_2  0x0001
@@ -75,6 +76,8 @@ struct ohci_transfer_descriptor {
 
     ohci_transfer_descriptor() : TdControl(0), CurrentBufferPointer(0), NextTD(0), BufferEnd(0) {
     }
+
+#ifdef OHCI_DEBUGPRINT_TRANSFER
     ~ohci_transfer_descriptor() {
         {
             std::stringstream str{};
@@ -84,6 +87,7 @@ struct ohci_transfer_descriptor {
             get_klogger() << str.str().c_str();
         }
     }
+#endif
 };
 
 struct ohci_endpoint_descriptor_pointer {

@@ -80,4 +80,16 @@ struct usb_configuration_descriptor {
     uint8_t bMaxPower;
 };
 
+struct usb_interface_descriptor {
+    uint8_t bLength;
+    uint8_t bDescriptorType;
+    uint8_t bInterfaceNumber;
+    uint8_t bAlternateSetting;
+    uint8_t bNumEndpoints;
+    uint8_t bInterfaceClass;
+    uint8_t bInterfaceSubClass;
+    uint8_t bInterfaceProtocol;
+    uint8_t iInterface;
+};
+
 #endif //JEOKERNEL_USB_CONTROL_REQ_H

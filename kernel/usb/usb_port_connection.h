@@ -58,8 +58,14 @@ public:
     void CopyTo(void *ptr, size_t size) {
         memcpy(ptr, Pointer(), size);
     }
+    void CopyTo(void *ptr, size_t offset, size_t size) {
+        memcpy(ptr, ((uint8_t *) Pointer()) + offset, size);
+    }
     template <typename T> void CopyTo(T &t) {
         CopyTo((void *) &t, sizeof(t));
+    }
+    template <typename T> void CopyTo(T &t, size_t offset) {
+        CopyTo((void *) &t, offset, sizeof(t));
     }
 };
 

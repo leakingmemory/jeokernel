@@ -265,20 +265,53 @@ void usb_port_connection::start(usb_speed speed, const usb_minimum_device_descri
 }
 
 void usb_port_connection::ReadConfigurations() {
-    usb_configuration_descriptor config{};
-    std::shared_ptr<usb_buffer> buffer = ControlRequest(*endpoint0, usb_get_descriptor(DESCRIPTOR_TYPE_CONFIGURATION, 0, sizeof(config)));
-    if (buffer) {
-        buffer->CopyTo(config);
-        {
-            std::stringstream str{};
-            str << std::hex << "conf len=" << config.bLength << " type=" << config.bDescriptorType
-                << " tot-len=" << config.wTotalLength << " num-iface=" << config.bNumInterfaces
-                << " conf-val=" << config.bConfigurationValue << " i-conf=" << config.iConfiguration
-                << " attr=" << config.bmAttributes << " max-pow=" << config.bMaxPower << "\n";
-            get_klogger() << str.str().c_str();
+    for (int index = 0; index < deviceDescriptor.bNumConfigurations; index++) {
+        usb_configuration_descriptor config{};
+        std::shared_ptr<usb_buffer> short_buffer = ControlRequest(*endpoint0,
+                                                                  usb_get_descriptor(DESCRIPTOR_TYPE_CONFIGURATION, index,
+                                                                  sizeof(config)));
+        if (short_buffer) {
+            short_buffer->CopyTo(config);
+            {
+                std::stringstream str{};
+                str << std::hex << "conf len=" << config.bLength << " type=" << config.bDescriptorType
+                    << " tot-len=" << config.wTotalLength << " num-iface=" << config.bNumInterfaces
+                    << " conf-val=" << config.bConfigurationValue << " i-conf=" << config.iConfiguration
+                    << " attr=" << config.bmAttributes << " max-pow=" << config.bMaxPower << "\n";
+                get_klogger() << str.str().c_str();
+            }
+            std::shared_ptr<usb_buffer> buffer = ControlRequest(*endpoint0,
+                                                                usb_get_descriptor(DESCRIPTOR_TYPE_CONFIGURATION, index,
+                                                                config.wTotalLength));
+            if (buffer) {
+                size_t offset{0};
+                offset += config.bLength;
+                int c_interfaces{0};
+                if ((c_interfaces++) < config.bNumInterfaces) {
+                    usb_interface_descriptor iface{};
+                    if (offset > buffer->Size() || (buffer->Size() - offset) < sizeof(iface)) {
+                        get_klogger() << "Buffer underrun with attachments to config descriptor\n";
+                        return;
+                    }
+                    buffer->CopyTo(iface, offset);
+                    offset += iface.bLength;
+
+                    {
+                        std::stringstream str{};
+                        str << std::hex << "Iface " << iface.bLength << " " << iface.bDescriptorType
+                            << " " << iface.bInterfaceNumber << " alt=" << iface.bAlternateSetting
+                            << " endp=" << iface.bNumEndpoints << " class=" << iface.bInterfaceClass
+                            << "/" << iface.bInterfaceSubClass << "/" << iface.bInterfaceProtocol
+                            << " str=" << iface.iInterface << "\n";
+                        get_klogger() << str.str().c_str();
+                    }
+                }
+            } else {
+                get_klogger() << "Failed to read attachments to config descriptor\n";
+            }
+        } else {
+            get_klogger() << "Failed to get config descriptor\n";
         }
-    } else {
-        get_klogger() << "Failed to get config descriptor\n";
     }
 }
 
