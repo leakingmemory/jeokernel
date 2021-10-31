@@ -96,6 +96,36 @@ public:
     virtual std::shared_ptr<usb_func_addr> GetFuncAddr() = 0;
 };
 
+class usb_port_connection;
+struct UsbInterfaceInformation;
+
+struct UsbDeviceInformation : public DeviceInformation {
+    usb_port_connection &port;
+
+    explicit UsbDeviceInformation(const usb_device_descriptor &devDesc, usb_port_connection &port);
+    UsbDeviceInformation(const UsbDeviceInformation &cp);
+
+    UsbDeviceInformation *GetUsbInformation() override;
+    virtual UsbInterfaceInformation *GetUsbInterfaceInformation();
+};
+
+struct UsbIfacedevInformation;
+
+struct UsbInterfaceInformation : public UsbDeviceInformation {
+    usb_configuration_descriptor descr;
+    usb_interface_descriptor iface;
+    std::vector<usb_endpoint_descriptor> endpoints;
+
+    UsbInterfaceInformation(
+            const UsbDeviceInformation &devInfo,
+            const usb_configuration_descriptor &descr,
+            const usb_interface_descriptor &iface);
+    UsbInterfaceInformation(const UsbInterfaceInformation &cp);
+
+    UsbInterfaceInformation *GetUsbInterfaceInformation() override;
+    virtual UsbIfacedevInformation *GetIfaceDev();
+};
+
 class usb_port_connection {
 private:
     usb_hub &hub;
@@ -105,6 +135,7 @@ private:
     std::shared_ptr<usb_endpoint> endpoint0;
     usb_device_descriptor deviceDescriptor;
     Device *device;
+    std::vector<UsbInterfaceInformation> interfaces;
 public:
     usb_port_connection(usb_hub &hub, uint8_t port);
     ~usb_port_connection();
@@ -116,18 +147,7 @@ public:
         this->device = &device;
     }
     std::shared_ptr<usb_buffer> ControlRequest(usb_endpoint &endpoint, const usb_control_request &request);
-    void ReadConfigurations();
-};
-
-struct UsbDeviceInformation : public DeviceInformation {
-    usb_port_connection &port;
-
-    explicit UsbDeviceInformation(const usb_device_descriptor &devDesc, usb_port_connection &port);
-    UsbDeviceInformation(const UsbDeviceInformation &cp);
-
-    UsbDeviceInformation *GetUsbInformation() override {
-        return this;
-    }
+    const std::vector<UsbInterfaceInformation> &ReadConfigurations(const UsbDeviceInformation &devInfo);
 };
 
 #endif //JEOKERNEL_USB_PORT_CONNECTION_H

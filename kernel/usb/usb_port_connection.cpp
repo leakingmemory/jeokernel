@@ -24,7 +24,8 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         hub(hub), port(port),
         addr(hub.GetFuncAddr()),
         thread(nullptr), endpoint0(),
-        deviceDescriptor(), device(nullptr) {
+        deviceDescriptor(), device(nullptr),
+        interfaces() {
     if (!addr) {
         get_klogger() << "Couldn't assign address to usb device\n";
     }
@@ -269,7 +270,10 @@ void usb_port_connection::start(usb_speed speed, const usb_minimum_device_descri
     }
 }
 
-void usb_port_connection::ReadConfigurations() {
+const std::vector<UsbInterfaceInformation> &usb_port_connection::ReadConfigurations(const UsbDeviceInformation &devInfo) {
+    if (!interfaces.empty()) {
+        return interfaces;
+    }
     for (int index = 0; index < deviceDescriptor.bNumConfigurations; index++) {
         usb_configuration_descriptor config{};
         std::shared_ptr<usb_buffer> short_buffer = ControlRequest(*endpoint0,
@@ -292,11 +296,11 @@ void usb_port_connection::ReadConfigurations() {
                 size_t offset{0};
                 offset += config.bLength;
                 int c_interfaces{0};
-                if ((c_interfaces++) < config.bNumInterfaces) {
+                while ((c_interfaces++) < config.bNumInterfaces) {
                     usb_interface_descriptor iface{};
                     if (offset > buffer->Size() || (buffer->Size() - offset) < sizeof(iface)) {
                         get_klogger() << "Buffer underrun with attachments to config descriptor\n";
-                        return;
+                        break;
                     }
                     buffer->CopyTo(iface, offset);
                     offset += iface.bLength;
@@ -310,6 +314,36 @@ void usb_port_connection::ReadConfigurations() {
                             << " str=" << iface.iInterface << "\n";
                         get_klogger() << str.str().c_str();
                     }
+
+                    UsbInterfaceInformation ifaceInfo{devInfo, config, iface};
+
+                    int c_endpoints{0};
+                    while ((c_endpoints++) < iface.bNumEndpoints) {
+                        usb_endpoint_descriptor endpoint{};
+                        if (offset > buffer->Size() || (buffer->Size() - offset) < sizeof(endpoint)) {
+                            get_klogger() << "Buffer underrun with attachments to config descriptor\n";
+                            break;
+                        }
+                        buffer->CopyTo(endpoint, offset);
+                        offset += endpoint.bLength;
+
+                        if (endpoint.bDescriptorType != 5) {
+                            --c_endpoints;
+                            continue;
+                        }
+
+                        {
+                            std::stringstream str{};
+                            str << std::hex << "endp " << endpoint.bLength << " " << endpoint.bDescriptorType
+                                << " addr=" << endpoint.bEndpointAddress << " att=" << endpoint.bmAttributes
+                                << " max-pack=" << endpoint.wMaxPacketSize << " interv=" << endpoint.bInterval << "\n";
+                            get_klogger() << str.str().c_str();
+                        }
+
+                        ifaceInfo.endpoints.push_back(endpoint);
+                    }
+
+                    interfaces.push_back(ifaceInfo);
                 }
             } else {
                 get_klogger() << "Failed to read attachments to config descriptor\n";
@@ -318,6 +352,7 @@ void usb_port_connection::ReadConfigurations() {
             get_klogger() << "Failed to get config descriptor\n";
         }
     }
+    return interfaces;
 }
 
 UsbDeviceInformation::UsbDeviceInformation(const usb_device_descriptor &devDesc, usb_port_connection &port) : DeviceInformation(), port(port) {
@@ -334,4 +369,37 @@ UsbDeviceInformation::UsbDeviceInformation(const UsbDeviceInformation &cp) : por
     device_subclass = cp.device_subclass;
     device_class = cp.device_class;
     prog_if = cp.prog_if;
+}
+
+UsbDeviceInformation *UsbDeviceInformation::GetUsbInformation() {
+    return this;
+}
+
+UsbInterfaceInformation *UsbDeviceInformation::GetUsbInterfaceInformation() {
+    return nullptr;
+}
+
+UsbInterfaceInformation::UsbInterfaceInformation(
+        const UsbDeviceInformation &devInfo,
+        const usb_configuration_descriptor &descr,
+        const usb_interface_descriptor &iface)
+        : UsbDeviceInformation(devInfo),
+          descr(descr),
+          iface(iface),
+          endpoints() {
+}
+
+UsbInterfaceInformation::UsbInterfaceInformation(const UsbInterfaceInformation &cp)
+: UsbDeviceInformation(cp),
+  descr(cp.descr),
+  iface(cp.iface),
+  endpoints(cp.endpoints) {
+}
+
+UsbInterfaceInformation *UsbInterfaceInformation::GetUsbInterfaceInformation() {
+    return this;
+}
+
+UsbIfacedevInformation *UsbInterfaceInformation::GetIfaceDev() {
+    return nullptr;
 }

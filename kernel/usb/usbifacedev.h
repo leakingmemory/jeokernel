@@ -8,15 +8,31 @@
 #include <devices/drivers.h>
 #include "usb_port_connection.h"
 
+class usbifacedev;
+
+struct UsbIfacedevInformation : public UsbInterfaceInformation {
+    usbifacedev &ifacedev;
+
+    UsbIfacedevInformation(usbifacedev &ifacedev, const UsbInterfaceInformation &info);
+    UsbIfacedevInformation(const UsbIfacedevInformation &cp);
+    UsbIfacedevInformation *GetIfaceDev() override;
+};
+
 class usbifacedev : public Bus {
 private:
     UsbDeviceInformation usbDeviceInformation;
+    Device *device;
 public:
     usbifacedev(Bus &bus, const UsbDeviceInformation &usbDeviceInformation) :
         Bus("usbdev", &bus),
-        usbDeviceInformation(usbDeviceInformation)
+        usbDeviceInformation(usbDeviceInformation),
+        device(nullptr)
     { }
+    ~usbifacedev() override;
     void init() override;
+    void SetDevice(Device &dev) {
+        device = &dev;
+    }
 };
 
 class usbifacedev_driver : public Driver {

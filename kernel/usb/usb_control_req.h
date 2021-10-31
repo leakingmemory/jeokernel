@@ -78,7 +78,7 @@ struct usb_configuration_descriptor {
     uint8_t iConfiguration;
     uint8_t bmAttributes;
     uint8_t bMaxPower;
-};
+}  __attribute__((__packed__));
 
 struct usb_interface_descriptor {
     uint8_t bLength;
@@ -90,6 +90,15 @@ struct usb_interface_descriptor {
     uint8_t bInterfaceSubClass;
     uint8_t bInterfaceProtocol;
     uint8_t iInterface;
-};
+}  __attribute__((__packed__));
+
+struct usb_endpoint_descriptor {
+    uint8_t bLength;
+    uint8_t bDescriptorType;
+    uint8_t bEndpointAddress;
+    uint8_t bmAttributes;
+    uint16_t wMaxPacketSize;
+    uint8_t bInterval;
+}  __attribute__((__packed__));
 
 #endif //JEOKERNEL_USB_CONTROL_REQ_H
