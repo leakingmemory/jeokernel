@@ -146,6 +146,9 @@ public:
     void SetDevice(Device &device) {
         this->device = &device;
     }
+    std::shared_ptr<usb_endpoint> Endpoint0() {
+        return endpoint0;
+    }
     std::shared_ptr<usb_buffer> ControlRequest(usb_endpoint &endpoint, const usb_control_request &request);
     const std::vector<UsbInterfaceInformation> &ReadConfigurations(const UsbDeviceInformation &devInfo);
 };

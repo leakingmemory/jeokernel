@@ -45,6 +45,11 @@ struct usb_get_descriptor : usb_control_request {
     : usb_control_request(0x80, 6, (descriptorType << 8) + descriptorIndex, languageId, descriptorLength) { }
 } __attribute__((__packed__));
 
+struct usb_set_configuration : usb_control_request {
+    usb_set_configuration(uint8_t configValue)
+    : usb_control_request(0, 9, configValue, 0, 0) { }
+} __attribute__((__packed__));
+
 struct usb_minimum_device_descriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
