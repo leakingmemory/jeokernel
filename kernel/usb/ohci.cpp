@@ -496,32 +496,29 @@ std::shared_ptr<usb_transfer> ohci::ExtractDoneQueueItem(uint32_t physaddr) {
 }
 
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {
-    for (int i = 0; i < 0x3F; i++) {
+    for (int i = 0; i < 0x1F; i++) {
         hcca_ed_ptrs[i].ed = &(hcca->hcca_with_eds.eds[i]);
         hcca->hcca_with_eds.eds[i].HcControl = 0;
         hcca->hcca_with_eds.eds[i].HeadP = 0;
         hcca->hcca_with_eds.eds[i].TailP = 0;
     }
-    for (int i = 0; i < 0x20; i++) {
-        int j = (i >> 1) + 0x20;
+    for (int i = 0; i < 0x10; i++) {
+        int j = (i >> 1) + 0x10;
         hcca->hcca_with_eds.eds[i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
     }
-    for (int i = 0; i < 0x10; i++) {
-        int j = (i >> 1) + 0x30;
-        hcca->hcca_with_eds.eds[0x20 + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
-    }
     for (int i = 0; i < 8; i++) {
-        int j = (i >> 1) + 0x38;
-        hcca->hcca_with_eds.eds[0x30 + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
+        int j = (i >> 1) + 0x18;
+        hcca->hcca_with_eds.eds[0x10 + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
     }
     for (int i = 0; i < 4; i++) {
-        int j = (i >> 1) + 0x3C;
-        hcca->hcca_with_eds.eds[0x38 + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
+        int j = (i >> 1) + 0x1C;
+        hcca->hcca_with_eds.eds[0x18 + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
     }
     for (int i = 0; i < 2; i++) {
-        hcca->hcca_with_eds.eds[0x3C + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[0x3E]));
+        int j = 0x1E;
+        hcca->hcca_with_eds.eds[0x1C + i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
     }
-    hcca->hcca_with_eds.eds[0x3E].NextED = 0;
+    hcca->hcca_with_eds.eds[0x1E].NextED = 0;
 
     hcca->hc_control_ed.NextED = 0;
     hcca->hc_control_ed.TailP = 0;
@@ -532,6 +529,16 @@ OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()),
     hcca->hc_bulk_ed.TailP = 0;
     hcca->hc_bulk_ed.HeadP = 0;
     hcca->hc_bulk_ed.HcControl = 0;
+
+    static const uint8_t Balance[16] =
+            {0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF};
+
+    for (uint8_t i = 0; i < 16; i++) {
+        uint8_t bal = Balance[i] >> 1;
+        uint8_t idx = i << 1;
+        hcca->hcca_with_eds.hcca.hcca.intr_ed[idx] = hcca->hcca_with_eds.RelativeAddr(hcca_ed_ptrs[bal].ed) + page.PhysAddr();
+        hcca->hcca_with_eds.hcca.hcca.intr_ed[idx + 1] = hcca->hcca_with_eds.RelativeAddr(hcca_ed_ptrs[8 + bal].ed) + page.PhysAddr();
+    }
 }
 
 #define OHCI_ED_DIRECTION_BOTH 0x0000

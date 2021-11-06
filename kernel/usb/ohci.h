@@ -115,7 +115,7 @@ static_assert(sizeof(ohci_hcca_aligned) == 0x100);
 struct ohci_hcca_with_eds {
     ohci_hcca_aligned hcca;
 
-    ohci_endpoint_descriptor eds[0x3F];
+    ohci_endpoint_descriptor eds[0x1F];
 
     uint16_t RelativeAddr(void *ptr) {
         uint64_t base = (uint64_t) this;
@@ -133,13 +133,13 @@ struct ohci_hcca_and_eds {
     ohci_endpoint_descriptor hc_bulk_ed;
 };
 
-static_assert(sizeof(ohci_hcca_with_eds) == 0x4F0);
+static_assert(sizeof(ohci_hcca_with_eds) == 0x2F0);
 
 class OhciHcca {
 private:
     Phys32Page page;
     ohci_hcca_and_eds *hcca;
-    ohci_endpoint_descriptor_pointer hcca_ed_ptrs[0x3F];
+    ohci_endpoint_descriptor_pointer hcca_ed_ptrs[0x1F];
 public:
     OhciHcca();
     ohci_hcca &Hcca() {
