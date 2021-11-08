@@ -22,7 +22,7 @@ static void timeout_wait(const usb_transfer &transfer) {
 
 usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         hub(hub), port(port),
-        addr(hub.GetFuncAddr()),
+        addr(hub.GetFuncAddr()), speed(LOW),
         thread(nullptr), endpoint0(),
         deviceDescriptor(), device(nullptr),
         interfaces() {
@@ -63,7 +63,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         get_klogger() << str.str().c_str();
     }
     usb_minimum_device_descriptor minDevDesc{};
-    auto speed = hub.PortSpeed(port);
+    speed = hub.PortSpeed(port);
     {
         std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, usb_endpoint_direction::BOTH, speed);
         {
@@ -109,7 +109,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         std::this_thread::sleep_for(100ms);
     }
 
-    thread = new std::thread([this, minDevDesc, speed] () {
+    thread = new std::thread([this, minDevDesc] () {
         this->start(speed, minDevDesc);
     });
 }
@@ -234,6 +234,10 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
     } else {
         return t_req->Buffer();
     }
+}
+
+std::shared_ptr<usb_endpoint> usb_port_connection::InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs) {
+    return hub.CreateInterruptEndpoint(maxPacketSize, addr->GetAddr(), endpointNum, direction, speed, pollingIntervalMs);
 }
 
 void usb_port_connection::start(usb_speed speed, const usb_minimum_device_descriptor &minDesc) {

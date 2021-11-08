@@ -30,8 +30,9 @@ enum usb_speed {
     FULL
 };
 
-enum usb_endpoint_type {
-    CONTROL
+enum class usb_endpoint_type {
+    CONTROL,
+    INTERRUPT
 };
 
 class usb_transfer;
@@ -46,6 +47,7 @@ public:
     virtual bool Addressing64bit() = 0;
     virtual std::shared_ptr<usb_transfer> CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) = 0;
     virtual std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) = 0;
+    virtual std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) = 0;
     virtual std::shared_ptr<usb_buffer> Alloc() = 0;
 };
 
@@ -87,6 +89,7 @@ public:
     virtual void dumpregs() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
+    virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) = 0;
     virtual void EnablePort(int port) = 0;
     virtual void DisablePort(int port) = 0;
     virtual void ResetPort(int port) = 0;
@@ -131,6 +134,7 @@ private:
     usb_hub &hub;
     uint8_t port;
     std::shared_ptr<usb_func_addr> addr;
+    usb_speed speed;
     std::thread *thread;
     std::shared_ptr<usb_endpoint> endpoint0;
     usb_device_descriptor deviceDescriptor;
@@ -150,6 +154,7 @@ public:
         return endpoint0;
     }
     std::shared_ptr<usb_buffer> ControlRequest(usb_endpoint &endpoint, const usb_control_request &request);
+    std::shared_ptr<usb_endpoint> InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs);
     const std::vector<UsbInterfaceInformation> &ReadConfigurations(const UsbDeviceInformation &devInfo);
 };
 

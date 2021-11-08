@@ -39,3 +39,8 @@ std::string usb_transfer::GetStatusStr() {
             return "Unknown error code";
     }
 }
+
+void usb_transfer::SetDone() {
+    done = true;
+    doneCall();
+}

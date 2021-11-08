@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <functional>
 
 enum class usb_transfer_status {
         NO_ERROR,
@@ -29,9 +30,10 @@ class usb_buffer;
 
 class usb_transfer {
 private:
+    std::function<void ()> doneCall;
     bool done;
 public:
-    usb_transfer() : done(false) {}
+    usb_transfer() : doneCall([] () {}), done(false) {}
     virtual ~usb_transfer() {}
 
     usb_transfer(const usb_transfer &) = delete;
@@ -40,12 +42,15 @@ public:
     usb_transfer &operator = (usb_transfer &&) = delete;
 
     virtual std::shared_ptr<usb_buffer> Buffer() = 0;
-    virtual void SetDone() { done = true;}
+    virtual void SetDone();
     bool IsDone() const { return done; }
     virtual usb_transfer_status GetStatus() = 0;
     std::string GetStatusStr();
     bool IsSuccessful() {
         return done && GetStatus() == usb_transfer_status::NO_ERROR;
+    }
+    void SetDoneCall(std::function<void ()> doneCall) {
+        this->doneCall = doneCall;
     }
 };
 

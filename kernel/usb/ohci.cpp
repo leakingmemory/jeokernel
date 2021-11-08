@@ -441,7 +441,12 @@ void ohci::ResetPort(int port) {
 std::shared_ptr<usb_endpoint>
 ohci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                             usb_endpoint_direction dir, usb_speed speed) {
-    auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed, CONTROL);
+    auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed, usb_endpoint_type::CONTROL);
+    return std::shared_ptr<usb_endpoint>(endpoint);
+}
+
+std::shared_ptr<usb_endpoint> ohci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
+    auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed, usb_endpoint_type::INTERRUPT, pollingIntervalMs);
     return std::shared_ptr<usb_endpoint>(endpoint);
 }
 
@@ -495,13 +500,21 @@ std::shared_ptr<usb_transfer> ohci::ExtractDoneQueueItem(uint32_t physaddr) {
     return {};
 }
 
-OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs() {
+OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs(), cycle(0) {
     for (int i = 0; i < 0x1F; i++) {
         hcca_ed_ptrs[i].ed = &(hcca->hcca_with_eds.eds[i]);
+        hcca_ed_ptrs[i].head = nullptr;
+        hcca_ed_ptrs[i].index = i;
+        hcca_root_ptrs[i].ed = nullptr;
+        hcca_root_ptrs[i].head = nullptr;
+        hcca_root_ptrs[i].index = i;
         hcca->hcca_with_eds.eds[i].HcControl = 0;
         hcca->hcca_with_eds.eds[i].HeadP = 0;
         hcca->hcca_with_eds.eds[i].TailP = 0;
     }
+    hcca_root_ptrs[0x1F].ed = nullptr;
+    hcca_root_ptrs[0x1F].head = nullptr;
+    hcca_root_ptrs[0x1F].index = 0x1F;
     for (int i = 0; i < 0x10; i++) {
         int j = (i >> 1) + 0x10;
         hcca->hcca_with_eds.eds[i].NextED = page.PhysAddr() + hcca->hcca_with_eds.RelativeAddr(&(hcca->hcca_with_eds.eds[j]));
@@ -564,7 +577,8 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, usb_endpoint_type endpointType) :
 }
 
 ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                             usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType) :
+                             usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType,
+                             int pollingRateMs) :
                              ohciRef(ohci),
                              edPtr(ohci.edPool.Alloc()),
                              head(new ohci_transfer(ohci, *this)), tail(head),
@@ -587,11 +601,27 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
     }
     ed->HeadP = head->PhysAddr();
     ed->TailP = tail->PhysAddr();
-    if (endpointType == CONTROL) {
+
+    critical_section cli{};
+    std::lock_guard lock{ohci.ohcilock};
+
+    if (endpointType == usb_endpoint_type::CONTROL) {
         ed->NextED = ohci.ohciRegisters->HcControlHeadED;
         ohci.ohciRegisters->HcControlHeadED = edPtr->Phys();
         next = ohci.controlHead;
         ohci.controlHead = this;
+    }
+    if (endpointType == usb_endpoint_type::INTERRUPT) {
+        auto &edptr = ohci.hcca.GetInterruptEDHead(pollingRateMs);
+        if (edptr.ed != nullptr) {
+            ed->NextED = edptr.ed->NextED;
+            edptr.ed->NextED = edPtr->Phys();
+        } else {
+            ed->NextED = ohci.hcca.Hcca().intr_ed[edptr.index];
+            ohci.hcca.Hcca().intr_ed[edptr.index] = edPtr->Phys();
+        }
+        next = edptr.head;
+        edptr.head = this;
     }
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
     {
@@ -603,7 +633,7 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
 }
 
 ohci_endpoint::~ohci_endpoint() {
-    if (endpointType == CONTROL) {
+    if (endpointType == usb_endpoint_type::CONTROL) {
         critical_section cli{};
         std::lock_guard lock{ohciRef.ohcilock};
         ohci_endpoint *endpoint = ohciRef.controlHead;
@@ -671,7 +701,7 @@ uint32_t ohci_endpoint::Phys() {
 
 std::shared_ptr<usb_transfer>
 ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
-                              uint16_t delayInterrupt, int8_t dataToggle) {
+                              uint16_t delayInterrupt, int8_t dataToggle, std::function<void (ohci_transfer &transfer)> &applyFunc) {
     uint32_t ctrl{0};
     if (dataToggle >= 0) {
         ctrl |= ((uint32_t) (dataToggle & 1) | 2) << 24;
@@ -718,6 +748,7 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
         TD->CurrentBufferPointer = 0;
         TD->BufferEnd = 0;
     }
+    applyFunc(*tail);
     std::shared_ptr<ohci_transfer> filled{tail};
     tail->next = newtd;
     TD->NextTD = newtd->PhysAddr();
@@ -743,7 +774,8 @@ ohci_endpoint::CreateTransfer(void *data, uint32_t size, usb_transfer_direction 
                               uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer = Alloc();
     memcpy(buffer->Pointer(), data, size);
-    return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle);
+    std::function<void (ohci_transfer &)> applyFunc = [] (ohci_transfer &) {};
+    return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_transfer>
@@ -753,7 +785,21 @@ ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, b
     if (size > 0) {
         buffer = Alloc();
     }
-    return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle);
+    std::function<void (ohci_transfer &)> applyFunc = [] (ohci_transfer &) {};
+    return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
+                              bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
+    std::function<void (ohci_transfer &)> applyFunc = [doneCall] (ohci_transfer &transfer) {
+        transfer.SetDoneCall(doneCall);
+    };
+    return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_buffer> ohci_endpoint::Alloc() {

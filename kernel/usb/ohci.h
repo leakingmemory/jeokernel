@@ -90,9 +90,12 @@ struct ohci_transfer_descriptor {
 #endif
 };
 
+class ohci_endpoint;
+
 struct ohci_endpoint_descriptor_pointer {
     ohci_endpoint_descriptor *ed;
-    ohci_endpoint_descriptor_pointer *next;
+    ohci_endpoint *head;
+    uint8_t index;
 };
 
 struct ohci_hcca {
@@ -140,10 +143,27 @@ private:
     Phys32Page page;
     ohci_hcca_and_eds *hcca;
     ohci_endpoint_descriptor_pointer hcca_ed_ptrs[0x1F];
+    ohci_endpoint_descriptor_pointer hcca_root_ptrs[0x20];
+    uint16_t cycle;
 public:
     OhciHcca();
     ohci_hcca &Hcca() {
         return hcca->hcca_with_eds.hcca.hcca;
+    }
+    ohci_endpoint_descriptor_pointer &GetInterruptEDHead(int pollingRateMs) {
+        if (pollingRateMs < 2) {
+            return hcca_ed_ptrs[0x1E]; // 1ms
+        } else if (pollingRateMs < 3) {
+            return hcca_ed_ptrs[0x1C + (cycle++ & 1)]; // 2ms
+        } else if (pollingRateMs < 5) {
+            return hcca_ed_ptrs[0x18 + (cycle++ & 3)]; // 4ms
+        } else if (pollingRateMs < 9) {
+            return hcca_ed_ptrs[0x10 + (cycle++ & 7)]; // 8ms
+        } else if (pollingRateMs < 17) {
+            return hcca_ed_ptrs[cycle++ & 0xF]; // 16ms
+        } else {
+            return hcca_root_ptrs[cycle++ & 0x1F]; // 32ms
+        }
     }
     ohci_endpoint_descriptor &ControlED() {
         return hcca->hc_control_ed;
@@ -252,8 +272,6 @@ public:
     }
 };
 
-class ohci_endpoint;
-
 class ohci_transfer : public usb_transfer {
     friend ohci;
     friend ohci_endpoint;
@@ -303,7 +321,7 @@ private:
     ohci_endpoint *next;
 public:
     ohci_endpoint(ohci &ohci, usb_endpoint_type endpointType);
-    ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType);
+    ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs = 0);
     virtual ~ohci_endpoint();
     void SetNext(ohci_endpoint *endpoint);
     uint32_t Phys();
@@ -311,10 +329,11 @@ public:
         return false;
     }
 private:
-    std::shared_ptr<usb_transfer> CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle);
+    std::shared_ptr<usb_transfer> CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle, std::function<void (ohci_transfer &transfer)> &applyFunc);
 public:
     std::shared_ptr<usb_transfer> CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) override;
     std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) override;
+    std::shared_ptr<usb_transfer> CreateTransfer(uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
     std::shared_ptr<usb_buffer> Alloc() override;
 };
 
@@ -343,7 +362,7 @@ private:
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         usb_hcd("ohci", bus), pciDeviceInformation(deviceInformation),
-        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, CONTROL), controlHead(&controlEndpointEnd), bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, usb_endpoint_type::CONTROL), controlHead(&controlEndpointEnd), bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
     void init() override;
     void dumpregs() override;
 
@@ -369,6 +388,7 @@ public:
     void SwitchPortOn(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
     std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     size_t TransferBufferSize() override {
         return OHCI_TRANSFER_BUFSIZE;
     }
