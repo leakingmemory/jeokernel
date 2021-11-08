@@ -7,20 +7,15 @@
 #include "usb_port_connection.h"
 #include "usbifacedev.h"
 #include "uhid_structs.h"
+#include "usb_transfer.h"
 
-struct usbkbd_report {
-    uint8_t modifierKeys;
-    uint8_t reserved;
-    uint8_t keypress[6];
-
-    void dump() {
-        std::stringstream str{};
-        str << "keyboard m="<< std::hex << modifierKeys << " "
-            << keypress[0] << " " << keypress[1] << " " << keypress[2] << " "
-            << keypress[3] << " " << keypress[4] << " " << keypress[5] << "\n";
-        get_klogger() << str.str().c_str();
-    }
-} __attribute__ ((__packed__));
+void usbkbd_report::dump() {
+    std::stringstream str{};
+    str << "keyboard m="<< std::hex << modifierKeys << " "
+        << keypress[0] << " " << keypress[1] << " " << keypress[2] << " "
+        << keypress[3] << " " << keypress[4] << " " << keypress[5] << "\n";
+    get_klogger() << str.str().c_str();
+}
 
 Device *usbkbd_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     UsbInterfaceInformation *ifaceInfo{nullptr};
@@ -74,7 +69,60 @@ void usbkbd::init() {
         kbrep.dump();
     }
 
+    for (auto &endpoint : devInfo.endpoints) {
+        if (endpoint.IsInterrupt() && endpoint.IsDirectionIn()) {
+            poll_endpoint = devInfo.port.InterruptEndpoint(endpoint.MaxPacketSize(), endpoint.Address(), usb_endpoint_direction::IN, endpoint.bInterval);
+        }
+    }
+
+    if (!poll_endpoint) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Error: USB keyboard lacks a poll endpoint\n";
+        get_klogger() << str.str().c_str();
+        return;
+    }
+
+    poll_transfer = poll_endpoint->CreateTransfer(8, usb_transfer_direction::IN, [this] () {
+        this->interrupt();
+    }, true, 1);
+
     std::stringstream str{};
     str << DeviceType() << DeviceId() << ": USB keyboard\n";
     get_klogger() << str.str().c_str();
+
+    kbd_thread = new std::thread([this] () {
+        worker_thread();
+    });
+}
+
+void usbkbd::interrupt() {
+    std::shared_ptr<usb_buffer> report = poll_transfer->Buffer();
+    report->CopyTo(kbrep);
+    semaphore.release();
+}
+
+usbkbd::~usbkbd() {
+    stop = true;
+    if (poll_transfer) {
+        poll_transfer->SetDoneCall([] () {});
+    }
+    semaphore.release();
+    if (kbd_thread != nullptr) {
+        kbd_thread->join();
+        delete kbd_thread;
+        kbd_thread = nullptr;
+    }
+}
+
+void usbkbd::worker_thread() {
+    while (true) {
+        semaphore.acquire();
+        if (stop) {
+            break;
+        }
+        kbrep.dump();
+        poll_transfer = poll_endpoint->CreateTransfer(8, usb_transfer_direction::IN, [this] () {
+            this->interrupt();
+        }, true, 1);
+    }
 }

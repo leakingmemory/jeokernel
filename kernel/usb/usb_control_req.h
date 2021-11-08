@@ -104,6 +104,19 @@ struct usb_endpoint_descriptor {
     uint8_t bmAttributes;
     uint16_t wMaxPacketSize;
     uint8_t bInterval;
+
+    bool IsDirectionIn() {
+        return (bEndpointAddress & 0x80) != 0;
+    }
+    uint8_t Address() {
+        return bEndpointAddress & 0xF;
+    }
+    bool IsInterrupt() {
+        return (bmAttributes & 3) == 3;
+    }
+    uint16_t MaxPacketSize() {
+        return wMaxPacketSize & 0x3FF;
+    }
 }  __attribute__((__packed__));
 
 #endif //JEOKERNEL_USB_CONTROL_REQ_H
