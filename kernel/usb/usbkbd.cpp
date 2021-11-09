@@ -17,6 +17,17 @@ void usbkbd_report::dump() {
     get_klogger() << str.str().c_str();
 }
 
+bool usbkbd_report::operator==(usbkbd_report &other) {
+    return (
+            modifierKeys == other.modifierKeys &&
+            keypress[0] == other.keypress[0] &&
+            keypress[1] == other.keypress[1] &&
+            keypress[2] == other.keypress[2] &&
+            keypress[3] == other.keypress[3] &&
+            keypress[4] == other.keypress[4] &&
+            keypress[5] == other.keypress[5]);
+}
+
 Device *usbkbd_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     UsbInterfaceInformation *ifaceInfo{nullptr};
     {
@@ -97,7 +108,7 @@ void usbkbd::init() {
 
 void usbkbd::interrupt() {
     std::shared_ptr<usb_buffer> report = poll_transfer->Buffer();
-    report->CopyTo(kbrep);
+    report->CopyTo(kbrep_backlog[kbrep_windex++ & KBREP_BACKLOG_INDEX_MASK]);
     semaphore.release();
 }
 
@@ -120,9 +131,13 @@ void usbkbd::worker_thread() {
         if (stop) {
             break;
         }
-        kbrep.dump();
         poll_transfer = poll_endpoint->CreateTransfer(8, usb_transfer_direction::IN, [this] () {
             this->interrupt();
         }, true, 1);
+        uint8_t rindex = kbrep_rindex++ & KBREP_BACKLOG_INDEX_MASK;
+        if (kbrep != kbrep_backlog[rindex]) {
+            kbrep = kbrep_backlog[rindex];
+            kbrep.dump();
+        }
     }
 }
