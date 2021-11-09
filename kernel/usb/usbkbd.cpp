@@ -110,6 +110,9 @@ void usbkbd::interrupt() {
     std::shared_ptr<usb_buffer> report = poll_transfer->Buffer();
     report->CopyTo(kbrep_backlog[kbrep_windex++ & KBREP_BACKLOG_INDEX_MASK]);
     semaphore.release();
+    poll_transfer = poll_endpoint->CreateTransferWithLock(8, usb_transfer_direction::IN, [this] () {
+        this->interrupt();
+    }, true, 1);
 }
 
 usbkbd::~usbkbd() {
@@ -131,9 +134,6 @@ void usbkbd::worker_thread() {
         if (stop) {
             break;
         }
-        poll_transfer = poll_endpoint->CreateTransfer(8, usb_transfer_direction::IN, [this] () {
-            this->interrupt();
-        }, true, 1);
         uint8_t rindex = kbrep_rindex++ & KBREP_BACKLOG_INDEX_MASK;
         if (kbrep != kbrep_backlog[rindex]) {
             kbrep = kbrep_backlog[rindex];

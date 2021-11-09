@@ -702,6 +702,19 @@ uint32_t ohci_endpoint::Phys() {
 std::shared_ptr<usb_transfer>
 ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
                               uint16_t delayInterrupt, int8_t dataToggle, std::function<void (ohci_transfer &transfer)> &applyFunc) {
+    std::shared_ptr<usb_transfer> transfer{};
+    {
+        critical_section cli{};
+        std::lock_guard lock{ohciRef.ohcilock};
+        transfer = CreateTransferWithLock(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle,
+                                          applyFunc);
+    }
+    return transfer;
+}
+
+std::shared_ptr<usb_transfer>
+ohci_endpoint::CreateTransferWithLock(std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
+                              uint16_t delayInterrupt, int8_t dataToggle, std::function<void (ohci_transfer &transfer)> &applyFunc) {
     uint32_t ctrl{0};
     if (dataToggle >= 0) {
         ctrl |= ((uint32_t) (dataToggle & 1) | 2) << 24;
@@ -726,8 +739,6 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
     }
     auto newtd = std::make_shared<ohci_transfer>(ohciRef, *this);
 
-    critical_section cli{};
-    std::lock_guard lock{ohciRef.ohcilock};
     {
         auto *TD = newtd->TD();
         TD->NextTD = 0;
@@ -800,6 +811,19 @@ ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, s
         transfer.SetDoneCall(doneCall);
     };
     return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+ohci_endpoint::CreateTransferWithLock(uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
+                              bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
+    std::function<void (ohci_transfer &)> applyFunc = [doneCall] (ohci_transfer &transfer) {
+        transfer.SetDoneCall(doneCall);
+    };
+    return CreateTransferWithLock(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_buffer> ohci_endpoint::Alloc() {

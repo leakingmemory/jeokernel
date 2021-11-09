@@ -23,7 +23,7 @@ struct usbkbd_report {
     void dump();
 } __attribute__ ((__packed__));
 
-#define KBREP_BACKLOG_INDEX_MASK 1
+#define KBREP_BACKLOG_INDEX_MASK 15
 
 class usbkbd : public Device {
 private:
