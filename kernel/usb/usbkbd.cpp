@@ -67,6 +67,13 @@ void usbkbd::init() {
         return;
     }
 
+    if (!devInfo.port.ControlRequest(*endpoint0, uhid_set_idle())) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Error: USB keyboard set idle failed\n";
+        get_klogger() << str.str().c_str();
+        return;
+    }
+
     {
         std::shared_ptr<usb_buffer> report = devInfo.port.ControlRequest(*endpoint0, uhid_get_report());
         if (!report) {
