@@ -67,7 +67,7 @@ void usbkbd::init() {
         return;
     }
 
-    if (!devInfo.port.ControlRequest(*endpoint0, uhid_set_idle())) {
+    if (!devInfo.port.ControlRequest(*endpoint0, uhid_set_idle(devInfo.iface.bInterfaceNumber))) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Error: USB keyboard set idle failed\n";
         get_klogger() << str.str().c_str();
@@ -142,9 +142,9 @@ void usbkbd::worker_thread() {
             break;
         }
         uint8_t rindex = kbrep_rindex++ & KBREP_BACKLOG_INDEX_MASK;
-        if (kbrep != kbrep_backlog[rindex]) {
+        //if (kbrep != kbrep_backlog[rindex]) {
             kbrep = kbrep_backlog[rindex];
             kbrep.dump();
-        }
+        //}
     }
 }

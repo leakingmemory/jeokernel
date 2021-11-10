@@ -14,7 +14,7 @@ struct uhid_set_protocol : usb_control_request {
 };
 
 struct uhid_set_idle : usb_control_request {
-    uhid_set_idle() : usb_control_request(0x21, 0x0A, 0, 0, 0) { }
+    uhid_set_idle(uint8_t iface) : usb_control_request(0x21, 0x0A, 0, iface, 0) { }
 };
 
 struct uhid_get_report : usb_control_request {
