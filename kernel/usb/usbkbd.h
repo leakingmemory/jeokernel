@@ -30,6 +30,7 @@ private:
     UsbIfacedevInformation devInfo;
     std::shared_ptr<usb_endpoint> poll_endpoint;
     std::shared_ptr<usb_transfer> poll_transfer;
+    uint64_t transfercount;
     std::thread *kbd_thread;
     raw_semaphore semaphore;
     usbkbd_report kbrep_backlog[KBREP_BACKLOG_INDEX_MASK + 1];
@@ -38,7 +39,7 @@ private:
     usbkbd_report kbrep;
     bool stop;
 public:
-    usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), poll_endpoint(), poll_transfer(), kbd_thread(nullptr), semaphore(-1), kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), stop(false) {
+    usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), semaphore(-1), kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), stop(false) {
     }
     ~usbkbd() override;
     void init() override;

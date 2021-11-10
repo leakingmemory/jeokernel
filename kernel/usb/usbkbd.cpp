@@ -102,7 +102,7 @@ void usbkbd::init() {
 
     poll_transfer = poll_endpoint->CreateTransfer(8, usb_transfer_direction::IN, [this] () {
         this->interrupt();
-    }, true, 1);
+    }, true, 1, (int8_t) (transfercount++ & 1));
 
     std::stringstream str{};
     str << DeviceType() << DeviceId() << ": USB keyboard\n";
@@ -119,7 +119,7 @@ void usbkbd::interrupt() {
     semaphore.release();
     poll_transfer = poll_endpoint->CreateTransferWithLock(8, usb_transfer_direction::IN, [this] () {
         this->interrupt();
-    }, true, 1);
+    }, true, 1, (int8_t) (transfercount++ & 1));
 }
 
 usbkbd::~usbkbd() {
