@@ -236,6 +236,45 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
     }
 }
 
+bool usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_request &request, void *data) {
+    std::shared_ptr<usb_transfer> t_req = endpoint.CreateTransfer(
+            (void *) &request, sizeof(request),
+            usb_transfer_direction::SETUP, true,
+            1, 0
+    );
+    std::shared_ptr<usb_transfer> data_stage_tr = endpoint.CreateTransfer(
+            data, request.wLength,
+            usb_transfer_direction::OUT, true,
+            1, 1);
+    std::shared_ptr<usb_transfer> status_stage = endpoint.CreateTransfer(
+            0,
+            usb_transfer_direction::IN, true,
+            1, 1
+    );
+    timeout_wait(*t_req);
+    if (!t_req->IsSuccessful()) {
+        std::stringstream str{};
+        str << "Usb control transfer failed: " << t_req->GetStatusStr() << "\n";
+        get_klogger() << str.str().c_str();
+        return false;
+    }
+    timeout_wait(*data_stage_tr);
+    if (!data_stage_tr->IsSuccessful()) {
+        std::stringstream str{};
+        str << "Usb control transfer failed (data): " << data_stage_tr->GetStatusStr() << "\n";
+        get_klogger() << str.str().c_str();
+        return false;
+    }
+    timeout_wait(*status_stage);
+    if (!status_stage->IsSuccessful()) {
+        std::stringstream str{};
+        str << "Usb control transfer failed (status): " << status_stage->GetStatusStr() << "\n";
+        get_klogger() << str.str().c_str();
+        return false;
+    }
+    return true;
+}
+
 std::shared_ptr<usb_endpoint> usb_port_connection::InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs) {
     return hub.CreateInterruptEndpoint(maxPacketSize, addr->GetAddr(), endpointNum, direction, speed, pollingIntervalMs);
 }

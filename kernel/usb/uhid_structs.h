@@ -22,4 +22,8 @@ struct uhid_get_report : usb_control_request {
     uhid_get_report() : uhid_get_report(8) { }
 };
 
+struct uhid_set_report : usb_control_request {
+    uhid_set_report(uint8_t iface, uint8_t length) : usb_control_request(0x21, 9, 0x200, iface, length) { }
+};
+
 #endif //JEOKERNEL_UHID_STRUCTS_H

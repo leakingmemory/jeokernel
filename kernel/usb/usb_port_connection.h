@@ -155,6 +155,7 @@ public:
         return endpoint0;
     }
     std::shared_ptr<usb_buffer> ControlRequest(usb_endpoint &endpoint, const usb_control_request &request);
+    bool ControlRequest(usb_endpoint &endpoint, const usb_control_request &request, void *data);
     std::shared_ptr<usb_endpoint> InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs);
     const std::vector<UsbInterfaceInformation> &ReadConfigurations(const UsbDeviceInformation &devInfo);
 };

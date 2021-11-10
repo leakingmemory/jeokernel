@@ -25,6 +25,12 @@ struct usbkbd_report {
 
 #define KBREP_BACKLOG_INDEX_MASK 15
 
+#define MOD_STAT_NUMLOCK    1
+#define MOD_STAT_CAPSLOCK   2
+#define MOD_STAT_SCROLLLOCK 4
+#define MOD_STAT_COMPOSE    8
+#define MOD_STAT_KANA       16
+
 class usbkbd : public Device {
 private:
     UsbIfacedevInformation devInfo;
@@ -38,8 +44,10 @@ private:
     uint8_t kbrep_rindex;
     usbkbd_report kbrep;
     bool stop;
+    uint8_t mod_status;
 public:
-    usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), semaphore(-1), kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), stop(false) {
+    usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), semaphore(-1),
+                                                        kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), stop(false), mod_status(MOD_STAT_NUMLOCK) {
     }
     ~usbkbd() override;
     void init() override;
