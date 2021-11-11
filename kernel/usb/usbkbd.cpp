@@ -28,6 +28,10 @@ bool usbkbd_report::operator==(usbkbd_report &other) {
             keypress[5] == other.keypress[5]);
 }
 
+UsbKeycode::UsbKeycode(usbkbd &kdb, uint8_t keycode) : keycode(keycode) {
+    kdb.submit(keycode);
+}
+
 Device *usbkbd_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     UsbInterfaceInformation *ifaceInfo{nullptr};
     {
@@ -140,6 +144,12 @@ usbkbd::~usbkbd() {
         delete kbd_thread;
         kbd_thread = nullptr;
     }
+    for (int i = 0; i < USBKB_MAX_KEYS; i++) {
+        if (keycodes[i] != nullptr) {
+            delete keycodes[i];
+            keycodes[i] = nullptr;
+        }
+    }
 }
 
 void usbkbd::worker_thread() {
@@ -149,9 +159,50 @@ void usbkbd::worker_thread() {
             break;
         }
         uint8_t rindex = kbrep_rindex++ & KBREP_BACKLOG_INDEX_MASK;
-        //if (kbrep != kbrep_backlog[rindex]) {
+        if (kbrep != kbrep_backlog[rindex]) {
             kbrep = kbrep_backlog[rindex];
-            kbrep.dump();
-        //}
+            uint8_t keycodes[USBKB_MAX_KEYS];
+            uint8_t num{0};
+            if (kbrep.keypress[0] != kbrep.keypress[1] || kbrep.keypress[0] == 0)
+            for (int i = 0; i < 6 && kbrep.keypress[i] != 0; i++) {
+                keycodes[num++] = kbrep.keypress[i];
+            }
+            for (int i = 0; i < USBKB_MAX_KEYS; i++) {
+                if (this->keycodes[i] != nullptr) {
+                    bool found{false};
+                    for (int j = 0; j < num; j++) {
+                        if (keycodes[j] == this->keycodes[i]->keycode) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        delete this->keycodes[i];
+                        this->keycodes[i] = nullptr;
+                    }
+                }
+            }
+            for (int i = 0; i < num; i++) {
+                bool found{false};
+                for (int j = 0; j < USBKB_MAX_KEYS; j++) {
+                    if (this->keycodes[j] != nullptr && this->keycodes[j]->keycode == keycodes[i]) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    for (int j = 0; j < USBKB_MAX_KEYS; j++) {
+                        if (this->keycodes[j] == nullptr) {
+                            this->keycodes[j] = new UsbKeycode(*this, keycodes[i]);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
+}
+
+void usbkbd::submit(uint8_t keycode) {
+    get_klogger() << keycode;
 }

@@ -23,7 +23,17 @@ struct usbkbd_report {
     void dump();
 } __attribute__ ((__packed__));
 
+class usbkbd;
+
+class UsbKeycode {
+public:
+    UsbKeycode(usbkbd &kdb, uint8_t keycode);
+    ~UsbKeycode() { }
+    uint8_t keycode;
+};
+
 #define KBREP_BACKLOG_INDEX_MASK 15
+#define USBKB_MAX_KEYS           13
 
 #define MOD_STAT_NUMLOCK    1
 #define MOD_STAT_CAPSLOCK   2
@@ -43,14 +53,20 @@ private:
     uint8_t kbrep_windex;
     uint8_t kbrep_rindex;
     usbkbd_report kbrep;
+    UsbKeycode *keycodes[USBKB_MAX_KEYS];
     bool stop;
     uint8_t mod_status;
+    uint8_t modifiers;
 public:
     usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), semaphore(-1),
-                                                        kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), stop(false), mod_status(MOD_STAT_NUMLOCK) {
+                                                        kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), keycodes(), stop(false), mod_status(MOD_STAT_NUMLOCK), modifiers(0) {
+        for (int i = 0; i < USBKB_MAX_KEYS; i++) {
+            keycodes[i] = nullptr;
+        }
     }
     ~usbkbd() override;
     void init() override;
+    void submit(uint8_t keycode);
 private:
     void interrupt();
     void worker_thread();
