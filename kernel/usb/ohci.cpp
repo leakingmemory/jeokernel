@@ -303,6 +303,10 @@ bool ohci::irq() {
 }
 
 void ohci::StartOfFrame() {
+    if ((ohciRegisters->HcControl & OHCI_CTRL_CLE) == 0) {
+        ohciRegisters->HcControlCurrentED = 0;
+        ohciRegisters->HcControl |= OHCI_CTRL_CLE;
+    }
     destroyEds.clear();
 }
 
@@ -637,6 +641,7 @@ ohci_endpoint::~ohci_endpoint() {
         critical_section cli{};
         std::lock_guard lock{ohciRef.ohcilock};
         ohci_endpoint *endpoint = ohciRef.controlHead;
+        SetSkip();
         if (endpoint == this) {
             if (endpoint->next != nullptr) {
                 this->ohciRef.ohciRegisters->HcControlHeadED = endpoint->next->edPtr->Phys();
@@ -646,17 +651,16 @@ ohci_endpoint::~ohci_endpoint() {
                 this->ohciRef.controlHead = nullptr;
             }
             ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
-            this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
-            this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
         } else while (endpoint) {
             if (endpoint->next == this) {
                 endpoint->SetNext(next);
                 ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
-                this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
-                this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
             }
             endpoint = endpoint->next;
         }
+        this->ohciRef.ohciRegisters->HcControl &= ~OHCI_CTRL_CLE;
+        this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
+        this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
     }
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
     get_klogger() << "Transfers:\n";
@@ -829,6 +833,14 @@ ohci_endpoint::CreateTransferWithLock(uint32_t size, usb_transfer_direction dire
 std::shared_ptr<usb_buffer> ohci_endpoint::Alloc() {
     std::shared_ptr<usb_buffer> buffer{std::make_shared<ohci_buffer>(ohciRef)};
     return buffer;
+}
+
+void ohci_endpoint::SetSkip(bool skip) {
+    if (skip) {
+        edPtr->Pointer()->HcControl |= OHCI_ED_SKIP;
+    } else {
+        edPtr->Pointer()->HcControl &= ~OHCI_ED_SKIP;
+    }
 }
 
 ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer(), transferPtr(ohci.xPool.Alloc()), buffer(), next(), endpoint(endpoint), waitCancelled(false), waitCancelledAndWaitedCycle(false) {

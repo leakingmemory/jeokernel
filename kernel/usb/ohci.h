@@ -324,6 +324,7 @@ public:
     ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs = 0);
     virtual ~ohci_endpoint();
     void SetNext(ohci_endpoint *endpoint);
+    void SetSkip(bool skip = true);
     uint32_t Phys();
     bool Addressing64bit() override {
         return false;
