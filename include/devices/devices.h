@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#ifndef UNIT_TESTING
 #include <klogger.h>
+#endif
 
 class Bus;
 
