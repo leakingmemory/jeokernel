@@ -459,7 +459,7 @@ usb_speed ohci::PortSpeed(int port) {
 }
 
 void ohci::ProcessDoneQueue() {
-    uint32_t doneHead = hcca.Hcca().HccaDoneHead;
+    uint32_t doneHead = hcca.Hcca().HccaDoneHead & 0xFFFFFFF0;
     uint32_t prevHead = 0;
     while (doneHead != 0) {
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
