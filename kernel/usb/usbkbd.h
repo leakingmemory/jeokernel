@@ -31,11 +31,13 @@ private:
 public:
     UsbKeycode(usbkbd &kbd, uint32_t modifiers, uint8_t keycode);
     ~UsbKeycode();
+    uint64_t rep_ticks;
     uint8_t keycode;
 };
 
 #define KBREP_BACKLOG_INDEX_MASK 15
 #define USBKB_MAX_KEYS           13
+#define USBKB_REPEAT_START_TICKS 50
 
 #define MOD_STAT_NUMLOCK    1
 #define MOD_STAT_CAPSLOCK   2
@@ -50,6 +52,8 @@ private:
     std::shared_ptr<usb_transfer> poll_transfer;
     uint64_t transfercount;
     std::thread *kbd_thread;
+    std::thread *rep_thread;
+    std::mutex mtx;
     raw_semaphore semaphore;
     usbkbd_report kbrep_backlog[KBREP_BACKLOG_INDEX_MASK + 1];
     uint8_t kbrep_windex;
@@ -60,7 +64,7 @@ private:
     uint8_t mod_status;
     uint8_t modifiers;
 public:
-    usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), semaphore(-1),
+    usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), rep_thread(nullptr), mtx(), semaphore(-1),
                                                         kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), keycodes(), stop(false), mod_status(MOD_STAT_NUMLOCK), modifiers(0) {
         for (int i = 0; i < USBKB_MAX_KEYS; i++) {
             keycodes[i] = nullptr;
@@ -74,6 +78,7 @@ private:
     void set_leds();
     void interrupt();
     void worker_thread();
+    void repeat_thread();
 };
 
 class usbkbd_driver : public Driver {

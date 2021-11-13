@@ -38,8 +38,9 @@ bool usbkbd_report::operator==(usbkbd_report &other) {
             keypress[5] == other.keypress[5]);
 }
 
-UsbKeycode::UsbKeycode(usbkbd &kbd, uint32_t modifiers, uint8_t keycode) : kbd(kbd), keycode(keycode) {
+UsbKeycode::UsbKeycode(usbkbd &kbd, uint32_t modifiers, uint8_t keycode) : kbd(kbd), rep_ticks(get_ticks()), keycode(keycode) {
     kbd.submit(modifiers, keycode);
+    rep_ticks += USBKB_REPEAT_START_TICKS;
 }
 
 UsbKeycode::~UsbKeycode() {
@@ -131,6 +132,9 @@ void usbkbd::init() {
     kbd_thread = new std::thread([this] () {
         worker_thread();
     });
+    rep_thread = new std::thread([this] () {
+        repeat_thread();
+    });
 }
 
 void usbkbd::interrupt() {
@@ -153,6 +157,11 @@ usbkbd::~usbkbd() {
         delete kbd_thread;
         kbd_thread = nullptr;
     }
+    if (rep_thread != nullptr) {
+        rep_thread->join();
+        delete rep_thread;
+        rep_thread = nullptr;
+    }
     for (int i = 0; i < USBKB_MAX_KEYS; i++) {
         if (keycodes[i] != nullptr) {
             delete keycodes[i];
@@ -165,6 +174,9 @@ void usbkbd::worker_thread() {
     auto &kbd = Keyboard();
     while (true) {
         semaphore.acquire();
+
+        std::lock_guard lock{mtx};
+
         if (stop) {
             break;
         }
@@ -359,4 +371,29 @@ uint32_t usbkbd::keyboard_modifiers() {
         kmods |= KEYBOARD_CODE_BIT_RGUI;
     }
     return kmods;
+}
+
+void usbkbd::repeat_thread() {
+    auto &kbd = Keyboard();
+    while (true) {
+        if (stop) {
+            break;
+        }
+        {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(80ms);
+        }
+
+        std::lock_guard lock{mtx};
+
+        auto ticks = get_ticks();
+        auto mods = keyboard_modifiers();
+        for (int j = 0; j < USBKB_MAX_KEYS; j++) {
+            if (this->keycodes[j] != nullptr && this->keycodes[j]->rep_ticks < ticks) {
+                uint32_t code{mods};
+                code |= this->keycodes[j]->keycode;
+                kbd.keycode(code);
+            }
+        }
+    }
 }
