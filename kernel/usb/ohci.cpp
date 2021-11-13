@@ -579,7 +579,7 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, usb_endpoint_type endpointType) :
         edPtr(ohci.edPool.Alloc()),
         head(), tail(),
         endpointType(endpointType),
-        next(nullptr) {
+        next(nullptr), int_ed_chain(nullptr) {
     auto *ptr = edPtr->Pointer();
     ptr->NextED = 0;
     ptr->TailP = 0;
@@ -594,7 +594,7 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
                              edPtr(ohci.edPool.Alloc()),
                              head(new ohci_transfer(ohci, *this)), tail(head),
                              endpointType(endpointType),
-                             next(nullptr) {
+                             next(nullptr), int_ed_chain(nullptr) {
     ohci_endpoint_descriptor *ed = edPtr->Pointer();
     {
         uint32_t control = ((maxPacketSize & 0x7FF) << 16)
@@ -633,6 +633,7 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
         }
         next = edptr.head;
         edptr.head = this;
+        int_ed_chain = &edptr;
     }
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
     {
@@ -644,30 +645,49 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
 }
 
 ohci_endpoint::~ohci_endpoint() {
-    if (endpointType == usb_endpoint_type::CONTROL) {
+    {
         critical_section cli{};
         std::lock_guard lock{ohciRef.ohcilock};
-        ohci_endpoint *endpoint = ohciRef.controlHead;
         SetSkip();
+        ohci_endpoint *endpoint{nullptr};
+        if (endpointType == usb_endpoint_type::CONTROL) {
+            endpoint = ohciRef.controlHead;
+        }
+        if (endpointType == usb_endpoint_type::INTERRUPT) {
+            endpoint = int_ed_chain->head;
+        }
         if (endpoint == this) {
-            if (endpoint->next != nullptr) {
-                this->ohciRef.ohciRegisters->HcControlHeadED = endpoint->next->edPtr->Phys();
-                this->ohciRef.controlHead = endpoint->next;
-            } else {
-                this->ohciRef.ohciRegisters->HcControlHeadED = 0;
-                this->ohciRef.controlHead = nullptr;
+            if (endpointType == usb_endpoint_type::CONTROL) {
+                if (endpoint->next != nullptr) {
+                    this->ohciRef.ohciRegisters->HcControlHeadED = endpoint->next->edPtr->Phys();
+                    this->ohciRef.controlHead = endpoint->next;
+                } else {
+                    this->ohciRef.ohciRegisters->HcControlHeadED = 0;
+                    this->ohciRef.controlHead = nullptr;
+                }
+            }
+            if (endpointType == usb_endpoint_type::INTERRUPT)
+            {
+                if (int_ed_chain->ed != nullptr)
+                    int_ed_chain->ed->NextED = endpoint->edPtr->Pointer()->NextED;
+                else
+                    ohciRef.hcca.Hcca().intr_ed[int_ed_chain->index] = endpoint->edPtr->Pointer()->NextED;
+                int_ed_chain->head = next;
             }
             ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
-        } else while (endpoint) {
-            if (endpoint->next == this) {
-                endpoint->SetNext(next);
-                ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
+        } else
+            while (endpoint) {
+                if (endpoint->next == this) {
+                    endpoint->SetNext(next);
+                    ohciRef.destroyEds.emplace_back(ohciRef, edPtr, head);
+                }
+                endpoint = endpoint->next;
             }
-            endpoint = endpoint->next;
+        if (endpointType == usb_endpoint_type::CONTROL) {
+            this->ohciRef.ohciRegisters->HcControl &= ~OHCI_CTRL_CLE;
+            this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
+            this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
         }
-        this->ohciRef.ohciRegisters->HcControl &= ~OHCI_CTRL_CLE;
-        this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
-        this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
     }
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
     get_klogger() << "Transfers:\n";

@@ -319,6 +319,7 @@ private:
     std::shared_ptr<ohci_transfer> tail;
     usb_endpoint_type endpointType;
     ohci_endpoint *next;
+    ohci_endpoint_descriptor_pointer *int_ed_chain;
 public:
     ohci_endpoint(ohci &ohci, usb_endpoint_type endpointType);
     ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs = 0);
