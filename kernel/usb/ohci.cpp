@@ -460,6 +460,7 @@ usb_speed ohci::PortSpeed(int port) {
 
 void ohci::ProcessDoneQueue() {
     uint32_t doneHead = hcca.Hcca().HccaDoneHead;
+    uint32_t prevHead = 0;
     while (doneHead != 0) {
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
         {
@@ -469,8 +470,14 @@ void ohci::ProcessDoneQueue() {
         }
 #endif
         std::shared_ptr<usb_transfer> item = ExtractDoneQueueItem(doneHead);
+        if (!item) {
+            std::stringstream str{};
+            str << "done queue item " << std::hex << doneHead << " not found after " << prevHead;
+            wild_panic(str.str().c_str());
+        }
         item->SetDone();
         ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*item));
+        prevHead = doneHead;
         doneHead = ohciTransfer.TD()->NextTD;
     }
     auto iter = transfersInProgress.begin();
