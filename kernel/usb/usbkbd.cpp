@@ -8,6 +8,16 @@
 #include "usbifacedev.h"
 #include "uhid_structs.h"
 #include "usb_transfer.h"
+#include <keyboard/keyboard.h>
+
+#define USBKB_LEFT_CTRL   1
+#define USBKB_LEFT_SHIFT  2
+#define USBKB_LEFT_ALT    4
+#define USBKB_LEFT_GUI    8
+#define USBKB_RIGHT_CTRL  16
+#define USBKB_RIGHT_SHIFT 32
+#define USBKB_RIGHT_ALT   64
+#define USBKB_RIGHT_GUI   128
 
 void usbkbd_report::dump() {
     std::stringstream str{};
@@ -28,8 +38,12 @@ bool usbkbd_report::operator==(usbkbd_report &other) {
             keypress[5] == other.keypress[5]);
 }
 
-UsbKeycode::UsbKeycode(usbkbd &kdb, uint8_t keycode) : keycode(keycode) {
-    kdb.submit(keycode);
+UsbKeycode::UsbKeycode(usbkbd &kbd, uint32_t modifiers, uint8_t keycode) : kbd(kbd), keycode(keycode) {
+    kbd.submit(modifiers, keycode);
+}
+
+UsbKeycode::~UsbKeycode() {
+    kbd.submit(kbd.keyboard_modifiers() | KEYBOARD_CODE_BIT_RELEASE, keycode);
 }
 
 Device *usbkbd_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
@@ -148,14 +162,92 @@ usbkbd::~usbkbd() {
 }
 
 void usbkbd::worker_thread() {
+    auto &kbd = Keyboard();
     while (true) {
         semaphore.acquire();
         if (stop) {
             break;
         }
+        uint32_t kmods{keyboard_modifiers()};
         uint8_t rindex = kbrep_rindex++ & KBREP_BACKLOG_INDEX_MASK;
         if (kbrep != kbrep_backlog[rindex]) {
             kbrep = kbrep_backlog[rindex];
+            {
+                uint8_t modc = modifiers ^ kbrep.modifierKeys;
+                if ((modc & USBKB_LEFT_CTRL) != 0) {
+                    uint32_t code{224};
+                    if ((kbrep.modifierKeys & USBKB_LEFT_CTRL) == 0) {
+                        code |= KEYBOARD_CODE_BIT_RELEASE;
+                        kmods &= ~KEYBOARD_CODE_BIT_LCONTROL;
+                    }
+                    code |= kmods;
+                    kbd.keycode(code);
+                }
+                if ((modc & USBKB_LEFT_SHIFT) != 0) {
+                    uint32_t code{225};
+                    if ((kbrep.modifierKeys & USBKB_LEFT_SHIFT) == 0) {
+                        code |= KEYBOARD_CODE_BIT_RELEASE;
+                        kmods &= ~KEYBOARD_CODE_BIT_LSHIFT;
+                    }
+                    code |= kmods;
+                    kbd.keycode(code);
+                }
+                if ((modc & USBKB_LEFT_ALT) != 0) {
+                    uint32_t code{226};
+                    if ((kbrep.modifierKeys & USBKB_LEFT_ALT) == 0) {
+                        code |= KEYBOARD_CODE_BIT_RELEASE;
+                        kmods &= ~KEYBOARD_CODE_BIT_LALT;
+                    }
+                    code |= kmods;
+                    kbd.keycode(code);
+                }
+                if ((modc & USBKB_LEFT_GUI) != 0) {
+                    uint32_t code{227};
+                    if ((kbrep.modifierKeys & USBKB_LEFT_GUI) == 0) {
+                        code |= KEYBOARD_CODE_BIT_RELEASE;
+                        kmods &= ~KEYBOARD_CODE_BIT_LGUI;
+                    }
+                    code |= kmods;
+                    kbd.keycode(code);
+                }
+                if ((modc & USBKB_RIGHT_CTRL) != 0) {
+                    uint32_t code{228};
+                    if ((kbrep.modifierKeys & USBKB_RIGHT_CTRL) == 0) {
+                        code |= KEYBOARD_CODE_BIT_RELEASE;
+                        kmods &= ~KEYBOARD_CODE_BIT_RCONTROL;
+                    }
+                    code |= kmods;
+                    kbd.keycode(code);
+                }
+                if ((modc & USBKB_RIGHT_SHIFT) != 0) {
+                    uint32_t code{229};
+                    if ((kbrep.modifierKeys & USBKB_RIGHT_SHIFT) == 0) {
+                        code |= KEYBOARD_CODE_BIT_RELEASE;
+                        kmods &= ~KEYBOARD_CODE_BIT_RSHIFT;
+                    }
+                    code |= kmods;
+                    kbd.keycode(code);
+                }
+                if ((modc & USBKB_RIGHT_ALT) != 0) {
+                    uint32_t code{230};
+                    if ((kbrep.modifierKeys & USBKB_RIGHT_ALT) == 0) {
+                        code |= KEYBOARD_CODE_BIT_RELEASE;
+                        kmods &= ~KEYBOARD_CODE_BIT_RALT;
+                    }
+                    code |= kmods;
+                    kbd.keycode(code);
+                }
+                if ((modc & USBKB_RIGHT_GUI) != 0) {
+                    uint32_t code{231};
+                    if ((kbrep.modifierKeys & USBKB_RIGHT_GUI) == 0) {
+                        code |= KEYBOARD_CODE_BIT_RELEASE;
+                        kmods &= ~KEYBOARD_CODE_BIT_RGUI;
+                    }
+                    code |= kmods;
+                    kbd.keycode(code);
+                }
+            }
+            modifiers = kbrep.modifierKeys;
             uint8_t keycodes[USBKB_MAX_KEYS];
             uint8_t num{0};
             if (kbrep.keypress[0] != kbrep.keypress[1] || kbrep.keypress[0] == 0)
@@ -188,7 +280,7 @@ void usbkbd::worker_thread() {
                 if (!found) {
                     for (int j = 0; j < USBKB_MAX_KEYS; j++) {
                         if (this->keycodes[j] == nullptr) {
-                            this->keycodes[j] = new UsbKeycode(*this, keycodes[i]);
+                            this->keycodes[j] = new UsbKeycode(*this, kmods, keycodes[i]);
                             break;
                         }
                     }
@@ -198,7 +290,8 @@ void usbkbd::worker_thread() {
     }
 }
 
-void usbkbd::submit(uint8_t keycode) {
+void usbkbd::submit(uint32_t modifiers, uint8_t keycode) {
+    uint32_t fullcode{keycode};
     uint8_t ledc{0};
     switch (keycode) {
         case 83:
@@ -214,8 +307,10 @@ void usbkbd::submit(uint8_t keycode) {
     if (ledc != 0) {
         mod_status = mod_status ^ ledc;
         set_leds();
+        return;
     }
-    get_klogger() << keycode;
+    fullcode |= modifiers;
+    Keyboard().keycode(fullcode);
 }
 
 void usbkbd::set_leds() {
@@ -226,4 +321,42 @@ void usbkbd::set_leds() {
         get_klogger() << str.str().c_str();
         return;
     }
+}
+
+uint32_t usbkbd::keyboard_modifiers() {
+    uint32_t kmods{0};
+    if ((mod_status & MOD_STAT_NUMLOCK) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_NUMLOCK;
+    }
+    if ((mod_status & MOD_STAT_CAPSLOCK) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_CAPSLOCK;
+    }
+    if ((mod_status & MOD_STAT_SCROLLLOCK) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_SCROLLLOCK;
+    }
+    if ((modifiers & USBKB_LEFT_CTRL) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_LCONTROL;
+    }
+    if ((modifiers & USBKB_LEFT_SHIFT) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_LSHIFT;
+    }
+    if ((modifiers & USBKB_LEFT_ALT) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_LALT;
+    }
+    if ((modifiers & USBKB_LEFT_GUI) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_LGUI;
+    }
+    if ((modifiers & USBKB_RIGHT_CTRL) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_RCONTROL;
+    }
+    if ((modifiers & USBKB_RIGHT_SHIFT) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_RSHIFT;
+    }
+    if ((modifiers & USBKB_RIGHT_ALT) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_RALT;
+    }
+    if ((modifiers & USBKB_RIGHT_GUI) != 0) {
+        kmods |= KEYBOARD_CODE_BIT_RGUI;
+    }
+    return kmods;
 }

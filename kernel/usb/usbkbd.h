@@ -26,9 +26,11 @@ struct usbkbd_report {
 class usbkbd;
 
 class UsbKeycode {
+private:
+    usbkbd &kbd;
 public:
-    UsbKeycode(usbkbd &kdb, uint8_t keycode);
-    ~UsbKeycode() { }
+    UsbKeycode(usbkbd &kbd, uint32_t modifiers, uint8_t keycode);
+    ~UsbKeycode();
     uint8_t keycode;
 };
 
@@ -66,7 +68,8 @@ public:
     }
     ~usbkbd() override;
     void init() override;
-    void submit(uint8_t keycode);
+    void submit(uint32_t modifiers, uint8_t keycode);
+    uint32_t keyboard_modifiers();
 private:
     void set_leds();
     void interrupt();
