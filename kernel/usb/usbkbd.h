@@ -68,6 +68,7 @@ public:
     void init() override;
     void submit(uint8_t keycode);
 private:
+    void set_leds();
     void interrupt();
     void worker_thread();
 };

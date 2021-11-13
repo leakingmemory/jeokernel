@@ -78,12 +78,7 @@ void usbkbd::init() {
         return;
     }
 
-    if (!devInfo.port.ControlRequest(*endpoint0, uhid_set_report(devInfo.iface.bInterfaceNumber, 1), &mod_status)) {
-        std::stringstream str{};
-        str << DeviceType() << DeviceId() << ": Error: USB keyboard set LEDs failed\n";
-        get_klogger() << str.str().c_str();
-        return;
-    }
+    set_leds();
 
     {
         std::shared_ptr<usb_buffer> report = devInfo.port.ControlRequest(*endpoint0, uhid_get_report());
@@ -204,5 +199,31 @@ void usbkbd::worker_thread() {
 }
 
 void usbkbd::submit(uint8_t keycode) {
+    uint8_t ledc{0};
+    switch (keycode) {
+        case 83:
+            ledc = MOD_STAT_NUMLOCK;
+            break;
+        case 57:
+            ledc = MOD_STAT_CAPSLOCK;
+            break;
+        case 71:
+            ledc = MOD_STAT_SCROLLLOCK;
+            break;
+    }
+    if (ledc != 0) {
+        mod_status = mod_status ^ ledc;
+        set_leds();
+    }
     get_klogger() << keycode;
+}
+
+void usbkbd::set_leds() {
+    std::shared_ptr<usb_endpoint> endpoint0 = devInfo.port.Endpoint0();
+    if (!devInfo.port.ControlRequest(*endpoint0, uhid_set_report(devInfo.iface.bInterfaceNumber, 1), &mod_status)) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Error: USB keyboard set LEDs failed\n";
+        get_klogger() << str.str().c_str();
+        return;
+    }
 }
