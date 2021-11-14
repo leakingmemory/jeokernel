@@ -9,6 +9,9 @@
 #include "../pci/pci.h"
 #include "Phys32Page.h"
 #include "StructPool.h"
+#include "usb_hcd.h"
+
+#define UHCI_TRANSFER_BUFFER_SIZE 64
 
 struct uhci_queue_head {
     uint32_t head;
@@ -38,20 +41,39 @@ union uhci_qh_or_td {
 };
 static_assert(sizeof(uhci_qh_or_td) == 16);
 
-class uhci : public Device {
+class uhci : public usb_hcd {
 private:
     PciDeviceInformation pciDeviceInformation;
     Phys32Page FramesPhys;
     uint32_t *Frames;
     StructPool<StructPoolAllocator<Phys32Page,uhci_qh_or_td>> qhtdPool;
     std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> qh;
+    hw_spinlock uhcilock;
     uint32_t iobase;
 public:
     uhci(Bus &bus, PciDeviceInformation &deviceInformation) :
-        Device("uhci", &bus), pciDeviceInformation(deviceInformation),
+        usb_hcd("uhci", bus), pciDeviceInformation(deviceInformation),
         FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()),
-        qhtdPool(), qh() {}
+        qhtdPool(), qh(), uhcilock() {}
     void init() override;
+    void dumpregs() override;
+    int GetNumberOfPorts() override;
+    uint32_t GetPortStatus(int port) override;
+    void SwitchPortOff(int port) override;
+    void SwitchPortOn(int port) override;
+    void EnablePort(int port) override;
+    void DisablePort(int port) override;
+    void ResetPort(int port) override;
+    usb_speed PortSpeed(int port) override;
+    void ClearStatusChange(int port, uint32_t statuses) override;
+    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
+    size_t TransferBufferSize() override {
+        return UHCI_TRANSFER_BUFFER_SIZE;
+    }
+    hw_spinlock &HcdSpinlock() override {
+        return uhcilock;
+    }
 private:
     bool irq();
 };

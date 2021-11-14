@@ -66,7 +66,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
     speed = hub.PortSpeed(port);
     {
         std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, usb_endpoint_direction::BOTH, speed);
-        {
+        if (ctrl_0_0) {
             usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
             std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*ctrl_0_0, get_descr0);
             if (descr0_buf) {
@@ -86,6 +86,11 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
                 hub.DisablePort(port);
                 return;
             }
+        } else {
+            get_klogger() << "Usb connection: Can't create control endpoints\n";
+            addr = {};
+            hub.DisablePort(port);
+            return;
         }
         {
             uint8_t func = addr->GetAddr();

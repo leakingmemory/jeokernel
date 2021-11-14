@@ -35,6 +35,7 @@ public:
 #define USB_PORT_STATUS_PSSC   0x000200 // Port Suspend Status Change
 #define USB_PORT_STATUS_OCIC   0x000400 // Port Over Current Indicator Change
 #define USB_PORT_STATUS_PRSC   0x000800 // Port Reset Status Change
+#define USB_PORT_STATUS_RESUME 0x001000 // Resume detected
 
 class usb_hcd : public usb_hub {
     friend usb_hcd_addr;
