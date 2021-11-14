@@ -8,6 +8,19 @@
 #include "uhci.h"
 
 #define REG_LEGACY_SUPPORT 0xC0
+#define REG_COMMAND        0
+#define REG_STATUS         0x02
+#define REG_INTR           0x04
+#define REG_FRAME_NUMBER   0x06
+#define REG_FRAME_BASEADDR 0x08
+#define REG_SOFMOD         0x0C
+#define REG_PORTSC1        0x10
+#define REG_PORTSC2        0x12
+
+#define COMMAND_RUN_STOP   1
+
+#define UHCI_POINTER_TERMINATE 1
+#define UHCI_POINTER_QH        2
 
 Device *uhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
@@ -36,4 +49,44 @@ void uhci::init() {
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB controller iobase 0x" << std::hex << iobase << "\n";
         get_klogger() << msg.str().c_str();
     }
+
+    outportw(iobase + REG_INTR, 0); // Disable intr
+
+    PciRegisterF regF{pciDeviceInformation.readRegF()};
+    {
+        auto *pci = GetBus()->GetPci();
+        std::optional<uint8_t> irq = pci->GetIrqNumber(pciDeviceInformation, regF.InterruptPin - 1);
+        {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": INT pin " << (unsigned int) regF.InterruptPin
+                << " PIC INT#" << (unsigned int) regF.InterruptLine << " ACPI INT# " << (irq ? *irq : 0) << "\n";
+            get_klogger() << msg.str().c_str();
+        }
+        if (irq) {
+            pci->AddIrqHandler(*irq,[this]() {
+                return this->irq();
+            });
+        }
+    }
+
+    qh = qhtdPool.Alloc();
+    qh->Pointer()->qh.head = UHCI_POINTER_TERMINATE;
+    qh->Pointer()->qh.element = UHCI_POINTER_TERMINATE;
+    for (int i = 0; i < 1024; i++) {
+        Frames[i] = UHCI_POINTER_QH | qh->Phys();
+    }
+
+    outportw(iobase + REG_FRAME_NUMBER, 0);
+    outportl(iobase + REG_FRAME_BASEADDR, FramesPhys.PhysAddr());
+
+    outportb(iobase + REG_SOFMOD, 0x40);
+
+    outportw(iobase + REG_STATUS, 0xFFFF); // Clear
+
+    outportw(iobase + REG_COMMAND, COMMAND_RUN_STOP);
+}
+
+bool uhci::irq() {
+    get_klogger() << "UHCI interrupt\n";
+    return false;
 }
