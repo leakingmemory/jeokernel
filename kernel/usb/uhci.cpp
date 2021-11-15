@@ -22,6 +22,7 @@
 
 #define UHCI_POINTER_TERMINATE 1
 #define UHCI_POINTER_QH        2
+#define UHCI_POINTER_DEPTH     4
 
 #define UHCI_PORT_SUSPENDED         0x1000
 #define UHCI_PORT_RESET             0x0200
@@ -33,6 +34,24 @@
 #define UHCI_PORT_ENABLED           0x0004
 #define UHCI_PORT_CONNECTED_CHANGE  0x0002
 #define UHCI_PORT_CONNECTED         0x0001
+
+#define UHCI_TD_STATUS_ACTIVE           0x80
+#define UHCI_TD_STATUS_STALL            0x40
+#define UHCI_TD_STATUS_DATABUF_ERR      0x20
+#define UHCI_TD_STATUS_BABBLE           0x10
+#define UHCI_TD_STATUS_NAK              0x08
+#define UHCI_TD_STATUS_CRC_OR_TIMEOUT   0x04
+#define UHCI_TD_STATUS_BITSTUFF_ERR     0x02
+
+#define UHCI_TD_STATUS_INTERRUPT_ON_CMP 0x0100
+#define UHCI_TD_STATUS_ISOCHRONOUS      0x0200
+#define UHCI_TD_STATUS_LOW_SPEED        0x0400
+#define UHCI_TD_STATUS_SHORT_PACKET_DET 0x2000
+
+#define UHCI_INT_SHORT_PACKET   0x0008
+#define UHCI_INT_INTERRUPT_COMP 0x0004
+#define UHCI_INT_RESUME         0x0002
+#define UHCI_INT_TIMEOUT_OR_CRC 0x0001
 
 Device *uhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
@@ -94,6 +113,8 @@ void uhci::init() {
     outportb(iobase + REG_SOFMOD, 0x40);
 
     outportw(iobase + REG_STATUS, 0xFFFF); // Clear
+
+    outportw(iobase + REG_INTR, UHCI_INT_INTERRUPT_COMP);
 
     outportw(iobase + REG_COMMAND, COMMAND_RUN_STOP);
 
@@ -167,7 +188,9 @@ void uhci::ClearStatusChange(int port, uint32_t statuses) {
 std::shared_ptr<usb_endpoint>
 uhci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                             usb_endpoint_direction dir, usb_speed speed) {
-    return std::shared_ptr<usb_endpoint>();
+    std::shared_ptr<uhci_endpoint> endpoint{new uhci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::CONTROL)};
+    std::shared_ptr<usb_endpoint> usbEndpoint{endpoint};
+    return usbEndpoint;
 }
 
 std::shared_ptr<usb_endpoint>
@@ -206,4 +229,179 @@ usb_speed uhci::PortSpeed(int port) {
     uint32_t reg = iobase + REG_PORTSC1 + (port * 2);
     uint32_t value = inportw(reg);
     return (value & UHCI_PORT_LOW_SPEED) == 0 ? FULL : LOW;
+}
+
+std::shared_ptr<usb_buffer> uhci_endpoint::Alloc() {
+    std::shared_ptr<usb_buffer> buffer{new uhci_buffer(uhciRef)};
+    return buffer;
+}
+
+uhci_endpoint::uhci_endpoint(uhci &uhciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
+                             usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs)
+                             : uhciRef(uhciRef), speed(speed), endpointType(endpointType), pollingRateMs(pollingRateMs),
+                             maxPacketSize(maxPacketSize), functionAddr(functionAddr), endpointNum(endpointNum),
+                             qh(), pending(), active() {
+    if (endpointType == usb_endpoint_type::CONTROL) {
+        critical_section cli{};
+        std::lock_guard lock{uhciRef.HcdSpinlock()};
+        qh = uhciRef.qhtdPool.Alloc();
+        auto &qhv = qh->Pointer()->qh;
+        qhv.head = uhciRef.qh->Pointer()->qh.head;
+        qhv.element = UHCI_POINTER_TERMINATE;
+        uhciRef.qh->Pointer()->qh.head = qh->Phys() | UHCI_POINTER_QH;
+    }
+}
+
+std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
+                                                                    usb_transfer_direction direction,
+                                                                    int8_t dataToggle,
+                                                                    std::function<void(uhci_transfer &)> &applyFunc) {
+    std::shared_ptr<uhci_transfer> transfer = std::make_shared<uhci_transfer>(uhciRef);
+    transfer->buffer = buffer;
+    auto &td = transfer->TD();
+    td.next = UHCI_POINTER_TERMINATE;
+    td.ActLen = 0;
+    td.Status = UHCI_TD_STATUS_ACTIVE;
+    if (speed == LOW) {
+        td.Status |= UHCI_TD_STATUS_LOW_SPEED;
+    }
+    if (commitTransaction) {
+        td.Status |= UHCI_TD_STATUS_INTERRUPT_ON_CMP;
+    }
+    switch (direction) {
+        case usb_transfer_direction::IN:
+            td.PID = 0x69;
+            break;
+        case usb_transfer_direction::OUT:
+            td.PID = 0xE1;
+            break;
+        case usb_transfer_direction::SETUP:
+            td.PID = 0x2D;
+            break;
+    }
+    td.DeviceAddress = functionAddr;
+    td.Endpoint = endpointNum;
+    td.DataToggle = dataToggle;
+    td.Reserved = 0;
+    td.MaxLen = size - 1;
+    td.BufferPointer = buffer ? buffer->Addr() : 0;
+
+    {
+        std::shared_ptr<uhci_transfer> pending{this->pending};
+        if (pending) {
+            while (pending->next) {
+                pending = pending->next;
+            }
+            pending->TD().next = transfer->td->Phys() | UHCI_POINTER_DEPTH;
+            pending->next = transfer;
+        } else {
+            this->pending = transfer;
+        }
+    }
+
+    if (commitTransaction) {
+        auto &qhv = qh->Pointer()->qh;
+        while (active) {
+            if (active->td->Phys() == (qhv.element & 0xFFFFFFF0)) {
+                break;
+            }
+            active = active->next;
+        }
+        if (!active) {
+            active = this->pending;
+            this->pending = std::shared_ptr<uhci_transfer>();
+            qhv.element = active->td->Phys();
+        }
+    }
+
+    std::shared_ptr<usb_transfer> usbTransfer{transfer};
+    return usbTransfer;
+}
+
+std::shared_ptr<usb_transfer>
+uhci_endpoint::CreateTransferWithoutLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
+                                         usb_transfer_direction direction,
+                                         int8_t dataToggle, std::function<void(uhci_transfer &)> &applyFunc) {
+    critical_section cli{};
+    std::lock_guard lock{uhciRef.HcdSpinlock()};
+
+    return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+uhci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
+                              uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer = Alloc();
+    memcpy(buffer->Pointer(), data, size);
+    std::function<void (uhci_transfer &)> applyFunc = [] (uhci_transfer &) {};
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+uhci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
+                              uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
+    std::function<void (uhci_transfer &)> applyFunc = [] (uhci_transfer &) {};
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+uhci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
+                              bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
+    std::function<void (uhci_transfer &)> applyFunc = [doneCall] (uhci_transfer &transfer) {
+        transfer.SetDoneCall(doneCall);
+    };
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+uhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
+                                      bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
+    std::function<void (uhci_transfer &)> applyFunc = [doneCall] (uhci_transfer &transfer) {
+        transfer.SetDoneCall(doneCall);
+    };
+    return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+uhci_buffer::uhci_buffer(uhci &uhci) : bufferPtr(uhci.bufPool.Alloc()){
+}
+
+uhci_transfer::uhci_transfer(uhci &uhciRef) : td(uhciRef.qhtdPool.Alloc()), buffer(), next() {
+}
+
+usb_transfer_status uhci_transfer::GetStatus() {
+    auto &td = TD();
+    if ((td.Status & UHCI_TD_STATUS_ACTIVE) != 0) {
+        return usb_transfer_status::NOT_ACCESSED;
+    }
+    if ((td.Status & UHCI_TD_STATUS_STALL) != 0) {
+        return usb_transfer_status::STALL;
+    }
+    if ((td.Status & UHCI_TD_STATUS_DATABUF_ERR) != 0) {
+        return usb_transfer_status::BUFFER_UNDERRUN;
+    }
+    if ((td.Status & UHCI_TD_STATUS_BABBLE) != 0) {
+        return usb_transfer_status::DEVICE_NOT_RESPONDING;
+    }
+    if ((td.Status & UHCI_TD_STATUS_NAK) != 0) {
+        return usb_transfer_status::UNKNOWN_ERROR;
+    }
+    if ((td.Status & UHCI_TD_STATUS_CRC_OR_TIMEOUT) != 0) {
+        return usb_transfer_status::CRC;
+    }
+    if ((td.Status & UHCI_TD_STATUS_BITSTUFF_ERR) != 0) {
+        return usb_transfer_status::BIT_STUFFING;
+    }
+    return usb_transfer_status::NO_ERROR;
 }

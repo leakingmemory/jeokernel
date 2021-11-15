@@ -172,7 +172,7 @@ public:
 std::shared_ptr<usb_buffer>
 usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_request &request) {
     std::shared_ptr<usb_transfer> t_req = endpoint.CreateTransfer(
-                (void *) &request, sizeof(request),
+                false, (void *) &request, sizeof(request),
                 usb_transfer_direction::SETUP, true,
                 1, 0
             );
@@ -182,7 +182,7 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
         auto remaining = request.wLength;
         while (remaining > 0) {
             auto data_stage_tr = endpoint.CreateTransfer(
-                    request.wLength,
+                    false, request.wLength,
                     usb_transfer_direction::IN, true,
                     1, 1);
             data_stage.push_back(data_stage_tr);
@@ -194,13 +194,13 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
             }
         }
         status_stage = endpoint.CreateTransfer(
-                0,
+                true, 0,
                 usb_transfer_direction::OUT, true,
                 1, 1
                 );
     } else {
         status_stage = endpoint.CreateTransfer(
-                0,
+                true, 0,
                 usb_transfer_direction::IN, true,
                 1, 1
         );
@@ -243,16 +243,16 @@ usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_re
 
 bool usb_port_connection::ControlRequest(usb_endpoint &endpoint, const usb_control_request &request, void *data) {
     std::shared_ptr<usb_transfer> t_req = endpoint.CreateTransfer(
-            (void *) &request, sizeof(request),
+            false, (void *) &request, sizeof(request),
             usb_transfer_direction::SETUP, true,
             1, 0
     );
     std::shared_ptr<usb_transfer> data_stage_tr = endpoint.CreateTransfer(
-            data, request.wLength,
+            false, data, request.wLength,
             usb_transfer_direction::OUT, true,
             1, 1);
     std::shared_ptr<usb_transfer> status_stage = endpoint.CreateTransfer(
-            0,
+            true, 0,
             usb_transfer_direction::IN, true,
             1, 1
     );

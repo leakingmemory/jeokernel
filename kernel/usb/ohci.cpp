@@ -812,7 +812,7 @@ ohci_endpoint::CreateTransferWithLock(std::shared_ptr<usb_buffer> buffer, uint32
 }
 
 std::shared_ptr<usb_transfer>
-ohci_endpoint::CreateTransfer(void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
+ohci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
                               uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer = Alloc();
     memcpy(buffer->Pointer(), data, size);
@@ -821,7 +821,7 @@ ohci_endpoint::CreateTransfer(void *data, uint32_t size, usb_transfer_direction 
 }
 
 std::shared_ptr<usb_transfer>
-ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, bool bufferRounding,
+ohci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
                               uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
@@ -832,7 +832,7 @@ ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, b
 }
 
 std::shared_ptr<usb_transfer>
-ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
+ohci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
@@ -845,7 +845,7 @@ ohci_endpoint::CreateTransfer(uint32_t size, usb_transfer_direction direction, s
 }
 
 std::shared_ptr<usb_transfer>
-ohci_endpoint::CreateTransferWithLock(uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
+ohci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
