@@ -53,6 +53,8 @@
 #define UHCI_INT_RESUME         0x0002
 #define UHCI_INT_TIMEOUT_OR_CRC 0x0001
 
+#define UHCI_STATUS_USBINT 1
+
 Device *uhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
             deviceInformation.device_class == 0x0C /* serial bus */ &&
@@ -123,7 +125,16 @@ void uhci::init() {
 }
 
 bool uhci::irq() {
-    get_klogger() << "UHCI interrupt\n";
+    uint16_t status{inportw(iobase + REG_STATUS)};
+    uint16_t clear{0};
+    if ((status & UHCI_STATUS_USBINT) != 0) {
+        clear |= UHCI_STATUS_USBINT;
+        get_klogger() << "UHCI USBINT interrupt\n";
+    }
+    if (clear != 0) {
+        outportw(iobase + REG_STATUS, clear);
+        return true;
+    }
     return false;
 }
 
@@ -308,12 +319,23 @@ std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitT
             if (active->td->Phys() == (qhv.element & 0xFFFFFFF0)) {
                 break;
             }
+            active->SetDone();
             active = active->next;
         }
         if (!active) {
             active = this->pending;
             this->pending = std::shared_ptr<uhci_transfer>();
             qhv.element = active->td->Phys();
+        }
+        bool found{false};
+        for (uhci_endpoint *watched : uhciRef.watchList) {
+            if (watched == this) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            uhciRef.watchList.push_back(this);
         }
     }
 
@@ -381,6 +403,17 @@ uhci_endpoint::~uhci_endpoint() {
     if (endpointType == usb_endpoint_type::CONTROL) {
         critical_section cli{};
         std::lock_guard lock{uhciRef.HcdSpinlock()};
+        {
+            auto iter = uhciRef.watchList.begin();
+            while (iter != uhciRef.watchList.end()) {
+                uhci_endpoint *endpoint = *iter;
+                if (endpoint == this) {
+                    uhciRef.watchList.erase(iter);
+                } else {
+                    ++iter;
+                }
+            }
+        }
         auto *qh = &(this->uhciRef.qh->Pointer()->qh);
         bool found{false};
         while (qh != nullptr) {

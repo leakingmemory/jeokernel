@@ -129,6 +129,7 @@ private:
     StructPool<StructPoolAllocator<Phys32Page,uhci_qh_or_td>> qhtdPool;
     std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> qh;
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<UHCI_TRANSFER_BUFFER_SIZE>>> bufPool;
+    std::vector<uhci_endpoint *> watchList;
     std::vector<std::shared_ptr<uhci_endpoint_cleanup>> delayedDestruction;
     hw_spinlock uhcilock;
     uint32_t iobase;
@@ -136,7 +137,7 @@ public:
     uhci(Bus &bus, PciDeviceInformation &deviceInformation) :
         usb_hcd("uhci", bus), pciDeviceInformation(deviceInformation),
         FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()),
-        qhtdPool(), qh(), bufPool(), delayedDestruction(), uhcilock() {}
+        qhtdPool(), qh(), bufPool(), watchList(), delayedDestruction(), uhcilock() {}
     void init() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;
