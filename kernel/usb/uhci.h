@@ -14,10 +14,15 @@
 
 #define UHCI_TRANSFER_BUFFER_SIZE 64
 
+class uhci_endpoint;
+
 struct uhci_queue_head {
     uint32_t head;
     uint32_t element;
-    uint64_t unused;
+    union {
+        uint64_t unused;
+        uhci_endpoint *NextEndpoint;
+    };
 };
 static_assert(sizeof(uhci_queue_head) == 16);
 
@@ -62,8 +67,6 @@ public:
     }
 };
 
-class uhci_endpoint;
-
 class uhci_transfer : public usb_transfer {
     friend uhci_endpoint;
 private:
@@ -95,6 +98,7 @@ private:
     std::shared_ptr<uhci_transfer> active;
 public:
     uhci_endpoint(uhci &uhciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs = 0);
+    ~uhci_endpoint() override;
     bool Addressing64bit() override {
         return false;
     }
@@ -109,6 +113,11 @@ public:
     std::shared_ptr<usb_buffer> Alloc() override;
 };
 
+struct uhci_endpoint_cleanup {
+    std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> qh;
+    std::shared_ptr<uhci_transfer> transfers;
+};
+
 class uhci : public usb_hcd {
     friend uhci_endpoint;
     friend uhci_buffer;
@@ -120,13 +129,14 @@ private:
     StructPool<StructPoolAllocator<Phys32Page,uhci_qh_or_td>> qhtdPool;
     std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> qh;
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<UHCI_TRANSFER_BUFFER_SIZE>>> bufPool;
+    std::vector<std::shared_ptr<uhci_endpoint_cleanup>> delayedDestruction;
     hw_spinlock uhcilock;
     uint32_t iobase;
 public:
     uhci(Bus &bus, PciDeviceInformation &deviceInformation) :
         usb_hcd("uhci", bus), pciDeviceInformation(deviceInformation),
         FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()),
-        qhtdPool(), qh(), bufPool(), uhcilock() {}
+        qhtdPool(), qh(), bufPool(), delayedDestruction(), uhcilock() {}
     void init() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;

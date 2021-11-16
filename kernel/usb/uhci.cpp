@@ -103,6 +103,7 @@ void uhci::init() {
     qh = qhtdPool.Alloc();
     qh->Pointer()->qh.head = UHCI_POINTER_TERMINATE;
     qh->Pointer()->qh.element = UHCI_POINTER_TERMINATE;
+    qh->Pointer()->qh.NextEndpoint = nullptr;
     for (int i = 0; i < 1024; i++) {
         Frames[i] = UHCI_POINTER_QH | qh->Phys();
     }
@@ -248,7 +249,9 @@ uhci_endpoint::uhci_endpoint(uhci &uhciRef, uint32_t maxPacketSize, uint8_t func
         auto &qhv = qh->Pointer()->qh;
         qhv.head = uhciRef.qh->Pointer()->qh.head;
         qhv.element = UHCI_POINTER_TERMINATE;
+        qhv.NextEndpoint = uhciRef.qh->Pointer()->qh.NextEndpoint;
         uhciRef.qh->Pointer()->qh.head = qh->Phys() | UHCI_POINTER_QH;
+        uhciRef.qh->Pointer()->qh.NextEndpoint = this;
     }
 }
 
@@ -372,6 +375,33 @@ uhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
         transfer.SetDoneCall(doneCall);
     };
     return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+uhci_endpoint::~uhci_endpoint() {
+    if (endpointType == usb_endpoint_type::CONTROL) {
+        critical_section cli{};
+        std::lock_guard lock{uhciRef.HcdSpinlock()};
+        auto *qh = &(this->uhciRef.qh->Pointer()->qh);
+        bool found{false};
+        while (qh != nullptr) {
+            auto *endpoint = qh->NextEndpoint;
+            if (this == endpoint) {
+                auto *nqh = &(endpoint->qh->Pointer()->qh);
+                qh->head = nqh->head;
+                qh->NextEndpoint = nqh->NextEndpoint;
+                found = true;
+                break;
+            }
+            qh = endpoint != nullptr ? &(endpoint->qh->Pointer()->qh) : nullptr;
+        }
+        if (!found) {
+            wild_panic("Endpoint destruction but did not find the endpoint");
+        }
+        std::shared_ptr<uhci_endpoint_cleanup> cleanup = std::make_shared<uhci_endpoint_cleanup>();
+        cleanup->qh = this->qh;
+        cleanup->transfers = this->active;
+        uhciRef.delayedDestruction.push_back(cleanup);
+    }
 }
 
 uhci_buffer::uhci_buffer(uhci &uhci) : bufferPtr(uhci.bufPool.Alloc()){
