@@ -140,6 +140,7 @@ public:
         FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()),
         qhtdPool(), qh(), bufPool(), watchList(), delayedDestruction(), uhcilock() {}
     void init() override;
+    bool reset();
     void dumpregs() override;
     int GetNumberOfPorts() override;
     uint32_t GetPortStatus(int port) override;
@@ -157,6 +158,9 @@ public:
     }
     hw_spinlock &HcdSpinlock() override {
         return uhcilock;
+    }
+    bool PortResetEnablesPort() override {
+        return false;
     }
 private:
     bool irq();

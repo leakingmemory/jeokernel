@@ -98,6 +98,9 @@ public:
     virtual bool EnabledPort(int port) = 0;
     virtual usb_speed PortSpeed(int port) = 0;
     virtual std::shared_ptr<usb_func_addr> GetFuncAddr() = 0;
+    virtual bool PortResetEnablesPort() {
+        return true;
+    }
 };
 
 class usb_port_connection;

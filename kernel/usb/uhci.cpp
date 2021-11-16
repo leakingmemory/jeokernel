@@ -19,6 +19,8 @@
 #define REG_PORTSC2        0x12
 
 #define COMMAND_RUN_STOP   1
+#define COMMAND_HCRESET    2
+#define COMMAND_GRESET     4
 
 #define UHCI_POINTER_TERMINATE 1
 #define UHCI_POINTER_QH        2
@@ -54,6 +56,7 @@
 #define UHCI_INT_TIMEOUT_OR_CRC 0x0001
 
 #define UHCI_STATUS_USBINT 1
+#define UHCI_STATUS_HALTED 0x20
 
 Device *uhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
@@ -83,7 +86,12 @@ void uhci::init() {
         get_klogger() << msg.str().c_str();
     }
 
-    outportw(iobase + REG_INTR, 0); // Disable intr
+    if (!reset()) {
+        std::stringstream msg;
+        msg << DeviceType() << (unsigned int) DeviceId() << ": UHCI reset failed\n";
+        get_klogger() << msg.str().c_str();
+        return;
+    }
 
     PciRegisterF regF{pciDeviceInformation.readRegF()};
     {
@@ -110,10 +118,7 @@ void uhci::init() {
         Frames[i] = UHCI_POINTER_QH | qh->Phys();
     }
 
-    outportw(iobase + REG_FRAME_NUMBER, 0);
     outportl(iobase + REG_FRAME_BASEADDR, FramesPhys.PhysAddr());
-
-    outportb(iobase + REG_SOFMOD, 0x40);
 
     outportw(iobase + REG_STATUS, 0xFFFF); // Clear
 
@@ -254,6 +259,54 @@ void uhci::usbint() {
     for (uhci_endpoint *endpoint : watched) {
         endpoint->IntWithLock();
     }
+}
+
+bool uhci::reset() {
+    outportw(iobase + REG_INTR, 0); // Disable intr
+
+    outportw(iobase + REG_COMMAND, COMMAND_GRESET);
+
+    {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(100ms);
+    }
+
+    outportw(iobase + REG_COMMAND, COMMAND_HCRESET);
+
+    {
+        uint16_t cmd{COMMAND_HCRESET};
+        for (int i = 0; i < 10; i++) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            cmd = inportw(iobase + REG_COMMAND);
+            if ((cmd & COMMAND_HCRESET) == 0) {
+                break;
+            }
+        }
+        if ((cmd & COMMAND_HCRESET) != 0) {
+            return false;
+        }
+    }
+
+    {
+        uint16_t status{0};
+        for (int i = 0; i < 10; i++) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            status = inportw(iobase + REG_STATUS);
+            if ((status & UHCI_STATUS_HALTED) != 0) {
+                break;
+            }
+        }
+        if ((status & UHCI_STATUS_HALTED) == 0) {
+            return false;
+        }
+    }
+
+    outportw(iobase + REG_FRAME_NUMBER, 0);
+    outportb(iobase + REG_SOFMOD, 0x40);
+
+    return true;
 }
 
 std::shared_ptr<usb_buffer> uhci_endpoint::Alloc() {

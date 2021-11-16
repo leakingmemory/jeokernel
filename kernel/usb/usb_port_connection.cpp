@@ -42,6 +42,12 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
             using namespace std::literals::chrono_literals;
             std::this_thread::sleep_for(10ms);
             resetted = !hub.ResettingPort(port);
+            if (resetted && !hub.PortResetEnablesPort()) {
+                resetted = hub.EnabledPort(port);
+                if (!resetted) {
+                    hub.EnablePort(port);
+                }
+            }
             --timeout;
         }
         if (!resetted) {
