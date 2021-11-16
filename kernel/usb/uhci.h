@@ -111,6 +111,7 @@ public:
     std::shared_ptr<usb_transfer> CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
     std::shared_ptr<usb_transfer> CreateTransferWithLock(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
     std::shared_ptr<usb_buffer> Alloc() override;
+    void IntWithLock();
 };
 
 struct uhci_endpoint_cleanup {
@@ -159,6 +160,7 @@ public:
     }
 private:
     bool irq();
+    void usbint();
 };
 
 class uhci_driver : public Driver {

@@ -129,7 +129,7 @@ bool uhci::irq() {
     uint16_t clear{0};
     if ((status & UHCI_STATUS_USBINT) != 0) {
         clear |= UHCI_STATUS_USBINT;
-        get_klogger() << "UHCI USBINT interrupt\n";
+        usbint();
     }
     if (clear != 0) {
         outportw(iobase + REG_STATUS, clear);
@@ -243,6 +243,19 @@ usb_speed uhci::PortSpeed(int port) {
     return (value & UHCI_PORT_LOW_SPEED) == 0 ? FULL : LOW;
 }
 
+void uhci::usbint() {
+    std::vector<uhci_endpoint *> watched{};
+
+    std::lock_guard lock{uhcilock};
+
+    for (uhci_endpoint *endpoint : watchList) {
+        watched.push_back(endpoint);
+    }
+    for (uhci_endpoint *endpoint : watched) {
+        endpoint->IntWithLock();
+    }
+}
+
 std::shared_ptr<usb_buffer> uhci_endpoint::Alloc() {
     std::shared_ptr<usb_buffer> buffer{new uhci_buffer(uhciRef)};
     return buffer;
@@ -314,19 +327,7 @@ std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitT
     }
 
     if (commitTransaction) {
-        auto &qhv = qh->Pointer()->qh;
-        while (active) {
-            if (active->td->Phys() == (qhv.element & 0xFFFFFFF0)) {
-                break;
-            }
-            active->SetDone();
-            active = active->next;
-        }
-        if (!active) {
-            active = this->pending;
-            this->pending = std::shared_ptr<uhci_transfer>();
-            qhv.element = active->td->Phys();
-        }
+        IntWithLock();
         bool found{false};
         for (uhci_endpoint *watched : uhciRef.watchList) {
             if (watched == this) {
@@ -434,6 +435,34 @@ uhci_endpoint::~uhci_endpoint() {
         cleanup->qh = this->qh;
         cleanup->transfers = this->active;
         uhciRef.delayedDestruction.push_back(cleanup);
+    }
+}
+
+void uhci_endpoint::IntWithLock() {
+    auto &qhv = qh->Pointer()->qh;
+    while (active) {
+        if (active->td->Phys() == (qhv.element & 0xFFFFFFF0)) {
+            break;
+        }
+        active->SetDone();
+        active = active->next;
+    }
+    if (!active) {
+        if (this->pending) {
+            active = this->pending;
+            this->pending = std::shared_ptr<uhci_transfer>();
+            qhv.element = active->td->Phys();
+        } else {
+            auto iter = uhciRef.watchList.begin();
+            while (iter != uhciRef.watchList.end()) {
+                uhci_endpoint *endpoint = *iter;
+                if (endpoint == this) {
+                    uhciRef.watchList.erase(iter);
+                } else {
+                    ++iter;
+                }
+            }
+        }
     }
 }
 
