@@ -46,6 +46,7 @@ public:
 #define MOD_STAT_KANA       16
 
 class usbkbd : public Device {
+    friend UsbKeycode;
 private:
     UsbIfacedevInformation devInfo;
     std::shared_ptr<usb_endpoint> poll_endpoint;
@@ -79,6 +80,9 @@ private:
     void interrupt();
     void worker_thread();
     void repeat_thread();
+
+    bool ShouldRepeat(uint8_t keycode);
+    bool ShouldRelease(uint8_t keycode);
 };
 
 class usbkbd_driver : public Driver {

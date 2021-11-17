@@ -44,7 +44,9 @@ UsbKeycode::UsbKeycode(usbkbd &kbd, uint32_t modifiers, uint8_t keycode) : kbd(k
 }
 
 UsbKeycode::~UsbKeycode() {
-    kbd.submit(kbd.keyboard_modifiers() | KEYBOARD_CODE_BIT_RELEASE, keycode);
+    if (kbd.ShouldRelease(keycode)) {
+        kbd.submit(kbd.keyboard_modifiers() | KEYBOARD_CODE_BIT_RELEASE, keycode);
+    }
 }
 
 Device *usbkbd_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
@@ -389,11 +391,33 @@ void usbkbd::repeat_thread() {
         auto ticks = get_ticks();
         auto mods = keyboard_modifiers();
         for (int j = 0; j < USBKB_MAX_KEYS; j++) {
-            if (this->keycodes[j] != nullptr && this->keycodes[j]->rep_ticks < ticks) {
+            if (this->keycodes[j] != nullptr && this->keycodes[j]->rep_ticks < ticks && ShouldRepeat(this->keycodes[j]->keycode)) {
                 uint32_t code{mods};
                 code |= this->keycodes[j]->keycode;
                 kbd.keycode(code);
             }
         }
+    }
+}
+
+bool usbkbd::ShouldRepeat(uint8_t keycode) {
+    switch (keycode) {
+        case 83:
+        case 57:
+        case 71:
+            return false;
+        default:
+            return true;
+    }
+}
+
+bool usbkbd::ShouldRelease(uint8_t keycode) {
+    switch (keycode) {
+        case 83:
+        case 57:
+        case 71:
+            return false;
+        default:
+            return true;
     }
 }
