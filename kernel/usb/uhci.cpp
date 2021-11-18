@@ -114,8 +114,44 @@ void uhci::init() {
     qh->Pointer()->qh.head = UHCI_POINTER_TERMINATE;
     qh->Pointer()->qh.element = UHCI_POINTER_TERMINATE;
     qh->Pointer()->qh.NextEndpoint = nullptr;
+
+    for (int i = 0; i < 0x1F; i++) {
+        intqhs[i] = qhtdPool.Alloc();
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.element = UHCI_POINTER_TERMINATE;
+        qh.NextEndpoint = nullptr;
+    }
+    for (int i = 0; i < 0x10; i++) {
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.head = intqhs[0x10 + (i >> 1)]->Phys() | UHCI_POINTER_QH;
+    }
+    for (int i = 0x10; i < 0x18; i++) {
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.head = intqhs[0x18 + ((i - 0x10) >> 1)]->Phys() | UHCI_POINTER_QH;
+    }
+    for (int i = 0x18; i < 0x1C; i++) {
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.head = intqhs[0x1C + ((i - 0x18) >> 1)]->Phys() | UHCI_POINTER_QH;
+    }
+    for (int i = 0x1C; i < 0x1E; i++) {
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.head = intqhs[0x1E]->Phys() | UHCI_POINTER_QH;
+    }
+    {
+        auto &qh = intqhs[0x1E]->Pointer()->qh;
+        qh.head = this->qh->Phys() | UHCI_POINTER_QH;
+    }
+
+    for (int i = 0; i < 0x20; i++) {
+        intqhroots[i] = qhtdPool.Alloc();
+        auto &qh = intqhroots[i]->Pointer()->qh;
+        qh.head = intqhs[i >> 1]->Phys() | UHCI_POINTER_QH;
+        qh.element = UHCI_POINTER_TERMINATE;
+        qh.NextEndpoint = nullptr;
+    }
+
     for (int i = 0; i < 1024; i++) {
-        Frames[i] = UHCI_POINTER_QH | qh->Phys();
+        Frames[i] = UHCI_POINTER_QH | intqhroots[i & 0x1F]->Phys();
     }
 
     outportl(iobase + REG_FRAME_BASEADDR, FramesPhys.PhysAddr());
@@ -213,7 +249,9 @@ uhci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_
 std::shared_ptr<usb_endpoint>
 uhci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                               usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
-    return std::shared_ptr<usb_endpoint>();
+    std::shared_ptr<uhci_endpoint> endpoint{new uhci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::INTERRUPT, pollingIntervalMs)};
+    std::shared_ptr<usb_endpoint> usbEndpoint{endpoint};
+    return usbEndpoint;
 }
 
 void uhci::EnablePort(int port) {
@@ -318,18 +356,34 @@ uhci_endpoint::uhci_endpoint(uhci &uhciRef, uint32_t maxPacketSize, uint8_t func
                              usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs)
                              : uhciRef(uhciRef), speed(speed), endpointType(endpointType), pollingRateMs(pollingRateMs),
                              maxPacketSize(maxPacketSize), functionAddr(functionAddr), endpointNum(endpointNum),
-                             qh(), pending(), active() {
+                             head(), qh(), pending(), active() {
+    critical_section cli{};
+    std::lock_guard lock{uhciRef.HcdSpinlock()};
     if (endpointType == usb_endpoint_type::CONTROL) {
-        critical_section cli{};
-        std::lock_guard lock{uhciRef.HcdSpinlock()};
-        qh = uhciRef.qhtdPool.Alloc();
-        auto &qhv = qh->Pointer()->qh;
-        qhv.head = uhciRef.qh->Pointer()->qh.head;
-        qhv.element = UHCI_POINTER_TERMINATE;
-        qhv.NextEndpoint = uhciRef.qh->Pointer()->qh.NextEndpoint;
-        uhciRef.qh->Pointer()->qh.head = qh->Phys() | UHCI_POINTER_QH;
-        uhciRef.qh->Pointer()->qh.NextEndpoint = this;
+        head = uhciRef.qh;
     }
+    if (endpointType == usb_endpoint_type::INTERRUPT) {
+        if (pollingRateMs < 2) {
+            head = uhciRef.intqhs[0x1E]; // 1ms
+        } else if (pollingRateMs < 3) {
+            head = uhciRef.intqhs[0x1C + (uhciRef.intcycle++ & 1)]; // 2ms
+        } else if (pollingRateMs < 5) {
+            head = uhciRef.intqhs[0x18 + (uhciRef.intcycle++ & 3)]; // 4ms
+        } else if (pollingRateMs < 9) {
+            head = uhciRef.intqhs[0x10 + (uhciRef.intcycle++ & 7)]; // 8ms
+        } else if (pollingRateMs < 17) {
+            head = uhciRef.intqhs[uhciRef.intcycle++ & 0xF]; // 16ms
+        } else {
+            head = uhciRef.intqhroots[uhciRef.intcycle++ & 0x1F]; // 32ms
+        }
+    }
+    qh = uhciRef.qhtdPool.Alloc();
+    auto &qhv = qh->Pointer()->qh;
+    qhv.head = head->Pointer()->qh.head;
+    qhv.element = UHCI_POINTER_TERMINATE;
+    qhv.NextEndpoint = head->Pointer()->qh.NextEndpoint;
+    head->Pointer()->qh.head = qh->Phys() | UHCI_POINTER_QH;
+    head->Pointer()->qh.NextEndpoint = this;
 }
 
 std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
@@ -365,6 +419,8 @@ std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitT
     td.Reserved = 0;
     td.MaxLen = size - 1;
     td.BufferPointer = buffer ? buffer->Addr() : 0;
+
+    applyFunc(*transfer);
 
     {
         std::shared_ptr<uhci_transfer> pending{this->pending};
@@ -454,7 +510,7 @@ uhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
 }
 
 uhci_endpoint::~uhci_endpoint() {
-    if (endpointType == usb_endpoint_type::CONTROL) {
+    if (endpointType == usb_endpoint_type::CONTROL || endpointType == usb_endpoint_type::INTERRUPT) {
         critical_section cli{};
         std::lock_guard lock{uhciRef.HcdSpinlock()};
         {
@@ -468,7 +524,7 @@ uhci_endpoint::~uhci_endpoint() {
                 }
             }
         }
-        auto *qh = &(this->uhciRef.qh->Pointer()->qh);
+        auto *qh = &(head->Pointer()->qh);
         bool found{false};
         while (qh != nullptr) {
             auto *endpoint = qh->NextEndpoint;
@@ -493,11 +549,12 @@ uhci_endpoint::~uhci_endpoint() {
 
 void uhci_endpoint::IntWithLock() {
     auto &qhv = qh->Pointer()->qh;
+    std::vector<std::shared_ptr<uhci_transfer>> done{};
     while (active) {
         if (active->td->Phys() == (qhv.element & 0xFFFFFFF0)) {
             break;
         }
-        active->SetDone();
+        done.push_back(active);
         active = active->next;
     }
     if (!active) {
@@ -516,6 +573,9 @@ void uhci_endpoint::IntWithLock() {
                 }
             }
         }
+    }
+    for (auto &transfer : done) {
+        transfer->SetDone();
     }
 }
 

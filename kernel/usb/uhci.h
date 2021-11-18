@@ -93,6 +93,7 @@ private:
     uint32_t maxPacketSize;
     uint8_t functionAddr;
     uint8_t endpointNum;
+    std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> head;
     std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> qh;
     std::shared_ptr<uhci_transfer> pending;
     std::shared_ptr<uhci_transfer> active;
@@ -129,6 +130,9 @@ private:
     uint32_t *Frames;
     StructPool<StructPoolAllocator<Phys32Page,uhci_qh_or_td>> qhtdPool;
     std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> qh;
+    std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> intqhroots[0x20];
+    std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> intqhs[0x1F];
+    unsigned int intcycle;
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<UHCI_TRANSFER_BUFFER_SIZE>>> bufPool;
     std::vector<uhci_endpoint *> watchList;
     std::vector<std::shared_ptr<uhci_endpoint_cleanup>> delayedDestruction;
@@ -138,7 +142,7 @@ public:
     uhci(Bus &bus, PciDeviceInformation &deviceInformation) :
         usb_hcd("uhci", bus), pciDeviceInformation(deviceInformation),
         FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()),
-        qhtdPool(), qh(), bufPool(), watchList(), delayedDestruction(), uhcilock() {}
+        qhtdPool(), qh(), intqhroots(), intqhs(), intcycle(0), bufPool(), watchList(), delayedDestruction(), uhcilock() {}
     void init() override;
     bool reset();
     void dumpregs() override;
