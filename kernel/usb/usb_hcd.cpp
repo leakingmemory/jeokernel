@@ -25,7 +25,12 @@
         std::this_thread::sleep_for(1s);
     }
     while (true) {
-        hub_sema.acquire();
+        if (!PollPorts()) {
+            hub_sema.acquire();
+        } else {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(1s);
+        }
         for (int i = 0; i < GetNumberOfPorts(); i++) {
             uint32_t status{GetPortStatus(i)};
             if ((status & USB_PORT_STATUS_CSC) != 0) {
@@ -108,6 +113,10 @@ void usb_hcd::ReleaseFuncAddr(int addr) {
     bit = bit << (addr & 31);
     int i = addr / 32;
     func_addr_map[i] = func_addr_map[i] & (~bit);
+}
+
+bool usb_hcd::PollPorts() {
+    return false;
 }
 
 usb_hcd_addr::~usb_hcd_addr() {

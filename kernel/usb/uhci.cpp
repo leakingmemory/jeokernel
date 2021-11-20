@@ -347,6 +347,10 @@ bool uhci::reset() {
     return true;
 }
 
+bool uhci::PollPorts() {
+    return true;
+}
+
 std::shared_ptr<usb_buffer> uhci_endpoint::Alloc() {
     std::shared_ptr<usb_buffer> buffer{new uhci_buffer(uhciRef)};
     return buffer;

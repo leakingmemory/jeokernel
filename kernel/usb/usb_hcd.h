@@ -65,6 +65,7 @@ private:
 public:
     void Run();
     void RootHubStatusChange();
+    virtual bool PollPorts();
     virtual void EnablePort(int port) override = 0;
     virtual void DisablePort(int port) override = 0;
     virtual void ResetPort(int port) override = 0;
