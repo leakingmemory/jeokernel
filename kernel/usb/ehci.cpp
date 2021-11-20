@@ -8,7 +8,10 @@
 #include <thread>
 #include "ehci.h"
 
+#define EHCI_CMD_RUN_STOP   1
+#define EHCI_CMD_HCRESET    2
 
+#define EHCI_STATUS_HALTED  (1 << 12)
 
 Device *ehci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
@@ -141,6 +144,33 @@ void ehci::init() {
             get_klogger() << msg.str().c_str();
         }
     }
+    regs->usbCommand &= ~EHCI_CMD_RUN_STOP;
+    if ((regs->usbStatus & EHCI_STATUS_HALTED) == 0) {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(10ms);
+        if ((regs->usbStatus & EHCI_STATUS_HALTED) == 0) {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << "error: USB2 controller failed to stop\n";
+            get_klogger() << msg.str().c_str();
+            return;
+        }
+    }
+
+    regs->usbCommand |= EHCI_CMD_HCRESET;
+    {
+        int timeout = 50;
+        while ((regs->usbCommand & EHCI_CMD_HCRESET) != 0) {
+            if (--timeout == 0) {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << "error: USB2 controller failed to reset\n";
+                get_klogger() << msg.str().c_str();
+                return;
+            }
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(100ms);
+        }
+    }
+
     {
         std::stringstream msg;
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB2 controller caps 0x" << std::hex << caps->hccparams << "\n";
