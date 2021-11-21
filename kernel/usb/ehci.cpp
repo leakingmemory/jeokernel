@@ -9,7 +9,18 @@
 #include "ehci.h"
 
 #define EHCI_CMD_RUN_STOP   1
-#define EHCI_CMD_HCRESET    2
+#define EHCI_CMD_HCRESET    (1 << 1)
+#define EHCI_CMD_ITC_1MF    (1 << 16)
+#define EHCI_CMD_ITC_2MF    (2 << 16)
+#define EHCI_CMD_ITC_4MF    (4 << 16)
+#define EHCI_CMD_ITC_8MF    (8 << 16)
+#define EHCI_CMD_ITC_16MF   (16 << 16)
+#define EHCI_CMD_ITC_32MF   (32 << 16)
+#define EHCI_CMD_ITC_64MF   (64 << 16)
+#define EHCI_CMD_ITC_MASK   (0xFF << 16)
+#define EHCI_CMD_ASYNC_ENABLE   (1 << 5)
+#define EHCI_CMD_PERIODIC_ENABLE    (1 << 4)
+
 
 #define EHCI_STATUS_HALTED  (1 << 12)
 
@@ -170,6 +181,59 @@ void ehci::init() {
             std::this_thread::sleep_for(100ms);
         }
     }
+
+    regs->usbCommand &= ~EHCI_CMD_RUN_STOP;
+    if ((regs->usbStatus & EHCI_STATUS_HALTED) == 0) {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(10ms);
+        if ((regs->usbStatus & EHCI_STATUS_HALTED) == 0) {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << "error: USB2 controller failed to stop\n";
+            get_klogger() << msg.str().c_str();
+            return;
+        }
+    }
+
+    {
+        uint32_t cmd{regs->usbCommand};
+        cmd &= ~(EHCI_CMD_ITC_MASK | EHCI_CMD_ASYNC_ENABLE | EHCI_CMD_PERIODIC_ENABLE);
+        cmd |= EHCI_CMD_ITC_8MF;
+        regs->usbCommand = cmd;
+    }
+
+    if (regs->ctrlDsSegment != 0) {
+        regs->ctrlDsSegment = 0;
+    }
+
+    qh = qhtdPool.Alloc();
+    qh->Pointer()->qh.HorizLink = EHCI_POINTER_TERMINATE;
+    qh->Pointer()->qh.DeviceAddress = 0;
+    qh->Pointer()->qh.InactivateOnNext = false;
+    qh->Pointer()->qh.EndpointNumber = 0;
+    qh->Pointer()->qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_HIGH;
+    qh->Pointer()->qh.DataToggleControl = 1;
+    qh->Pointer()->qh.HeadOfReclamationList = true;
+    qh->Pointer()->qh.MaxPacketLength = 0;
+    qh->Pointer()->qh.ControlEndpointFlag = false;
+    qh->Pointer()->qh.NakCountReload = 0;
+    qh->Pointer()->qh.InterruptScheduleMask = 0;
+    qh->Pointer()->qh.SplitCompletionMask = 0;
+    qh->Pointer()->qh.HubAddress = 0;
+    qh->Pointer()->qh.PortNumber = 0;
+    qh->Pointer()->qh.HighBandwidthPipeMultiplier = 1;
+    qh->Pointer()->qh.CurrentQTd = EHCI_POINTER_TERMINATE;
+    qh->Pointer()->qh.NextQTd = EHCI_POINTER_TERMINATE;
+    qh->Pointer()->qh.AlternateQTd = EHCI_POINTER_TERMINATE;
+    qh->Pointer()->qh.Overlay[0] = 0;
+    qh->Pointer()->qh.Overlay[1] = 0;
+    qh->Pointer()->qh.Overlay[2] = 0;
+    qh->Pointer()->qh.Overlay[3] = 0;
+    qh->Pointer()->qh.Overlay[4] = 0;
+    qh->Pointer()->qh.Overlay[5] = 0;
+    qh->Pointer()->qh.NextEndpoint = nullptr;
+
+    regs->asyncListAddr = qh->Phys();
+    regs->usbCommand |= EHCI_CMD_ASYNC_ENABLE | EHCI_CMD_RUN_STOP;
 
     {
         std::stringstream msg;
