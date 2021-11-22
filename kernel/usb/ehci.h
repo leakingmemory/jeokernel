@@ -10,6 +10,7 @@
 #include "../pci/pci.h"
 #include "Phys32Page.h"
 #include "StructPool.h"
+#include "usb_hcd.h"
 
 struct ehci_regs {
     uint32_t usbCommand;
@@ -93,6 +94,8 @@ struct EECP {
 
 class ehci_endpoint;
 
+#define EHCI_TRANSFER_BUFFER_SIZE 4096
+
 #define EHCI_POINTER_TERMINATE 1
 
 #define EHCI_QH_ENDPOINT_SPEED_FULL 0
@@ -148,7 +151,7 @@ union ehci_qh_or_qtd {
     ehci_qtd qtd;
 };
 
-class ehci : public Device {
+class ehci : public usb_hcd {
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
@@ -156,9 +159,34 @@ private:
     ehci_regs *regs;
     StructPool<StructPoolAllocator<Phys32Page,ehci_qh_or_qtd>> qhtdPool;
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> qh;
+    hw_spinlock ehcilock;
 public:
-    ehci(Bus &bus, PciDeviceInformation &deviceInformation) : Device("ehci", &bus), pciDeviceInformation(deviceInformation) {}
+    ehci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("ehci", bus), pciDeviceInformation(deviceInformation),
+                                                              qhtdPool(), qh(), ehcilock() {}
     void init() override;
+    void dumpregs() override;
+    int GetNumberOfPorts() override;
+    uint32_t GetPortStatus(int port) override;
+    void SwitchPortOff(int port) override;
+    void SwitchPortOn(int port) override;
+    void EnablePort(int port) override;
+    void DisablePort(int port) override;
+    void ResetPort(int port) override;
+    usb_speed PortSpeed(int port) override;
+    void ClearStatusChange(int port, uint32_t statuses) override;
+    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
+    size_t TransferBufferSize() override {
+        return EHCI_TRANSFER_BUFFER_SIZE;
+    }
+    hw_spinlock &HcdSpinlock() override {
+        return ehcilock;
+    }
+    bool PortResetEnablesPort() override {
+        return false;
+    }
+private:
+    bool irq();
 };
 
 class ehci_driver : public Driver {

@@ -205,6 +205,23 @@ void ehci::init() {
         regs->ctrlDsSegment = 0;
     }
 
+    PciRegisterF regF{pciDeviceInformation.readRegF()};
+    {
+        auto *pci = GetBus()->GetPci();
+        std::optional<uint8_t> irq = pci->GetIrqNumber(pciDeviceInformation, regF.InterruptPin - 1);
+        {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": INT pin " << (unsigned int) regF.InterruptPin
+                << " PIC INT#" << (unsigned int) regF.InterruptLine << " ACPI INT# " << (irq ? *irq : 0) << "\n";
+            get_klogger() << msg.str().c_str();
+        }
+        if (irq) {
+            pci->AddIrqHandler(*irq,[this]() {
+                return this->irq();
+            });
+        }
+    }
+
     qh = qhtdPool.Alloc();
     qh->Pointer()->qh.HorizLink = EHCI_POINTER_TERMINATE;
     qh->Pointer()->qh.DeviceAddress = 0;
@@ -240,4 +257,54 @@ void ehci::init() {
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB2 controller caps 0x" << std::hex << caps->hccparams << "\n";
         get_klogger() << msg.str().c_str();
     }
+}
+
+void ehci::dumpregs() {
+}
+
+int ehci::GetNumberOfPorts() {
+    return 0;
+}
+
+uint32_t ehci::GetPortStatus(int port) {
+    return 0;
+}
+
+void ehci::SwitchPortOff(int port) {
+}
+
+void ehci::SwitchPortOn(int port) {
+}
+
+void ehci::EnablePort(int port) {
+}
+
+void ehci::DisablePort(int port) {
+}
+
+void ehci::ResetPort(int port) {
+}
+
+usb_speed ehci::PortSpeed(int port) {
+    return LOW;
+}
+
+void ehci::ClearStatusChange(int port, uint32_t statuses) {
+}
+
+std::shared_ptr<usb_endpoint>
+ehci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
+                            usb_endpoint_direction dir, usb_speed speed) {
+    return std::shared_ptr<usb_endpoint>();
+}
+
+std::shared_ptr<usb_endpoint>
+ehci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
+                              usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
+    return std::shared_ptr<usb_endpoint>();
+}
+
+bool ehci::irq() {
+    get_klogger() << "EHCI intr\n";
+    return false;
 }
