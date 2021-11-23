@@ -57,11 +57,21 @@ void usb_hcd::RootHubStatusChange() {
 }
 
 void usb_hcd::PortConnected(uint8_t port) {
-    for (auto *connection : connections) {
+    auto iterator = connections.begin();
+    while (iterator != connections.end()) {
+        auto *connection = *iterator;
         if (connection->Port() == port) {
             // Already connected
-            return;
+            if ((GetPortStatus(port) & USB_PORT_STATUS_PES) != 0) {
+                return;
+            } else {
+                // Port disabled - assume disconnect+connect
+                connections.erase(iterator);
+                delete connection;
+                break;
+            }
         }
+        ++iterator;
     }
     usb_port_connection *connection = new usb_port_connection(*this, port);
     connections.push_back(connection);
