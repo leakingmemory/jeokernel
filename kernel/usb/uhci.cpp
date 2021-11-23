@@ -272,7 +272,10 @@ void uhci::ResetPort(int port) {
         value |= UHCI_PORT_RESET;
         outportw(reg, value);
     }
-    delay_nano(50000000);
+    {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(50ms);
+    }
     {
         uint32_t value = inportw(reg);
         value &= ~(UHCI_PORT_CONNECTED_CHANGE | UHCI_PORT_ENABLED_CHANGE | UHCI_PORT_RESET);
