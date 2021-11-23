@@ -24,6 +24,23 @@
 
 #define EHCI_STATUS_HALTED  (1 << 12)
 
+#define EHCI_HCSPARAMS_PORT_POWER_CONTROL   0x10
+
+#define EHCI_PORT_LINE_MASK             (3 << 10)
+#define EHCI_PORT_LINE_LOWSPEED         (1 << 10)
+
+#define EHCI_PORT_COMPANION_OWNS        (1 << 13)
+#define EHCI_PORT_POWER                 (1 << 12)
+#define EHCI_PORT_RESET                 (1 << 8)
+#define EHCI_PORT_SUSPEND               (1 << 7)
+#define EHCI_PORT_FORCE_RESUME          (1 << 6)
+#define EHCI_PORT_OVERCURRENT_CHANGE    (1 << 5)
+#define EHCI_PORT_OVERCURRENT           (1 << 4)
+#define EHCI_PORT_ENABLE_CHANGE         (1 << 3)
+#define EHCI_PORT_ENABLE                (1 << 2)
+#define EHCI_PORT_CONNECT_CHANGE        (1 << 1)
+#define EHCI_PORT_CONNECT               1
+
 Device *ehci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
             deviceInformation.device_class == 0x0C /* serial bus */ &&
@@ -252,37 +269,137 @@ void ehci::init() {
     regs->asyncListAddr = qh->Phys();
     regs->usbCommand |= EHCI_CMD_ASYNC_ENABLE | EHCI_CMD_RUN_STOP;
 
+    numPorts = (caps->hcsparams & 0xF);
+    portPower = (caps->hcsparams & EHCI_HCSPARAMS_PORT_POWER_CONTROL) != 0;
+
+    regs->configFlag |= 1;
+
     {
         std::stringstream msg;
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB2 controller caps 0x" << std::hex << caps->hccparams << "\n";
         get_klogger() << msg.str().c_str();
     }
+
+    Run();
 }
 
 void ehci::dumpregs() {
 }
 
 int ehci::GetNumberOfPorts() {
-    return 0;
+    return numPorts;
 }
 
 uint32_t ehci::GetPortStatus(int port) {
-    return 0;
+    uint32_t status{0};
+    uint32_t ehci_status = regs->portStatusControl[port];
+    if ((ehci_status & EHCI_PORT_POWER) != 0) {
+        status |= USB_PORT_STATUS_PPS;
+    }
+    if ((ehci_status & EHCI_PORT_RESET) != 0) {
+        status |= USB_PORT_STATUS_PRS;
+    }
+    if ((ehci_status & EHCI_PORT_OVERCURRENT_CHANGE) != 0) {
+        status |= USB_PORT_STATUS_OCIC;
+    }
+    if ((ehci_status & EHCI_PORT_OVERCURRENT) != 0) {
+        status |= USB_PORT_STATUS_POCI;
+    }
+    if ((ehci_status & EHCI_PORT_ENABLE_CHANGE) != 0) {
+        status |= USB_PORT_STATUS_PESC;
+    }
+    if ((ehci_status & EHCI_PORT_ENABLE) != 0) {
+        status |= USB_PORT_STATUS_PES;
+    }
+    if ((ehci_status & EHCI_PORT_CONNECT_CHANGE) != 0) {
+        status |= USB_PORT_STATUS_CSC;
+    }
+    if ((ehci_status & EHCI_PORT_CONNECT) != 0) {
+        status |= USB_PORT_STATUS_CCS;
+    }
+    return status;
 }
 
 void ehci::SwitchPortOff(int port) {
+    if (portPower) {
+        uint32_t cmd{regs->portStatusControl[port]};
+        cmd &= ~(EHCI_PORT_ENABLE_CHANGE | EHCI_PORT_CONNECT_CHANGE | EHCI_PORT_OVERCURRENT_CHANGE | EHCI_PORT_POWER);
+        regs->portStatusControl[port] = cmd;
+    }
 }
 
 void ehci::SwitchPortOn(int port) {
+    if (portPower) {
+        uint32_t cmd{regs->portStatusControl[port]};
+        cmd &= ~(EHCI_PORT_ENABLE_CHANGE | EHCI_PORT_CONNECT_CHANGE | EHCI_PORT_OVERCURRENT_CHANGE);
+        cmd |= EHCI_PORT_POWER;
+        regs->portStatusControl[port] = cmd;
+    }
 }
 
 void ehci::EnablePort(int port) {
+    uint32_t cmd{regs->portStatusControl[port]};
+    cmd &= ~(EHCI_PORT_ENABLE_CHANGE | EHCI_PORT_CONNECT_CHANGE | EHCI_PORT_OVERCURRENT_CHANGE);
+    cmd |= EHCI_PORT_ENABLE;
+    regs->portStatusControl[port] = cmd;
 }
 
 void ehci::DisablePort(int port) {
+    uint32_t cmd{regs->portStatusControl[port]};
+    cmd &= ~(EHCI_PORT_ENABLE_CHANGE | EHCI_PORT_CONNECT_CHANGE | EHCI_PORT_OVERCURRENT_CHANGE | EHCI_PORT_ENABLE);
+    regs->portStatusControl[port] = cmd;
 }
 
 void ehci::ResetPort(int port) {
+    {
+        uint32_t cmd{regs->portStatusControl[port]};
+        bool portEnabled = (cmd & EHCI_PORT_ENABLE) != 0;
+        cmd &= ~(EHCI_PORT_ENABLE_CHANGE | EHCI_PORT_CONNECT_CHANGE | EHCI_PORT_OVERCURRENT_CHANGE | EHCI_PORT_ENABLE);
+        if (!portEnabled && (cmd & EHCI_PORT_LINE_MASK) == EHCI_PORT_LINE_LOWSPEED) {
+            if ((cmd & EHCI_PORT_CONNECT) != 0) {
+                cmd |= EHCI_PORT_COMPANION_OWNS;
+                regs->portStatusControl[port] = cmd;
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": Low speed device handed off to companion\n";
+                get_klogger() << msg.str().c_str();
+            } else {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": Lost connection during port reset\n";
+                get_klogger() << msg.str().c_str();
+            }
+            return;
+        }
+        cmd |= EHCI_PORT_RESET;
+        regs->portStatusControl[port] = cmd;
+    }
+    using namespace std::literals::chrono_literals;
+    std::this_thread::sleep_for(50ms);
+    {
+        uint32_t cmd{regs->portStatusControl[port]};
+        cmd &= ~(EHCI_PORT_ENABLE_CHANGE | EHCI_PORT_CONNECT_CHANGE | EHCI_PORT_OVERCURRENT_CHANGE | EHCI_PORT_RESET);
+        regs->portStatusControl[port] = cmd;
+    }
+    int timeout{5};
+    while (timeout > 0) {
+        std::this_thread::sleep_for(10ms);
+        if ((regs->portStatusControl[port] & EHCI_PORT_ENABLE) != 0) {
+            return;
+        }
+    }
+    uint32_t cmd{regs->portStatusControl[port]};
+    cmd &= ~(EHCI_PORT_ENABLE_CHANGE | EHCI_PORT_CONNECT_CHANGE | EHCI_PORT_OVERCURRENT_CHANGE | EHCI_PORT_RESET);
+    if ((cmd & EHCI_PORT_CONNECT) != 0) {
+        cmd |= EHCI_PORT_COMPANION_OWNS;
+        regs->portStatusControl[port] = cmd;
+        std::stringstream msg;
+        msg << DeviceType() << (unsigned int) DeviceId() << ": Full speed device handed off\n";
+        get_klogger() << msg.str().c_str();
+    } else {
+        std::stringstream msg;
+        msg << DeviceType() << (unsigned int) DeviceId() << ": Lost connection with full/high speed during port reset\n";
+        get_klogger() << msg.str().c_str();
+    }
+    return;
 }
 
 usb_speed ehci::PortSpeed(int port) {
@@ -290,6 +407,18 @@ usb_speed ehci::PortSpeed(int port) {
 }
 
 void ehci::ClearStatusChange(int port, uint32_t statuses) {
+    uint32_t ehci_clear{regs->portStatusControl[port]};
+    ehci_clear &= ~(EHCI_PORT_ENABLE_CHANGE | EHCI_PORT_CONNECT_CHANGE | EHCI_PORT_OVERCURRENT_CHANGE);
+    if ((statuses & USB_PORT_STATUS_PESC) != 0) {
+        ehci_clear |= EHCI_PORT_ENABLE_CHANGE;
+    }
+    if ((statuses & USB_PORT_STATUS_CSC) != 0) {
+        ehci_clear |= EHCI_PORT_CONNECT_CHANGE;
+    }
+    if ((statuses & USB_PORT_STATUS_OCIC) != 0) {
+        ehci_clear |= EHCI_PORT_OVERCURRENT_CHANGE;
+    }
+    regs->portStatusControl[port] = ehci_clear;
 }
 
 std::shared_ptr<usb_endpoint>

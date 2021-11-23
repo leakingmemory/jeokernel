@@ -160,9 +160,11 @@ private:
     StructPool<StructPoolAllocator<Phys32Page,ehci_qh_or_qtd>> qhtdPool;
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> qh;
     hw_spinlock ehcilock;
+    uint8_t numPorts;
+    bool portPower;
 public:
     ehci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("ehci", bus), pciDeviceInformation(deviceInformation),
-                                                              qhtdPool(), qh(), ehcilock() {}
+                                                              qhtdPool(), qh(), ehcilock(), numPorts(0), portPower(false) {}
     void init() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;
