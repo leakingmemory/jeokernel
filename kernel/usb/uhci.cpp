@@ -150,8 +150,22 @@ void uhci::init() {
         qh.NextEndpoint = nullptr;
     }
 
-    for (int i = 0; i < 1024; i++) {
-        Frames[i] = UHCI_POINTER_QH | intqhroots[i & 0x1F]->Phys();
+    {
+        uint32_t pointers[0x20]{};
+
+        static const uint8_t Balance[16] =
+                {0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF};
+
+        for (uint8_t i = 0; i < 16; i++) {
+            uint8_t bal = Balance[i] >> 1;
+            uint8_t idx = i << 1;
+            pointers[idx] = intqhroots[bal]->Phys() | UHCI_POINTER_QH;
+            pointers[idx + 1] = intqhroots[8 + bal]->Phys() | UHCI_POINTER_QH;
+        }
+
+        for (int i = 0; i < 1024; i++) {
+            Frames[i] = pointers[i & 0x1F];
+        }
     }
 
     outportl(iobase + REG_FRAME_BASEADDR, FramesPhys.PhysAddr());
