@@ -27,7 +27,8 @@ enum class usb_endpoint_direction {
 
 enum usb_speed {
     LOW,
-    FULL
+    FULL,
+    HIGH
 };
 
 enum class usb_endpoint_type {

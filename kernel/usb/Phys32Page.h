@@ -21,6 +21,9 @@ public:
     void *Pointer() const {
         return vm.pointer();
     }
+    size_t Size() {
+        return size;
+    }
     uint32_t PhysAddr() {
         return physaddr;
     }

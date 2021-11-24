@@ -11,6 +11,7 @@
 #include "Phys32Page.h"
 #include "StructPool.h"
 #include "usb_hcd.h"
+#include "usb_transfer.h"
 
 struct ehci_regs {
     uint32_t usbCommand;
@@ -97,6 +98,7 @@ class ehci_endpoint;
 #define EHCI_TRANSFER_BUFFER_SIZE 4096
 
 #define EHCI_POINTER_TERMINATE 1
+#define EHCI_POINTER_QH        2
 
 #define EHCI_QH_ENDPOINT_SPEED_FULL 0
 #define EHCI_QH_ENDPOINT_SPEED_LOW  1
@@ -151,7 +153,57 @@ union ehci_qh_or_qtd {
     ehci_qtd qtd;
 };
 
+class ehci;
+class ehci_endpoint;
+
+class ehci_transfer : public usb_transfer {
+    friend ehci_endpoint;
+private:
+    std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> td;
+    std::shared_ptr<usb_buffer> buffer;
+    std::shared_ptr<ehci_transfer> next;
+public:
+    explicit ehci_transfer(ehci &ehciRef);
+    std::shared_ptr<usb_buffer> Buffer() override {
+        return buffer;
+    }
+    ehci_qtd &qTD() {
+        return td->Pointer()->qtd;
+    }
+    usb_transfer_status GetStatus() override;
+};
+
+class ehci_endpoint : public usb_endpoint {
+private:
+    ehci &ehciRef;
+    std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> head;
+    std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> qh;
+    std::shared_ptr<ehci_transfer> pending;
+    std::shared_ptr<ehci_transfer> active;
+public:
+    ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs = 0);
+    ~ehci_endpoint() override;
+private:
+    std::shared_ptr<usb_transfer> CreateTransferWithLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, int8_t dataToggle, std::function<void (ehci_transfer &transfer)> &applyFunc);
+    std::shared_ptr<usb_transfer> CreateTransferWithoutLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, int8_t dataToggle, std::function<void (ehci_transfer &transfer)> &applyFunc);
+public:
+    bool Addressing64bit() override;
+    std::shared_ptr<usb_transfer> CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
+    std::shared_ptr<usb_transfer> CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
+    std::shared_ptr<usb_transfer> CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
+    std::shared_ptr<usb_transfer> CreateTransferWithLock(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
+    std::shared_ptr<usb_buffer> Alloc() override;
+    void IntWithLock();
+};
+
+struct ehci_endpoint_cleanup {
+    std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> qh;
+    std::shared_ptr<ehci_transfer> transfers;
+};
+
 class ehci : public usb_hcd {
+    friend ehci_endpoint;
+    friend ehci_transfer;
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
@@ -159,12 +211,14 @@ private:
     ehci_regs *regs;
     StructPool<StructPoolAllocator<Phys32Page,ehci_qh_or_qtd>> qhtdPool;
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> qh;
+    std::vector<std::shared_ptr<ehci_endpoint_cleanup>> delayedDestruction;
+    std::vector<ehci_endpoint *> watchList;
     hw_spinlock ehcilock;
     uint8_t numPorts;
     bool portPower;
 public:
     ehci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("ehci", bus), pciDeviceInformation(deviceInformation),
-                                                              qhtdPool(), qh(), ehcilock(), numPorts(0), portPower(false) {}
+                                                              qhtdPool(), qh(), watchList(), delayedDestruction(), ehcilock(), numPorts(0), portPower(false) {}
     void init() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;
@@ -190,6 +244,7 @@ public:
 private:
     bool irq();
     void frameListRollover();
+    void usbint();
 };
 
 class ehci_driver : public Driver {

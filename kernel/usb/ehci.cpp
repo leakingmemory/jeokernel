@@ -7,6 +7,7 @@
 #include <cpuio.h>
 #include <thread>
 #include "ehci.h"
+#include "UsbBuffer32.h"
 
 #define EHCI_CMD_RUN_STOP   1
 #define EHCI_CMD_HCRESET    (1 << 1)
@@ -53,6 +54,15 @@
 #define EHCI_INT_PORT_CHANGE            (1 << 2)
 #define EHCI_INT_USB_ERROR              (1 << 1)
 #define EHCI_INT_USBINT                 1
+
+#define EHCI_QTD_STATUS_ACTIVE              (1 << 7)
+#define EHCI_QTD_STATUS_HALTED              (1 << 6)
+#define EHCI_QTD_STATUS_DATA_BUFFER_ERROR   (1 << 5)
+#define EHCI_QTD_STATUS_BABBLE              (1 << 4)
+#define EHCI_QTD_STATUS_TRANSACTION_ERROR   (1 << 3)
+#define EHCI_QTD_STATUS_MISSED_MICRO_FRAME  (1 << 2)
+#define EHCI_QTD_STATUS_SPLIT_X_STATE       (1 << 1)
+#define EHCI_QTD_STATUS_PING_OR_ERR         (1 << 0)
 
 Device *ehci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
@@ -439,7 +449,10 @@ void ehci::ClearStatusChange(int port, uint32_t statuses) {
 std::shared_ptr<usb_endpoint>
 ehci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                             usb_endpoint_direction dir, usb_speed speed) {
-    return std::shared_ptr<usb_endpoint>();
+    std::shared_ptr<ehci_endpoint> endpoint{
+            new ehci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::CONTROL)};
+    std::shared_ptr<usb_endpoint> usbEndpoint{endpoint};
+    return usbEndpoint;
 }
 
 std::shared_ptr<usb_endpoint>
@@ -476,7 +489,7 @@ bool ehci::irq() {
         }
         if ((status & EHCI_STATUS_USBINT) != 0) {
             clear |= EHCI_STATUS_USBINT;
-            get_klogger() << "EHCI USB interrupt\n";
+            usbint();
         }
         if (clear != 0) {
             handled = true;
@@ -489,4 +502,274 @@ bool ehci::irq() {
 }
 
 void ehci::frameListRollover() {
+}
+
+void ehci::usbint() {
+    std::vector<ehci_endpoint *> watched{};
+
+    for (ehci_endpoint *endpoint : watchList) {
+        watched.push_back(endpoint);
+    }
+    for (ehci_endpoint *endpoint : watched) {
+        endpoint->IntWithLock();
+    }
+}
+
+ehci_transfer::ehci_transfer(ehci &ehciRef) : td(ehciRef.qhtdPool.Alloc()), buffer(), next() {
+}
+
+usb_transfer_status ehci_transfer::GetStatus() {
+    uint8_t status{qTD().status};
+    if ((status & EHCI_QTD_STATUS_ACTIVE) != 0) {
+        return usb_transfer_status::NOT_ACCESSED;
+    }
+    if ((status & EHCI_QTD_STATUS_HALTED) != 0) {
+        if ((status & EHCI_QTD_STATUS_DATA_BUFFER_ERROR) != 0) {
+            return usb_transfer_status::DATA_UNDERRUN;
+        }
+        if ((status & EHCI_QTD_STATUS_BABBLE) != 0) {
+            return usb_transfer_status::BIT_STUFFING;
+        }
+        return usb_transfer_status::STALL;
+    }
+    return usb_transfer_status::NO_ERROR;
+}
+
+ehci_endpoint::ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
+                             usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs) :
+                             ehciRef(ehciRef), head(), qh(ehciRef.qhtdPool.Alloc()) {
+    if (endpointType == usb_endpoint_type::CONTROL) {
+        head = ehciRef.qh;
+    }
+    if (head) {
+        critical_section cli{};
+        std::lock_guard lock{ehciRef.ehcilock};
+        qh->Pointer()->qh.HorizLink = head->Pointer()->qh.HorizLink;
+        qh->Pointer()->qh.DeviceAddress = functionAddr;
+        qh->Pointer()->qh.InactivateOnNext = false;
+        qh->Pointer()->qh.EndpointNumber = endpointNum;
+        qh->Pointer()->qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_HIGH;
+        qh->Pointer()->qh.DataToggleControl = 1;
+        qh->Pointer()->qh.HeadOfReclamationList = false;
+        qh->Pointer()->qh.MaxPacketLength = maxPacketSize;
+        if (speed != HIGH && endpointType == usb_endpoint_type::CONTROL) {
+            qh->Pointer()->qh.ControlEndpointFlag = true;
+        } else {
+            qh->Pointer()->qh.ControlEndpointFlag = false;
+        }
+        qh->Pointer()->qh.NakCountReload = 0;
+        qh->Pointer()->qh.InterruptScheduleMask = 0;
+        qh->Pointer()->qh.SplitCompletionMask = 0;
+        qh->Pointer()->qh.HubAddress = 0;
+        qh->Pointer()->qh.PortNumber = 0;
+        qh->Pointer()->qh.HighBandwidthPipeMultiplier = 1;
+        qh->Pointer()->qh.CurrentQTd = EHCI_POINTER_TERMINATE;
+        qh->Pointer()->qh.NextQTd = EHCI_POINTER_TERMINATE;
+        qh->Pointer()->qh.AlternateQTd = EHCI_POINTER_TERMINATE;
+        qh->Pointer()->qh.Overlay[0] = 0;
+        qh->Pointer()->qh.Overlay[1] = 0;
+        qh->Pointer()->qh.Overlay[2] = 0;
+        qh->Pointer()->qh.Overlay[3] = 0;
+        qh->Pointer()->qh.Overlay[4] = 0;
+        qh->Pointer()->qh.Overlay[5] = 0;
+        qh->Pointer()->qh.NextEndpoint = head->Pointer()->qh.NextEndpoint;
+        head->Pointer()->qh.HorizLink = qh->Phys() | EHCI_POINTER_QH;
+        head->Pointer()->qh.NextEndpoint = this;
+    }
+}
+
+ehci_endpoint::~ehci_endpoint() {
+    if (head) {
+        auto *qh = &(head->Pointer()->qh);
+        bool found{false};
+        while (qh != nullptr) {
+            auto *endpoint = qh->NextEndpoint;
+            if (this == endpoint) {
+                auto *nqh = &(endpoint->qh->Pointer()->qh);
+                qh->HorizLink = nqh->HorizLink;
+                qh->NextEndpoint = nqh->NextEndpoint;
+                found = true;
+                break;
+            }
+            qh = endpoint != nullptr ? &(endpoint->qh->Pointer()->qh) : nullptr;
+        }
+        if (!found) {
+            wild_panic("Endpoint destruction but did not find the endpoint");
+        }
+        std::shared_ptr<ehci_endpoint_cleanup> cleanup = std::make_shared<ehci_endpoint_cleanup>();
+        cleanup->qh = this->qh;
+        cleanup->transfers = this->active;
+        ehciRef.delayedDestruction.push_back(cleanup);
+    }
+}
+
+std::shared_ptr<usb_transfer>
+ehci_endpoint::CreateTransferWithLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
+                                         usb_transfer_direction direction, int8_t dataToggle,
+                                         std::function<void (ehci_transfer &transfer)> &applyFunc) {
+    auto buffer_phys{0};
+    if (buffer) {
+        buffer_phys = buffer->Addr();
+    } else if (size > 0) {
+        return {};
+    }
+    if (buffer_phys > 0xFFFFFFFF || (buffer_phys & 4095) != 0) {
+        return {};
+    }
+    if (size > 4096) {
+        return {};
+    }
+    std::shared_ptr<ehci_transfer> transfer = std::make_shared<ehci_transfer>(ehciRef);
+    transfer->buffer = buffer;
+    auto &td = transfer->qTD();
+    td.next_qtd = EHCI_POINTER_TERMINATE;
+    td.data_toggle = (dataToggle & 1) != 0;
+    td.total_bytes = size;
+    td.interrup_on_cmp = commitTransaction;
+    td.current_page = 0;
+    td.error_count = 0;
+    switch (direction) {
+        case usb_transfer_direction::OUT:
+            td.pid = 0;
+            break;
+        case usb_transfer_direction::IN:
+            td.pid = 1;
+            break;
+        case usb_transfer_direction::SETUP:
+            td.pid = 2;
+            break;
+    }
+    td.status = EHCI_QTD_STATUS_ACTIVE;
+    td.buffer_pages[0] = buffer_phys;
+
+    applyFunc(*transfer);
+
+    {
+        std::shared_ptr<ehci_transfer> pending{this->pending};
+        if (pending) {
+            while (pending->next) {
+                pending = pending->next;
+            }
+            pending->qTD().next_qtd = transfer->td->Phys();
+            pending->next = transfer;
+        } else {
+            this->pending = transfer;
+        }
+    }
+
+    if (commitTransaction) {
+        IntWithLock();
+        bool found{false};
+        for (ehci_endpoint *watched : ehciRef.watchList) {
+            if (watched == this) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ehciRef.watchList.push_back(this);
+        }
+    }
+
+    std::shared_ptr<usb_transfer> usbTransfer{transfer};
+    return usbTransfer;
+}
+
+std::shared_ptr<usb_transfer>
+ehci_endpoint::CreateTransferWithoutLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
+                                         usb_transfer_direction direction, int8_t dataToggle,
+                                         std::function<void (ehci_transfer &transfer)> &applyFunc) {
+    critical_section cli{};
+    std::lock_guard lock{ehciRef.HcdSpinlock()};
+
+    return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+ehci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction,
+                              bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer = Alloc();
+    memcpy(buffer->Pointer(), data, size);
+    std::function<void (ehci_transfer &)> applyFunc = [] (ehci_transfer &) {};
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+ehci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction,
+                              bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
+    std::function<void (ehci_transfer &)> applyFunc = [] (ehci_transfer &) {};
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+ehci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction,
+                              std::function<void()> doneCall, bool bufferRounding, uint16_t delayInterrupt,
+                              int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
+    std::function<void (ehci_transfer &)> applyFunc = [doneCall] (ehci_transfer &transfer) {
+        transfer.SetDoneCall(doneCall);
+    };
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
+ehci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb_transfer_direction direction,
+                                      std::function<void()> doneCall, bool bufferRounding, uint16_t delayInterrupt,
+                                      int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc();
+    }
+    std::function<void (ehci_transfer &)> applyFunc = [doneCall] (ehci_transfer &transfer) {
+        transfer.SetDoneCall(doneCall);
+    };
+    return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_buffer> ehci_endpoint::Alloc() {
+    std::shared_ptr<usb_buffer> buffer{new UsbBuffer32(4096)};
+    return buffer;
+}
+
+bool ehci_endpoint::Addressing64bit() {
+    return false;
+}
+
+void ehci_endpoint::IntWithLock() {
+    auto &qhv = qh->Pointer()->qh;
+    std::vector<std::shared_ptr<ehci_transfer>> done{};
+    while (active) {
+        if (active->td->Phys() == (qhv.NextQTd & 0xFFFFFFE0)) {
+            break;
+        }
+        done.push_back(active);
+        active = active->next;
+    }
+    if (!active) {
+        if (this->pending) {
+            active = this->pending;
+            this->pending = std::shared_ptr<ehci_transfer>();
+            qhv.NextQTd = active->td->Phys();
+        } else {
+            auto iter = ehciRef.watchList.begin();
+            while (iter != ehciRef.watchList.end()) {
+                ehci_endpoint *endpoint = *iter;
+                if (endpoint == this) {
+                    ehciRef.watchList.erase(iter);
+                } else {
+                    ++iter;
+                }
+            }
+        }
+    }
+    for (auto &transfer : done) {
+        transfer->SetDone();
+    }
 }

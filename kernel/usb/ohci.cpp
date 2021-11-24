@@ -445,13 +445,23 @@ void ohci::ResetPort(int port) {
 std::shared_ptr<usb_endpoint>
 ohci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                             usb_endpoint_direction dir, usb_speed speed) {
-    auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed, usb_endpoint_type::CONTROL);
-    return std::shared_ptr<usb_endpoint>(endpoint);
+    if (speed == LOW || speed == FULL) {
+        auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed,
+                                          usb_endpoint_type::CONTROL);
+        return std::shared_ptr<usb_endpoint>(endpoint);
+    } else {
+        return {};
+    }
 }
 
 std::shared_ptr<usb_endpoint> ohci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
-    auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed, usb_endpoint_type::INTERRUPT, pollingIntervalMs);
-    return std::shared_ptr<usb_endpoint>(endpoint);
+    if (speed == LOW || speed == FULL) {
+        auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed,
+                                          usb_endpoint_type::INTERRUPT, pollingIntervalMs);
+        return std::shared_ptr<usb_endpoint>(endpoint);
+    } else {
+        return {};
+    }
 }
 
 usb_speed ohci::PortSpeed(int port) {
