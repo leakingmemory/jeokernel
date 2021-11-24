@@ -189,6 +189,7 @@ public:
     }
 private:
     bool irq();
+    void frameListRollover();
 };
 
 class ehci_driver : public Driver {

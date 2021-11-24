@@ -22,7 +22,13 @@
 #define EHCI_CMD_PERIODIC_ENABLE    (1 << 4)
 
 
-#define EHCI_STATUS_HALTED  (1 << 12)
+#define EHCI_STATUS_HALTED              (1 << 12)
+#define EHCI_STATUS_ASYNC_ADVANCE       (1 << 5)
+#define EHCI_STATUS_HOST_SYSTEM_ERROR   (1 << 4)
+#define EHCI_STATUS_FRAME_LIST_ROLLOVER (1 << 3)
+#define EHCI_STATUS_PORT_CHANGE         (1 << 2)
+#define EHCI_STATUS_USB_ERROR           (1 << 1)
+#define EHCI_STATUS_USBINT              1
 
 #define EHCI_HCSPARAMS_PORT_POWER_CONTROL   0x10
 
@@ -40,6 +46,13 @@
 #define EHCI_PORT_ENABLE                (1 << 2)
 #define EHCI_PORT_CONNECT_CHANGE        (1 << 1)
 #define EHCI_PORT_CONNECT               1
+
+#define EHCI_INT_ASYNC_ADVANCE          (1 << 5)
+#define EHCI_INT_HOST_SYSTEM_ERROR      (1 << 4)
+#define EHCI_INT_FRAME_LIST_ROLLOVER    (1 << 3)
+#define EHCI_INT_PORT_CHANGE            (1 << 2)
+#define EHCI_INT_USB_ERROR              (1 << 1)
+#define EHCI_INT_USBINT                 1
 
 Device *ehci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
@@ -272,6 +285,8 @@ void ehci::init() {
     numPorts = (caps->hcsparams & 0xF);
     portPower = (caps->hcsparams & EHCI_HCSPARAMS_PORT_POWER_CONTROL) != 0;
 
+    regs->usbInterruptEnable = EHCI_INT_ASYNC_ADVANCE | EHCI_INT_HOST_SYSTEM_ERROR | EHCI_INT_FRAME_LIST_ROLLOVER | EHCI_INT_PORT_CHANGE | EHCI_INT_USB_ERROR | EHCI_INT_USBINT;
+
     regs->configFlag |= 1;
 
     {
@@ -434,6 +449,44 @@ ehci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint
 }
 
 bool ehci::irq() {
-    get_klogger() << "EHCI intr\n";
-    return false;
+    bool handled{false};
+    std::lock_guard lock{ehcilock};
+    while (true) {
+        uint32_t clear{0};
+        uint32_t status{regs->usbStatus};
+        if ((status & EHCI_STATUS_ASYNC_ADVANCE) != 0) {
+            clear |= EHCI_STATUS_ASYNC_ADVANCE;
+            get_klogger() << "EHCI async advance\n";
+        }
+        if ((status & EHCI_STATUS_HOST_SYSTEM_ERROR) != 0) {
+            clear |= EHCI_STATUS_HOST_SYSTEM_ERROR;
+            get_klogger() << "EHCI host system error\n";
+        }
+        if ((status & EHCI_STATUS_FRAME_LIST_ROLLOVER) != 0) {
+            clear |= EHCI_STATUS_FRAME_LIST_ROLLOVER;
+            frameListRollover();
+        }
+        if ((status & EHCI_STATUS_PORT_CHANGE) != 0) {
+            clear |= EHCI_STATUS_PORT_CHANGE;
+            RootHubStatusChange();
+        }
+        if ((status & EHCI_STATUS_USB_ERROR) != 0) {
+            clear |= EHCI_STATUS_USB_ERROR;
+            get_klogger() << "EHCI USB error\n";
+        }
+        if ((status & EHCI_STATUS_USBINT) != 0) {
+            clear |= EHCI_STATUS_USBINT;
+            get_klogger() << "EHCI USB interrupt\n";
+        }
+        if (clear != 0) {
+            handled = true;
+            regs->usbStatus = clear;
+        } else {
+            break;
+        }
+    }
+    return handled;
+}
+
+void ehci::frameListRollover() {
 }
