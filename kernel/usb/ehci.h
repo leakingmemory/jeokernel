@@ -137,7 +137,10 @@ struct ehci_qh {
     uint32_t CurrentQTd;
     uint32_t NextQTd;
     uint32_t AlternateQTd;
-    uint32_t Overlay[6];
+    union {
+        uint32_t Overlay[6];
+        uint8_t Status;
+    };
     union {
         struct {
             uint64_t Padding1;
@@ -209,8 +212,13 @@ private:
     std::unique_ptr<vmem> mapped_registers_vm;
     ehci_capabilities *caps;
     ehci_regs *regs;
+    Phys32Page FramesPhys;
+    uint32_t *Frames;
     StructPool<StructPoolAllocator<Phys32Page,ehci_qh_or_qtd>> qhtdPool;
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> qh;
+    std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> intqhroots[0x20];
+    std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> intqhs[0x1F];
+    unsigned int intcycle;
     std::vector<std::shared_ptr<ehci_endpoint_cleanup>> delayedDestruction;
     std::vector<ehci_endpoint *> watchList;
     hw_spinlock ehcilock;
@@ -218,7 +226,9 @@ private:
     bool portPower;
 public:
     ehci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("ehci", bus), pciDeviceInformation(deviceInformation),
-                                                              qhtdPool(), qh(), watchList(), delayedDestruction(), ehcilock(), numPorts(0), portPower(false) {}
+                                                              FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()), qhtdPool(),
+                                                              qh(), intqhroots(), intqhs(), intcycle(0), watchList(), delayedDestruction(),
+                                                              ehcilock(), numPorts(0), portPower(false) {}
     void init() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;

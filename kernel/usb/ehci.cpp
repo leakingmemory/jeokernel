@@ -290,7 +290,106 @@ void ehci::init() {
     qh->Pointer()->qh.NextEndpoint = nullptr;
 
     regs->asyncListAddr = qh->Phys();
-    regs->usbCommand |= EHCI_CMD_ASYNC_ENABLE | EHCI_CMD_RUN_STOP;
+
+    for (int i = 0; i < 0x1F; i++) {
+        intqhs[i] = qhtdPool.Alloc();
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.HorizLink = EHCI_POINTER_TERMINATE;
+        qh.DeviceAddress = 0;
+        qh.InactivateOnNext = false;
+        qh.EndpointNumber = 0;
+        qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_HIGH;
+        qh.DataToggleControl = 1;
+        qh.HeadOfReclamationList = false;
+        qh.MaxPacketLength = 0;
+        qh.ControlEndpointFlag = false;
+        qh.NakCountReload = 0;
+        qh.InterruptScheduleMask = 1;
+        qh.SplitCompletionMask = 0;
+        qh.HubAddress = 0;
+        qh.PortNumber = 0;
+        qh.HighBandwidthPipeMultiplier = 1;
+        qh.CurrentQTd = EHCI_POINTER_TERMINATE;
+        qh.NextQTd = EHCI_POINTER_TERMINATE;
+        qh.AlternateQTd = EHCI_POINTER_TERMINATE;
+        qh.Overlay[0] = 0;
+        qh.Overlay[1] = 0;
+        qh.Overlay[2] = 0;
+        qh.Overlay[3] = 0;
+        qh.Overlay[4] = 0;
+        qh.Overlay[5] = 0;
+        qh.NextEndpoint = nullptr;
+    }
+    for (int i = 0; i < 0x10; i++) {
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.HorizLink = intqhs[0x10 + (i >> 1)]->Phys() | EHCI_POINTER_QH;
+    }
+    for (int i = 0x10; i < 0x18; i++) {
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.HorizLink = intqhs[0x18 + ((i - 0x10) >> 1)]->Phys() | EHCI_POINTER_QH;
+    }
+    for (int i = 0x18; i < 0x1C; i++) {
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.HorizLink = intqhs[0x1C + ((i - 0x18) >> 1)]->Phys() | EHCI_POINTER_QH;
+    }
+    for (int i = 0x1C; i < 0x1E; i++) {
+        auto &qh = intqhs[i]->Pointer()->qh;
+        qh.HorizLink = intqhs[0x1E]->Phys() | EHCI_POINTER_QH;
+    }
+    {
+        auto &qh = intqhs[0x1E]->Pointer()->qh;
+        qh.HorizLink = EHCI_POINTER_TERMINATE;
+    }
+
+    for (int i = 0; i < 0x20; i++) {
+        intqhroots[i] = qhtdPool.Alloc();
+        auto &qh = intqhroots[i]->Pointer()->qh;
+        qh.HorizLink = EHCI_POINTER_TERMINATE;
+        qh.DeviceAddress = 0;
+        qh.InactivateOnNext = false;
+        qh.EndpointNumber = 0;
+        qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_HIGH;
+        qh.DataToggleControl = 1;
+        qh.HeadOfReclamationList = false;
+        qh.MaxPacketLength = 0;
+        qh.ControlEndpointFlag = false;
+        qh.NakCountReload = 0;
+        qh.InterruptScheduleMask = 0;
+        qh.SplitCompletionMask = 0;
+        qh.HubAddress = 0;
+        qh.PortNumber = 0;
+        qh.HighBandwidthPipeMultiplier = 1;
+        qh.CurrentQTd = EHCI_POINTER_TERMINATE;
+        qh.NextQTd = EHCI_POINTER_TERMINATE;
+        qh.AlternateQTd = EHCI_POINTER_TERMINATE;
+        qh.Overlay[0] = 0;
+        qh.Overlay[1] = 0;
+        qh.Overlay[2] = 0;
+        qh.Overlay[3] = 0;
+        qh.Overlay[4] = 0;
+        qh.Overlay[5] = 0;
+        qh.NextEndpoint = nullptr;
+    }
+
+    {
+        static const uint8_t Balance[16] =
+                {0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF};
+
+        for (uint8_t i = 0; i < 16; i++) {
+            uint8_t bal = Balance[i] >> 1;
+            uint8_t idx = i << 1;
+            intqhroots[idx]->Pointer()->qh.HorizLink = intqhs[bal]->Phys() | EHCI_POINTER_QH;
+            intqhroots[idx + 1]->Pointer()->qh.HorizLink = intqhs[8 + bal]->Phys() | EHCI_POINTER_QH;
+        }
+
+        for (int i = 0; i < 1024; i++) {
+            Frames[i] = EHCI_POINTER_QH | intqhroots[i & 0x1F]->Phys();
+        }
+    }
+
+    regs->periodicListBase = FramesPhys.PhysAddr();
+
+    regs->usbCommand |= EHCI_CMD_ASYNC_ENABLE | EHCI_CMD_PERIODIC_ENABLE | EHCI_CMD_RUN_STOP;
 
     numPorts = (caps->hcsparams & 0xF);
     portPower = (caps->hcsparams & EHCI_HCSPARAMS_PORT_POWER_CONTROL) != 0;
@@ -458,7 +557,11 @@ ehci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_
 std::shared_ptr<usb_endpoint>
 ehci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                               usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
-    return std::shared_ptr<usb_endpoint>();
+    std::shared_ptr<ehci_endpoint> endpoint{
+            new ehci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::INTERRUPT,
+                              pollingIntervalMs)};
+    std::shared_ptr<usb_endpoint> usbEndpoint{endpoint};
+    return usbEndpoint;
 }
 
 bool ehci::irq() {
@@ -541,6 +644,21 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t func
     if (endpointType == usb_endpoint_type::CONTROL) {
         head = ehciRef.qh;
     }
+    if (endpointType == usb_endpoint_type::INTERRUPT) {
+        if (pollingRateMs < 2) {
+            head = ehciRef.intqhs[0x1E]; // 1ms
+        } else if (pollingRateMs < 3) {
+            head = ehciRef.intqhs[0x1C + (ehciRef.intcycle++ & 1)]; // 2ms
+        } else if (pollingRateMs < 5) {
+            head = ehciRef.intqhs[0x18 + (ehciRef.intcycle++ & 3)]; // 4ms
+        } else if (pollingRateMs < 9) {
+            head = ehciRef.intqhs[0x10 + (ehciRef.intcycle++ & 7)]; // 8ms
+        } else if (pollingRateMs < 17) {
+            head = ehciRef.intqhs[ehciRef.intcycle++ & 0xF]; // 16ms
+        } else {
+            head = ehciRef.intqhroots[ehciRef.intcycle++ & 0x1F]; // 32ms
+        }
+    }
     if (head) {
         critical_section cli{};
         std::lock_guard lock{ehciRef.ehcilock};
@@ -558,7 +676,11 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t func
             qh->Pointer()->qh.ControlEndpointFlag = false;
         }
         qh->Pointer()->qh.NakCountReload = 0;
-        qh->Pointer()->qh.InterruptScheduleMask = 0;
+        if (endpointType == usb_endpoint_type::INTERRUPT) {
+            qh->Pointer()->qh.InterruptScheduleMask = 1 << (ehciRef.intcycle & 7);
+        } else {
+            qh->Pointer()->qh.InterruptScheduleMask = 0;
+        }
         qh->Pointer()->qh.SplitCompletionMask = 0;
         qh->Pointer()->qh.HubAddress = 0;
         qh->Pointer()->qh.PortNumber = 0;
@@ -746,7 +868,8 @@ void ehci_endpoint::IntWithLock() {
     auto &qhv = qh->Pointer()->qh;
     std::vector<std::shared_ptr<ehci_transfer>> done{};
     while (active) {
-        if (active->td->Phys() == (qhv.NextQTd & 0xFFFFFFE0)) {
+        auto a_phys = active->td->Phys();
+        if (a_phys == (qhv.NextQTd & 0xFFFFFFE0) || (a_phys == (qhv.CurrentQTd & 0xFFFFFFE0) && (qhv.Status & EHCI_QTD_STATUS_ACTIVE) != 0)) {
             break;
         }
         done.push_back(active);
