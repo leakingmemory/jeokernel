@@ -19,6 +19,7 @@
 #define EHCI_CMD_ITC_32MF   (32 << 16)
 #define EHCI_CMD_ITC_64MF   (64 << 16)
 #define EHCI_CMD_ITC_MASK   (0xFF << 16)
+#define EHCI_CMD_ASYNC_DOORBELL (1 << 6)
 #define EHCI_CMD_ASYNC_ENABLE   (1 << 5)
 #define EHCI_CMD_PERIODIC_ENABLE    (1 << 4)
 
@@ -572,7 +573,7 @@ bool ehci::irq() {
         uint32_t status{regs->usbStatus};
         if ((status & EHCI_STATUS_ASYNC_ADVANCE) != 0) {
             clear |= EHCI_STATUS_ASYNC_ADVANCE;
-            get_klogger() << "EHCI async advance\n";
+            asyncAdvance();
         }
         if ((status & EHCI_STATUS_HOST_SYSTEM_ERROR) != 0) {
             clear |= EHCI_STATUS_HOST_SYSTEM_ERROR;
@@ -616,6 +617,14 @@ void ehci::usbint() {
     for (ehci_endpoint *endpoint : watched) {
         endpoint->IntWithLock();
     }
+}
+
+void ehci::asyncAdvance() {
+    nextForDestruction.clear();
+    for (std::shared_ptr<ehci_endpoint_cleanup> destroy : delayedDestruction) {
+        nextForDestruction.push_back(destroy);
+    }
+    delayedDestruction.clear();
 }
 
 ehci_transfer::ehci_transfer(ehci &ehciRef) : td(ehciRef.qhtdPool.Alloc()), buffer(), next() {
@@ -702,6 +711,8 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t func
 
 ehci_endpoint::~ehci_endpoint() {
     if (head) {
+        critical_section cli{};
+        std::lock_guard lock{ehciRef.ehcilock};
         auto *qh = &(head->Pointer()->qh);
         bool found{false};
         while (qh != nullptr) {
@@ -722,6 +733,7 @@ ehci_endpoint::~ehci_endpoint() {
         cleanup->qh = this->qh;
         cleanup->transfers = this->active;
         ehciRef.delayedDestruction.push_back(cleanup);
+        ehciRef.regs->usbCommand |= EHCI_CMD_ASYNC_DOORBELL;
     }
 }
 

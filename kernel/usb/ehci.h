@@ -220,6 +220,7 @@ private:
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> intqhs[0x1F];
     unsigned int intcycle;
     std::vector<std::shared_ptr<ehci_endpoint_cleanup>> delayedDestruction;
+    std::vector<std::shared_ptr<ehci_endpoint_cleanup>> nextForDestruction;
     std::vector<ehci_endpoint *> watchList;
     hw_spinlock ehcilock;
     uint8_t numPorts;
@@ -228,7 +229,7 @@ public:
     ehci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("ehci", bus), pciDeviceInformation(deviceInformation),
                                                               FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()), qhtdPool(),
                                                               qh(), intqhroots(), intqhs(), intcycle(0), watchList(), delayedDestruction(),
-                                                              ehcilock(), numPorts(0), portPower(false) {}
+                                                              nextForDestruction(), ehcilock(), numPorts(0), portPower(false) {}
     void init() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;
@@ -255,6 +256,7 @@ private:
     bool irq();
     void frameListRollover();
     void usbint();
+    void asyncAdvance();
 };
 
 class ehci_driver : public Driver {
