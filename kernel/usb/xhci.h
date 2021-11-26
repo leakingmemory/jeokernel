@@ -156,7 +156,6 @@ struct xhci_capabilities {
     xhci_operational_registers *opregs() {
         uint8_t *ptr = (uint8_t *) (void *) this;
         ptr += caplength;
-        ptr += 0x20;
         return (xhci_operational_registers *) (void *) ptr;
     }
 

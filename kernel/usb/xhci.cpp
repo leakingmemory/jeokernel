@@ -8,6 +8,12 @@
 #include <thread>
 #include "xhci.h"
 
+#define XHCI_CMD_RUN        1
+#define XHCI_CMD_HCRESET    (1 << 1)
+
+#define XHCI_STATUS_HALTED      1
+#define XHCI_STATUS_NOT_READY   (1 << 11)
+
 Device *xhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
             deviceInformation.device_class == 0x0C /* serial bus */ &&
@@ -91,6 +97,58 @@ void xhci::init() {
             extcap = extcap->next();
         }
     }
+
+    /* Stop HC */
+    opregs->usbCommand &= ~XHCI_CMD_RUN;
+    {
+        int timeout = 5;
+        while (true) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(20ms);
+            if ((opregs->usbStatus & XHCI_STATUS_HALTED) != 0) {
+                break;
+            }
+            if (--timeout == 0) {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": USB3 failed to stop, no use - cmd=" << std::hex << opregs->usbCommand << " status="<< opregs->usbStatus << "\n";
+                get_klogger() << msg.str().c_str();
+            }
+        }
+    }
+
+    /* Reset HC */
+    opregs->usbCommand |= XHCI_CMD_HCRESET;
+    {
+        int timeout = 20;
+        while (true) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if ((opregs->usbCommand & XHCI_CMD_HCRESET) == 0) {
+                break;
+            }
+            if (--timeout == 0) {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": USB3 failed to reset, no use\n";
+                get_klogger() << msg.str().c_str();
+            }
+        }
+    }
+    {
+        int timeout = 20;
+        while (true) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if ((opregs->usbStatus & XHCI_STATUS_NOT_READY) == 0) {
+                break;
+            }
+            if (--timeout == 0) {
+                std::stringstream msg;
+                msg << DeviceType() << (unsigned int) DeviceId() << ": USB3 failed to become available after reset, no use\n";
+                get_klogger() << msg.str().c_str();
+            }
+        }
+    }
+
     {
         std::stringstream msg;
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB3 controller hccparams1=" << std::hex << capabilities->hccparams1 << "\n";
