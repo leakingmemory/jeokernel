@@ -13,11 +13,15 @@ private:
     Phys32Page dcbaa_page;
     std::unique_ptr<Phys32Page> scratchpad_array;
     std::vector<std::shared_ptr<Phys32Page>> scratchpad_pages;
+    Phys32Page rings_page;
 public:
     xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize);
+    ~xhci_resources_32() override;
     uint64_t DCBAAPhys() const override;
     xhci_dcbaa *DCBAA() const override;
     uint64_t ScratchpadPhys() const override;
+    uint64_t CommandRingPhys() const override;
+    xhci_rings *Rings() const override;
 };
 
 

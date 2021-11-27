@@ -4,7 +4,8 @@
 
 #include "xhci_resources_32.h"
 
-xhci_resources_32::xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize) : dcbaa_page(4096), scratchpad_array(), scratchpad_pages() {
+xhci_resources_32::xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize) :
+        dcbaa_page(4096), scratchpad_array(), scratchpad_pages(), rings_page(sizeof(xhci_rings)) {
     if (pagesize > 4096) {
         wild_panic("Pagesize other than 4096 is not supported by driver due to alignment issues.");
     }
@@ -17,6 +18,7 @@ xhci_resources_32::xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize
             buffers[i] = scratchpad_pages[i]->PhysAddr();
         }
     }
+    new (rings_page.Pointer()) xhci_rings(rings_page.PhysAddr());
 }
 
 uint64_t xhci_resources_32::DCBAAPhys() const {
@@ -29,4 +31,16 @@ xhci_dcbaa *xhci_resources_32::DCBAA() const {
 
 uint64_t xhci_resources_32::ScratchpadPhys() const {
     return scratchpad_array ? scratchpad_array->PhysAddr() : 0;
+}
+
+xhci_resources_32::~xhci_resources_32() {
+    ((xhci_rings *) rings_page.Pointer())->~xhci_rings();
+}
+
+uint64_t xhci_resources_32::CommandRingPhys() const {
+    return rings_page.PhysAddr();
+}
+
+xhci_rings *xhci_resources_32::Rings() const {
+    return (xhci_rings *) rings_page.Pointer();
 }

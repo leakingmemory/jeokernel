@@ -174,6 +174,57 @@ struct xhci_capabilities {
 
 static_assert(sizeof(xhci_capabilities) == 0x20);
 
+struct xhci_trb {
+    uint64_t DataPtr;
+    uint32_t TransferLength : 17;
+    uint8_t TDSize : 5;
+    uint16_t InterrupterTarget : 10;
+    uint16_t Command;
+    uint16_t Reserved;
+} __attribute__((__packed__));
+static_assert(sizeof(xhci_trb) == 16);
+
+#define XHCI_TRB_NORMAL             (1 << 10)
+#define XHCI_TRB_SETUP              (2 << 10)
+#define XHCI_TRB_DATA               (3 << 10)
+#define XHCI_TRB_STATUS             (4 << 10)
+#define XHCI_TRB_ISOCH              (5 << 10)
+#define XHCI_TRB_LINK               (6 << 10)
+#define XHCI_TRB_EVENT_DATA         (7 << 10)
+#define XHCI_TRB_NOOP               (8 << 10)
+#define XHCI_TRB_ENABLE_SLOT        (9 << 10)
+#define XHCI_TRB_DISABLE_SLOT       (10 << 10)
+#define XHCI_TRB_ADDRESS_DEVICE     (11 << 10)
+#define XHCI_TRB_CONFIGURE_ENDPOINT (12 << 10)
+
+#define XHCI_TRB_CYCLE  1
+
+template <int n> struct xhci_trb_ring {
+    static_assert(n > 2);
+    xhci_trb ring[n];
+
+    xhci_trb_ring(uint64_t physAddr) : ring() {
+        ring[0].DataPtr = physAddr;
+        ring[0].TransferLength = 0;
+        ring[0].TDSize = 0;
+        ring[0].InterrupterTarget = 0;
+        ring[0].Command = XHCI_TRB_NORMAL | XHCI_TRB_CYCLE;
+        ring[0].Reserved = 0;
+        ring[n-1].DataPtr = physAddr;
+        ring[n-1].TransferLength = 0;
+        ring[n-1].TDSize = 0;
+        ring[n-1].InterrupterTarget = 0;
+        ring[n-1].Command = XHCI_TRB_LINK;
+        ring[n-1].Reserved = 0;
+    }
+};
+
+struct xhci_rings {
+    xhci_trb_ring<16> CommandRing;
+
+    xhci_rings(uint64_t physAddr) : CommandRing(physAddr) {}
+};
+
 struct xhci_device_context_entry;
 
 struct xhci_dcbaa {
@@ -203,6 +254,8 @@ public:
     virtual uint64_t DCBAAPhys() const = 0;
     virtual xhci_dcbaa *DCBAA() const = 0;
     virtual uint64_t ScratchpadPhys() const = 0;
+    virtual uint64_t CommandRingPhys() const = 0;
+    virtual xhci_rings *Rings() const = 0;
 };
 
 class xhci : public Device {
@@ -217,6 +270,8 @@ public:
     xhci(Bus &bus, PciDeviceInformation &deviceInformation) : Device("xhci", &bus), pciDeviceInformation(deviceInformation), numSlots(0) {}
     void init() override;
     uint32_t Pagesize();
+private:
+    bool irq();
 };
 
 class xhci_driver : public Driver {

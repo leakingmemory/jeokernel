@@ -183,6 +183,24 @@ void xhci::init() {
         }
     }
     opregs->deviceContextBaseAddressArrayPointer = resources->DCBAAPhys();
+    opregs->commandRingControl = resources->CommandRingPhys();
+
+    PciRegisterF regF{pciDeviceInformation.readRegF()};
+    {
+        auto *pci = GetBus()->GetPci();
+        std::optional<uint8_t> irq = pci->GetIrqNumber(pciDeviceInformation, regF.InterruptPin - 1);
+        {
+            std::stringstream msg;
+            msg << DeviceType() << (unsigned int) DeviceId() << ": INT pin " << (unsigned int) regF.InterruptPin
+                << " PIC INT#" << (unsigned int) regF.InterruptLine << " ACPI INT# " << (irq ? *irq : 0) << "\n";
+            get_klogger() << msg.str().c_str();
+        }
+        if (irq) {
+            pci->AddIrqHandler(*irq,[this]() {
+                return this->irq();
+            });
+        }
+    }
 
     {
         std::stringstream msg;
@@ -195,4 +213,9 @@ uint32_t xhci::Pagesize() {
     uint32_t n{opregs->pageSize & 0xFFFF};
     uint32_t pagesize(n * 4096);
     return pagesize;
+}
+
+bool xhci::irq() {
+    get_klogger() << "XHCI intr\n";
+    return false;
 }
