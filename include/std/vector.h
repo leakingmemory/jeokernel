@@ -267,13 +267,13 @@ namespace std {
         }
 
         reference at(size_type i) {
-            T *ptr = i >= 0 && i < c._size ? &(c._data[i]) : nullptr;
-            return *ptr;
+            vector_container_element<T> *ptr = i >= 0 && i < c._size ? &(c._data[i]) : nullptr;
+            return ptr->element;
         }
 
         const_reference at(size_type i) const {
-            T *ptr = i >= 0 && i < c._size ? &(c._data[i]) : nullptr;
-            return *ptr;
+            const vector_container_element<T> *ptr = i >= 0 && i < c._size ? &(c._data[i]) : nullptr;
+            return ptr->element;
         }
 
         reference operator[](size_type i) {
