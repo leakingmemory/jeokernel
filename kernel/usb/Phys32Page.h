@@ -21,10 +21,10 @@ public:
     void *Pointer() const {
         return vm.pointer();
     }
-    size_t Size() {
+    size_t Size() const {
         return size;
     }
-    uint32_t PhysAddr() {
+    uint32_t PhysAddr() const {
         return physaddr;
     }
 };
