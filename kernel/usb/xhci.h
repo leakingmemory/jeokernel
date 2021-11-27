@@ -174,15 +174,49 @@ struct xhci_capabilities {
 
 static_assert(sizeof(xhci_capabilities) == 0x20);
 
+struct xhci_device_context_entry;
+
+struct xhci_dcbaa {
+    uint64_t phys[256];
+    xhci_device_context_entry *contexts[256];
+
+    xhci_dcbaa() {
+        for (int i = 0; i < 256; i++) {
+            phys[i] = 0;
+            contexts[i] = nullptr;
+        }
+    }
+    ~xhci_dcbaa() {
+        for (int i = 0; i < 256; i++) {
+            if (contexts[i] != nullptr) {
+                delete contexts[i];
+            }
+        }
+    }
+};
+
+static_assert(sizeof(xhci_dcbaa) <= 4096);
+
+class xhci_resources {
+public:
+    virtual ~xhci_resources() {}
+    virtual uint64_t DCBAAPhys() const = 0;
+    virtual xhci_dcbaa *DCBAA() const = 0;
+    virtual uint64_t ScratchpadPhys() const = 0;
+};
+
 class xhci : public Device {
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
     xhci_capabilities *capabilities;
     xhci_operational_registers *opregs;
+    std::unique_ptr<xhci_resources> resources;
+    uint8_t numSlots;
 public:
-    xhci(Bus &bus, PciDeviceInformation &deviceInformation) : Device("xhci", &bus), pciDeviceInformation(deviceInformation) {}
+    xhci(Bus &bus, PciDeviceInformation &deviceInformation) : Device("xhci", &bus), pciDeviceInformation(deviceInformation), numSlots(0) {}
     void init() override;
+    uint32_t Pagesize();
 };
 
 class xhci_driver : public Driver {

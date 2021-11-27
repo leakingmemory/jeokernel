@@ -1,0 +1,32 @@
+//
+// Created by sigsegv on 11/27/21.
+//
+
+#include "xhci_resources_32.h"
+
+xhci_resources_32::xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize) : dcbaa_page(4096), scratchpad_array(), scratchpad_pages() {
+    if (pagesize > 4096) {
+        wild_panic("Pagesize other than 4096 is not supported by driver due to alignment issues.");
+    }
+    if (maxScratchpadBuffers > 0) {
+        scratchpad_array = std::make_unique<Phys32Page>(maxScratchpadBuffers * sizeof(uint64_t));
+        scratchpad_pages.reserve(maxScratchpadBuffers);
+        uint64_t *buffers = (uint64_t *) scratchpad_array->Pointer();
+        for (int i = 0; i < maxScratchpadBuffers; i++) {
+            scratchpad_pages.emplace_back(new Phys32Page(pagesize));
+            buffers[i] = scratchpad_pages[i]->PhysAddr();
+        }
+    }
+}
+
+uint64_t xhci_resources_32::DCBAAPhys() const {
+    return dcbaa_page.PhysAddr();
+}
+
+xhci_dcbaa *xhci_resources_32::DCBAA() const {
+    return (xhci_dcbaa *) dcbaa_page.Pointer();
+}
+
+uint64_t xhci_resources_32::ScratchpadPhys() const {
+    return scratchpad_array ? scratchpad_array->PhysAddr() : 0;
+}

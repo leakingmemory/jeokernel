@@ -7,6 +7,7 @@
 #include <chrono>
 #include <thread>
 #include "xhci.h"
+#include "xhci_resources_32.h"
 
 #define XHCI_CMD_RUN        1
 #define XHCI_CMD_HCRESET    (1 << 1)
@@ -149,9 +150,49 @@ void xhci::init() {
         }
     }
 
+    numSlots = (uint8_t) (capabilities->hcsparams1 & 0xFF);
+    {
+        uint32_t config{opregs->config};
+        config &= 0xFFFFFF00;
+        config |= numSlots;
+        opregs->config = config;
+    }
+
+    uint32_t maxScratchpadBuffers{capabilities->hcsparams2};
+    {
+        uint32_t hi{maxScratchpadBuffers};
+        maxScratchpadBuffers = maxScratchpadBuffers >> 27;
+        hi = (hi >> (21 - 5)) & (0x1F << 5);
+        maxScratchpadBuffers |= hi;
+    }
+
+    {
+        std::stringstream msg;
+        msg << DeviceType() << (unsigned int) DeviceId() << ": hcsparams2=" << std::hex << capabilities->hcsparams2
+            << " max-scratchpad=" << maxScratchpadBuffers << "\n";
+        get_klogger() << msg.str().c_str();
+    }
+
+    resources = std::unique_ptr<xhci_resources>(new xhci_resources_32(maxScratchpadBuffers, Pagesize()));
+    {
+        auto dcbaa = resources->DCBAA();
+        dcbaa->phys[0] = resources->ScratchpadPhys();
+        for (int i = 0; i < numSlots; i++) {
+            dcbaa->contexts[i] = 0;
+            dcbaa->phys[i + 1] = 0;
+        }
+    }
+    opregs->deviceContextBaseAddressArrayPointer = resources->DCBAAPhys();
+
     {
         std::stringstream msg;
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB3 controller hccparams1=" << std::hex << capabilities->hccparams1 << "\n";
         get_klogger() << msg.str().c_str();
     }
+}
+
+uint32_t xhci::Pagesize() {
+    uint32_t n{opregs->pageSize & 0xFFFF};
+    uint32_t pagesize(n * 4096);
+    return pagesize;
 }
