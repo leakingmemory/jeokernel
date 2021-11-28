@@ -73,6 +73,7 @@ void xhci::init() {
     }
     capabilities = (xhci_capabilities *) (void *) (((uint8_t *) mapped_registers_vm->pointer()) + pg_offset);
     opregs = capabilities->opregs();
+    runtimeregs = capabilities->runtimeregs();
     {
         std::optional<xhci_ext_cap> extcap = capabilities->extcap();
         while (extcap)  {
@@ -150,12 +151,21 @@ void xhci::init() {
         }
     }
 
-    numSlots = (uint8_t) (capabilities->hcsparams1 & 0xFF);
     {
-        uint32_t config{opregs->config};
-        config &= 0xFFFFFF00;
-        config |= numSlots;
-        opregs->config = config;
+        uint32_t hcsparams1{capabilities->hcsparams1};
+        numSlots = (uint8_t) (hcsparams1 & 0xFF);
+        {
+            uint32_t config{opregs->config};
+            config &= 0xFFFFFF00;
+            config |= numSlots;
+            opregs->config = config;
+        }
+        numInterrupters = (uint16_t) ((hcsparams1 >> 8) & 0x7FF);
+        numPorts = (uint8_t) (hcsparams1 >> 24);
+    }
+    {
+        uint32_t hcsparams2{capabilities->hcsparams2};
+        eventRingSegmentTableMax = (1 << ((hcsparams2 >> 4) & 0xF));
     }
 
     uint32_t maxScratchpadBuffers{capabilities->hcsparams2};
@@ -168,8 +178,9 @@ void xhci::init() {
 
     {
         std::stringstream msg;
-        msg << DeviceType() << (unsigned int) DeviceId() << ": hcsparams2=" << std::hex << capabilities->hcsparams2
-            << " max-scratchpad=" << maxScratchpadBuffers << "\n";
+        msg << DeviceType() << (unsigned int) DeviceId() << ": hcspa2=" << std::hex << capabilities->hcsparams2
+            << " max-scratchpad=" << maxScratchpadBuffers << std::dec << " ev-seg=" << eventRingSegmentTableMax
+            << " slots=" << numSlots << " ports=" << numPorts << " inter=" << numInterrupters << "\n";
         get_klogger() << msg.str().c_str();
     }
 
@@ -183,7 +194,7 @@ void xhci::init() {
         }
     }
     opregs->deviceContextBaseAddressArrayPointer = resources->DCBAAPhys();
-    opregs->commandRingControl = resources->CommandRingPhys();
+    opregs->commandRingControl = resources->CommandRingPhys() | XHCI_TRB_CYCLE;
 
     PciRegisterF regF{pciDeviceInformation.readRegF()};
     {
@@ -200,6 +211,24 @@ void xhci::init() {
                 return this->irq();
             });
         }
+    }
+
+    for (int i = 1; i < numInterrupters; i++) {
+        auto &inter = runtimeregs->interrupters[i];
+        inter.interrupterManagement = 0;
+        inter.eventRingSegmentTableSize = 0;
+    }
+    {
+        auto &inter = runtimeregs->interrupters[0];
+        inter.interrupterManagement = XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_ENABLE;
+        uint16_t segments = 1;
+        if (segments > eventRingSegmentTableMax) {
+            segments = eventRingSegmentTableMax;
+        }
+        inter.eventRingDequeuePointer = resources->PrimaryFirstEventPhys() |
+                XHCI_INTERRUPTER_DEQ_HANDLER_BUSY;
+        inter.eventRingSegmentTableBaseAddress = resources->PrimaryEventSegmentsPhys();
+        inter.eventRingSegmentTableSize = segments;
     }
 
     {

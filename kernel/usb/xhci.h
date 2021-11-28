@@ -39,6 +39,30 @@ struct xhci_operational_registers {
 
 static_assert(sizeof(xhci_operational_registers) == 0x410);
 
+#define XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_PENDING 1
+#define XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_ENABLE  2
+
+#define XHCI_INTERRUPTER_DEQ_HANDLER_BUSY   8
+
+struct xhci_interrupter_registers {
+    uint32_t interrupterManagement;
+    uint32_t interrupterModeration;
+    uint32_t eventRingSegmentTableSize;
+    uint32_t reserved;
+    uint64_t eventRingSegmentTableBaseAddress;
+    uint64_t eventRingDequeuePointer;
+};
+static_assert(sizeof(xhci_interrupter_registers) == 0x20);
+
+struct xhci_runtime_registers {
+    uint32_t microframeIndex; /* 00-03 */
+    uint32_t reserved1; /* 04-07 */
+    uint64_t reserved2; /* 08-0F */
+    uint64_t reserved3; /* 10-17 */
+    uint64_t reserved4; /* 18-1F */
+    xhci_interrupter_registers interrupters[1];
+};
+
 union xhci_legsup_cap {
     uint32_t value;
     struct {
@@ -159,6 +183,12 @@ struct xhci_capabilities {
         return (xhci_operational_registers *) (void *) ptr;
     }
 
+    xhci_runtime_registers *runtimeregs() {
+        uint8_t *ptr = (uint8_t *) (void *) this;
+        ptr += rtsoff;
+        return (xhci_runtime_registers *) (void *) ptr;
+    }
+
     std::optional<xhci_ext_cap> extcap() {
         xhci_hccparams1 par(hccparams1);
         if (par.xhciExtCapPtr != 0) {
@@ -204,26 +234,77 @@ template <int n> struct xhci_trb_ring {
     xhci_trb ring[n];
 
     xhci_trb_ring(uint64_t physAddr) : ring() {
-        ring[0].DataPtr = physAddr;
-        ring[0].TransferLength = 0;
-        ring[0].TDSize = 0;
-        ring[0].InterrupterTarget = 0;
-        ring[0].Command = XHCI_TRB_NORMAL | XHCI_TRB_CYCLE;
-        ring[0].Reserved = 0;
+        for (int i = 0; i < n; i++) {
+            ring[i].DataPtr = 0;
+            ring[i].TransferLength = 0;
+            ring[i].TDSize = 0;
+            ring[i].InterrupterTarget = 0;
+            ring[i].Command = XHCI_TRB_NORMAL;
+            ring[i].Reserved = 0;
+        }
         ring[n-1].DataPtr = physAddr;
-        ring[n-1].TransferLength = 0;
-        ring[n-1].TDSize = 0;
-        ring[n-1].InterrupterTarget = 0;
         ring[n-1].Command = XHCI_TRB_LINK;
-        ring[n-1].Reserved = 0;
+    }
+
+    constexpr int LengthIncludingLink() {
+        return n;
     }
 };
 
-struct xhci_rings {
-    xhci_trb_ring<16> CommandRing;
+template <int n> struct xhci_event_ring {
+    static_assert(n >= 16);
+    xhci_trb ring[n];
 
-    xhci_rings(uint64_t physAddr) : CommandRing(physAddr) {}
+    xhci_event_ring() : ring() {
+        for (int i = 0; i < n; i++) {
+            ring[i].DataPtr = 0;
+            ring[i].TransferLength = 0;
+            ring[i].TDSize = 0;
+            ring[i].InterrupterTarget = 0;
+            ring[i].Command = 0;
+            ring[i].Reserved = 0;
+        }
+    }
+
+    constexpr int Length() {
+        return n;
+    }
 };
+
+struct xhci_event_segment {
+    uint64_t ringSegmentBaseAddress;
+    uint16_t ringSegmentSize;
+    uint16_t reserved1;
+    uint32_t reserved2;
+};
+static_assert(sizeof(xhci_event_segment) == 16);
+
+#define XHCI_NUM_EVENT_SEGMENTS 32
+
+struct xhci_rings {
+    xhci_trb_ring<32> CommandRing;
+    xhci_event_segment EventSegments[XHCI_NUM_EVENT_SEGMENTS];
+    xhci_event_ring<32> PrimaryEventRing;
+
+    xhci_rings(uint64_t physAddr) : CommandRing(physAddr), EventSegments(), PrimaryEventRing() {
+        for (int i = 0; i < XHCI_NUM_EVENT_SEGMENTS; i++) {
+            EventSegments[i].ringSegmentBaseAddress = 0;
+            EventSegments[i].ringSegmentSize = 0;
+            EventSegments[i].reserved1 = 0;
+            EventSegments[i].reserved2 = 0;
+        }
+        EventSegments[0].ringSegmentBaseAddress = physAddr + PrimaryEventRingOffset();
+        EventSegments[0].ringSegmentSize = PrimaryEventRing.Length();
+    }
+
+    constexpr uint16_t EventSegmentsOffset() {
+        return sizeof(CommandRing);
+    }
+    constexpr uint16_t PrimaryEventRingOffset() {
+        return EventSegmentsOffset() + sizeof(EventSegments);
+    }
+} __attribute__((__packed__));
+static_assert(sizeof(xhci_rings) < 4096);
 
 struct xhci_device_context_entry;
 
@@ -249,12 +330,18 @@ struct xhci_dcbaa {
 static_assert(sizeof(xhci_dcbaa) <= 4096);
 
 class xhci_resources {
+private:
+    uint8_t CommandCycle : 1;
 public:
+    xhci_resources() : CommandCycle(1) {
+    }
     virtual ~xhci_resources() {}
     virtual uint64_t DCBAAPhys() const = 0;
     virtual xhci_dcbaa *DCBAA() const = 0;
     virtual uint64_t ScratchpadPhys() const = 0;
     virtual uint64_t CommandRingPhys() const = 0;
+    virtual uint64_t PrimaryFirstEventPhys() const = 0;
+    virtual uint64_t PrimaryEventSegmentsPhys() const = 0;
     virtual xhci_rings *Rings() const = 0;
 };
 
@@ -264,8 +351,12 @@ private:
     std::unique_ptr<vmem> mapped_registers_vm;
     xhci_capabilities *capabilities;
     xhci_operational_registers *opregs;
+    xhci_runtime_registers *runtimeregs;
     std::unique_ptr<xhci_resources> resources;
+    uint16_t numInterrupters;
+    uint16_t eventRingSegmentTableMax;
     uint8_t numSlots;
+    uint8_t numPorts;
 public:
     xhci(Bus &bus, PciDeviceInformation &deviceInformation) : Device("xhci", &bus), pciDeviceInformation(deviceInformation), numSlots(0) {}
     void init() override;

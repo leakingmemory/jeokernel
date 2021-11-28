@@ -21,6 +21,8 @@ public:
     xhci_dcbaa *DCBAA() const override;
     uint64_t ScratchpadPhys() const override;
     uint64_t CommandRingPhys() const override;
+    uint64_t PrimaryFirstEventPhys() const override;
+    uint64_t PrimaryEventSegmentsPhys() const override;
     xhci_rings *Rings() const override;
 };
 

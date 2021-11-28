@@ -44,3 +44,11 @@ uint64_t xhci_resources_32::CommandRingPhys() const {
 xhci_rings *xhci_resources_32::Rings() const {
     return (xhci_rings *) rings_page.Pointer();
 }
+
+uint64_t xhci_resources_32::PrimaryFirstEventPhys() const {
+    return rings_page.PhysAddr() + Rings()->PrimaryEventRingOffset();
+}
+
+uint64_t xhci_resources_32::PrimaryEventSegmentsPhys() const {
+    return rings_page.PhysAddr() + Rings()->EventSegmentsOffset();
+}
