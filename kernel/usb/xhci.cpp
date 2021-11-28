@@ -11,6 +11,7 @@
 
 #define XHCI_CMD_RUN        1
 #define XHCI_CMD_HCRESET    (1 << 1)
+#define XHCI_CMD_INT_ENABLE (1 << 2)
 
 #define XHCI_STATUS_HALTED      1
 #define XHCI_STATUS_NOT_READY   (1 << 11)
@@ -230,6 +231,8 @@ void xhci::init() {
         inter.eventRingSegmentTableBaseAddress = resources->PrimaryEventSegmentsPhys();
         inter.eventRingSegmentTableSize = segments;
     }
+
+    opregs->usbCommand |= XHCI_CMD_INT_ENABLE | XHCI_CMD_RUN;
 
     {
         std::stringstream msg;
