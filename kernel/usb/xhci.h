@@ -65,6 +65,10 @@ struct xhci_runtime_registers {
     xhci_interrupter_registers interrupters[1];
 };
 
+struct xhci_doorbell_registers {
+    uint32_t doorbells[1];
+};
+
 union xhci_legsup_cap {
     uint32_t value;
     struct {
@@ -187,8 +191,14 @@ struct xhci_capabilities {
 
     xhci_runtime_registers *runtimeregs() {
         uint8_t *ptr = (uint8_t *) (void *) this;
-        ptr += rtsoff;
+        ptr += rtsoff & 0xFFFFFFE0;
         return (xhci_runtime_registers *) (void *) ptr;
+    }
+
+    xhci_doorbell_registers *doorbellregs() {
+        uint8_t *ptr = (uint8_t *) (void *) this;
+        ptr += dboff & 0xFFFFFFFC;
+        return (xhci_doorbell_registers *) (void *) ptr;
     }
 
     std::optional<xhci_ext_cap> extcap() {
@@ -356,6 +366,7 @@ private:
     xhci_capabilities *capabilities;
     xhci_operational_registers *opregs;
     xhci_runtime_registers *runtimeregs;
+    xhci_doorbell_registers *doorbellregs;
     std::unique_ptr<xhci_resources> resources;
     hw_spinlock xhcilock;
     uint16_t numInterrupters;

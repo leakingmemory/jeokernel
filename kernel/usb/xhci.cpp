@@ -16,6 +16,31 @@
 #define XHCI_STATUS_HALTED      1
 #define XHCI_STATUS_NOT_READY   (1 << 11)
 
+#define XHCI_PORT_SC_CCS                    1
+#define XHCI_PORT_SC_ENABLED                (1 << 1)
+#define XHCI_PORT_SC_OVERCURRENT            (1 << 3)
+#define XHCI_PORT_SC_RESET                  (1 << 4)
+#define XHCI_PORT_SC_PORT_LINK_STATE_MASK   (0xF << 5)
+#define XHCI_PORT_SC_PORT_POWER             (1 << 9)
+#define XHCI_PORT_SC_PORT_SPEED_MASK        (0xF << 10)
+#define XHCI_PORT_SC_PORT_INDICATOR_MASK    (3 << 14)
+#define XHCI_PORT_SC_PORT_LINK_STATE_WRITE  (1 << 16)
+#define XHCI_PORT_SC_CSC                    (1 << 17)
+#define XHCI_PORT_SC_ENABLED_CHANGE         (1 << 18)
+#define XHCI_PORT_SC_WARM_PORT_RESET_CHANGE (1 << 19)
+#define XHCI_PORT_SC_OVERCURRENT_CHANGE     (1 << 20)
+#define XHCI_PORT_SC_PORT_RESET_CHANGE      (1 << 21)
+#define XHCI_PORT_SC_PORT_LINK_STATE_CHANGE (1 << 22)
+#define XHCI_PORT_SC_PORT_CONFIG_ERROR_CHG  (1 << 23)
+#define XHCI_PORT_SC_COLD_ATTACH_STATUS     (1 << 24)
+#define XHCI_PORT_SC_WAKE_ON_CONNECT_ENABLE (1 << 25)
+#define XHCI_PORT_SC_WAKE_ON_DISCONN_ENABLE (1 << 26)
+#define XHCI_PORT_SC_WAKE_ON_OVERCUR_ENABLE (1 << 27)
+#define XHCI_PORT_SC_NOT_REMOVABLE_DEVICE   (1 << 30)
+#define XHCI_PORT_SC_WARM_PORT_RESET        (1 << 31)
+
+#define XHCI_PORT_SC_W1CLEAR_MASK   (XHCI_PORT_SC_ENABLED | XHCI_PORT_SC_CSC | XHCI_PORT_SC_ENABLED_CHANGE | XHCI_PORT_SC_WARM_PORT_RESET_CHANGE | XHCI_PORT_SC_OVERCURRENT_CHANGE | XHCI_PORT_SC_PORT_RESET_CHANGE | XHCI_PORT_SC_PORT_LINK_STATE_CHANGE | XHCI_PORT_SC_PORT_CONFIG_ERROR_CHG)
+
 Device *xhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
             deviceInformation.device_class == 0x0C /* serial bus */ &&
@@ -75,6 +100,7 @@ void xhci::init() {
     capabilities = (xhci_capabilities *) (void *) (((uint8_t *) mapped_registers_vm->pointer()) + pg_offset);
     opregs = capabilities->opregs();
     runtimeregs = capabilities->runtimeregs();
+    doorbellregs = capabilities->doorbellregs();
     {
         std::optional<xhci_ext_cap> extcap = capabilities->extcap();
         while (extcap)  {
@@ -262,7 +288,36 @@ int xhci::GetNumberOfPorts() {
 }
 
 uint32_t xhci::GetPortStatus(int port) {
-    return 0;
+    uint32_t status{0};
+    uint32_t hcstatus{opregs->portRegisters[port].portStatusControl};
+    if ((hcstatus & XHCI_PORT_SC_CCS) != 0) {
+        status |= USB_PORT_STATUS_CCS;
+    }
+    if ((hcstatus & XHCI_PORT_SC_ENABLED) != 0) {
+        status |= USB_PORT_STATUS_PES;
+    }
+    if ((hcstatus & XHCI_PORT_SC_OVERCURRENT) != 0) {
+        status |= USB_PORT_STATUS_POCI;
+    }
+    if ((hcstatus & XHCI_PORT_SC_RESET) != 0) {
+        status |= USB_PORT_STATUS_PRS;
+    }
+    if ((hcstatus & XHCI_PORT_SC_PORT_POWER) != 0) {
+        status |= USB_PORT_STATUS_PPS;
+    }
+    if ((hcstatus & XHCI_PORT_SC_CSC) != 0) {
+        status |= USB_PORT_STATUS_CSC;
+    }
+    if ((hcstatus & XHCI_PORT_SC_ENABLED_CHANGE) != 0) {
+        status |= USB_PORT_STATUS_PESC;
+    }
+    if ((hcstatus & XHCI_PORT_SC_OVERCURRENT_CHANGE) != 0) {
+        status |= USB_PORT_STATUS_OCIC;
+    }
+    if ((hcstatus & XHCI_PORT_SC_PORT_RESET_CHANGE) != 0) {
+        status |= USB_PORT_STATUS_PRSC;
+    }
+    return status;
 }
 
 void xhci::SwitchPortOff(int port) {
@@ -286,6 +341,23 @@ usb_speed xhci::PortSpeed(int port) {
 }
 
 void xhci::ClearStatusChange(int port, uint32_t statuses) {
+    uint32_t clear{0};
+    if ((statuses & USB_PORT_STATUS_CSC) != 0) {
+        clear |= XHCI_PORT_SC_CSC;
+    }
+    if ((statuses & USB_PORT_STATUS_PESC) != 0) {
+        clear |= XHCI_PORT_SC_ENABLED_CHANGE;
+    }
+    if ((statuses & USB_PORT_STATUS_OCIC) != 0) {
+        clear |= XHCI_PORT_SC_OVERCURRENT_CHANGE;
+    }
+    if ((statuses & USB_PORT_STATUS_PRSC) != 0) {
+        clear |= XHCI_PORT_SC_PORT_RESET_CHANGE;
+    }
+    uint32_t status{opregs->portRegisters[port].portStatusControl};
+    status &= ~XHCI_PORT_SC_W1CLEAR_MASK;
+    status |= clear;
+    opregs->portRegisters[port].portStatusControl = status;
 }
 
 std::shared_ptr<usb_endpoint>
