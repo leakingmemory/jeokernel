@@ -9,6 +9,8 @@
 #include <devices/drivers.h>
 #include <core/vmem.h>
 #include "../pci/pci.h"
+#include "usb_hcd.h"
+
 #endif
 
 #include <memory>
@@ -345,7 +347,9 @@ public:
     virtual xhci_rings *Rings() const = 0;
 };
 
-class xhci : public Device {
+#define XHCI_TRANSFER_BUFFER_SIZE 1024
+
+class xhci : public usb_hcd {
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
@@ -353,14 +357,34 @@ private:
     xhci_operational_registers *opregs;
     xhci_runtime_registers *runtimeregs;
     std::unique_ptr<xhci_resources> resources;
+    hw_spinlock xhcilock;
     uint16_t numInterrupters;
     uint16_t eventRingSegmentTableMax;
     uint8_t numSlots;
     uint8_t numPorts;
 public:
-    xhci(Bus &bus, PciDeviceInformation &deviceInformation) : Device("xhci", &bus), pciDeviceInformation(deviceInformation), numSlots(0) {}
+    xhci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("xhci", bus), pciDeviceInformation(deviceInformation),
+    xhcilock(), numInterrupters(0), eventRingSegmentTableMax(0), numSlots(0), numPorts(0) {}
     void init() override;
     uint32_t Pagesize();
+    void dumpregs() override;
+    int GetNumberOfPorts() override;
+    uint32_t GetPortStatus(int port) override;
+    void SwitchPortOff(int port) override;
+    void SwitchPortOn(int port) override;
+    void EnablePort(int port) override;
+    void DisablePort(int port) override;
+    void ResetPort(int port) override;
+    usb_speed PortSpeed(int port) override;
+    void ClearStatusChange(int port, uint32_t statuses) override;
+    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
+    size_t TransferBufferSize() override {
+        return XHCI_TRANSFER_BUFFER_SIZE;
+    }
+    hw_spinlock &HcdSpinlock() override {
+        return xhcilock;
+    }
 private:
     bool irq();
 };

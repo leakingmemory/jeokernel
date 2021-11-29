@@ -239,6 +239,8 @@ void xhci::init() {
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB3 controller hccparams1=" << std::hex << capabilities->hccparams1 << "\n";
         get_klogger() << msg.str().c_str();
     }
+
+    Run();
 }
 
 uint32_t xhci::Pagesize() {
@@ -250,4 +252,50 @@ uint32_t xhci::Pagesize() {
 bool xhci::irq() {
     get_klogger() << "XHCI intr\n";
     return false;
+}
+
+void xhci::dumpregs() {
+}
+
+int xhci::GetNumberOfPorts() {
+    return numPorts;
+}
+
+uint32_t xhci::GetPortStatus(int port) {
+    return 0;
+}
+
+void xhci::SwitchPortOff(int port) {
+}
+
+void xhci::SwitchPortOn(int port) {
+}
+
+void xhci::EnablePort(int port) {
+    /* Not possible on xhci */
+}
+
+void xhci::DisablePort(int port) {
+}
+
+void xhci::ResetPort(int port) {
+}
+
+usb_speed xhci::PortSpeed(int port) {
+    return LOW;
+}
+
+void xhci::ClearStatusChange(int port, uint32_t statuses) {
+}
+
+std::shared_ptr<usb_endpoint>
+xhci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
+                            usb_endpoint_direction dir, usb_speed speed) {
+    return {};
+}
+
+std::shared_ptr<usb_endpoint>
+xhci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
+                              usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
+    return {};
 }
