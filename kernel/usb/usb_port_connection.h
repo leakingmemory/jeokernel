@@ -36,6 +36,19 @@ enum class usb_endpoint_type {
     INTERRUPT
 };
 
+class usb_hw_enumeration_ready {
+};
+
+class usb_hw_enumeration_addressing {
+public:
+    virtual std::shared_ptr<usb_hw_enumeration_ready> set_address(uint8_t addr) = 0;
+};
+
+class usb_hw_enumeration {
+public:
+    virtual std::shared_ptr<usb_hw_enumeration_addressing> enumerate() = 0;
+};
+
 class usb_transfer;
 
 #define TRANSFER_NO_INTERRUPT 0xFFFF
@@ -98,6 +111,9 @@ public:
     virtual bool ResettingPort(int port) = 0;
     virtual bool EnabledPort(int port) = 0;
     virtual usb_speed PortSpeed(int port) = 0;
+    virtual std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) {
+        return {};
+    }
     virtual std::shared_ptr<usb_func_addr> GetFuncAddr() = 0;
     virtual bool PortResetEnablesPort() {
         return true;

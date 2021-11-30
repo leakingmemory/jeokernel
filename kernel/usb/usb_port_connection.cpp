@@ -33,91 +33,126 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(200ms);
     }
-    get_klogger() << "USB port reset\n";
-    hub.ResetPort(port);
-    {
-        bool resetted{hub.EnabledPort(port)};
-        int timeout = 50;
-        while (timeout > 0 && !resetted) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
-            resetted = !hub.ResettingPort(port);
-            if (resetted && !hub.PortResetEnablesPort()) {
-                resetted = hub.EnabledPort(port);
-                if (!resetted) {
-                    hub.EnablePort(port);
-                }
-            }
-            --timeout;
-        }
-        if (!resetted) {
-            get_klogger() << "USB port failed to reset\n";
-            hub.DisablePort(port);
-            addr = {};
-            return;
-        }
-        bool enabled{hub.EnabledPort(port)};
-        if (!enabled) {
-            get_klogger() << "USB port failed to enable\n";
-            addr = {};
-            return;
-        }
-    }
-    {
-        std::stringstream str{};
-        str << std::hex << "USB port enabled and reset - status " << hub.GetPortStatus(port) << "\n";
-        get_klogger() << str.str().c_str();
-    }
+
     usb_minimum_device_descriptor minDevDesc{};
-    speed = hub.PortSpeed(port);
-    {
-        std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, usb_endpoint_direction::BOTH, speed);
-        if (ctrl_0_0) {
-            usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
-            std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*ctrl_0_0, get_descr0);
-            if (descr0_buf) {
-                descr0_buf->CopyTo(minDevDesc);
-                {
-                    std::stringstream str{};
-                    str << std::hex << "Dev desc len=" << minDevDesc.bLength
-                        << " type=" << minDevDesc.bDescriptorType << " USB=" << minDevDesc.bcdUSB
-                        << " class=" << minDevDesc.bDeviceClass << " sub=" << minDevDesc.bDeviceSubClass
-                        << " proto=" << minDevDesc.bDeviceProtocol << " packet-0=" << minDevDesc.bMaxPacketSize0
-                        << "\n";
-                    get_klogger() << str.str().c_str();
-                }
-            } else {
-                get_klogger() << "Dev desc error\n";
-                addr = {};
+
+    auto hc_enumeration = hub.EnumeratePort(port);
+
+    if (hc_enumeration) {
+        auto addressing = hc_enumeration->enumerate();
+        if (!addressing) {
+            get_klogger() << "USB port failed to enumerate\n";
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(100ms);
+            if (hub.EnabledPort(port)) {
                 hub.DisablePort(port);
-                return;
             }
-        } else {
-            get_klogger() << "Usb connection: Can't create control endpoints\n";
-            addr = {};
-            hub.DisablePort(port);
             return;
         }
-        {
-            uint8_t func = addr->GetAddr();
-            usb_set_address set_addr{func};
-            if (ControlRequest(*ctrl_0_0, set_addr)) {
-                std::stringstream str{};
-                str << std::hex << "Usb set address " << func << " success.\n";
-                get_klogger() << str.str().c_str();
-            } else {
-                get_klogger() << "Usb set address failed\n";
-                addr = {};
+        auto usbDevice = addressing->set_address(addr->GetAddr());
+        if (!usbDevice) {
+            get_klogger() << "USB port failed to set address\n";
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(100ms);
+            if (hub.EnabledPort(port)) {
                 hub.DisablePort(port);
-
-                using namespace std::literals::chrono_literals;
-                std::this_thread::sleep_for(100ms);
-                return;
             }
+            return;
         }
-
+        get_klogger() << "USB port configured\n";
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(100ms);
+        if (hub.EnabledPort(port)) {
+            hub.DisablePort(port);
+        }
+        return;
+    } else {
+        get_klogger() << "USB port reset\n";
+        hub.ResetPort(port);
+        {
+            bool resetted{hub.EnabledPort(port)};
+            int timeout = 50;
+            while (timeout > 0 && !resetted) {
+                using namespace std::literals::chrono_literals;
+                std::this_thread::sleep_for(10ms);
+                resetted = !hub.ResettingPort(port);
+                if (resetted && !hub.PortResetEnablesPort()) {
+                    resetted = hub.EnabledPort(port);
+                    if (!resetted) {
+                        hub.EnablePort(port);
+                    }
+                }
+                --timeout;
+            }
+            if (!resetted) {
+                get_klogger() << "USB port failed to reset\n";
+                hub.DisablePort(port);
+                addr = {};
+                return;
+            }
+            bool enabled{hub.EnabledPort(port)};
+            if (!enabled) {
+                get_klogger() << "USB port failed to enable\n";
+                addr = {};
+                return;
+            }
+        }
+        {
+            std::stringstream str{};
+            str << std::hex << "USB port enabled and reset - status " << hub.GetPortStatus(port) << "\n";
+            get_klogger() << str.str().c_str();
+        }
+        speed = hub.PortSpeed(port);
+        {
+            std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, usb_endpoint_direction::BOTH,
+                                                                               speed);
+            if (ctrl_0_0) {
+                usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
+                std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*ctrl_0_0, get_descr0);
+                if (descr0_buf) {
+                    descr0_buf->CopyTo(minDevDesc);
+                    {
+                        std::stringstream str{};
+                        str << std::hex << "Dev desc len=" << minDevDesc.bLength
+                            << " type=" << minDevDesc.bDescriptorType << " USB=" << minDevDesc.bcdUSB
+                            << " class=" << minDevDesc.bDeviceClass << " sub=" << minDevDesc.bDeviceSubClass
+                            << " proto=" << minDevDesc.bDeviceProtocol << " packet-0=" << minDevDesc.bMaxPacketSize0
+                            << "\n";
+                        get_klogger() << str.str().c_str();
+                    }
+                } else {
+                    get_klogger() << "Dev desc error\n";
+                    addr = {};
+                    hub.DisablePort(port);
+                    return;
+                }
+            } else {
+                get_klogger() << "Usb connection: Can't create control endpoints\n";
+                addr = {};
+                hub.DisablePort(port);
+                return;
+            }
+            {
+                uint8_t func = addr->GetAddr();
+                usb_set_address set_addr{func};
+                if (ControlRequest(*ctrl_0_0, set_addr)) {
+                    std::stringstream str{};
+                    str << std::hex << "Usb set address " << func << " success.\n";
+                    get_klogger() << str.str().c_str();
+                } else {
+                    get_klogger() << "Usb set address failed\n";
+                    addr = {};
+                    hub.DisablePort(port);
+
+                    using namespace std::literals::chrono_literals;
+                    std::this_thread::sleep_for(100ms);
+                    return;
+                }
+            }
+
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(100ms);
+        }
     }
 
     thread = new std::thread([this, minDevDesc] () {

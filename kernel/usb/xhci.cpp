@@ -41,6 +41,20 @@
 
 #define XHCI_PORT_SC_W1CLEAR_MASK   (XHCI_PORT_SC_ENABLED | XHCI_PORT_SC_CSC | XHCI_PORT_SC_ENABLED_CHANGE | XHCI_PORT_SC_WARM_PORT_RESET_CHANGE | XHCI_PORT_SC_OVERCURRENT_CHANGE | XHCI_PORT_SC_PORT_RESET_CHANGE | XHCI_PORT_SC_PORT_LINK_STATE_CHANGE | XHCI_PORT_SC_PORT_CONFIG_ERROR_CHG)
 
+#define XHCI_PORT_SC_PLS_STATE_U0               0
+#define XHCI_PORT_SC_PLS_STATE_U1               (1 << 5)
+#define XHCI_PORT_SC_PLS_STATE_U2               (2 << 5)
+#define XHCI_PORT_SC_PLS_STATE_U3               (3 << 5)
+#define XHCI_PORT_SC_PLS_STATE_DISABLED         (4 << 5)
+#define XHCI_PORT_SC_PLS_STATE_RX_DETECT        (5 << 5)
+#define XHCI_PORT_SC_PLS_STATE_INACTIVE         (6 << 5)
+#define XHCI_PORT_SC_PLS_STATE_POLLING          (7 << 5)
+#define XHCI_PORT_SC_PLS_STATE_RECOVERY         (8 << 5)
+#define XHCI_PORT_SC_PLS_STATE_HOT_RESET        (9 << 5)
+#define XHCI_PORT_SC_PLS_STATE_COMPLIANCE_MODE  (10 << 5)
+#define XHCI_PORT_SC_PLS_STATE_TEST_MODE        (11 << 5)
+#define XHCI_PORT_SC_PLS_STATE_RESUME           (15 << 5)
+
 Device *xhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
             deviceInformation.device_class == 0x0C /* serial bus */ &&
@@ -334,6 +348,23 @@ void xhci::DisablePort(int port) {
 }
 
 void xhci::ResetPort(int port) {
+    {
+        uint32_t change{GetPortStatus(port) & USB_PORT_STATUS_PRSC};
+        if (change != 0) {
+            ClearStatusChange(port, change);
+        }
+    }
+    opregs->portRegisters[port].portStatusControl |= XHCI_PORT_SC_RESET;
+    int timeout = 10;
+    while (--timeout > 0) {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(20ms);
+        uint32_t status{GetPortStatus(port)};
+        if ((status & USB_PORT_STATUS_PRSC) != 0 && (status & USB_PORT_STATUS_PRS) == 0) {
+            ClearStatusChange(port, USB_PORT_STATUS_PRSC);
+            return;
+        }
+    }
 }
 
 usb_speed xhci::PortSpeed(int port) {
@@ -369,5 +400,48 @@ xhci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_
 std::shared_ptr<usb_endpoint>
 xhci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                               usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
+    return {};
+}
+
+std::shared_ptr<usb_hw_enumeration> xhci::EnumeratePort(int port) {
+    return std::shared_ptr<usb_hw_enumeration>(new xhci_port_enumeration(*this, port));
+}
+
+std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate() {
+    uint32_t status{xhciRef.GetPortStatus(port)};
+    {
+        int timeout = 5;
+        while ((status & USB_PORT_STATUS_PES) == 0) {
+            if (--timeout == 0) {
+                break;
+            }
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            status = xhciRef.GetPortStatus(port);
+        }
+    }
+    if ((status & USB_PORT_STATUS_PES) != 0) {
+        /* USB3 */
+        return std::shared_ptr<usb_hw_enumeration_addressing>(
+                new xhci_port_enumeration_addressing(xhciRef, port)
+                );
+    } else if ((xhciRef.opregs->portRegisters[port].portStatusControl & XHCI_PORT_SC_PORT_LINK_STATE_MASK) == XHCI_PORT_SC_PLS_STATE_POLLING){
+        /* USB2 */
+        xhciRef.ResetPort(port);
+        uint32_t portstate{xhciRef.opregs->portRegisters[port].portStatusControl};
+        uint32_t pls{portstate & XHCI_PORT_SC_PORT_LINK_STATE_MASK};
+        if (
+                (portstate & XHCI_PORT_SC_ENABLED) != 0 &&
+                pls == XHCI_PORT_SC_PLS_STATE_U0
+                ) {
+            return std::shared_ptr<usb_hw_enumeration_addressing>(
+                    new xhci_port_enumeration_addressing(xhciRef, port)
+            );
+        }
+    }
+    return {};
+}
+
+std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_address(uint8_t addr) {
     return {};
 }
