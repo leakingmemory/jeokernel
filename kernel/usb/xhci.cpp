@@ -13,8 +13,9 @@
 #define XHCI_CMD_HCRESET    (1 << 1)
 #define XHCI_CMD_INT_ENABLE (1 << 2)
 
-#define XHCI_STATUS_HALTED      1
-#define XHCI_STATUS_NOT_READY   (1 << 11)
+#define XHCI_STATUS_HALTED          1
+#define XHCI_STATUS_EVENT_INTERRUPT (1 << 3)
+#define XHCI_STATUS_NOT_READY       (1 << 11)
 
 #define XHCI_PORT_SC_CCS                    1
 #define XHCI_PORT_SC_ENABLED                (1 << 1)
@@ -54,6 +55,15 @@
 #define XHCI_PORT_SC_PLS_STATE_COMPLIANCE_MODE  (10 << 5)
 #define XHCI_PORT_SC_PLS_STATE_TEST_MODE        (11 << 5)
 #define XHCI_PORT_SC_PLS_STATE_RESUME           (15 << 5)
+
+#define XHCI_EVENT_TRANSFER             32
+#define XHCI_EVENT_COMMAND_COMPLETION   33
+#define XHCI_EVENT_PORT_STATUS_CHANGE   34
+#define XHCI_EVENT_BANDWIDTH_REQUEST    35
+#define XHCI_EVENT_DOORBELL             36
+#define XHCI_EVENT_HOST_CONTROLLER      37
+#define XHCI_EVENT_DEVICE_NOTIFICATION  38
+#define XHCI_EVENT_MFINDEX_WRAP         39
 
 Device *xhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
@@ -221,7 +231,8 @@ void xhci::init() {
         std::stringstream msg;
         msg << DeviceType() << (unsigned int) DeviceId() << ": hcspa2=" << std::hex << capabilities->hcsparams2
             << " max-scratchpad=" << maxScratchpadBuffers << std::dec << " ev-seg=" << eventRingSegmentTableMax
-            << " slots=" << numSlots << " ports=" << numPorts << " inter=" << numInterrupters << "\n";
+            << " slots=" << numSlots << " ports=" << numPorts << " inter=" << numInterrupters
+            << " crng=" << opregs->commandRingControl << " dboff=" << capabilities->dboff << "\n";
         get_klogger() << msg.str().c_str();
     }
 
@@ -261,15 +272,17 @@ void xhci::init() {
     }
     {
         auto &inter = runtimeregs->interrupters[0];
-        inter.interrupterManagement = XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_ENABLE;
         uint16_t segments = 1;
         if (segments > eventRingSegmentTableMax) {
             segments = eventRingSegmentTableMax;
         }
         inter.eventRingDequeuePointer = resources->PrimaryFirstEventPhys() |
                 XHCI_INTERRUPTER_DEQ_HANDLER_BUSY;
-        inter.eventRingSegmentTableBaseAddress = resources->PrimaryEventSegmentsPhys();
         inter.eventRingSegmentTableSize = segments;
+        inter.eventRingSegmentTableBaseAddress = resources->PrimaryEventSegmentsPhys();
+
+        inter.interrupterModeration = 4000;
+        inter.interrupterManagement = XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_ENABLE | XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_PENDING;
     }
 
     opregs->usbCommand |= XHCI_CMD_INT_ENABLE | XHCI_CMD_RUN;
@@ -279,6 +292,22 @@ void xhci::init() {
         msg << DeviceType() << (unsigned int) DeviceId() << ": USB3 controller hccparams1=" << std::hex << capabilities->hccparams1 << "\n";
         get_klogger() << msg.str().c_str();
     }
+
+    event_thread = new std::thread(
+            [this] () {
+                while (true) {
+                    event_sema.acquire();
+                    {
+                        critical_section cli{};
+                        std::lock_guard lock{xhcilock};
+                        if (stop) {
+                            break;
+                        }
+                    }
+                    HcEvent();
+                }
+            }
+    );
 
     Run();
 }
@@ -290,11 +319,31 @@ uint32_t xhci::Pagesize() {
 }
 
 bool xhci::irq() {
-    get_klogger() << "XHCI intr\n";
-    return false;
+    bool handled{false};
+    uint32_t status{opregs->usbStatus};
+    while (true) {
+        uint32_t clear{0};
+        if ((status & XHCI_STATUS_EVENT_INTERRUPT) != 0) {
+            clear |= XHCI_STATUS_EVENT_INTERRUPT;
+            event_sema.release();
+        }
+        if (clear == 0) {
+            break;
+        }
+        opregs->usbStatus = clear;
+        handled = true;
+        status = opregs->usbStatus;
+    }
+    return handled;
 }
 
 void xhci::dumpregs() {
+    std::stringstream str{};
+    str << "XHCI cmd=" << std::hex << opregs->usbCommand << " sts=" << opregs->usbStatus
+    << " crng=" << opregs->commandRingControl << " i0=" << runtimeregs->interrupters[0].interrupterManagement
+    << " im0=" << runtimeregs->interrupters[0].interrupterModeration
+    << " evd=" << runtimeregs->interrupters[0].eventRingDequeuePointer << "\n";
+    get_klogger() << str.str().c_str();
 }
 
 int xhci::GetNumberOfPorts() {
@@ -348,6 +397,11 @@ void xhci::DisablePort(int port) {
 }
 
 void xhci::ResetPort(int port) {
+    {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(200ms);
+    }
+    dumpregs();
     {
         uint32_t change{GetPortStatus(port) & USB_PORT_STATUS_PRSC};
         if (change != 0) {
@@ -403,8 +457,117 @@ xhci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint
     return {};
 }
 
+xhci_trb *xhci::NextCommand() {
+    xhci_trb *trb = &(resources->Rings()->CommandRing.ring[commandIndex]);
+    if (commandIndex == 0) {
+        commandCycle = commandCycle != 0 ? 0 : 1;
+    }
+    ++commandIndex;
+    if (commandIndex == (resources->Rings()->CommandRing.LengthIncludingLink() - 1)) {
+        uint16_t cmd{resources->Rings()->CommandRing.ring[commandIndex].Command};
+        cmd &= 0xFFFE;
+        cmd |= commandCycle;
+        resources->Rings()->CommandRing.ring[commandIndex].Command = cmd;
+        commandIndex = 0;
+    }
+    trb->Data.DataPtr = 0;
+    trb->Data.TransferLength = 0;
+    trb->Data.TDSize = 0;
+    trb->Data.InterrupterTarget = 0;
+    trb->Command = trb->Command & 1;
+    trb->EnableSlot.SlotType = 0;
+    return trb;
+}
+
 std::shared_ptr<usb_hw_enumeration> xhci::EnumeratePort(int port) {
     return std::shared_ptr<usb_hw_enumeration>(new xhci_port_enumeration(*this, port));
+}
+
+void xhci::HcEvent() {
+    uint32_t iman{runtimeregs->interrupters[0].interrupterManagement};
+    if ((iman & XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_PENDING) != 0) {
+        runtimeregs->interrupters[0].interrupterManagement = iman;
+        PrimaryEventRing();
+    }
+}
+
+xhci::~xhci() {
+    {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        stop = true;
+    }
+    event_sema.release();
+    if (event_thread != nullptr) {
+        event_thread->join();
+        delete event_thread;
+        event_thread = nullptr;
+    }
+}
+
+void xhci::PrimaryEventRing() {
+    uint32_t index{0};
+    uint8_t cycle{0};
+    {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        cycle = primaryEventCycle;
+        index = primaryEventIndex;
+    }
+    while (true) {
+        xhci_trb event = resources->Rings()->PrimaryEventRing.ring[index];
+        if ((event.Command & XHCI_TRB_CYCLE) != cycle) {
+            break;
+        }
+        uint16_t trbtype{event.Command};
+        trbtype = trbtype >> 10;
+        Event(trbtype, event);
+        ++index;
+        if (index == resources->Rings()->PrimaryEventRing.Length()) {
+            cycle = cycle != 0 ? 0 : 1;
+            index = 0;
+        }
+    }
+    {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        primaryEventCycle = cycle;
+        primaryEventIndex = index;
+
+        uint64_t dequeptr{resources->PrimaryFirstEventPhys()};
+        dequeptr += sizeof(resources->Rings()->PrimaryEventRing.ring[0]) * index;
+        runtimeregs->interrupters[0].eventRingDequeuePointer = dequeptr |
+                                                               XHCI_INTERRUPTER_DEQ_HANDLER_BUSY;
+    }
+}
+
+void xhci::Event(uint8_t trbtype, const xhci_trb &event) {
+    switch (trbtype) {
+        case XHCI_EVENT_TRANSFER:
+            get_klogger() << "XHCI transfer event\n";
+            break;
+        case XHCI_EVENT_COMMAND_COMPLETION:
+            get_klogger() << "XHCI command completion\n";
+            break;
+        case XHCI_EVENT_PORT_STATUS_CHANGE:
+            get_klogger() << "XHCI port status change\n";
+            break;
+        case XHCI_EVENT_BANDWIDTH_REQUEST:
+            get_klogger() << "XHCI bandwidth request event\n";
+            break;
+        case XHCI_EVENT_DOORBELL:
+            get_klogger() << "XHCI doorbell event\n";
+            break;
+        case XHCI_EVENT_HOST_CONTROLLER:
+            get_klogger() << "XHCI host controller event\n";
+            break;
+        case XHCI_EVENT_DEVICE_NOTIFICATION:
+            get_klogger() << "XHCI device notification\n";
+            break;
+        case XHCI_EVENT_MFINDEX_WRAP:
+            get_klogger() << "XHCI MFINDEX wrap\n";
+            break;
+    }
 }
 
 std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate() {
@@ -443,5 +606,6 @@ std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate(
 }
 
 std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_address(uint8_t addr) {
+    xhciRef.EnableSlot(0);
     return {};
 }

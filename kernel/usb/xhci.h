@@ -13,7 +13,26 @@
 
 #endif
 
+#include <sstream>
 #include <memory>
+
+struct xhci_reg64 {
+    uint32_t low;
+    uint32_t high;
+
+    operator uint64_t() {
+        uint32_t low{this->low};
+        uint64_t value{this->high};
+        value = value << 32;
+        value |= low;
+        return value;
+    }
+    uint64_t operator = (uint64_t value) {
+        low = (uint32_t) value;
+        high = (uint32_t) (value >> 32);
+        return value;
+    }
+} __attribute__((__packed__));
 
 struct HostControllerPortRegisters {
     uint32_t portStatusControl;
@@ -30,7 +49,7 @@ struct xhci_operational_registers {
     uint32_t pageSize;
     uint64_t reserved1;
     uint32_t deviceNotificationControl;
-    uint64_t commandRingControl;
+    xhci_reg64 commandRingControl;
     uint64_t reserved2;
     uint64_t reserved3;
     uint64_t deviceContextBaseAddressArrayPointer;
@@ -51,8 +70,8 @@ struct xhci_interrupter_registers {
     uint32_t interrupterModeration;
     uint32_t eventRingSegmentTableSize;
     uint32_t reserved;
-    uint64_t eventRingSegmentTableBaseAddress;
-    uint64_t eventRingDequeuePointer;
+    xhci_reg64 eventRingSegmentTableBaseAddress;
+    xhci_reg64 eventRingDequeuePointer;
 };
 static_assert(sizeof(xhci_interrupter_registers) == 0x20);
 
@@ -216,13 +235,21 @@ struct xhci_capabilities {
 
 static_assert(sizeof(xhci_capabilities) == 0x20);
 
-struct xhci_trb {
+struct xhci_trb_data {
     uint64_t DataPtr;
     uint32_t TransferLength : 17;
     uint8_t TDSize : 5;
     uint16_t InterrupterTarget : 10;
+} __attribute__((__packed__));
+
+struct xhci_trb_enable_slot {
+    uint16_t SlotType;
+} __attribute__((__packed__));
+
+struct xhci_trb {
+    xhci_trb_data Data;
     uint16_t Command;
-    uint16_t Reserved;
+    xhci_trb_enable_slot EnableSlot;
 } __attribute__((__packed__));
 static_assert(sizeof(xhci_trb) == 16);
 
@@ -247,14 +274,14 @@ template <int n> struct xhci_trb_ring {
 
     xhci_trb_ring(uint64_t physAddr) : ring() {
         for (int i = 0; i < n; i++) {
-            ring[i].DataPtr = 0;
-            ring[i].TransferLength = 0;
-            ring[i].TDSize = 0;
-            ring[i].InterrupterTarget = 0;
+            ring[i].Data.DataPtr = 0;
+            ring[i].Data.TransferLength = 0;
+            ring[i].Data.TDSize = 0;
+            ring[i].Data.InterrupterTarget = 0;
             ring[i].Command = XHCI_TRB_NORMAL;
-            ring[i].Reserved = 0;
+            ring[i].EnableSlot.SlotType = 0;
         }
-        ring[n-1].DataPtr = physAddr;
+        ring[n-1].Data.DataPtr = physAddr;
         ring[n-1].Command = XHCI_TRB_LINK;
     }
 
@@ -269,12 +296,12 @@ template <int n> struct xhci_event_ring {
 
     xhci_event_ring() : ring() {
         for (int i = 0; i < n; i++) {
-            ring[i].DataPtr = 0;
-            ring[i].TransferLength = 0;
-            ring[i].TDSize = 0;
-            ring[i].InterrupterTarget = 0;
+            ring[i].Data.DataPtr = 0;
+            ring[i].Data.TransferLength = 0;
+            ring[i].Data.TDSize = 0;
+            ring[i].Data.InterrupterTarget = 0;
             ring[i].Command = 0;
-            ring[i].Reserved = 0;
+            ring[i].EnableSlot.SlotType = 0;
         }
     }
 
@@ -390,13 +417,22 @@ private:
     xhci_doorbell_registers *doorbellregs;
     std::unique_ptr<xhci_resources> resources;
     hw_spinlock xhcilock;
+    raw_semaphore event_sema;
+    std::thread *event_thread;
+    uint32_t commandIndex;
+    uint32_t primaryEventIndex;
     uint16_t numInterrupters;
     uint16_t eventRingSegmentTableMax;
     uint8_t numSlots;
     uint8_t numPorts;
+    uint8_t commandCycle : 1;
+    uint8_t primaryEventCycle : 1;
+    bool stop : 1;
 public:
     xhci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("xhci", bus), pciDeviceInformation(deviceInformation),
-    xhcilock(), numInterrupters(0), eventRingSegmentTableMax(0), numSlots(0), numPorts(0) {}
+    xhcilock(), event_sema(-1), event_thread(nullptr), commandIndex(0), primaryEventIndex(0), numInterrupters(0), eventRingSegmentTableMax(0),
+    numSlots(0), numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false) {}
+    ~xhci();
     void init() override;
     uint32_t Pagesize();
     void dumpregs() override;
@@ -418,8 +454,29 @@ public:
     hw_spinlock &HcdSpinlock() override {
         return xhcilock;
     }
+    xhci_trb *NextCommand();
+    void CommitCommand(xhci_trb *trb) {
+        dumpregs();
+        trb->Command = (trb->Command & 0xFFFE) | (commandCycle & 1);
+        doorbellregs->doorbells[0] = 0; /* Ring the bell */
+        std::stringstream str{};
+        str << "Added command " << std::hex << trb->Command << " vaddr=" << ((uint64_t) trb) << "\n";
+        get_klogger() << str.str().c_str();
+        dumpregs();
+    }
+    void EnableSlot(uint8_t SlotType) {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        auto *trb= NextCommand();
+        trb->Command |= XHCI_TRB_ENABLE_SLOT;
+        trb->EnableSlot.SlotType = SlotType;
+        CommitCommand(trb);
+    }
 private:
     bool irq();
+    void HcEvent();
+    void PrimaryEventRing();
+    void Event(uint8_t trbtype, const xhci_trb &event);
 };
 
 class xhci_driver : public Driver {
