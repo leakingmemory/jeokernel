@@ -24,6 +24,19 @@ public:
     uint64_t PrimaryFirstEventPhys() const override;
     uint64_t PrimaryEventSegmentsPhys() const override;
     xhci_rings *Rings() const override;
+    std::shared_ptr<xhci_device> CreateDeviceData() const override;
+};
+
+class xhci_device_32 : public xhci_device {
+private:
+    Phys32Page page;
+public:
+    xhci_device_32();
+    ~xhci_device_32() override;
+    xhci_slot_data *SlotData() const override;
+    uint64_t Endpoint0RingPhys() const override;
+    uint64_t InputContextPhys() const override;
+    uint64_t SlotContextPhys() const override;
 };
 
 

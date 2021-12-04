@@ -242,12 +242,23 @@ struct xhci_trb_data {
     uint16_t InterrupterTarget : 10;
 } __attribute__((__packed__));
 
+struct xhci_trb_command_completion {
+    uint64_t CommandPtr;
+    uint32_t CommandCompletionParameter : 24;
+    uint8_t CompletionCode;
+} __attribute__((__packed__));
+static_assert(sizeof(xhci_trb_command_completion) == 12);
+
 struct xhci_trb_enable_slot {
-    uint16_t SlotType;
+    uint8_t SlotType;
+    uint8_t SlotId;
 } __attribute__((__packed__));
 
 struct xhci_trb {
-    xhci_trb_data Data;
+    union {
+        xhci_trb_data Data;
+        xhci_trb_command_completion CommandCompletion;
+    };
     uint16_t Command;
     xhci_trb_enable_slot EnableSlot;
 } __attribute__((__packed__));
@@ -318,6 +329,36 @@ struct xhci_event_segment {
 };
 static_assert(sizeof(xhci_event_segment) == 16);
 
+class xhci;
+
+class xhci_command {
+    friend xhci;
+private:
+    hw_spinlock spinlock;
+    xhci_trb *trb;
+    uint64_t phys;
+    uint8_t code;
+    uint8_t slotID;
+    bool done : 1;
+public:
+    xhci_command(xhci_trb *trb, uint64_t phys) : spinlock(), trb(trb), phys(phys), code(0), done(false) {}
+    void SetDone() {
+        std::lock_guard lock{spinlock};
+        done = true;
+    }
+    bool IsDone() {
+        critical_section cli{};
+        std::lock_guard lock{spinlock};
+        return done;
+    }
+    uint8_t CompletionCode() {
+        return code;
+    }
+    uint8_t SlotId() {
+        return slotID;
+    }
+};
+
 #define XHCI_NUM_EVENT_SEGMENTS 32
 
 struct xhci_rings {
@@ -345,11 +386,68 @@ struct xhci_rings {
 } __attribute__((__packed__));
 static_assert(sizeof(xhci_rings) < 4096);
 
-struct xhci_device_context_entry;
+struct xhci_input_context {
+    uint32_t dropContextFlags;
+    uint32_t addContextFlags;
+    uint32_t reserved32[5];
+    uint8_t configurationValue;
+    uint8_t interfaceNumber;
+    uint8_t alternateSetting;
+    uint8_t reserved;
+    uint32_t reserved64[8];
+
+    xhci_input_context() :
+        dropContextFlags(0), addContextFlags(0), reserved32(), configurationValue(0), interfaceNumber(0),
+        alternateSetting(0), reserved(0), reserved64() { }
+
+};
+static_assert(sizeof(xhci_input_context) == 64);
+
+struct xhci_slot_context {
+    uint32_t routeString : 20;
+    uint8_t was_speed_now_deprecated : 4;
+    uint8_t flags : 3;
+    uint8_t contextEntries : 5;
+    uint16_t maxExitLatency;
+    uint8_t rootHubPortNumber;
+    uint8_t numberOfPorts;
+    uint8_t parentHubSlotId;
+    uint8_t parentPortNumber;
+    uint8_t ttThinkTime : 6;
+    uint16_t interruperTarget : 10;
+    uint8_t deviceAddress;
+    uint32_t reserved : 19;
+    uint8_t slotState : 5;
+    uint32_t reserved2[4];
+
+    xhci_slot_context() :
+        routeString(0), was_speed_now_deprecated(0), flags(0), contextEntries(0), maxExitLatency(0), rootHubPortNumber(0),
+        numberOfPorts(0), parentHubSlotId(0), parentPortNumber(0), ttThinkTime(0), interruperTarget(0), deviceAddress(0),
+        reserved(0), slotState(0), reserved2() { }
+} __attribute__((__packed__));
+static_assert(sizeof(xhci_slot_context) == 32);
+
+struct xhci_slot_data {
+    xhci_slot_context slotContext[64];
+    xhci_input_context inputContext;
+    xhci_trb_ring<32> Endpoint0Ring;
+
+    xhci_slot_data(uint64_t physaddr) : Endpoint0Ring(physaddr), inputContext(), slotContext() { }
+
+    constexpr uint32_t SlotContextOffset() {
+        return 0;
+    }
+    constexpr uint32_t InputContextOffset() {
+        return SlotContextOffset() + sizeof(slotContext);
+    }
+    constexpr uint32_t Endpoint0RingOffset() {
+        return InputContextOffset() + sizeof(inputContext);
+    }
+};
 
 struct xhci_dcbaa {
     uint64_t phys[256];
-    xhci_device_context_entry *contexts[256];
+    xhci_slot_data *contexts[256];
 
     xhci_dcbaa() {
         for (int i = 0; i < 256; i++) {
@@ -368,6 +466,8 @@ struct xhci_dcbaa {
 
 static_assert(sizeof(xhci_dcbaa) <= 4096);
 
+class xhci_device;
+
 class xhci_resources {
 private:
     uint8_t CommandCycle : 1;
@@ -382,17 +482,28 @@ public:
     virtual uint64_t PrimaryFirstEventPhys() const = 0;
     virtual uint64_t PrimaryEventSegmentsPhys() const = 0;
     virtual xhci_rings *Rings() const = 0;
+    virtual std::shared_ptr<xhci_device> CreateDeviceData() const = 0;
 };
 
-class xhci;
+class xhci_device {
+public:
+    virtual ~xhci_device() { }
+    virtual xhci_slot_data *SlotData() const = 0;
+    virtual uint64_t SlotContextPhys() const = 0;
+    virtual uint64_t InputContextPhys() const = 0;
+    virtual uint64_t Endpoint0RingPhys() const = 0;
+};
 
 class xhci_port_enumeration_addressing : public usb_hw_enumeration_addressing {
 private:
     xhci &xhciRef;
+    std::shared_ptr<xhci_device> deviceData;
     uint8_t port;
+    uint8_t slot;
 public:
     xhci_port_enumeration_addressing(xhci &xhciRef, uint8_t port) : xhciRef(xhciRef), port(port) {}
     std::shared_ptr<usb_hw_enumeration_ready> set_address(uint8_t addr) override;
+    void disable_slot();
 };
 
 class xhci_port_enumeration : public usb_hw_enumeration {
@@ -408,6 +519,7 @@ public:
 
 class xhci : public usb_hcd {
     friend xhci_port_enumeration;
+    friend xhci_port_enumeration_addressing;
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
@@ -419,6 +531,8 @@ private:
     hw_spinlock xhcilock;
     raw_semaphore event_sema;
     std::thread *event_thread;
+    std::vector<std::shared_ptr<xhci_command>> commands;
+    xhci_trb *commandBarrier;
     uint32_t commandIndex;
     uint32_t primaryEventIndex;
     uint16_t numInterrupters;
@@ -430,8 +544,8 @@ private:
     bool stop : 1;
 public:
     xhci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("xhci", bus), pciDeviceInformation(deviceInformation),
-    xhcilock(), event_sema(-1), event_thread(nullptr), commandIndex(0), primaryEventIndex(0), numInterrupters(0), eventRingSegmentTableMax(0),
-    numSlots(0), numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false) {}
+    xhcilock(), event_sema(-1), event_thread(nullptr), commands(), commandBarrier(nullptr), commandIndex(0), primaryEventIndex(0),
+    numInterrupters(0), eventRingSegmentTableMax(0), numSlots(0), numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false) {}
     ~xhci();
     void init() override;
     uint32_t Pagesize();
@@ -454,7 +568,7 @@ public:
     hw_spinlock &HcdSpinlock() override {
         return xhcilock;
     }
-    xhci_trb *NextCommand();
+    std::tuple<uint64_t,xhci_trb *> NextCommand();
     void CommitCommand(xhci_trb *trb) {
         dumpregs();
         trb->Command = (trb->Command & 0xFFFE) | (commandCycle & 1);
@@ -464,19 +578,61 @@ public:
         get_klogger() << str.str().c_str();
         dumpregs();
     }
-    void EnableSlot(uint8_t SlotType) {
+    std::shared_ptr<xhci_command> EnableSlot(uint8_t SlotType) {
         critical_section cli{};
         std::lock_guard lock{xhcilock};
-        auto *trb= NextCommand();
+        auto addr_trb = NextCommand();
+        uint64_t addr = std::get<0>(addr_trb);
+        xhci_trb *trb = std::get<1>(addr_trb);
+        if (trb == nullptr) {
+            return {};
+        }
         trb->Command |= XHCI_TRB_ENABLE_SLOT;
         trb->EnableSlot.SlotType = SlotType;
         CommitCommand(trb);
+        std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
+        commands.push_back(ptr);
+        return ptr;
+    }
+    std::shared_ptr<xhci_command> DisableSlot(uint8_t SlotId) {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        auto addr_trb = NextCommand();
+        uint64_t addr = std::get<0>(addr_trb);
+        xhci_trb *trb = std::get<1>(addr_trb);
+        if (trb == nullptr) {
+            return {};
+        }
+        trb->Command |= XHCI_TRB_DISABLE_SLOT;
+        trb->EnableSlot.SlotId = SlotId;
+        CommitCommand(trb);
+        std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
+        commands.push_back(ptr);
+        return ptr;
+    }
+    std::shared_ptr<xhci_command> SetAddress(uint64_t inputContextAddr, uint8_t SlotId) {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        auto addr_trb = NextCommand();
+        uint64_t addr = std::get<0>(addr_trb);
+        xhci_trb *trb = std::get<1>(addr_trb);
+        if (trb == nullptr) {
+            return {};
+        }
+        trb->Command |= XHCI_TRB_ADDRESS_DEVICE;
+        trb->EnableSlot.SlotId = SlotId;
+        trb->Data.DataPtr = inputContextAddr;
+        CommitCommand(trb);
+        std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
+        commands.push_back(ptr);
+        return ptr;
     }
 private:
     bool irq();
     void HcEvent();
     void PrimaryEventRing();
     void Event(uint8_t trbtype, const xhci_trb &event);
+    void CommandCompletion(const xhci_trb &event);
 };
 
 class xhci_driver : public Driver {

@@ -52,3 +52,34 @@ uint64_t xhci_resources_32::PrimaryFirstEventPhys() const {
 uint64_t xhci_resources_32::PrimaryEventSegmentsPhys() const {
     return rings_page.PhysAddr() + Rings()->EventSegmentsOffset();
 }
+
+std::shared_ptr<xhci_device> xhci_resources_32::CreateDeviceData() const {
+    std::shared_ptr<xhci_device> deviceData{new xhci_device_32};
+    return deviceData;
+}
+
+#define XHCI_DEVICE_SLOT_SIZE 4096
+static_assert(sizeof(xhci_slot_data) <= XHCI_DEVICE_SLOT_SIZE);
+xhci_device_32::xhci_device_32() : page(XHCI_DEVICE_SLOT_SIZE) {
+    new (page.Pointer()) xhci_slot_data(page.PhysAddr());
+}
+
+xhci_device_32::~xhci_device_32() {
+    ((xhci_slot_data *) page.Pointer())->~xhci_slot_data();
+}
+
+xhci_slot_data *xhci_device_32::SlotData() const {
+    return (xhci_slot_data *) page.Pointer();
+}
+
+uint64_t xhci_device_32::Endpoint0RingPhys() const {
+    return page.PhysAddr() + ((xhci_slot_data *) page.Pointer())->Endpoint0RingOffset();
+}
+
+uint64_t xhci_device_32::InputContextPhys() const {
+    return page.PhysAddr() + ((xhci_slot_data *) page.Pointer())->InputContextOffset();
+}
+
+uint64_t xhci_device_32::SlotContextPhys() const {
+    return page.PhysAddr() + ((xhci_slot_data *) page.Pointer())->SlotContextOffset();
+}

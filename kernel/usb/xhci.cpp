@@ -457,8 +457,15 @@ xhci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint
     return {};
 }
 
-xhci_trb *xhci::NextCommand() {
+std::tuple<uint64_t,xhci_trb *> xhci::NextCommand() {
     xhci_trb *trb = &(resources->Rings()->CommandRing.ring[commandIndex]);
+    if (commandBarrier == nullptr) {
+        commandBarrier = trb;
+    } else if (commandBarrier == trb) {
+        return std::make_tuple<uint64_t,xhci_trb *>(0, nullptr);
+    }
+    uint64_t physaddr{resources->CommandRingPhys()};
+    physaddr += sizeof(resources->Rings()->CommandRing.ring[0]) * commandIndex;
     if (commandIndex == 0) {
         commandCycle = commandCycle != 0 ? 0 : 1;
     }
@@ -476,7 +483,7 @@ xhci_trb *xhci::NextCommand() {
     trb->Data.InterrupterTarget = 0;
     trb->Command = trb->Command & 1;
     trb->EnableSlot.SlotType = 0;
-    return trb;
+    return std::make_tuple<uint64_t,xhci_trb *>(physaddr, trb);
 }
 
 std::shared_ptr<usb_hw_enumeration> xhci::EnumeratePort(int port) {
@@ -547,7 +554,7 @@ void xhci::Event(uint8_t trbtype, const xhci_trb &event) {
             get_klogger() << "XHCI transfer event\n";
             break;
         case XHCI_EVENT_COMMAND_COMPLETION:
-            get_klogger() << "XHCI command completion\n";
+            CommandCompletion(event);
             break;
         case XHCI_EVENT_PORT_STATUS_CHANGE:
             get_klogger() << "XHCI port status change\n";
@@ -567,6 +574,31 @@ void xhci::Event(uint8_t trbtype, const xhci_trb &event) {
         case XHCI_EVENT_MFINDEX_WRAP:
             get_klogger() << "XHCI MFINDEX wrap\n";
             break;
+    }
+}
+
+void xhci::CommandCompletion(const xhci_trb &event) {
+    uint64_t phys = event.CommandCompletion.CommandPtr & 0xFFFFFFFFFFFFFFF0;
+    uint8_t code = event.CommandCompletion.CompletionCode;
+    uint8_t slotId = event.EnableSlot.SlotId;
+
+    critical_section cli{};
+    std::lock_guard lock{xhcilock};
+    for (auto &cmd : commands) {
+        if (cmd->phys == phys) {
+            cmd->code = code;
+            cmd->slotID = slotId;
+            cmd->SetDone();
+            break;
+        }
+    }
+    auto iter = commands.begin();
+    while (iter != commands.end()) {
+        std::shared_ptr<xhci_command> cmd = *iter;
+        if (!cmd->done) {
+            break;
+        }
+        commands.erase(iter);
     }
 }
 
@@ -606,6 +638,82 @@ std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate(
 }
 
 std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_address(uint8_t addr) {
-    xhciRef.EnableSlot(0);
+    {
+        auto enableSlotCommand = xhciRef.EnableSlot(0);
+        bool done{false};
+        int timeout = 5;
+        while (--timeout > 0) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if (enableSlotCommand->IsDone()) {
+                done = true;
+                break;
+            }
+        }
+        if (!done) {
+            std::stringstream str{};
+            str << "XHCI enable slot failed with code "<< enableSlotCommand->CompletionCode() << "\n";
+            get_klogger() << str.str().c_str();
+            return {};
+        }
+        slot = enableSlotCommand->SlotId();
+    }
+    deviceData = xhciRef.resources->CreateDeviceData();
+    auto *slotData = deviceData->SlotData();
+    slotData->inputContext.addContextFlags = 3; // A0+A1
+    slotData->slotContext[0].parentPortNumber = port;
+    slotData->slotContext[0].routeString = 0;
+    slotData->slotContext[0].contextEntries = 1;
+    xhciRef.resources->DCBAA()->contexts[slot] = slotData;
+    xhciRef.resources->DCBAA()->phys[slot] = deviceData->SlotContextPhys();
+    {
+        auto setAddressCommand = xhciRef.SetAddress(deviceData->InputContextPhys(), slot);
+        bool done{false};
+        int timeout = 5;
+        while (--timeout > 0) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if (setAddressCommand->IsDone()) {
+                done = true;
+                break;
+            }
+        }
+        if (!done) {
+            std::stringstream str{};
+            str << "XHCI set address failed with code "<< setAddressCommand->CompletionCode() << "\n";
+            get_klogger() << str.str().c_str();
+            disable_slot();
+            return {};
+        }
+    }
+    std::stringstream str{};
+    str << "XHCI enabled slot with ID " << slot << "\n";
+    get_klogger() << str.str().c_str();
+    disable_slot();
     return {};
+}
+
+void xhci_port_enumeration_addressing::disable_slot() {
+    auto disableSlotCommand = xhciRef.DisableSlot(slot);
+    {
+        bool done{false};
+        int timeout = 5;
+        while (--timeout > 0) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if (disableSlotCommand->IsDone()) {
+                done = true;
+                break;
+            }
+        }
+        if (!done) {
+            std::stringstream str{};
+            str << "XHCI disable slot failed with code "<< disableSlotCommand->CompletionCode() << "\n";
+            get_klogger() << str.str().c_str();
+            return;
+        }
+        std::stringstream str{};
+        str << "XHCI disabled slot with ID " << slot << "\n";
+        get_klogger() << str.str().c_str();
+    }
 }
