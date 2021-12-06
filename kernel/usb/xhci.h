@@ -231,6 +231,15 @@ struct xhci_capabilities {
             return { };
         }
     }
+
+    bool controllerIs64bit() {
+        xhci_hccparams1 par(hccparams1);
+        return par.ac64;
+    }
+    bool contextSizeIs64() {
+        xhci_hccparams1 par(hccparams1);
+        return par.csz;
+    }
 } __attribute__((__packed__));
 
 static_assert(sizeof(xhci_capabilities) == 0x20);
@@ -386,7 +395,7 @@ struct xhci_rings {
 } __attribute__((__packed__));
 static_assert(sizeof(xhci_rings) < 4096);
 
-struct xhci_input_context {
+struct xhci_input_control_context {
     uint32_t dropContextFlags;
     uint32_t addContextFlags;
     uint32_t reserved32[5];
@@ -394,14 +403,13 @@ struct xhci_input_context {
     uint8_t interfaceNumber;
     uint8_t alternateSetting;
     uint8_t reserved;
-    uint32_t reserved64[8];
 
-    xhci_input_context() :
+    xhci_input_control_context() :
         dropContextFlags(0), addContextFlags(0), reserved32(), configurationValue(0), interfaceNumber(0),
-        alternateSetting(0), reserved(0), reserved64() { }
+        alternateSetting(0), reserved(0) { }
 
 };
-static_assert(sizeof(xhci_input_context) == 64);
+static_assert(sizeof(xhci_input_control_context) == 32);
 
 struct xhci_slot_context {
     uint32_t routeString : 20;
@@ -427,23 +435,83 @@ struct xhci_slot_context {
 } __attribute__((__packed__));
 static_assert(sizeof(xhci_slot_context) == 32);
 
+#define XHCI_EP_TYPE_ISOCH_OUT      1
+#define XHCI_EP_TYPE_BULK_OUT       2
+#define XHCI_EP_TYPE_INTERRUPT_OUT  3
+#define XHCI_EP_TYPE_CONTROL        4
+#define XHCI_EP_TYPE_ISOCH_IN       5
+#define XHCI_EP_TYPE_BULK_IN        6
+#define XHCI_EP_TYPE_INTERRUPT_IN   7
+
+struct xhci_endpoint_context {
+    uint8_t endpointState : 3;
+    uint8_t reserved1 : 5;
+    uint8_t mult : 2;
+    uint8_t maxPrimaryStreams : 5;
+    bool linearStreamArray : 1;
+    uint8_t interval;
+    uint8_t maxESITPayloadHigh;
+    uint8_t reserved2 : 1;
+    uint8_t errorCount : 2;
+    uint8_t endpointType : 3;
+    uint8_t reserved3 : 1;
+    bool hostInitiateDisable : 1;
+    uint8_t maxBurstSize;
+    uint16_t maxPacketSize;
+    uint64_t trDequePointer;
+    uint16_t averageTrbLength;
+    uint16_t maxESITPayloadLow;
+    uint32_t reserved4[3];
+
+    xhci_endpoint_context() : endpointState(0), reserved1(0), mult(0), maxPrimaryStreams(0), linearStreamArray(false),
+        interval(0), maxESITPayloadHigh(0), reserved2(0), errorCount(0), endpointType(0), reserved3(0), hostInitiateDisable(false),
+        maxBurstSize(0), maxPacketSize(0), trDequePointer(0), averageTrbLength(0), maxESITPayloadLow(0), reserved4() { }
+} __attribute__((__packed__));
+
 struct xhci_slot_data {
     xhci_slot_context slotContext[64];
-    xhci_input_context inputContext;
     xhci_trb_ring<32> Endpoint0Ring;
 
-    xhci_slot_data(uint64_t physaddr) : Endpoint0Ring(physaddr), inputContext(), slotContext() { }
+    xhci_slot_data(uint64_t physaddr) : Endpoint0Ring(physaddr), slotContext() { }
 
     constexpr uint32_t SlotContextOffset() {
         return 0;
     }
-    constexpr uint32_t InputContextOffset() {
+    constexpr uint32_t Endpoint0RingOffset() {
         return SlotContextOffset() + sizeof(slotContext);
     }
-    constexpr uint32_t Endpoint0RingOffset() {
-        return InputContextOffset() + sizeof(inputContext);
+
+    xhci_endpoint_context *EndpointContext(int index, bool contextSize64) {
+        ++index;
+        if (contextSize64) {
+            index = index << 1;
+        }
+        void *pointer = (void *) &(slotContext[index]);
+        return (xhci_endpoint_context *) pointer;
     }
 };
+
+struct xhci_input_context {
+    xhci_input_control_context context[66];
+
+    xhci_input_context() : context() {
+    }
+
+    xhci_slot_context *GetSlotContext(bool contextSize64) {
+        void *pointer = (void *) &(context[contextSize64 ? 2 : 1]);
+        return (xhci_slot_context *) pointer;
+    }
+
+    xhci_endpoint_context *EndpointContext(int index, bool contextSize64) {
+        index += 2;
+        if (contextSize64) {
+            index = index << 1;
+        }
+        void *pointer = (void *) &(context[index]);
+        return (xhci_endpoint_context *) pointer;
+    }
+};
+
 
 struct xhci_dcbaa {
     uint64_t phys[256];
@@ -490,7 +558,6 @@ public:
     virtual ~xhci_device() { }
     virtual xhci_slot_data *SlotData() const = 0;
     virtual uint64_t SlotContextPhys() const = 0;
-    virtual uint64_t InputContextPhys() const = 0;
     virtual uint64_t Endpoint0RingPhys() const = 0;
 };
 
@@ -542,10 +609,13 @@ private:
     uint8_t commandCycle : 1;
     uint8_t primaryEventCycle : 1;
     bool stop : 1;
+    bool controller64bit : 1;
+    bool contextSize64 : 1;
 public:
     xhci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("xhci", bus), pciDeviceInformation(deviceInformation),
     xhcilock(), event_sema(-1), event_thread(nullptr), commands(), commandBarrier(nullptr), commandIndex(0), primaryEventIndex(0),
-    numInterrupters(0), eventRingSegmentTableMax(0), numSlots(0), numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false) {}
+    numInterrupters(0), eventRingSegmentTableMax(0), numSlots(0), numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false),
+    controller64bit(false), contextSize64(false) {}
     ~xhci();
     void init() override;
     uint32_t Pagesize();

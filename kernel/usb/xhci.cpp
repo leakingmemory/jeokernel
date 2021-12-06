@@ -150,6 +150,8 @@ void xhci::init() {
             extcap = extcap->next();
         }
     }
+    controller64bit = capabilities->controllerIs64bit();
+    contextSize64 = capabilities->contextSizeIs64();
 
     /* Stop HC */
     opregs->usbCommand &= ~XHCI_CMD_RUN;
@@ -232,7 +234,8 @@ void xhci::init() {
         msg << DeviceType() << (unsigned int) DeviceId() << ": hcspa2=" << std::hex << capabilities->hcsparams2
             << " max-scratchpad=" << maxScratchpadBuffers << std::dec << " ev-seg=" << eventRingSegmentTableMax
             << " slots=" << numSlots << " ports=" << numPorts << " inter=" << numInterrupters
-            << " crng=" << opregs->commandRingControl << " dboff=" << capabilities->dboff << "\n";
+            << " crng=" << opregs->commandRingControl << " dboff=" << capabilities->dboff
+            << " 64bit=" << (controller64bit ? "yes" : "no") << "\n";
         get_klogger() << msg.str().c_str();
     }
 
@@ -660,34 +663,43 @@ std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_
     }
     deviceData = xhciRef.resources->CreateDeviceData();
     auto *slotData = deviceData->SlotData();
-    slotData->inputContext.addContextFlags = 3; // A0+A1
-    slotData->slotContext[0].parentPortNumber = port;
-    slotData->slotContext[0].routeString = 0;
-    slotData->slotContext[0].contextEntries = 1;
     xhciRef.resources->DCBAA()->contexts[slot] = slotData;
     xhciRef.resources->DCBAA()->phys[slot] = deviceData->SlotContextPhys();
     {
-        auto setAddressCommand = xhciRef.SetAddress(deviceData->InputContextPhys(), slot);
-        bool done{false};
-        int timeout = 5;
-        while (--timeout > 0) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
-            if (setAddressCommand->IsDone()) {
-                done = true;
-                break;
+        Phys32Page inputctx_page{sizeof(xhci_input_context)};
+        xhci_input_context *inputctx = new(inputctx_page.Pointer()) xhci_input_context();
+        xhci_input_control_context *inputContext = &(inputctx->context[0]);
+        xhci_slot_context *slotContext = inputctx->GetSlotContext(xhciRef.contextSize64);
+        inputContext->addContextFlags = 3; // A0+A1
+        slotContext->rootHubPortNumber = port + 1;
+        slotContext->routeString = 0;
+        slotContext->contextEntries = 1;
+        auto *endpoint0 = inputctx->EndpointContext(0, xhciRef.contextSize64);
+        endpoint0->trDequePointer = deviceData->Endpoint0RingPhys() | XHCI_TRB_CYCLE;
+        {
+            auto setAddressCommand = xhciRef.SetAddress(inputctx_page.PhysAddr(), slot);
+            bool done{false};
+            int timeout = 5;
+            while (--timeout > 0) {
+                using namespace std::literals::chrono_literals;
+                std::this_thread::sleep_for(10ms);
+                if (setAddressCommand->IsDone()) {
+                    done = true;
+                    break;
+                }
+            }
+            if (!done) {
+                std::stringstream str{};
+                str << "XHCI set address failed with code " << setAddressCommand->CompletionCode() << "\n";
+                get_klogger() << str.str().c_str();
+                disable_slot();
+                return {};
             }
         }
-        if (!done) {
-            std::stringstream str{};
-            str << "XHCI set address failed with code "<< setAddressCommand->CompletionCode() << "\n";
-            get_klogger() << str.str().c_str();
-            disable_slot();
-            return {};
-        }
     }
+    auto *slotContext = &(slotData->slotContext[0]);
     std::stringstream str{};
-    str << "XHCI enabled slot with ID " << slot << "\n";
+    str << "XHCI enabled slot with ID " << slot << " addr " << slotContext->deviceAddress << "\n";
     get_klogger() << str.str().c_str();
     disable_slot();
     return {};

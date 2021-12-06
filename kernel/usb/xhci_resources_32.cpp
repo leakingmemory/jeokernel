@@ -76,10 +76,6 @@ uint64_t xhci_device_32::Endpoint0RingPhys() const {
     return page.PhysAddr() + ((xhci_slot_data *) page.Pointer())->Endpoint0RingOffset();
 }
 
-uint64_t xhci_device_32::InputContextPhys() const {
-    return page.PhysAddr() + ((xhci_slot_data *) page.Pointer())->InputContextOffset();
-}
-
 uint64_t xhci_device_32::SlotContextPhys() const {
     return page.PhysAddr() + ((xhci_slot_data *) page.Pointer())->SlotContextOffset();
 }

@@ -35,7 +35,6 @@ public:
     ~xhci_device_32() override;
     xhci_slot_data *SlotData() const override;
     uint64_t Endpoint0RingPhys() const override;
-    uint64_t InputContextPhys() const override;
     uint64_t SlotContextPhys() const override;
 };
 
