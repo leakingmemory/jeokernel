@@ -6,6 +6,7 @@
 #define JEOKERNEL_STD_RATIO_H
 
 #include <std/numeric.h>
+#include <cstdint>
 
 namespace std {
 
