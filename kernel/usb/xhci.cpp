@@ -8,6 +8,7 @@
 #include <thread>
 #include "xhci.h"
 #include "xhci_resources_32.h"
+#include "xhci_endpoint.h"
 
 #define XHCI_CMD_RUN        1
 #define XHCI_CMD_HCRESET    (1 << 1)
@@ -676,6 +677,7 @@ std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_
         slotContext->contextEntries = 1;
         auto *endpoint0 = inputctx->EndpointContext(0, xhciRef.contextSize64);
         endpoint0->trDequePointer = deviceData->Endpoint0RingPhys() | XHCI_TRB_CYCLE;
+        endpoint0->maxPacketSize = 8;
         {
             auto setAddressCommand = xhciRef.SetAddress(inputctx_page.PhysAddr(), slot);
             bool done{false};
@@ -701,6 +703,27 @@ std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_
     std::stringstream str{};
     str << "XHCI enabled slot with ID " << slot << " addr " << slotContext->deviceAddress << "\n";
     get_klogger() << str.str().c_str();
+    std::shared_ptr<xhci_endpoint_ring_container> ringContainer{new xhci_endpoint_ring_container_endpoint0(deviceData)};
+    std::shared_ptr<usb_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, slot, 1, 0)};
+    usb_minimum_device_descriptor minDevDesc{};
+    {
+        usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
+        std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*endpoint0, get_descr0);
+        if (descr0_buf) {
+            descr0_buf->CopyTo(minDevDesc);
+            {
+                std::stringstream str{};
+                str << std::hex << "Dev desc len=" << minDevDesc.bLength
+                    << " type=" << minDevDesc.bDescriptorType << " USB=" << minDevDesc.bcdUSB
+                    << " class=" << minDevDesc.bDeviceClass << " sub=" << minDevDesc.bDeviceSubClass
+                    << " proto=" << minDevDesc.bDeviceProtocol << " packet-0=" << minDevDesc.bMaxPacketSize0
+                    << "\n";
+                get_klogger() << str.str().c_str();
+            }
+        } else {
+            get_klogger() << "Dev desc error\n";
+        }
+    }
     disable_slot();
     return {};
 }

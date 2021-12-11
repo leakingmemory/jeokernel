@@ -263,13 +263,26 @@ struct xhci_trb_enable_slot {
     uint8_t SlotId;
 } __attribute__((__packed__));
 
+#define XHCI_SETUP_TRT_NO_DATA  0
+#define XHCI_SETUP_TRT_OUT      2
+#define XHCI_SETUP_TRT_IN       3
+struct xhci_trb_setup {
+    uint16_t TransferType;
+} __attribute__((__packed__));
+
+#define XHCI_TRB_DIR_OUT    0
+#define XHCI_TRB_DIR_IN     1
 struct xhci_trb {
     union {
         xhci_trb_data Data;
         xhci_trb_command_completion CommandCompletion;
     };
     uint16_t Command;
-    xhci_trb_enable_slot EnableSlot;
+    union {
+        xhci_trb_enable_slot EnableSlot;
+        xhci_trb_setup Setup;
+        uint16_t Flags;
+    };
 } __attribute__((__packed__));
 static_assert(sizeof(xhci_trb) == 16);
 
@@ -286,7 +299,9 @@ static_assert(sizeof(xhci_trb) == 16);
 #define XHCI_TRB_ADDRESS_DEVICE     (11 << 10)
 #define XHCI_TRB_CONFIGURE_ENDPOINT (12 << 10)
 
-#define XHCI_TRB_CYCLE  1
+#define XHCI_TRB_IMMEDIATE_DATA         (1 << 6)
+#define XHCI_TRB_INTERRUPT_ON_COMPLETE  (1 << 5)
+#define XHCI_TRB_CYCLE                  1
 
 template <int n> struct xhci_trb_ring {
     static_assert(n > 2);
@@ -561,7 +576,7 @@ public:
     virtual uint64_t Endpoint0RingPhys() const = 0;
 };
 
-class xhci_port_enumeration_addressing : public usb_hw_enumeration_addressing {
+class xhci_port_enumeration_addressing : public usb_hw_enumeration_addressing, private control_request_trait {
 private:
     xhci &xhciRef;
     std::shared_ptr<xhci_device> deviceData;
@@ -582,11 +597,14 @@ public:
     std::shared_ptr<usb_hw_enumeration_addressing> enumerate() override;
 };
 
+class xhci_endpoint;
+
 #define XHCI_TRANSFER_BUFFER_SIZE 1024
 
 class xhci : public usb_hcd {
     friend xhci_port_enumeration;
     friend xhci_port_enumeration_addressing;
+    friend xhci_endpoint;
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
