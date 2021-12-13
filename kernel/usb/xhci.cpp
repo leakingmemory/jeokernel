@@ -555,7 +555,7 @@ void xhci::PrimaryEventRing() {
 void xhci::Event(uint8_t trbtype, const xhci_trb &event) {
     switch (trbtype) {
         case XHCI_EVENT_TRANSFER:
-            get_klogger() << "XHCI transfer event\n";
+            TransferEvent(event);
             break;
         case XHCI_EVENT_COMMAND_COMPLETION:
             CommandCompletion(event);
@@ -603,6 +603,16 @@ void xhci::CommandCompletion(const xhci_trb &event) {
             break;
         }
         commands.erase(iter);
+    }
+}
+
+void xhci::TransferEvent(const xhci_trb &event) {
+    critical_section cli{};
+    std::lock_guard lock{xhcilock};
+    auto *slotContext = resources->DCBAA()->contexts[event.TransferEvent.SlotId];
+    if (slotContext != nullptr) {
+        auto *eventContext = slotContext->Endpoint(event.TransferEvent.EndpointId - 1);
+        eventContext->TransferEvent(event.TransferCompletion.TransferPtr, event.TransferCompletion.TransferLength, event.TransferCompletion.CompletionCode);
     }
 }
 
@@ -704,7 +714,7 @@ std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_
     str << "XHCI enabled slot with ID " << slot << " addr " << slotContext->deviceAddress << "\n";
     get_klogger() << str.str().c_str();
     std::shared_ptr<xhci_endpoint_ring_container> ringContainer{new xhci_endpoint_ring_container_endpoint0(deviceData)};
-    std::shared_ptr<usb_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, slot, 1, 0)};
+    std::shared_ptr<usb_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, slot, 0, 0)};
     usb_minimum_device_descriptor minDevDesc{};
     {
         usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};

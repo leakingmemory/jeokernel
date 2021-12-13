@@ -258,6 +258,13 @@ struct xhci_trb_command_completion {
 } __attribute__((__packed__));
 static_assert(sizeof(xhci_trb_command_completion) == 12);
 
+struct xhci_trb_transfer_completion {
+    uint64_t TransferPtr;
+    uint32_t TransferLength : 24;
+    uint8_t CompletionCode;
+} __attribute__((__packed__));
+static_assert(sizeof(xhci_trb_transfer_completion) == 12);
+
 struct xhci_trb_enable_slot {
     uint8_t SlotType;
     uint8_t SlotId;
@@ -270,17 +277,26 @@ struct xhci_trb_setup {
     uint16_t TransferType;
 } __attribute__((__packed__));
 
+struct xhci_trb_transfer_event {
+    uint8_t EndpointId : 5;
+    uint8_t Reserved : 3;
+    uint8_t SlotId;
+};
+static_assert(sizeof(xhci_trb_transfer_event) == 2);
+
 #define XHCI_TRB_DIR_OUT    0
 #define XHCI_TRB_DIR_IN     1
 struct xhci_trb {
     union {
         xhci_trb_data Data;
         xhci_trb_command_completion CommandCompletion;
+        xhci_trb_transfer_completion TransferCompletion;
     };
     uint16_t Command;
     union {
         xhci_trb_enable_slot EnableSlot;
         xhci_trb_setup Setup;
+        xhci_trb_transfer_event TransferEvent;
         uint16_t Flags;
     };
 } __attribute__((__packed__));
@@ -483,9 +499,12 @@ struct xhci_endpoint_context {
         maxBurstSize(0), maxPacketSize(0), trDequePointer(0), averageTrbLength(0), maxESITPayloadLow(0), reserved4() { }
 } __attribute__((__packed__));
 
+class xhci_endpoint;
+
 struct xhci_slot_data {
     xhci_slot_context slotContext[64];
     xhci_trb_ring<32> Endpoint0Ring;
+    xhci_endpoint *Endpoints[31];
 
     xhci_slot_data(uint64_t physaddr) : Endpoint0Ring(physaddr), slotContext() { }
 
@@ -504,7 +523,22 @@ struct xhci_slot_data {
         void *pointer = (void *) &(slotContext[index]);
         return (xhci_endpoint_context *) pointer;
     }
+
+    void SetEndpoint(int index, xhci_endpoint *endpoint) {
+        Endpoints[index] = endpoint;
+    }
+
+    void UnsetEndpoint(int index, xhci_endpoint *endpoint) {
+        if (Endpoints[index] == endpoint) {
+            Endpoints[index] = nullptr;
+        }
+    }
+
+    xhci_endpoint *Endpoint(int index) {
+        return Endpoints[index];
+    }
 };
+static_assert(sizeof(xhci_slot_data) <= 4096);
 
 struct xhci_input_context {
     xhci_input_control_context context[66];
@@ -721,6 +755,7 @@ private:
     void PrimaryEventRing();
     void Event(uint8_t trbtype, const xhci_trb &event);
     void CommandCompletion(const xhci_trb &event);
+    void TransferEvent(const xhci_trb &event);
 };
 
 class xhci_driver : public Driver {

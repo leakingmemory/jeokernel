@@ -17,6 +17,7 @@ public:
     xhci_transfer(std::shared_ptr<usb_buffer> buffer, uint64_t physAddr) : buffer(buffer), physAddr(physAddr), status(usb_transfer_status::NOT_ACCESSED) { }
     std::shared_ptr<usb_buffer> Buffer() override;
     usb_transfer_status GetStatus() override;
+    void SetStatus(uint8_t status);
 };
 
 
