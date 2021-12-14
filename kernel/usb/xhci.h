@@ -314,6 +314,19 @@ static_assert(sizeof(xhci_trb) == 16);
 #define XHCI_TRB_DISABLE_SLOT       (10 << 10)
 #define XHCI_TRB_ADDRESS_DEVICE     (11 << 10)
 #define XHCI_TRB_CONFIGURE_ENDPOINT (12 << 10)
+#define XHCI_TRB_EVALUATE_CONTEXT   (13 << 10)
+#define XHCI_TRB_RESET_ENDPOINT     (14 << 10)
+#define XHCI_TRB_STOP_ENDPOINT      (15 << 10)
+#define XHCI_TRB_SET_TR_DEQUE_PTR   (16 << 10)
+#define XHCI_TRB_RESET_DEVICE       (17 << 10)
+#define XHCI_TRB_FORCE_EVENT_CMD    (18 << 10)
+#define XHCI_TRB_NEGOTIATE_BANDW    (19 << 10)
+#define XHCI_TRB_SET_LATENCY_TOLER  (20 << 10)
+#define XHCI_TRB_GET_PORT_BANDWIDTH (21 << 10)
+#define XHCI_TRB_FORCE_HEADER_CMD   (22 << 10)
+#define XHCI_TRB_NOOP_CMD           (23 << 10)
+#define XHCI_TRB_GET_EXTENDED_PROP  (24 << 10)
+#define XHCI_TRB_SET_EXTENDED_PROP  (25 << 10)
 
 #define XHCI_TRB_IMMEDIATE_DATA         (1 << 6)
 #define XHCI_TRB_INTERRUPT_ON_COMPLETE  (1 << 5)
@@ -742,6 +755,23 @@ public:
             return {};
         }
         trb->Command |= XHCI_TRB_ADDRESS_DEVICE;
+        trb->EnableSlot.SlotId = SlotId;
+        trb->Data.DataPtr = inputContextAddr;
+        CommitCommand(trb);
+        std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
+        commands.push_back(ptr);
+        return ptr;
+    }
+    std::shared_ptr<xhci_command> EvaluateContext(uint64_t inputContextAddr, uint8_t SlotId) {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        auto addr_trb = NextCommand();
+        uint64_t addr = std::get<0>(addr_trb);
+        xhci_trb *trb = std::get<1>(addr_trb);
+        if (trb == nullptr) {
+            return {};
+        }
+        trb->Command |= XHCI_TRB_EVALUATE_CONTEXT;
         trb->EnableSlot.SlotId = SlotId;
         trb->Data.DataPtr = inputContextAddr;
         CommitCommand(trb);

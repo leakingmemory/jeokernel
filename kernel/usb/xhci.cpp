@@ -676,9 +676,9 @@ std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_
     auto *slotData = deviceData->SlotData();
     xhciRef.resources->DCBAA()->contexts[slot] = slotData;
     xhciRef.resources->DCBAA()->phys[slot] = deviceData->SlotContextPhys();
+    Phys32Page inputctx_page{sizeof(xhci_input_context)};
+    xhci_input_context *inputctx = new(inputctx_page.Pointer()) xhci_input_context();
     {
-        Phys32Page inputctx_page{sizeof(xhci_input_context)};
-        xhci_input_context *inputctx = new(inputctx_page.Pointer()) xhci_input_context();
         xhci_input_control_context *inputContext = &(inputctx->context[0]);
         xhci_slot_context *slotContext = inputctx->GetSlotContext(xhciRef.contextSize64);
         inputContext->addContextFlags = 3; // A0+A1
@@ -709,12 +709,14 @@ std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_
             }
         }
     }
-    auto *slotContext = &(slotData->slotContext[0]);
-    std::stringstream str{};
-    str << "XHCI enabled slot with ID " << slot << " addr " << slotContext->deviceAddress << "\n";
-    get_klogger() << str.str().c_str();
+    {
+        auto *slotContext = &(slotData->slotContext[0]);
+        std::stringstream str{};
+        str << "XHCI enabled slot with ID " << slot << " addr " << slotContext->deviceAddress << "\n";
+        get_klogger() << str.str().c_str();
+    }
     std::shared_ptr<xhci_endpoint_ring_container> ringContainer{new xhci_endpoint_ring_container_endpoint0(deviceData)};
-    std::shared_ptr<usb_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, slot, 0, 0)};
+    std::shared_ptr<xhci_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, slot, 0, 0)};
     usb_minimum_device_descriptor minDevDesc{};
     {
         usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
@@ -732,6 +734,39 @@ std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_
             }
         } else {
             get_klogger() << "Dev desc error\n";
+            disable_slot();
+            return {};
+        }
+    }
+    {
+        auto *inputContext = &(inputctx->context[0]);
+        inputContext->addContextFlags = 2; // A1=endpoint0
+        auto *endpoint0_ctx = inputctx->EndpointContext(0, xhciRef.contextSize64);
+        {
+            uint64_t phys = deviceData->Endpoint0RingPhys();
+            phys += sizeof(xhci_trb) * endpoint0->index;
+            endpoint0_ctx->trDequePointer = phys | XHCI_TRB_CYCLE;
+        }
+        endpoint0_ctx->maxPacketSize = minDevDesc.bMaxPacketSize0;
+        {
+            auto evalContextCommand = xhciRef.EvaluateContext(inputctx_page.PhysAddr(), slot);
+            bool done{false};
+            int timeout = 5;
+            while (--timeout > 0) {
+                using namespace std::literals::chrono_literals;
+                std::this_thread::sleep_for(10ms);
+                if (evalContextCommand->IsDone()) {
+                    done = true;
+                    break;
+                }
+            }
+            if (!done) {
+                std::stringstream str{};
+                str << "XHCI evaluate context failed with code " << evalContextCommand->CompletionCode() << "\n";
+                get_klogger() << str.str().c_str();
+                disable_slot();
+                return {};
+            }
         }
     }
     disable_slot();

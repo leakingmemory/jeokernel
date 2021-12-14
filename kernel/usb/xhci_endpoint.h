@@ -11,6 +11,7 @@
 class xhci;
 class xhci_device;
 struct xhci_trb;
+class xhci_port_enumeration_addressing;
 
 class xhci_endpoint_ring_container {
 public:
@@ -31,6 +32,7 @@ public:
 
 class xhci_endpoint : public usb_endpoint {
     friend xhci;
+    friend xhci_port_enumeration_addressing;
 private:
     xhci &xhciRef;
     std::shared_ptr<xhci_endpoint_ring_container> ringContainer;
