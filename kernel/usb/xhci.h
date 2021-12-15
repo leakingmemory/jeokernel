@@ -623,6 +623,24 @@ public:
     virtual uint64_t Endpoint0RingPhys() const = 0;
 };
 
+class xhci_port_enumerated_device : public usb_hw_enumerated_device {
+private:
+    xhci &xhciRef;
+    std::shared_ptr<xhci_device> deviceData;
+    std::shared_ptr<usb_endpoint> endpoint0;
+    usb_minimum_device_descriptor minDesc;
+    usb_speed speed;
+    uint8_t port;
+    uint8_t slot;
+public:
+    xhci_port_enumerated_device(xhci &xhciRef, std::shared_ptr<xhci_device> deviceData, std::shared_ptr<usb_endpoint> endpoint0, usb_minimum_device_descriptor minDesc, usb_speed speed, uint8_t port, uint8_t slot) :
+    xhciRef(xhciRef), deviceData(deviceData), endpoint0(endpoint0), minDesc(minDesc), speed(speed), port(port), slot(slot) {}
+    ~xhci_port_enumerated_device();
+    usb_speed Speed() const override;
+    usb_minimum_device_descriptor MinDesc() const override;
+    std::shared_ptr<usb_endpoint> Endpoint0() const override;
+};
+
 class xhci_port_enumeration_addressing : public usb_hw_enumeration_addressing, private control_request_trait {
 private:
     xhci &xhciRef;
@@ -631,7 +649,7 @@ private:
     uint8_t slot;
 public:
     xhci_port_enumeration_addressing(xhci &xhciRef, uint8_t port) : xhciRef(xhciRef), port(port) {}
-    std::shared_ptr<usb_hw_enumeration_ready> set_address(uint8_t addr) override;
+    std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override;
     void disable_slot();
 };
 

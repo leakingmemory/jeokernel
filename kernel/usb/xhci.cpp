@@ -616,6 +616,43 @@ void xhci::TransferEvent(const xhci_trb &event) {
     }
 }
 
+xhci_port_enumerated_device::~xhci_port_enumerated_device() {
+    auto disableSlotCommand = xhciRef.DisableSlot(slot);
+    {
+        bool done{false};
+        int timeout = 5;
+        while (--timeout > 0) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if (disableSlotCommand->IsDone()) {
+                done = true;
+                break;
+            }
+        }
+        if (!done) {
+            std::stringstream str{};
+            str << "XHCI disable slot failed with code "<< disableSlotCommand->CompletionCode() << "\n";
+            get_klogger() << str.str().c_str();
+            return;
+        }
+        std::stringstream str{};
+        str << "XHCI disabled slot with ID " << slot << "\n";
+        get_klogger() << str.str().c_str();
+    }
+}
+
+usb_speed xhci_port_enumerated_device::Speed() const {
+    return speed;
+}
+
+usb_minimum_device_descriptor xhci_port_enumerated_device::MinDesc() const {
+    return minDesc;
+}
+
+std::shared_ptr<usb_endpoint> xhci_port_enumerated_device::Endpoint0() const {
+    return endpoint0;
+}
+
 std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate() {
     uint32_t status{xhciRef.GetPortStatus(port)};
     {
@@ -651,7 +688,7 @@ std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate(
     return {};
 }
 
-std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_address(uint8_t addr) {
+std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_address(uint8_t addr) {
     {
         auto enableSlotCommand = xhciRef.EnableSlot(0);
         bool done{false};
@@ -769,8 +806,12 @@ std::shared_ptr<usb_hw_enumeration_ready> xhci_port_enumeration_addressing::set_
             }
         }
     }
-    disable_slot();
-    return {};
+    std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
+        new xhci_port_enumerated_device(
+                xhciRef, deviceData, endpoint0, minDevDesc, usb_speed::HIGH, port, slot
+                )
+    };
+    return enumeratedDevice;
 }
 
 void xhci_port_enumeration_addressing::disable_slot() {

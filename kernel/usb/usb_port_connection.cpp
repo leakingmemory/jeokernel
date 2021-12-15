@@ -10,10 +10,41 @@
 #include "usb_control_req.h"
 #include "usb_transfer.h"
 
+class legacy_usb_enumerated : public usb_hw_enumerated_device {
+private:
+    usb_speed speed;
+    usb_minimum_device_descriptor minDesc;
+    std::shared_ptr<usb_endpoint> endpoint0;
+public:
+    legacy_usb_enumerated(usb_hub &hub, uint8_t func, usb_speed speed, usb_minimum_device_descriptor minDesc) : speed(speed), minDesc(minDesc), endpoint0() {
+        {
+            std::stringstream str{};
+            str << std::hex << "Creating endpoint0 for addr " << func << "\n";
+            get_klogger() << str.str().c_str();
+        }
+        endpoint0 = hub.CreateControlEndpoint(minDesc.bMaxPacketSize0, func, 0, usb_endpoint_direction::BOTH, speed);
+    }
+    usb_speed Speed() const override;
+    usb_minimum_device_descriptor MinDesc() const override;
+    std::shared_ptr<usb_endpoint> Endpoint0() const override;
+};
+
+usb_speed legacy_usb_enumerated::Speed() const {
+    return speed;
+}
+
+usb_minimum_device_descriptor legacy_usb_enumerated::MinDesc() const {
+    return minDesc;
+}
+
+std::shared_ptr<usb_endpoint> legacy_usb_enumerated::Endpoint0() const {
+    return endpoint0;
+}
+
 usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         hub(hub), port(port),
         addr(hub.GetFuncAddr()), speed(LOW),
-        thread(nullptr), endpoint0(),
+        thread(nullptr), endpoint0(), enumeratedDevice(),
         deviceDescriptor(), device(nullptr),
         interfaces() {
     if (!addr) {
@@ -52,9 +83,10 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         get_klogger() << "USB port configured\n";
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(100ms);
-        if (hub.EnabledPort(port)) {
-            hub.DisablePort(port);
-        }
+
+        thread = new std::thread([this, usbDevice] () {
+            this->start(usbDevice);
+        });
         return;
     } else {
         get_klogger() << "USB port reset\n";
@@ -146,7 +178,10 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
     }
 
     thread = new std::thread([this, minDevDesc] () {
-        this->start(speed, minDevDesc);
+        std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
+            new legacy_usb_enumerated(this->hub, addr->GetAddr(), speed, minDevDesc)
+        };
+        this->start(enumeratedDevice);
     });
 }
 
@@ -160,6 +195,7 @@ usb_port_connection::~usb_port_connection() {
         thread->join();
         delete thread;
     }
+    enumeratedDevice = {};
     if (addr) {
         hub.DisablePort(port);
     }
@@ -170,14 +206,11 @@ std::shared_ptr<usb_endpoint> usb_port_connection::InterruptEndpoint(int maxPack
     return hub.CreateInterruptEndpoint(maxPacketSize, addr->GetAddr(), endpointNum, direction, speed, pollingIntervalMs);
 }
 
-void usb_port_connection::start(usb_speed speed, const usb_minimum_device_descriptor &minDesc) {
-    uint8_t func = addr->GetAddr();
-    {
-        std::stringstream str{};
-        str << std::hex << "Creating endpoint0 for addr " << func << "\n";
-        get_klogger() << str.str().c_str();
-    }
-    endpoint0 = hub.CreateControlEndpoint(minDesc.bMaxPacketSize0, func, 0, usb_endpoint_direction::BOTH, speed);
+void usb_port_connection::start(std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice) {
+    usb_speed speed{enumeratedDevice->Speed()};
+    usb_minimum_device_descriptor minDesc{enumeratedDevice->MinDesc()};
+    this->enumeratedDevice = enumeratedDevice;
+    endpoint0 = enumeratedDevice->Endpoint0();
     if (minDesc.bLength >= sizeof(deviceDescriptor)) {
         usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, sizeof(deviceDescriptor)};
         std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*endpoint0, get_descr0);

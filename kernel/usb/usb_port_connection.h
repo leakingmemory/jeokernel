@@ -37,12 +37,16 @@ enum class usb_endpoint_type {
     INTERRUPT
 };
 
-class usb_hw_enumeration_ready {
+class usb_hw_enumerated_device {
+public:
+    virtual usb_speed Speed() const = 0;
+    virtual usb_minimum_device_descriptor MinDesc() const = 0;
+    virtual std::shared_ptr<usb_endpoint> Endpoint0() const = 0;
 };
 
 class usb_hw_enumeration_addressing {
 public:
-    virtual std::shared_ptr<usb_hw_enumeration_ready> set_address(uint8_t addr) = 0;
+    virtual std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) = 0;
 };
 
 class usb_hw_enumeration {
@@ -159,6 +163,7 @@ private:
     usb_speed speed;
     std::thread *thread;
     std::shared_ptr<usb_endpoint> endpoint0;
+    std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice;
     usb_device_descriptor deviceDescriptor;
     Device *device;
     std::vector<UsbInterfaceInformation> interfaces;
@@ -168,7 +173,7 @@ public:
     uint8_t Port() {
         return port;
     }
-    void start(usb_speed speed, const usb_minimum_device_descriptor &minDesc);
+    void start(std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice);
     void SetDevice(Device &device) {
         this->device = &device;
     }
