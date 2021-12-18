@@ -190,6 +190,35 @@ union xhci_hccparams1 {
     }
 };
 
+union xhci_hccparams2 {
+    uint32_t hccparams2;
+    struct {
+        bool u3c : 1;
+        bool cmc : 1;
+        bool fsc : 1;
+        bool ctc : 1;
+        bool lec : 1;
+        bool cic : 1;
+        bool etc : 1;
+        bool etc_tsc : 1;
+        bool gsc : 1;
+        bool vtc : 1;
+        uint32_t reserved : 22;
+    } __attribute__((__packed__));
+
+    explicit xhci_hccparams2(uint32_t hccparams2) noexcept : hccparams2(hccparams2) {}
+    xhci_hccparams2(const xhci_hccparams2 &cp) noexcept : hccparams2(cp.hccparams2) {}
+    xhci_hccparams2(const xhci_hccparams2 &&cp) noexcept : hccparams2(cp.hccparams2) {}
+    xhci_hccparams2 & operator = (const xhci_hccparams2 &cp) noexcept {
+        this->hccparams2 = cp.hccparams2;
+        return *this;
+    }
+    xhci_hccparams2 & operator = (const xhci_hccparams2 &&cp) noexcept {
+        this->hccparams2 = cp.hccparams2;
+        return *this;
+    }
+};
+
 struct xhci_capabilities {
     uint8_t caplength;
     uint8_t reserved;
@@ -623,28 +652,38 @@ public:
     virtual uint64_t Endpoint0RingPhys() const = 0;
 };
 
+class xhci_input_context_container {
+public:
+    virtual ~xhci_input_context_container() { }
+    virtual xhci_input_context *InputContext() const = 0;
+    virtual uint64_t InputContextPhys() const = 0;
+};
+
 class xhci_port_enumerated_device : public usb_hw_enumerated_device {
 private:
     xhci &xhciRef;
     std::shared_ptr<xhci_device> deviceData;
     std::shared_ptr<usb_endpoint> endpoint0;
+    std::shared_ptr<xhci_input_context_container> inputctx_container;
     usb_minimum_device_descriptor minDesc;
     usb_speed speed;
     uint8_t port;
     uint8_t slot;
 public:
-    xhci_port_enumerated_device(xhci &xhciRef, std::shared_ptr<xhci_device> deviceData, std::shared_ptr<usb_endpoint> endpoint0, usb_minimum_device_descriptor minDesc, usb_speed speed, uint8_t port, uint8_t slot) :
-    xhciRef(xhciRef), deviceData(deviceData), endpoint0(endpoint0), minDesc(minDesc), speed(speed), port(port), slot(slot) {}
+    xhci_port_enumerated_device(xhci &xhciRef, std::shared_ptr<xhci_device> deviceData, std::shared_ptr<usb_endpoint> endpoint0, std::shared_ptr<xhci_input_context_container> inputctx_container, usb_minimum_device_descriptor minDesc, usb_speed speed, uint8_t port, uint8_t slot) :
+    xhciRef(xhciRef), deviceData(deviceData), endpoint0(endpoint0), inputctx_container(inputctx_container), minDesc(minDesc), speed(speed), port(port), slot(slot) {}
     ~xhci_port_enumerated_device();
     usb_speed Speed() const override;
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
+    bool SetConfigurationValue(uint8_t configurationValue) override;
 };
 
 class xhci_port_enumeration_addressing : public usb_hw_enumeration_addressing, private control_request_trait {
 private:
     xhci &xhciRef;
     std::shared_ptr<xhci_device> deviceData;
+    std::shared_ptr<xhci_input_context_container> inputctx_container;
     uint8_t port;
     uint8_t slot;
 public:
@@ -773,6 +812,23 @@ public:
             return {};
         }
         trb->Command |= XHCI_TRB_ADDRESS_DEVICE;
+        trb->EnableSlot.SlotId = SlotId;
+        trb->Data.DataPtr = inputContextAddr;
+        CommitCommand(trb);
+        std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
+        commands.push_back(ptr);
+        return ptr;
+    }
+    std::shared_ptr<xhci_command> ConfigureEndpoint(uint64_t inputContextAddr, uint8_t SlotId) {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        auto addr_trb = NextCommand();
+        uint64_t addr = std::get<0>(addr_trb);
+        xhci_trb *trb = std::get<1>(addr_trb);
+        if (trb == nullptr) {
+            return {};
+        }
+        trb->Command |= XHCI_TRB_CONFIGURE_ENDPOINT;
         trb->EnableSlot.SlotId = SlotId;
         trb->Data.DataPtr = inputContextAddr;
         CommitCommand(trb);
