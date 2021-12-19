@@ -676,7 +676,7 @@ public:
     usb_speed Speed() const override;
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
-    bool SetConfigurationValue(uint8_t configurationValue) override;
+    bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
 };
 
 class xhci_port_enumeration_addressing : public usb_hw_enumeration_addressing, private control_request_trait {

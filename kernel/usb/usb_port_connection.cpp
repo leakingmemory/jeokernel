@@ -27,7 +27,7 @@ public:
     usb_speed Speed() const override;
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
-    bool SetConfigurationValue(uint8_t configurationValue) override;
+    bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
 };
 
 usb_speed legacy_usb_enumerated::Speed() const {
@@ -42,7 +42,7 @@ std::shared_ptr<usb_endpoint> legacy_usb_enumerated::Endpoint0() const {
     return endpoint0;
 }
 
-bool legacy_usb_enumerated::SetConfigurationValue(uint8_t configurationValue) {
+bool legacy_usb_enumerated::SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) {
 
     if (ControlRequest(*endpoint0, usb_set_configuration(configurationValue))) {
         return true;
@@ -332,8 +332,8 @@ const std::vector<UsbInterfaceInformation> &usb_port_connection::ReadConfigurati
     return interfaces;
 }
 
-bool usb_port_connection::SetConfigurationValue(uint8_t configurationValue) {
-    return enumeratedDevice->SetConfigurationValue(configurationValue);
+bool usb_port_connection::SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) {
+    return enumeratedDevice->SetConfigurationValue(configurationValue, interfaceNumber, alternateSetting);
 }
 
 UsbDeviceInformation::UsbDeviceInformation(const usb_device_descriptor &devDesc, usb_port_connection &port) : DeviceInformation(), port(port) {

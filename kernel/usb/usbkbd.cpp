@@ -74,7 +74,7 @@ Device *usbkbd_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
 
 void usbkbd::init() {
     std::shared_ptr<usb_endpoint> endpoint0 = devInfo.port.Endpoint0();
-    if (!devInfo.port.SetConfigurationValue(devInfo.descr.bConfigurationValue)) {
+    if (!devInfo.port.SetConfigurationValue(devInfo.descr.bConfigurationValue, devInfo.iface.bInterfaceNumber, devInfo.iface.bAlternateSetting)) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Error: USB keyboard set config failed\n";
         get_klogger() << str.str().c_str();

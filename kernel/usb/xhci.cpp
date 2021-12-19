@@ -660,12 +660,12 @@ std::shared_ptr<usb_endpoint> xhci_port_enumerated_device::Endpoint0() const {
     return endpoint0;
 }
 
-bool xhci_port_enumerated_device::SetConfigurationValue(uint8_t configurationValue) {
+bool xhci_port_enumerated_device::SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) {
     auto *inputctx = &(inputctx_container->InputContext()->context[0]);
     inputctx->addContextFlags = 1;
     inputctx->dropContextFlags = 0;
-    inputctx->alternateSetting = 0;
-    inputctx->interfaceNumber = 0;
+    inputctx->alternateSetting = alternateSetting;
+    inputctx->interfaceNumber = interfaceNumber;
     inputctx->configurationValue = configurationValue;
     auto evalContextCommand = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
     bool done{false};

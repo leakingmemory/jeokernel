@@ -42,7 +42,7 @@ public:
     virtual usb_speed Speed() const = 0;
     virtual usb_minimum_device_descriptor MinDesc() const = 0;
     virtual std::shared_ptr<usb_endpoint> Endpoint0() const = 0;
-    virtual bool SetConfigurationValue(uint8_t configurationValue) = 0;
+    virtual bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) = 0;
 };
 
 class usb_hw_enumeration_addressing {
@@ -183,7 +183,7 @@ public:
     }
     std::shared_ptr<usb_endpoint> InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs);
     const std::vector<UsbInterfaceInformation> &ReadConfigurations(const UsbDeviceInformation &devInfo);
-    bool SetConfigurationValue(uint8_t configurationValue);
+    bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting);
 };
 
 #endif //JEOKERNEL_USB_PORT_CONNECTION_H
