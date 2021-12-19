@@ -681,6 +681,64 @@ bool xhci_port_enumerated_device::SetConfigurationValue(uint8_t configurationVal
     return done;
 }
 
+std::shared_ptr<usb_endpoint>
+xhci_port_enumerated_device::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum,
+                                                     usb_endpoint_direction dir, int pollingIntervalMs) {
+    uint8_t interval{0};
+    {
+        int intervalUnits{pollingIntervalMs << 3};
+        while (intervalUnits > 0) {
+            intervalUnits = intervalUnits >> 1;
+            ++interval;
+        }
+    }
+    auto *inputctx = &(inputctx_container->InputContext()->context[0]);
+    uint8_t endpointIndex = ((endpointNum << 1) + (dir == usb_endpoint_direction::IN ? 1 : 0));
+    inputctx->addContextFlags = (1 << endpointIndex) | 1;
+    --endpointIndex;
+    inputctx->dropContextFlags = 0;
+    std::shared_ptr<xhci_endpoint_ring_container> endpointRing{new xhci_endpoint_ring_container_endpoints};
+    auto *endpoint = inputctx_container->InputContext()->EndpointContext(endpointIndex, xhciRef.contextSize64);
+    endpoint->endpointState = 0;
+    endpoint->reserved1 = 0;
+    endpoint->mult = 0;
+    endpoint->maxPrimaryStreams = 0;
+    endpoint->linearStreamArray = 0;
+    endpoint->interval = interval;
+    endpoint->maxESITPayloadHigh = 0;
+    endpoint->errorCount = 0;
+    endpoint->endpointType = dir == usb_endpoint_direction::IN ? 7 : 3;
+    endpoint->reserved2 = 0;
+    endpoint->hostInitiateDisable = 0;
+    endpoint->maxBurstSize = 0;
+    endpoint->maxPacketSize = maxPacketSize;
+    endpoint->trDequePointer = endpointRing->RingPhysAddr() | XHCI_TRB_CYCLE;
+    endpoint->averageTrbLength = maxPacketSize;
+    endpoint->maxESITPayloadLow = maxPacketSize;
+    auto evalContextCommand = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
+    bool done{false};
+    int timeout = 5;
+    while (--timeout > 0) {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(10ms);
+        if (evalContextCommand->IsDone()) {
+            done = true;
+            break;
+        }
+    }
+    if (!done) {
+        return {};
+    }
+    xhci_endpoint *xhciEndpoint = new xhci_endpoint(xhciRef, endpointRing, inputctx_container, slot, endpointNum, dir, 0);
+    std::shared_ptr<usb_endpoint> uendpoint{xhciEndpoint};
+    {
+        critical_section cli{};
+        std::lock_guard lock{xhciRef.xhcilock};
+        xhciRef.resources->DCBAA()->contexts[slot]->SetEndpoint(endpointIndex, xhciEndpoint);
+    }
+    return uendpoint;
+}
+
 std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate() {
     uint32_t status{xhciRef.GetPortStatus(port)};
     {
@@ -781,7 +839,7 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
         get_klogger() << str.str().c_str();
     }
     std::shared_ptr<xhci_endpoint_ring_container> ringContainer{new xhci_endpoint_ring_container_endpoint0(deviceData)};
-    std::shared_ptr<xhci_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, slot, 0, 0)};
+    std::shared_ptr<xhci_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, {}, slot, 0, usb_endpoint_direction::BOTH, 0)};
     usb_minimum_device_descriptor minDevDesc{};
     {
         usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};

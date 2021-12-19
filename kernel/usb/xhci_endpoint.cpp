@@ -7,6 +7,12 @@
 #include "xhci.h"
 #include "UsbBuffer32.h"
 
+struct xhci_endpoint_data {
+    xhci_trb_ring<256> transferRing;
+    xhci_endpoint_data(uint64_t physAddr) : transferRing(physAddr) {}
+};
+static_assert(sizeof(xhci_endpoint_data) <= 4096);
+
 xhci_trb *xhci_endpoint_ring_container_endpoint0::Trb(int index) {
     return &(device->SlotData()->Endpoint0Ring.ring[index]);
 }
@@ -20,6 +26,27 @@ uint64_t xhci_endpoint_ring_container_endpoint0::RingPhysAddr() {
 }
 
 xhci_endpoint::~xhci_endpoint() {
+    if (endpoint != 0) {
+        uint8_t endpointBit = ((endpoint << 1) + (dir == usb_endpoint_direction::IN ? 1 : 0));
+        auto *inputctx = &(inputctx_container->InputContext()->context[0]);
+        inputctx->dropContextFlags = 1 << endpointBit;
+        auto evalContextCommand = xhciRef.EvaluateContext(inputctx_container->InputContextPhys(), slot);
+        bool done{false};
+        int timeout = 5;
+        while (--timeout > 0) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if (evalContextCommand->IsDone()) {
+                done = true;
+                break;
+            }
+        }
+        if (!done) {
+            std::stringstream str{};
+            str <<  "Failed to deconfigure endpoint " << endpoint << "\n";
+            get_klogger() << str.str().c_str();
+        }
+    }
     {
         critical_section cli{};
         std::lock_guard lock{xhciRef.xhcilock};
@@ -245,14 +272,35 @@ void xhci_endpoint::TransferEvent(uint64_t trbaddr, uint32_t transferLength, uin
     }
 }
 
-xhci_endpoint::xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_container> ringContainer, uint8_t slot,
-                             uint8_t endpoint, uint16_t streamId) :
-        xhciRef(xhciRef), ringContainer(ringContainer), transferRing(nullptr), barrier(nullptr), index(0),
-        streamId(streamId), slot(slot), endpoint(endpoint), doorbellTarget(endpoint + 1), cycle(0) {
+xhci_endpoint::xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_container> ringContainer,
+                             std::shared_ptr<xhci_input_context_container> inputctx_container, uint8_t slot,
+                             uint8_t endpoint, usb_endpoint_direction dir, uint16_t streamId) :
+        xhciRef(xhciRef), ringContainer(ringContainer), transferRing(nullptr), inputctx_container(inputctx_container),
+        barrier(nullptr), dir(dir), index(0), streamId(streamId), slot(slot), endpoint(endpoint), doorbellTarget(endpoint + 1),
+        cycle(0) {
     auto length = ringContainer->LengthIncludingLink();
     transferRing = (std::shared_ptr<xhci_transfer> *) malloc(sizeof(*transferRing) * length);
     for (int i = 0; i < length; i++) {
         new (&(transferRing[i])) std::shared_ptr<xhci_transfer>();
     }
     xhciRef.resources->DCBAA()->contexts[slot]->SetEndpoint(endpoint, this);
+}
+
+xhci_endpoint_ring_container_endpoints::xhci_endpoint_ring_container_endpoints() : page(sizeof(*data)), data(new (page.Pointer()) xhci_endpoint_data(page.PhysAddr())) {
+}
+
+xhci_endpoint_ring_container_endpoints::~xhci_endpoint_ring_container_endpoints() {
+    data->~xhci_endpoint_data();
+}
+
+xhci_trb *xhci_endpoint_ring_container_endpoints::Trb(int index) {
+    return &(data->transferRing.ring[index]);
+}
+
+int xhci_endpoint_ring_container_endpoints::LengthIncludingLink() {
+    return data->transferRing.LengthIncludingLink();
+}
+
+uint64_t xhci_endpoint_ring_container_endpoints::RingPhysAddr() {
+    return page.PhysAddr();
 }

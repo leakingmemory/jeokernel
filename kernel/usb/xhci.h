@@ -677,6 +677,7 @@ public:
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
 };
 
 class xhci_port_enumeration_addressing : public usb_hw_enumeration_addressing, private control_request_trait {
@@ -706,6 +707,7 @@ class xhci_endpoint;
 #define XHCI_TRANSFER_BUFFER_SIZE 1024
 
 class xhci : public usb_hcd {
+    friend xhci_port_enumerated_device;
     friend xhci_port_enumeration;
     friend xhci_port_enumeration_addressing;
     friend xhci_endpoint;

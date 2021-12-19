@@ -43,6 +43,7 @@ public:
     virtual usb_minimum_device_descriptor MinDesc() const = 0;
     virtual std::shared_ptr<usb_endpoint> Endpoint0() const = 0;
     virtual bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) = 0;
+    virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) = 0;
 };
 
 class usb_hw_enumeration_addressing {

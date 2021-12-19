@@ -2,6 +2,7 @@
 // Created by sigsegv on 12/11/21.
 //
 
+#include <sstream>
 #include "xhci_transfer.h"
 
 std::shared_ptr<usb_buffer> xhci_transfer::Buffer() {
@@ -49,6 +50,11 @@ usb_transfer_status xhci_transfer::GetStatus() {
 #define XHCI_ERROR_SECONDARY_BANDWIDTH          35
 #define XHCI_ERROR_SPLIT_TRANSACTION            36
 void xhci_transfer::SetStatus(uint8_t status) {
+    if (status != XHCI_ERROR_SUCCESS) {
+        std::stringstream str{};
+        str << "XHCI transfer error code " << status << "\n";
+        get_klogger() << str.str().c_str();
+    }
     switch (status) {
         case XHCI_ERROR_SUCCESS:
             this->status = usb_transfer_status::NO_ERROR;

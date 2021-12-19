@@ -12,11 +12,13 @@
 
 class legacy_usb_enumerated : public usb_hw_enumerated_device, public control_request_trait {
 private:
+    usb_hub &hub;
     usb_speed speed;
     usb_minimum_device_descriptor minDesc;
     std::shared_ptr<usb_endpoint> endpoint0;
+    uint8_t addr;
 public:
-    legacy_usb_enumerated(usb_hub &hub, uint8_t func, usb_speed speed, usb_minimum_device_descriptor minDesc) : speed(speed), minDesc(minDesc), endpoint0() {
+    legacy_usb_enumerated(usb_hub &hub, uint8_t func, usb_speed speed, usb_minimum_device_descriptor minDesc) : hub(hub), speed(speed), minDesc(minDesc), endpoint0(), addr(func) {
         {
             std::stringstream str{};
             str << std::hex << "Creating endpoint0 for addr " << func << "\n";
@@ -28,6 +30,7 @@ public:
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
 };
 
 usb_speed legacy_usb_enumerated::Speed() const {
@@ -49,6 +52,12 @@ bool legacy_usb_enumerated::SetConfigurationValue(uint8_t configurationValue, ui
     } else {
         return false;
     }
+}
+
+std::shared_ptr<usb_endpoint>
+legacy_usb_enumerated::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir,
+                                               int pollingIntervalMs) {
+    return hub.CreateInterruptEndpoint(maxPacketSize, addr, endpointNum, dir, speed, pollingIntervalMs);
 }
 
 usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
@@ -213,7 +222,7 @@ usb_port_connection::~usb_port_connection() {
 }
 
 std::shared_ptr<usb_endpoint> usb_port_connection::InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs) {
-    return hub.CreateInterruptEndpoint(maxPacketSize, addr->GetAddr(), endpointNum, direction, speed, pollingIntervalMs);
+    return enumeratedDevice->CreateInterruptEndpoint(maxPacketSize, endpointNum, direction, pollingIntervalMs);
 }
 
 void usb_port_connection::start(std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice) {

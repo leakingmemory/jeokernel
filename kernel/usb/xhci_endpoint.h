@@ -7,6 +7,7 @@
 
 #include "usb_port_connection.h"
 #include "xhci_transfer.h"
+#include "Phys32Page.h"
 
 class xhci;
 class xhci_device;
@@ -30,6 +31,22 @@ public:
     uint64_t RingPhysAddr() override;
 };
 
+struct xhci_endpoint_data;
+
+class xhci_endpoint_ring_container_endpoints : public xhci_endpoint_ring_container {
+private:
+    Phys32Page page;
+    xhci_endpoint_data *data;
+public:
+    xhci_endpoint_ring_container_endpoints();
+    ~xhci_endpoint_ring_container_endpoints();
+    xhci_trb *Trb(int index) override;
+    int LengthIncludingLink() override;
+    uint64_t RingPhysAddr() override;
+};
+
+class xhci_input_context_container;
+
 class xhci_endpoint : public usb_endpoint {
     friend xhci;
     friend xhci_port_enumeration_addressing;
@@ -37,7 +54,9 @@ private:
     xhci &xhciRef;
     std::shared_ptr<xhci_endpoint_ring_container> ringContainer;
     std::shared_ptr<xhci_transfer> *transferRing;
+    std::shared_ptr<xhci_input_context_container> inputctx_container;
     xhci_trb *barrier;
+    usb_endpoint_direction dir;
     uint32_t index;
     uint16_t streamId;
     uint8_t slot;
@@ -45,7 +64,7 @@ private:
     uint8_t doorbellTarget; /* 1: ep0, 2: ep1 out, 3: ep1 in, ... */
     uint8_t cycle : 1;
 public:
-    xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_container> ringContainer,  uint8_t slot, uint8_t endpoint, uint16_t streamId);
+    xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_container> ringContainer,  std::shared_ptr<xhci_input_context_container> inputctx_container, uint8_t slot, uint8_t endpoint, usb_endpoint_direction dir, uint16_t streamId);
     virtual ~xhci_endpoint();
     bool Addressing64bit() override;
     std::shared_ptr<usb_transfer> CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
