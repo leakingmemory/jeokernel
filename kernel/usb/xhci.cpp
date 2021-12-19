@@ -568,7 +568,7 @@ void xhci::Event(uint8_t trbtype, const xhci_trb &event) {
             CommandCompletion(event);
             break;
         case XHCI_EVENT_PORT_STATUS_CHANGE:
-            get_klogger() << "XHCI port status change\n";
+            RootHubStatusChange();
             break;
         case XHCI_EVENT_BANDWIDTH_REQUEST:
             get_klogger() << "XHCI bandwidth request event\n";
