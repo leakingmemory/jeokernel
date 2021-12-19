@@ -77,6 +77,24 @@ std::shared_ptr<usb_buffer> xhci_endpoint::Alloc() {
     return {};
 }
 
+class xhci_setup_packet_buffer : public usb_buffer {
+private:
+    uint8_t buf[8];
+public:
+    xhci_setup_packet_buffer(void *data) : buf() {
+        memcpy(&(buf[0]), data, 8);
+    }
+    void *Pointer() override {
+        return (void *) &(buf[0]);
+    }
+    uint64_t Addr() override {
+        return 0;
+    }
+    size_t Size() override {
+        return 8;
+    }
+};
+
 std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitTransaction, void *data, uint32_t size,
                                                                     usb_transfer_direction direction,
                                                                     bool bufferRounding, uint16_t delayInterrupt,
@@ -85,6 +103,7 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
         if (size != 8) {
             return {};
         }
+        std::shared_ptr<usb_buffer> setup_buffer{new xhci_setup_packet_buffer(data)};
         uint32_t index{0};
         uint64_t phaddr{0};
         xhci_trb *trb{nullptr};
@@ -118,7 +137,7 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
         CommitCommand(trb);
         std::shared_ptr<usb_transfer> transfer{};
         {
-            std::shared_ptr<xhci_transfer> xhciTransfer{new xhci_transfer({}, phaddr)};
+            std::shared_ptr<xhci_transfer> xhciTransfer{new xhci_transfer(setup_buffer, phaddr)};
             transferRing[index] = xhciTransfer;
             transfer = xhciTransfer;
         }
