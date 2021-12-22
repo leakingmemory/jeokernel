@@ -5,8 +5,22 @@
 #include <klogger.h>
 #include <core/LocalApic.h>
 
-LocalApic::LocalApic(const cpu_mpfp &mpc) : vm(0x2000) {
-    uint64_t paddr = mpc.get_local_apic_addr();
+#define IA32_APIC_BASE_MSR 0x1B
+
+uint64_t get_cpu_local_apic_addr() {
+    uint32_t high{0}, low{0};
+    {
+        uint32_t msr{IA32_APIC_BASE_MSR};
+        asm("mov %2, %%ecx; rdmsr; mov %%edx, %0; mov %%eax, %1" : "=r"(high), "=r"(low) : "r"(msr) : "%eax", "%ecx", "%edx");
+    }
+    uint64_t lapic_addr{high & 0x0F};
+    lapic_addr = lapic_addr << 32;
+    lapic_addr |= low & 0xFFFFF000;
+    return lapic_addr;
+}
+
+LocalApic::LocalApic(const cpu_mpfp *mpc) : vm(0x2000) {
+    uint64_t paddr = mpc != nullptr ? mpc->get_local_apic_addr() : get_cpu_local_apic_addr();
     //get_klogger() << "lapic at addr " << paddr;
     uint64_t offset = paddr & 0xFFF;
     uint64_t end_addr = paddr + 0x3FF;

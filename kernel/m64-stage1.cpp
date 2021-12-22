@@ -194,8 +194,8 @@ extern "C" {
                     asm("hlt");
                 }
             }
-            uint64_t phys_mem_watermark = 0xc00000;
-            uint64_t end_phys_addr = 0xc00000;
+            uint64_t phys_mem_watermark = 0x2800000;
+            uint64_t end_phys_addr = 0x2800000;
             {
                 uint64_t phys_mem_added = 0;
                 const auto *part = multiboot2.first_part();
@@ -246,6 +246,17 @@ extern "C" {
                                         get_klogger() << last << "\n";
                                     }
                                 } else if (first_pass) {
+                                    uint64_t start = entr.base_addr >= phys_mem_watermark ? entr.base_addr
+                                                                                          : phys_mem_watermark;
+                                    for (uint64_t addr = start;
+                                         addr < (entr.base_addr + entr.length); addr += 0x1000) {
+                                        pageentr *pe = get_pageentr64(pml4t, addr);
+                                        if (pe == nullptr) {
+                                            break;
+                                        }
+                                        pe->os_phys_avail = 0;
+                                        phys_mem_added += 0x1000;
+                                    }
                                     reserved_mem.push_back(std::make_tuple<uint64_t,uint64_t>(entr.base_addr,entr.length));
                                 }
                             }
@@ -333,7 +344,11 @@ done_with_mem_extension:
         create_hw_interrupt_handler();
         create_cpu_interrupt_handler();
         mpfp = new cpu_mpfp{reserved_mem};
-        LocalApic lapic{*mpfp};
+        if (!mpfp->is_valid()) {
+            delete mpfp;
+            mpfp = nullptr;
+        }
+        LocalApic lapic{mpfp};
 
         gdt = new GlobalDescriptorTable;
 

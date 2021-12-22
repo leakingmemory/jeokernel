@@ -51,7 +51,7 @@ void ps2kbd::init() {
         }
     }
 
-    lapic = std::make_unique<LocalApic>(*mpfp);
+    lapic = std::make_unique<LocalApic>(mpfp);
     ioapic = std::make_unique<IOApic>(*mpfp);
 
     /* int pin number + 3 local apic ints below ioapic range */

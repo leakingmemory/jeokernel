@@ -22,7 +22,7 @@ private:
     vmem vm;
     uint32_t *pointer;
 public:
-    explicit LocalApic(const cpu_mpfp &mpc);
+    explicit LocalApic(const cpu_mpfp *mpc);
 
     uint64_t get_msr_base_reg();
     void set_msr_base_reg(uint64_t val);

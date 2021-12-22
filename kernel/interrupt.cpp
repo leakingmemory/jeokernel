@@ -267,7 +267,7 @@ extern "C" {
                 uint8_t cpu{0};
                 {
                     cpu_mpfp *mpfp = get_mpfp();
-                    LocalApic lapic{*mpfp};
+                    LocalApic lapic{mpfp};
                     cpu = lapic.get_cpu_num(*mpfp);
                 }
                 get_scheduler()->switch_tasks(interrupt, cpu);

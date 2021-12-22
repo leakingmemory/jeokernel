@@ -105,7 +105,7 @@ void write8_pci_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, 
 pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bus("pci"), bus(bus), br_bus(br_bus), br_slot(br_slot), br_func(br_func), irqr(), SourceMap(), ioapic(), lapic() {
     mpfp = get_mpfp();
     ioapic = std::make_unique<IOApic>(*mpfp);
-    lapic = std::make_unique<LocalApic>(*mpfp);
+    lapic = std::make_unique<LocalApic>(mpfp);
     if (!get_acpica().find_pci_bridges([this] (void *handle, ACPI_DEVICE_INFO *dev_info) {
         ACPI_PCI_ID pciId;
         if (get_acpica().determine_pci_id(pciId, dev_info, handle)) {

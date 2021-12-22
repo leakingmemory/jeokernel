@@ -331,7 +331,7 @@ uint32_t tasklist::get_current_task_id() {
     uint8_t cpu_num = 0;
     {
         cpu_mpfp *mpfp = get_mpfp();
-        LocalApic localApic{*mpfp};
+        LocalApic localApic{mpfp};
         cpu_num = localApic.get_cpu_num(*mpfp);
     }
 
@@ -378,7 +378,7 @@ task &tasklist::get_current_task_with_lock() {
     uint8_t cpu_num = 0;
     {
         cpu_mpfp *mpfp = get_mpfp();
-        LocalApic localApic{*mpfp};
+        LocalApic localApic{mpfp};
         cpu_num = localApic.get_cpu_num(*mpfp);
     }
 

@@ -157,12 +157,17 @@ private:
     uint8_t nioapic;
     uint16_t n_ioapic_int;
     uint16_t n_local_int;
+    bool valid;
 public:
     /**
      *
      * @param res_mem Reserved memory ranges <start,size>
      */
     explicit cpu_mpfp(const std::vector<std::tuple<uint64_t,uint64_t>> &res_mem);
+
+    bool is_valid() {
+        return valid;
+    }
 
     int get_num_cpus() const {
         return ncpu;

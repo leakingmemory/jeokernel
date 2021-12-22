@@ -24,7 +24,7 @@ static mp_floating_pointer *search_page(void *ptr, size_t size) {
 
 cpu_mpfp::cpu_mpfp(const std::vector<std::tuple<uint64_t, uint64_t>> &res_mem) :
 ncpu(0), nbus(0), nioapic(0), n_ioapic_int(0), n_local_int(0),
-cpus(), bus(), ioapic(), ioapic_ints(), local_ints() {
+cpus(), bus(), ioapic(), ioapic_ints(), local_ints(), valid(false) {
     vmem vm{0x2000};
     mp_configuration_table_header *mpc;
 
@@ -55,6 +55,7 @@ cpus(), bus(), ioapic(), ioapic_ints(), local_ints() {
     }
 locate_mpc:
     if (mpfp.phys_pointer != 0) {
+        mpc = nullptr;
         for (const auto &res : res_mem) {
             uint64_t baseaddr = std::get<0>(res);
             uint64_t size = std::get<1>(res);
@@ -71,7 +72,7 @@ locate_mpc:
             }
         }
 mpc_pointer_good:
-        if (!mpc->valid()) {
+        if (mpc == nullptr || !mpc->valid()) {
             get_klogger() << "MP config table is bad\n";
             goto mpc_pointer_bad;
         }
@@ -147,6 +148,8 @@ mpc_pointer_good:
                 entry = entry->next();
             }
         }
+        valid = true;
+
 mpc_pointer_bad:
         ;
     }

@@ -17,7 +17,7 @@ extern "C" {
         uint8_t cpu_num{0};
         {
             cpu_mpfp *mpfp = get_mpfp();
-            LocalApic lapic{*mpfp};
+            LocalApic lapic{mpfp};
             cpu_num = lapic.get_cpu_num(*mpfp);
         }
         tasklist *scheduler = get_scheduler();

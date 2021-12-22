@@ -39,7 +39,7 @@ extern "C" {
 
         GlobalDescriptorTable *gdt = get_gdt();
 
-        LocalApic lapic{*mpfp};
+        LocalApic lapic{mpfp};
 
         int cpu_num = lapic.get_cpu_num(*mpfp);
 
