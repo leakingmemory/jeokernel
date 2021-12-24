@@ -246,6 +246,10 @@ void tasklist::exit(uint8_t cpu) {
         critical_section cli{};
         std::lock_guard lock{_lock};
 
+        if (!multicpu) {
+            cpu = 0;
+        }
+
         for (task *t : tasks) {
             if (t->get_cpu() == cpu && t->is_running()) {
                 current_task = t;
@@ -352,12 +356,18 @@ uint32_t tasklist::get_current_task_id() {
     {
         cpu_mpfp *mpfp = get_mpfp();
         LocalApic localApic{mpfp};
-        cpu_num = localApic.get_cpu_num(*mpfp);
+        if (mpfp != nullptr) {
+            cpu_num = localApic.get_cpu_num(*mpfp);
+        }
     }
 
     task *current_task;
 
     std::lock_guard lock{_lock};
+
+    if (!multicpu) {
+        cpu_num = 0;
+    }
 
     for (task *t : tasks) {
         if (t->get_cpu() == cpu_num && t->is_running()) {
@@ -396,7 +406,7 @@ task *tasklist::get_nullable_task_with_lock(uint32_t task_id) {
 
 task &tasklist::get_current_task_with_lock() {
     uint8_t cpu_num = 0;
-    {
+    if (multicpu) {
         cpu_mpfp *mpfp = get_mpfp();
         LocalApic localApic{mpfp};
         cpu_num = localApic.get_cpu_num(*mpfp);

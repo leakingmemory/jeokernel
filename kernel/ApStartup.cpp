@@ -11,12 +11,20 @@
 #include "GlobalDescriptorTable.h"
 #include "start_ap.h"
 #include "PITTimerCalib.h"
+#include "IOApic.h"
 
 void set_tss(int cpun, struct TaskStateSegment *tss);
 void set_its(int cpun, struct InterruptTaskState *its);
 
 ApStartup::ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, PITTimerCalib *calib_timer, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its) {
     LocalApic lapic{mpfp};
+    IOApic ioApic{*mpfp};
+
+    uint8_t vectors = ioApic.get_num_vectors();
+    get_klogger() << "ioapic vectors " << vectors << "\n";
+    for (uint8_t i = 0; i < vectors; i++) {
+        ioApic.set_vector_interrupt(i, 0x23 + i);
+    }
 
     int cpu_num = lapic.get_cpu_num(*mpfp);
 

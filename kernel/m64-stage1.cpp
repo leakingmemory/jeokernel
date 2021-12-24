@@ -52,6 +52,7 @@
 //#define MICROSLEEP_TESTS
 //#define SLEEP_TESTS
 //#define SEMAPHORE_TEST // depends on sleep tests
+//#define DISABLE_MPFP
 
 void init_keyboard();
 
@@ -661,11 +662,15 @@ done_with_mem_extension:
             scheduler->create_current_idle_task(0);
         }
 
+#ifndef DISABLE_MPFP
         mpfp = new cpu_mpfp{reserved_mem};
         if (!mpfp->is_valid()) {
             delete mpfp;
             mpfp = nullptr;
         }
+#else
+        mpfp = nullptr;
+#endif
         LocalApic lapic{mpfp};
         {
 
@@ -691,14 +696,6 @@ done_with_mem_extension:
             lapic.enable_apic();
             lapic.set_lint0_int(0x21, false);
             lapic.set_lint1_int(0x22, false);
-
-            IOApic ioApic{*mpfp};
-
-            uint8_t vectors = ioApic.get_num_vectors();
-            get_klogger() << "ioapic vectors " << vectors << "\n";
-            for (uint8_t i = 0; i < vectors; i++) {
-                ioApic.set_vector_interrupt(i, 0x23 + i);
-            }
 
             for (int i = 0; i < 3; i++) {
                 get_hw_interrupt_handler().add_finalizer(i, [&lapic](Interrupt &interrupt) {
