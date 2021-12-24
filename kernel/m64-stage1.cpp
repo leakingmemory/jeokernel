@@ -344,11 +344,6 @@ done_with_mem_extension:
 
         create_hw_interrupt_handler();
         create_cpu_interrupt_handler();
-        mpfp = new cpu_mpfp{reserved_mem};
-        if (!mpfp->is_valid()) {
-            delete mpfp;
-            mpfp = nullptr;
-        }
 
         gdt = new GlobalDescriptorTable;
 
@@ -666,6 +661,11 @@ done_with_mem_extension:
             scheduler->create_current_idle_task(0);
         }
 
+        mpfp = new cpu_mpfp{reserved_mem};
+        if (!mpfp->is_valid()) {
+            delete mpfp;
+            mpfp = nullptr;
+        }
         LocalApic lapic{mpfp};
         {
 
