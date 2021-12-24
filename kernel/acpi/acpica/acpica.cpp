@@ -10,6 +10,7 @@ extern "C" {
     #include <acglobal.h>
 }
 #include <acpi/acpica.h>
+#include <acpi/acpi_madt.h>
 #include <klogger.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -360,6 +361,16 @@ std::optional<IRQLink> acpica_lib::get_extended_irq(void *handle) {
     return opt;
 }
 
+std::shared_ptr<acpi_madt_info> acpica_lib::get_madt() {
+    ACPI_TABLE_HEADER *madt;
+    auto Status = AcpiGetTable("APIC", 1, &madt);
+    if (Status != AE_OK) {
+        return {};
+    }
+    std::shared_ptr<acpi_madt_info> madt_info(new acpi_madt_info(madt));
+    return madt_info;
+}
+
 static acpica_lib *acpica_lib_singleton = nullptr;
 
 void init_acpica(uint64_t root_table_addr) {
@@ -372,6 +383,10 @@ acpica_lib *get_acpica_ptr() {
 }
 
 acpica_lib &get_acpica() {
+    return *acpica_lib_singleton;
+}
+
+acpi_madt_provider &get_acpi_madt_provider() {
     return *acpica_lib_singleton;
 }
 

@@ -66,8 +66,9 @@ static KernelElf *kernel_elf = nullptr;
 static hw_spinlock *aptimer_lock = nullptr;
 static uint64_t timer_ticks = 0;
 static uint64_t lapic_100ms = 0;
-static cpu_mpfp *mpfp;
-static tasklist *scheduler;
+static cpu_mpfp *mpfp = nullptr;
+static tasklist *scheduler = nullptr;
+static ApStartup *apStartup = nullptr;
 
 extern "C" {
     uint64_t bootstrap_stackptr = 0;
@@ -131,6 +132,9 @@ uint64_t get_ticks() {
     return ticks;
 }
 
+ApStartup *GetApStartup() {
+    return apStartup;
+}
 
 #define _get_pml4t()  (*((pagetable *) 0x1000))
 
@@ -833,7 +837,8 @@ done_with_mem_extension:
             std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state]() {
                 acpi_boot.join();
 
-                new ApStartup(gdt, mpfp, &calib_timer, tss, int_task_state);
+                apStartup = new ApStartup(gdt, mpfp, tss, int_task_state);
+                apStartup->Init(&calib_timer);
 
                 detect_root_pcis();
                 if (acpi_boot.has_8042()) {

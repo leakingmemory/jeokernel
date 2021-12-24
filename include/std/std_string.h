@@ -380,8 +380,7 @@ namespace std {
             return *this;
         }
 
-        basic_string(const CharT *cstr) : basic_string() {
-            size_type length = Traits::length(cstr);
+        basic_string(const CharT *cstr, size_type length) : basic_string() {
             if (length >= capacity()) {
                 reserve(length);
             }
@@ -391,6 +390,9 @@ namespace std {
             } else {
                 c.ptr.size = length;
             }
+        }
+
+        basic_string(const CharT *cstr) : basic_string(cstr, Traits::length(cstr)) {
         }
 
         basic_string &operator=(const char *cstr) {

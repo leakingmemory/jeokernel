@@ -131,8 +131,8 @@ private:
     std::vector<PciIRQRouting> irqr;
     std::vector<std::tuple<std::string,IRQLink>> SourceMap;
     std::vector<pci_irq*> irqs;
-    std::unique_ptr<IOApic> ioapic;
-    std::unique_ptr<LocalApic> lapic;
+    IOApic *ioapic;
+    LocalApic *lapic;
     const cpu_mpfp *mpfp;
 public:
     pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func);

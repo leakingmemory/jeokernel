@@ -15,6 +15,7 @@
 #include <thread>
 #include <acpi/acpica_types.h>
 #include <acpi/pci_irq_rt.h>
+#include "acpi_madt_provider.h"
 
 enum AcpiExecuteType
 {
@@ -62,7 +63,7 @@ public:
     }
 };
 
-class acpica_lib {
+class acpica_lib : public acpi_madt_provider {
 public:
     acpica_lib();
     virtual ~acpica_lib();
@@ -84,6 +85,8 @@ public:
     std::vector<PciIRQRouting> get_irq_routing(void *handle);
 
     std::optional<IRQLink> get_extended_irq(void *handle);
+
+    std::shared_ptr<acpi_madt_info> get_madt() override;
 
     virtual void terminate() = 0;
     virtual void *allocate_zeroed(std::size_t size) = 0;

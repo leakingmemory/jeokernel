@@ -9,6 +9,7 @@
 #include <thread>
 #include "ps2kbd.h"
 #include "../HardwareInterrupts.h"
+#include "../ApStartup.h"
 #include <keyboard/keyboard.h>
 
 //#define DEBUG_BUFFER
@@ -51,8 +52,9 @@ void ps2kbd::init() {
         }
     }
 
-    lapic = std::make_unique<LocalApic>(mpfp);
-    ioapic = std::make_unique<IOApic>(*mpfp);
+    ApStartup *ap = GetApStartup();
+    lapic = ap->GetLocalApic();
+    ioapic = ap->GetIoapic();
 
     /* int pin number + 3 local apic ints below ioapic range */
     get_hw_interrupt_handler().add_handler(ioapic_intn + 3, [this, ioapic_intn] (Interrupt &intr) {

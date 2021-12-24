@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory(acpica)
 
-add_library(acpi OBJECT ACPI.cpp)
+add_library(acpi OBJECT ACPI.cpp acpi_madt.cpp)
 
 target_link_libraries(acpi PUBLIC acpica)
 

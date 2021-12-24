@@ -40,8 +40,8 @@ private:
     bool stop;
     std::thread extractor_thread;
     ps2_device_interface &ps2dev;
-    std::unique_ptr<IOApic> ioapic;
-    std::unique_ptr<LocalApic> lapic;
+    IOApic *ioapic;
+    LocalApic *lapic;
     uint8_t buffer[RD_RING_BUFSIZE];
     uint16_t inspos, outpos;
     uint8_t cmd_length;

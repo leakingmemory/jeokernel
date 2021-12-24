@@ -6,13 +6,13 @@
 #include <sstream>
 #include "IOApic.h"
 
-IOApic::IOApic(const cpu_mpfp &mpc) : vm(0x2000) {
-    if (mpc.get_num_ioapics() < 1) {
+IOApic::IOApic(const apics_info *mpc) : vm(0x2000) {
+    if (mpc->GetNumberOfIoapics() < 1) {
         wild_panic("no ioapic");
-    } else if (mpc.get_num_ioapics() > 1) {
+    } else if (mpc->GetNumberOfIoapics() > 1) {
         wild_panic("more than one ioapic");
     }
-    uint64_t paddr = mpc.get_ioapic(0).mapped_memory_addr;
+    uint64_t paddr = mpc->GetIoapicAddr(0);
     get_klogger() << "ioapic at addr " << paddr;
     uint64_t offset = paddr & 0xFFF;
     uint64_t end_addr = paddr + 0x1F;

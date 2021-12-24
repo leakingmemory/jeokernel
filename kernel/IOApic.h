@@ -36,7 +36,7 @@ private:
     vmem vm;
     uint32_t *pointer;
 public:
-    explicit IOApic(const cpu_mpfp &mpc);
+    explicit IOApic(const apics_info *mpc);
 
     IOApicReg operator [] (uint8_t reg) {
         return IOApicReg(pointer, reg);

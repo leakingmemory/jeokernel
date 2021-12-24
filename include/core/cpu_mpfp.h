@@ -7,6 +7,7 @@
 
 #include <tuple>
 #include <vector>
+#include "apics_info.h"
 
 struct mp_floating_pointer {
     uint32_t signature;
@@ -143,7 +144,7 @@ static_assert(sizeof(mp_configuration_table_header) == 0x2C);
 #define MAX_INTs 64
 #define MAX_LOCAL_INTs (MAX_CPUs * 16)
 
-class cpu_mpfp {
+class cpu_mpfp : public apics_info {
 private:
     mp_floating_pointer mpfp;
     mp_configuration_table_header mp_tbl_hdr;
@@ -202,6 +203,13 @@ public:
 
     const mp_ioapic_interrupt_entry &get_ioapic_int(int idx) {
         return ioapic_ints[idx];
+    }
+
+    int GetNumberOfIoapics() const override {
+        return nioapic;
+    };
+    uint64_t GetIoapicAddr(int index) const override {
+        return ioapic[index].mapped_memory_addr;
     }
 };
 
