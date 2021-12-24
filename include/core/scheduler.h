@@ -232,15 +232,18 @@ private:
     hw_spinlock _lock;
     uint64_t tick_counter;
     uint32_t serial;
+    bool multicpu;
     std::vector<task *> tasks;
 private:
     uint32_t get_next_id();
     void ticks_millisleep(uint64_t ms);
     void tsc_nanosleep(uint64_t nanos);
 public:
-    tasklist() : _lock(), tick_counter(0), serial(0), tasks() {
+    tasklist() : _lock(), tick_counter(0), serial(0), multicpu(false), tasks() {
     }
-    void create_current_idle_task(uint8_t cpu);
+    bool is_multicpu();
+    uint32_t create_current_idle_task(uint8_t cpu);
+    void start_multi_cpu(uint8_t cpu);
     void switch_tasks(Interrupt &interrupt, uint8_t cpu);
 
     uint32_t new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi,

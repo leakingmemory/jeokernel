@@ -77,7 +77,9 @@ public:
      * @param cpu_n
      * @return TSS selector
      */
+    int install_bsp(GlobalDescriptorTable &gdt);
     int install(GlobalDescriptorTable &gdt, int cpu_n);
+    int install_bsp_cpu(GlobalDescriptorTable &gdt);
     int install_cpu(GlobalDescriptorTable &gdt, int cpu_n);
 
     /*

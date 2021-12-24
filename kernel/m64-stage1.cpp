@@ -45,6 +45,7 @@
 #include "ps2/ps2.h"
 #include "usb/usbifacedev.h"
 #include "usb/usbkbd.h"
+#include "ApStartup.h"
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -90,14 +91,14 @@ void set_tss(int cpun, struct TaskStateSegment *tss) {
     glob_tss[cpun] = tss;
 }
 TaskStateSegment *get_tss(int cpun) {
-    return glob_tss[cpun];
+    return glob_tss[cpun + 1];
 }
 
 void set_its(int cpun, struct InterruptTaskState *its) {
     glob_int_task_state[cpun] = its;
 }
 InterruptTaskState *get_its(int cpun) {
-    return glob_int_task_state[cpun];
+    return glob_int_task_state[cpun + 1];
 }
 
 cpu_mpfp *get_mpfp() {
@@ -348,40 +349,23 @@ done_with_mem_extension:
             delete mpfp;
             mpfp = nullptr;
         }
-        LocalApic lapic{mpfp};
 
         gdt = new GlobalDescriptorTable;
 
-        for (int i = 0; i < mpfp->get_num_cpus(); i++) {
-            get_klogger() << "Creating TSS ";
-            TaskStateSegment *tss = new TaskStateSegment;
-            set_tss(i, tss);
-            get_klogger() << (uint64_t) &(tss->get_entry()) << " its:";
-            InterruptTaskState *int_task_state = new InterruptTaskState(*tss);
-            set_its(i, int_task_state);
-            get_klogger() << (uint64_t) int_task_state << " for cpu " << (uint8_t) i << " to gdt sel ";
-            get_klogger() << (uint16_t) tss->install(*gdt, i) << "\n";
-        }
-        int cpu_num = lapic.get_cpu_num(*mpfp);
+        TaskStateSegment *tss = new TaskStateSegment;
+        InterruptTaskState *int_task_state = new InterruptTaskState(*tss);
 
-        get_klogger() << "Loading TSS/ITS for CPU "<< (uint8_t) cpu_num << "\n";
-        TaskStateSegment *tss = get_tss(cpu_num);
-        InterruptTaskState *int_task_state = get_its(cpu_num);
+        set_tss(0, tss);
+        set_its(0, int_task_state);
+        tss->install_bsp(*gdt);
 
         uint64_t *gdt_ptr = (uint64_t *) &(gdt->get_descriptor(0));
         get_klogger() << "GDT at " << ((uint64_t) gdt_ptr) << "\n";
-        /*for (int i = 0; i < 9; i++) {
-            get_klogger() << gdt_ptr[i << 2] << " " << gdt_ptr[(i << 2) + 1] << " " << gdt_ptr[(i << 2) + 2] << " " << gdt_ptr[(i << 2) + 3] << "\n";
-        }*/
         gdt->reload();
 
         uint64_t *tss_ptr = (uint64_t *) &(tss->get_entry());
-        /*get_klogger() << "TSS at " << ((uint64_t) tss_ptr) << "\n";
-        for (int i = 0; i < 16; i++) {
-            get_klogger() << tss_ptr[i << 1] << " " << tss_ptr[(i << 1) + 1] << "\n";
-        }*/
 
-        tss->install_cpu(*gdt, cpu_num);
+        tss->install_bsp_cpu(*gdt);
 
         idt = new InterruptDescriptorTable;
         idt->interrupt_handler(0x00, 0x8, (uint64_t) interrupt_imm00_handler, 0, 0xF, 0);
@@ -679,13 +663,13 @@ done_with_mem_extension:
 
         scheduler = new tasklist;
         {
-            int cpu_idx = lapic.get_cpu_num(*mpfp);
-            scheduler->create_current_idle_task(cpu_idx);
+            scheduler->create_current_idle_task(0);
         }
 
+        LocalApic lapic{mpfp};
         {
 
-            int cpu_idx = lapic.get_cpu_num(*mpfp);
+            /*int cpu_idx = lapic.get_cpu_num(*mpfp);
 
             get_klogger() << "Current cpu lapic reg " << lapic.get_lapic_id() << " num=" << (uint8_t) cpu_idx << "\n";
 
@@ -697,7 +681,7 @@ done_with_mem_extension:
 
             if ((cpu.features & 0x200) == 0) {
                 wild_panic("system lacks apic support");
-            }
+            }*/
 
             Pic pic{};
             pic.disable();
@@ -723,8 +707,8 @@ done_with_mem_extension:
             }
         }
 
+        PITTimerCalib calib_timer{};
         {
-            PITTimerCalib calib_timer{};
             lapic.set_timer_div(0x3);
             {
                 lapic_100ms = (uint64_t) 0x00FFFFFFFF;
@@ -756,13 +740,14 @@ done_with_mem_extension:
             timer_ticks = 0;
             const char *characters = "|/-\\|/-\\";
             aptimer_lock = new hw_spinlock;
-            uint64_t *aptimers = (uint64_t *) malloc(sizeof(aptimers[0]) * mpfp->get_num_cpus());
-            for (int i = 0; i < mpfp->get_num_cpus(); i++) {
+            uint64_t *aptimers = (uint64_t *) malloc(sizeof(aptimers[0]) * MAX_CPUs);
+            for (int i = 0; i < MAX_CPUs; i++) {
                 aptimers[i] = 0;
             }
             get_hw_interrupt_handler().add_handler(0, [&lapic, characters, aptimers](Interrupt &interrupt) {
-                uint8_t cpu_num = lapic.get_cpu_num(*mpfp);
-                bool is_bootstrap_cpu = (mpfp->get_cpu(cpu_num).cpu_flags & 2) != 0;
+                bool multicpu = scheduler->is_multicpu();
+                uint8_t cpu_num = multicpu ? lapic.get_cpu_num(*mpfp) : 0;
+                bool is_bootstrap_cpu = !multicpu || (mpfp->get_cpu(cpu_num).cpu_flags & 2) != 0;
                 uint64_t prev_vis = 0;
                 uint64_t vis = 0;
                 uint64_t ticks = 0;
@@ -791,40 +776,10 @@ done_with_mem_extension:
             });
 
             get_hw_interrupt_handler().add_handler(0, [&lapic] (Interrupt &intr) {
-                scheduler->switch_tasks(intr, lapic.get_cpu_num(*mpfp));
+                bool multicpu = scheduler->is_multicpu();
+                scheduler->switch_tasks(intr, multicpu ? lapic.get_cpu_num(*mpfp) : 0);
             });
 
-            const uint32_t *ap_count = install_ap_bootstrap();
-            for (int i = 0; i < mpfp->get_num_cpus(); i++) {
-                if (i != lapic.get_cpu_num(*mpfp)) {
-                    uint32_t apc = *ap_count;
-                    uint32_t exp_apc = apc + 1;
-                    uint8_t lapic_id = mpfp->get_cpu(i).local_apic_id;
-
-                    /*
-                     * AP needs the bootstrap stack, so enforce only one at a time
-                     */
-                    get_ap_start_lock()->lock();
-
-                    get_klogger() << "Starting cpu"<<((uint8_t) i)<<" "<<lapic_id<<"\n";
-                    lapic.send_init_ipi(lapic_id);
-                    calib_timer.delay(10000); //10ms
-                    lapic.send_sipi(lapic_id, 0x8);
-                    if (*ap_count == apc) {
-                        calib_timer.delay(1000); //1ms
-                        lapic.send_sipi(lapic_id, 0x8);
-                        calib_timer.delay(10000); //10ms
-                    }
-                    if (*ap_count == exp_apc) {
-                        get_klogger() << "Started cpu"<<((uint8_t) i)<<" "<<lapic_id<<"\n";
-                    } else {
-                        if (*ap_count != apc) {
-                            wild_panic("Something went wrong with starting AP(CPU)");
-                        }
-                        get_klogger() << "Failed to start cpu"<<((uint8_t) i)<<" "<<lapic_id<<"\n";
-                    }
-                }
-            }
         }
 
         asm("sti");
@@ -878,8 +833,11 @@ done_with_mem_extension:
         AcpiBoot acpi_boot{multiboot2};
 
         {
-            std::thread pci_scan_thread{[&acpi_boot]() {
+            std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state]() {
                 acpi_boot.join();
+
+                new ApStartup(gdt, mpfp, &calib_timer, tss, int_task_state);
+
                 detect_root_pcis();
                 if (acpi_boot.has_8042()) {
                     ps2 *ps2dev = new ps2();
@@ -889,6 +847,8 @@ done_with_mem_extension:
             }};
             pci_scan_thread.detach();
         }
+
+        int cpu_num = lapic.get_cpu_num(*mpfp);
 
 #ifdef THREADING_TESTS
 #ifdef SLEEP_TESTS

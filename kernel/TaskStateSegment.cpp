@@ -33,8 +33,28 @@ int TaskStateSegment::install(GlobalDescriptorTable &gdt, int cpu_n) {
     return sel_idx;
 }
 
+int TaskStateSegment::install_bsp(GlobalDescriptorTable &gdt) {
+    int sel_idx = BSP_TSS_GD;
+    GDT &gdt_e = gdt.get_descriptor(sel_idx);
+    gdt_e.set_base((uint32_t) ((uint64_t) tss_entry));
+    gdt_e.set_limit(sizeof(*tss_entry));
+    gdt_e.type = 0x89;
+    gdt_e.granularity = 0x4;
+    return sel_idx;
+}
+
 int TaskStateSegment::install_cpu(GlobalDescriptorTable &gdt, int cpu_n) {
     int sel_idx = TSS_GD(cpu_n);
+
+    uint16_t selector = gdt.get_selector(sel_idx);
+
+    asm("mov %0, %%ax; ltr %%ax" :: "r"(selector) : "%ax");
+
+    return sel_idx;
+}
+
+int TaskStateSegment::install_bsp_cpu(GlobalDescriptorTable &gdt) {
+    int sel_idx = BSP_TSS_GD;
 
     uint16_t selector = gdt.get_selector(sel_idx);
 

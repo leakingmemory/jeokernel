@@ -31,18 +31,36 @@ public:
     }
 };
 
-void tasklist::create_current_idle_task(uint8_t cpu) {
+bool tasklist::is_multicpu() {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    return multicpu;
+}
+
+uint32_t tasklist::create_current_idle_task(uint8_t cpu) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
     task *t = new task();
-    t->set_id(get_next_id());
+    uint32_t pid = get_next_id();
+    t->set_id(pid);
     t->set_running(true);
     t->set_blocked(false);
     t->set_cpu(cpu);
     t->set_priority_group(PRIO_GROUP_IDLE);
     t->set_cpu_pinned(true);
     tasks.push_back(t);
+    return pid;
+}
+
+void tasklist::start_multi_cpu(uint8_t cpu) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    for (task *t : tasks) {
+        t->set_cpu(cpu);
+    }
+    multicpu = true;
 }
 
 void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
@@ -63,7 +81,7 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
         if (nanos_avail) {
             t->event(TASK_EVENT_NANOTIME, nanos, cpu);
         }
-        if (t->get_cpu() == cpu) {
+        if (!multicpu || t->get_cpu() == cpu) {
             if (t->is_stack_quarantined()) {
                 t->set_stack_quarantine(false);
             } else if (t->is_running()) {
@@ -84,7 +102,7 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     }
     if (task_pool.empty()) {
         for (task *t : tasks) {
-            if (t->is_cpu_pinned() && t->get_cpu() != cpu) {
+            if (multicpu && t->is_cpu_pinned() && t->get_cpu() != cpu) {
                 continue;
             }
             if (t->get_priority_group() == PRIO_GROUP_LOW && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
@@ -155,7 +173,9 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
         }
         win->restore_state(interrupt);
         win->set_running(true);
-        win->set_cpu(cpu);
+        if (multicpu) {
+            win->set_cpu(cpu);
+        }
         if (current_task->is_end()) {
             auto iterator = tasks.begin();
             while (iterator != tasks.end()) {

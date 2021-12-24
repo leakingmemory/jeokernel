@@ -8,8 +8,9 @@
 #include <loaderconfig.h>
 #include <pagetable.h>
 
-#define TSS_GD(cpu) (((cpu) * 2) + 4)
-#define TSS_MAX_CPUS ((GDT_SIZE - 4) / 2)
+#define BSP_TSS_GD  4
+#define TSS_GD(cpu) (((cpu) * 2) + 6)
+#define TSS_MAX_CPUS ((GDT_SIZE - 6) / 2)
 
 class GlobalDescriptorTable {
 private:
