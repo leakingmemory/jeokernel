@@ -17,7 +17,6 @@ class acpi_madt_info;
 
 class ApStartup {
 private:
-    cpu_mpfp *mpfp;
     std::shared_ptr<acpi_madt_info> madtptr;
     const apics_info *apicsInfo;
     LocalApic *lapic;

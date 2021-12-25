@@ -18,7 +18,7 @@
 void set_tss(int cpun, struct TaskStateSegment *tss);
 void set_its(int cpun, struct InterruptTaskState *its);
 
-ApStartup::ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its) : mpfp(mpfp) {
+ApStartup::ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its) {
     auto &acpi = get_acpi_madt_provider();
     madtptr = acpi.get_madt();
     if (!madtptr) {
@@ -37,7 +37,7 @@ ApStartup::ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegmen
 
     bsp_cpu_num = GetCpuNum();
 
-    for (int i = 1; i <= mpfp->get_num_cpus(); i++) {
+    for (int i = 1; i <= apicsInfo->GetNumberOfCpus(); i++) {
         get_klogger() << "Creating TSS ";
         TaskStateSegment *tss = (i - 1) != bsp_cpu_num ? new TaskStateSegment : cpu_tss;
         set_tss(i, tss);
@@ -66,11 +66,11 @@ void ApStartup::Init(PITTimerCalib *calib_timer) {
     const uint32_t *ap_count = install_ap_bootstrap();
 
     critical_section cli{};
-    for (int i = 0; i < mpfp->get_num_cpus(); i++) {
+    for (int i = 0; i < apicsInfo->GetNumberOfCpus(); i++) {
         if (i != bsp_cpu_num) {
             uint32_t apc = *ap_count;
             uint32_t exp_apc = apc + 1;
-            uint8_t lapic_id = mpfp->get_cpu(i).local_apic_id;
+            uint8_t lapic_id = apicsInfo->GetLocalApicId(i);
 
             /*
              * AP needs the bootstrap stack, so enforce only one at a time
