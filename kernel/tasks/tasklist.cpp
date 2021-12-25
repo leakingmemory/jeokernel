@@ -8,10 +8,9 @@
 #include <core/scheduler.h>
 #include <stack.h>
 #include <sstream>
-#include <core/cpu_mpfp.h>
-#include <core/LocalApic.h>
 #include <core/nanotime.h>
 #include <pagealloc.h>
+#include "../ApStartup.h"
 
 #define CONTINUE_RUNNING_BIAS 12
 #define RESOURCE_PRIORITY_BIAS 12
@@ -239,7 +238,7 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rs
     return t->get_id();
 }
 
-void tasklist::exit(uint8_t cpu) {
+void tasklist::exit(uint8_t cpu, bool returnToCallerIfNotTerminatedImmediately) {
     task *current_task = nullptr;
 
     {
@@ -271,11 +270,14 @@ void tasklist::exit(uint8_t cpu) {
     }
 
     asm("int $0xFE"); // Request task switch now.
-    /*
-     * Wait for being evicted
-     */
-    while (true) {
-        asm("hlt");
+
+    if (!returnToCallerIfNotTerminatedImmediately) {
+        /*
+         * Wait for being evicted
+         */
+        while (true) {
+            asm("hlt");
+        }
     }
 }
 
@@ -353,20 +355,14 @@ uint32_t tasklist::get_current_task_id() {
     critical_section cli{};
 
     uint8_t cpu_num = 0;
-    {
-        cpu_mpfp *mpfp = get_mpfp();
-        LocalApic localApic{mpfp};
-        if (mpfp != nullptr) {
-            cpu_num = localApic.get_cpu_num(*mpfp);
-        }
-    }
 
     task *current_task;
 
     std::lock_guard lock{_lock};
 
-    if (!multicpu) {
-        cpu_num = 0;
+    if (multicpu) {
+        ApStartup *apStartup = GetApStartup();
+        cpu_num = apStartup->GetCpuNum();
     }
 
     for (task *t : tasks) {
@@ -407,9 +403,8 @@ task *tasklist::get_nullable_task_with_lock(uint32_t task_id) {
 task &tasklist::get_current_task_with_lock() {
     uint8_t cpu_num = 0;
     if (multicpu) {
-        cpu_mpfp *mpfp = get_mpfp();
-        LocalApic localApic{mpfp};
-        cpu_num = localApic.get_cpu_num(*mpfp);
+        ApStartup *apStartup = GetApStartup();
+        cpu_num = apStartup->GetCpuNum();
     }
 
     task *current_task;

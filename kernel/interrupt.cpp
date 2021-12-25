@@ -14,6 +14,7 @@
 #include "KernelElf.h"
 #include "HardwareInterrupts.h"
 #include "CpuInterrupts.h"
+#include "ApStartup.h"
 
 //#define PRINT_HANDLED_CPU_INTR
 
@@ -265,10 +266,10 @@ extern "C" {
             case 0xFE: {
                 /* Voluntary task switch vector */
                 uint8_t cpu{0};
-                {
-                    cpu_mpfp *mpfp = get_mpfp();
-                    LocalApic lapic{mpfp};
-                    cpu = lapic.get_cpu_num(*mpfp);
+                auto *scheduler = get_scheduler();
+                if (scheduler->is_multicpu()) {
+                    ApStartup *apStartup = GetApStartup();
+                    cpu = apStartup->GetCpuNum();
                 }
                 get_scheduler()->switch_tasks(interrupt, cpu);
                 return;

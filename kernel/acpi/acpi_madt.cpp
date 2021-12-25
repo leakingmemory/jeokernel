@@ -127,6 +127,7 @@ acpi_madt_info::acpi_madt_info(void *pointer) : ioapicAddrs() {
 }
 
 void acpi_madt_info::Visit(const acpi_madt_processor &cpu) {
+    localApicIds.push_back(cpu.ApicId);
     std::stringstream str{};
     str << std::hex << "ACPI CPU " << cpu.AcpiProcessorId << " APIC-ID " << cpu.ApicId << " flags " << cpu.Flags << "\n";
     get_klogger() << str.str().c_str();
@@ -176,4 +177,12 @@ int acpi_madt_info::GetNumberOfIoapics() const {
 
 uint64_t acpi_madt_info::GetIoapicAddr(int index) const {
     return ioapicAddrs.at(index);
+}
+
+int acpi_madt_info::GetNumberOfCpus() const {
+    return localApicIds.size();
+}
+
+int acpi_madt_info::GetLocalApicId(int cpu) const {
+    return localApicIds.at(cpu);
 }

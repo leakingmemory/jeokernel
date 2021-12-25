@@ -13,21 +13,29 @@ class GlobalDescriptorTable;
 class TaskStateSegment;
 class InterruptTaskState;
 class PITTimerCalib;
+class acpi_madt_info;
 
 class ApStartup {
 private:
     cpu_mpfp *mpfp;
+    std::shared_ptr<acpi_madt_info> madtptr;
+    const apics_info *apicsInfo;
     LocalApic *lapic;
     IOApic *ioapic;
+    int bsp_cpu_num;
 public:
     ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its);
     ~ApStartup();
     void Init(PITTimerCalib *calib_timer);
-    LocalApic *GetLocalApic() {
+    int GetCpuNum() const;
+    LocalApic *GetLocalApic() const {
         return lapic;
     }
-    IOApic *GetIoapic() {
+    IOApic *GetIoapic() const {
         return ioapic;
+    }
+    bool IsBsp(int cpu_num) const {
+        return cpu_num == bsp_cpu_num;
     }
 };
 

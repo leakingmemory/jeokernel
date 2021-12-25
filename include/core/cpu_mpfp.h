@@ -211,6 +211,12 @@ public:
     uint64_t GetIoapicAddr(int index) const override {
         return ioapic[index].mapped_memory_addr;
     }
+    int GetNumberOfCpus() const override {
+        return ncpu;
+    }
+    virtual int GetLocalApicId(int cpu) const override {
+        return cpus[cpu].local_apic_id;
+    }
 };
 
 cpu_mpfp *get_mpfp();

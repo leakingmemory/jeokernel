@@ -104,10 +104,13 @@ public:
 class acpi_madt_info : private acpi_madt_visitor, public apics_info {
 private:
     std::vector<uint64_t> ioapicAddrs;
+    std::vector<int> localApicIds;
 public:
     acpi_madt_info(void *);
     int GetNumberOfIoapics() const override;
     uint64_t GetIoapicAddr(int) const override;
+    int GetNumberOfCpus() const override;
+    int GetLocalApicId(int cpu) const override;
 private:
     void Visit(const acpi_madt_processor &) override;
     void Visit(const acpi_madt_ioapic &) override;

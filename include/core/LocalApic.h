@@ -38,10 +38,10 @@ public:
         pointer[0x80 / 4] = tpr;
     }
 
-    int get_cpu_num(const cpu_mpfp &mpc) const {
+    int get_cpu_num(const apics_info *mpc) const {
         uint32_t lapic_id = get_lapic_id() >> 24;
-        for (int i = 0; i < mpc.get_num_cpus(); i++) {
-            if (mpc.get_cpu(i).local_apic_id == lapic_id) {
+        for (int i = 0; i < mpc->GetNumberOfCpus(); i++) {
+            if (mpc->GetLocalApicId(i) == lapic_id) {
                 return i;
             }
         }

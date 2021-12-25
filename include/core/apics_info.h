@@ -12,6 +12,8 @@ public:
     }
     virtual int GetNumberOfIoapics() const = 0;
     virtual uint64_t GetIoapicAddr(int) const = 0;
+    virtual int GetNumberOfCpus() const = 0;
+    virtual int GetLocalApicId(int cpu) const = 0;
 };
 
 #endif //JEOKERNEL_APICS_INFO_H

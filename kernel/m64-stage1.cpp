@@ -12,7 +12,6 @@
 #include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
 #include "Pic.h"
-#include "IOApic.h"
 #include <pagealloc.h>
 #include <multiboot_impl.h>
 #include <core/malloc.h>
@@ -21,9 +20,7 @@
 #include <vector>
 #include <tuple>
 #include <sstream>
-#include <cpuid.h>
 #include <string>
-#include <concurrency/critical_section.h>
 #include <mutex>
 #include "PITTimerCalib.h"
 #include "HardwareInterrupts.h"
@@ -38,7 +35,6 @@
 #include <thread>
 #include <core/nanotime.h>
 #include <chrono>
-#include <concurrency/raw_semaphore.h>
 #include <devices/devices.h>
 #include <devices/drivers.h>
 #include "usb/usb_hcis.h"
@@ -747,8 +743,11 @@ done_with_mem_extension:
             }
             get_hw_interrupt_handler().add_handler(0, [&lapic, characters, aptimers](Interrupt &interrupt) {
                 bool multicpu = scheduler->is_multicpu();
-                uint8_t cpu_num = multicpu ? lapic.get_cpu_num(*mpfp) : 0;
-                bool is_bootstrap_cpu = !multicpu || (mpfp->get_cpu(cpu_num).cpu_flags & 2) != 0;
+                uint8_t cpu_num{0};
+                if (multicpu) {
+                    cpu_num = apStartup->GetCpuNum();
+                }
+                bool is_bootstrap_cpu = !multicpu || apStartup->IsBsp(cpu_num);
                 uint64_t prev_vis = 0;
                 uint64_t vis = 0;
                 uint64_t ticks = 0;
@@ -778,7 +777,7 @@ done_with_mem_extension:
 
             get_hw_interrupt_handler().add_handler(0, [&lapic] (Interrupt &intr) {
                 bool multicpu = scheduler->is_multicpu();
-                scheduler->switch_tasks(intr, multicpu ? lapic.get_cpu_num(*mpfp) : 0);
+                scheduler->switch_tasks(intr, multicpu ? apStartup->GetCpuNum() : 0);
             });
 
         }
@@ -850,7 +849,7 @@ done_with_mem_extension:
             pci_scan_thread.detach();
         }
 
-        int cpu_num = lapic.get_cpu_num(*mpfp);
+        auto *scheduler = get_scheduler();
 
 #ifdef THREADING_TESTS
 #ifdef SLEEP_TESTS
@@ -1059,8 +1058,11 @@ done_with_mem_extension:
              * THis is the idle task, and pinned to this cpu, so cpu_num
              * should be valid.
              * */
-            if (get_scheduler()->clear_stack_quarantines(cpu_num)) {
-                asm("int $0xFE");
+            if (scheduler->is_multicpu()) {
+                int cpu_num = apStartup->GetCpuNum();
+                if (scheduler->clear_stack_quarantines(cpu_num)) {
+                    asm("int $0xFE");
+                }
             }
         }
     }

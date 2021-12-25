@@ -7,9 +7,9 @@
 #include <sstream>
 #include "start_ap.h"
 #include "TaskStateSegment.h"
-#include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
 #include "InterruptDescriptorTable.h"
+#include "ApStartup.h"
 #include <core/scheduler.h>
 #include <core/nanotime.h>
 
@@ -35,13 +35,11 @@ extern "C" {
 
         //get_klogger() << "In AP with stack\n";
 
-        cpu_mpfp *mpfp = get_mpfp();
-
         GlobalDescriptorTable *gdt = get_gdt();
 
-        LocalApic lapic{mpfp};
+        ApStartup *apStartup = GetApStartup();
 
-        int cpu_num = lapic.get_cpu_num(*mpfp);
+        int cpu_num = apStartup->GetCpuNum();
 
         //get_klogger() << "Loading TSS/ITS for CPU "<< (uint8_t) cpu_num << "\n";
 
@@ -53,23 +51,25 @@ extern "C" {
 
         idt->install();
 
-        lapic.enable_apic();
+        auto *lapic = apStartup->GetLocalApic();
+
+        lapic->enable_apic();
         {
             //uint32_t ltimer_mode =
-            lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC);
+            lapic->set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC);
             //get_klogger() << "AP init timer: " << ltimer_mode << "\n";
         }
-        lapic.set_lint0_int(0x21, false);
-        lapic.set_lint1_int(0x22, false);
+        lapic->set_lint0_int(0x21, false);
+        lapic->set_lint1_int(0x22, false);
 
         uint64_t lapic_100ms = get_lapic_100ms();
 
-        lapic.set_timer_div(0x3);
-        lapic.set_timer_count((uint32_t) (lapic_100ms / 10));
+        lapic->set_timer_div(0x3);
+        lapic->set_timer_count((uint32_t) (lapic_100ms / 10));
 
         {
             //uint32_t ltimer_mode =
-            lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC);
+            lapic->set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC);
             //std::stringstream stream{};
             //stream << std::dec << " " << lapic_100ms << " ticks per 100ms";
             //std::string info = stream.str();
@@ -85,7 +85,7 @@ extern "C" {
             get_klogger() << sstr.str().c_str();
         }
 
-        lapic.eio();
+        lapic->eio();
 
         asm("sti");
 

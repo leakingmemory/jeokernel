@@ -20,13 +20,14 @@ void set_its(int cpun, struct InterruptTaskState *its);
 
 ApStartup::ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its) : mpfp(mpfp) {
     auto &acpi = get_acpi_madt_provider();
-    auto madtptr = acpi.get_madt();
+    madtptr = acpi.get_madt();
     if (!madtptr) {
         get_klogger() << "Can't find a madt\n";
     }
+    apicsInfo = mpfp != nullptr ? mpfp : madtptr->GetApicsInfo();
 
     lapic = new LocalApic(mpfp);
-    ioapic = new IOApic(mpfp != nullptr ? mpfp : madtptr->GetApicsInfo());
+    ioapic = new IOApic(apicsInfo);
 
     uint8_t vectors = ioapic->get_num_vectors();
     get_klogger() << "ioapic vectors " << vectors << "\n";
@@ -34,14 +35,14 @@ ApStartup::ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegmen
         ioapic->set_vector_interrupt(i, 0x23 + i);
     }
 
-    int cpu_num = lapic->get_cpu_num(*mpfp);
+    bsp_cpu_num = GetCpuNum();
 
     for (int i = 1; i <= mpfp->get_num_cpus(); i++) {
         get_klogger() << "Creating TSS ";
-        TaskStateSegment *tss = (i - 1) != cpu_num ? new TaskStateSegment : cpu_tss;
+        TaskStateSegment *tss = (i - 1) != bsp_cpu_num ? new TaskStateSegment : cpu_tss;
         set_tss(i, tss);
         get_klogger() << (uint64_t) &(tss->get_entry()) << " its:";
-        InterruptTaskState *int_task_state = (i - 1) != cpu_num ? new InterruptTaskState(*tss) : cpu_its;
+        InterruptTaskState *int_task_state = (i - 1) != bsp_cpu_num ? new InterruptTaskState(*tss) : cpu_its;
         set_its(i, int_task_state);
         get_klogger() << (uint64_t) int_task_state << " for cpu " << (uint8_t) i << " to gdt sel ";
         get_klogger() << (uint16_t) tss->install(*gdt, i) << "\n";
@@ -59,16 +60,14 @@ ApStartup::~ApStartup() {
 }
 
 void ApStartup::Init(PITTimerCalib *calib_timer) {
-    int cpu_num = lapic->get_cpu_num(*mpfp);
-
     tasklist *scheduler = get_scheduler();
-    scheduler->start_multi_cpu(cpu_num);
+    scheduler->start_multi_cpu(bsp_cpu_num);
 
     const uint32_t *ap_count = install_ap_bootstrap();
 
     critical_section cli{};
     for (int i = 0; i < mpfp->get_num_cpus(); i++) {
-        if (i != lapic->get_cpu_num(*mpfp)) {
+        if (i != bsp_cpu_num) {
             uint32_t apc = *ap_count;
             uint32_t exp_apc = apc + 1;
             uint8_t lapic_id = mpfp->get_cpu(i).local_apic_id;
@@ -97,4 +96,8 @@ void ApStartup::Init(PITTimerCalib *calib_timer) {
             }
         }
     }
+}
+
+int ApStartup::GetCpuNum() const {
+    return lapic->get_cpu_num(apicsInfo);
 }

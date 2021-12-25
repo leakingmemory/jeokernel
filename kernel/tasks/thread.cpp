@@ -2,11 +2,10 @@
 // Created by sigsegv on 09.05.2021.
 //
 
-#include <thread>
 #include <core/scheduler.h>
 #include <core/cpu_mpfp.h>
-#include <core/LocalApic.h>
 #include <std/thread.h>
+#include "../ApStartup.h"
 
 
 extern "C" {
@@ -15,13 +14,18 @@ extern "C" {
     void thread_trampoline(std::threadimpl::thread_start_context *ctx) {
         ctx->invoke();
         uint8_t cpu_num{0};
-        {
-            cpu_mpfp *mpfp = get_mpfp();
-            LocalApic lapic{mpfp};
-            cpu_num = lapic.get_cpu_num(*mpfp);
-        }
         tasklist *scheduler = get_scheduler();
-        scheduler->exit(cpu_num);
+        {
+            critical_section cli{};
+            if (scheduler->is_multicpu()) {
+                ApStartup *apStartup = GetApStartup();
+                cpu_num = apStartup->GetCpuNum();
+            }
+            scheduler->exit(cpu_num, true);
+        }
+        while (true) {
+            asm("hlt");
+        }
     }
 }
 
