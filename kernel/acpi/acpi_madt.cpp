@@ -127,7 +127,9 @@ acpi_madt_info::acpi_madt_info(void *pointer) : ioapicAddrs() {
 }
 
 void acpi_madt_info::Visit(const acpi_madt_processor &cpu) {
-    localApicIds.push_back(cpu.ApicId);
+    if ((cpu.Flags & 1) != 0 || (cpu.Flags & 2) != 0) {
+        localApicIds.push_back(cpu.ApicId);
+    }
     std::stringstream str{};
     str << std::hex << "ACPI CPU " << cpu.AcpiProcessorId << " APIC-ID " << cpu.ApicId << " flags " << cpu.Flags << "\n";
     get_klogger() << str.str().c_str();
