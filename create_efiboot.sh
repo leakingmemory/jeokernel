@@ -6,6 +6,9 @@ if grub-file --is-x86-multiboot2  boot32/jeokernel; then
   bzip2 -dc ${CMAKE_SOURCE_DIR}/efipart.img.fs.bz2 > efipart.img.fs &&
   bzip2 -dc ${CMAKE_SOURCE_DIR}/efipart.img.end.bz2 > efipart.img.end &&
   cp -vp ${CMAKE_SOURCE_DIR}/mtools.conf mtools.conf &&
+  grub-mkimage --format=x86_64-efi "--prefix=(hd0,gpt1)/boot/grub" part_gpt fat > bootx64.efi &&
+  env MTOOLSRC=mtools.conf mdel a:/efi/boot/bootx64.efi &&
+  env MTOOLSRC=mtools.conf mcopy bootx64.efi a:/efi/boot/bootx64.efi &&
   env MTOOLSRC=mtools.conf mcopy ${CMAKE_SOURCE_DIR}/grubefi.cfg a:/boot/grub/grub.cfg &&
   env MTOOLSRC=mtools.conf mdir a:/boot &&
   env MTOOLSRC=mtools.conf mdir a:/boot/grub/grub.cfg &&
