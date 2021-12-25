@@ -24,7 +24,7 @@ ApStartup::ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegmen
     if (!madtptr) {
         get_klogger() << "Can't find a madt\n";
     }
-    apicsInfo = mpfp != nullptr ? mpfp : madtptr->GetApicsInfo();
+    apicsInfo = madtptr != nullptr ? madtptr->GetApicsInfo() : mpfp;
 
     lapic = new LocalApic(mpfp);
     ioapic = new IOApic(apicsInfo);
