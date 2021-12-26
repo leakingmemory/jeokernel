@@ -58,6 +58,19 @@ bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update) {
     }
 }
 
+bool update_pageentr(uint64_t addr, std::function<void (pageentr &pe)> func) {
+    critical_section cli{};
+    std::lock_guard lock{*pagetables_lock};
+
+    pageentr *pe = get_pageentr64(_get_pml4t(), addr);
+    if (pe != nullptr) {
+        func(*pe);
+        return true;
+    } else {
+        return false;
+    }
+}
+
 uint64_t get_phys_from_virt(uint64_t vaddr) {
     std::optional<pageentr> pe = get_pageentr(vaddr);
     if (pe) {

@@ -10,6 +10,7 @@
 struct MultibootInfoHeader;
 struct MultibootModuleInfo;
 struct MultibootMemoryMap;
+struct MultibootFramebuffer;
 struct MultibootRsdp1;
 struct MultibootRsdp2;
 
@@ -25,6 +26,7 @@ struct MultibootInfoHeaderPart {
 
     const MultibootModuleInfo &get_type3() const;
     const MultibootMemoryMap &get_type6() const;
+    const MultibootFramebuffer &get_type8() const;
     const MultibootRsdp1 &get_type14() const;
     const MultibootRsdp2 &get_type15() const;
 };
@@ -92,6 +94,24 @@ struct MultibootMemoryMap {
         }
         return get_entries_ptr()[n];
     }
+} __attribute__((__packed__));
+
+struct MultibootFramebufferColor {
+
+} __attribute__((__packed__));
+
+struct MultibootFramebuffer {
+    MultibootInfoHeaderPart part_header;
+    uint64_t framebuffer_addr;
+    uint32_t framebuffer_pitch;
+    uint32_t framebuffer_width;
+    uint32_t framebuffer_height;
+    uint8_t framebuffer_bpp;
+    uint8_t framebuffer_type;
+    uint8_t reserved;
+    /* only available when framebuffer_type == 0 : */
+    uint32_t framebuffer_palette_number_of_colors;
+    MultibootFramebufferColor framebuffer_palette[1];
 } __attribute__((__packed__));
 
 struct MultibootRsdp1 {

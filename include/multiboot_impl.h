@@ -54,6 +54,10 @@ const MultibootMemoryMap &MultibootInfoHeaderPart::get_type6() const {
     return *((MultibootMemoryMap *) this);
 }
 
+const MultibootFramebuffer &MultibootInfoHeaderPart::get_type8() const {
+    return *((MultibootFramebuffer *) this);
+}
+
 const MultibootRsdp1 &MultibootInfoHeaderPart::get_type14() const {
     return *((const MultibootRsdp1 *) this);
 }

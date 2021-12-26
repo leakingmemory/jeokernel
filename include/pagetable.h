@@ -136,9 +136,11 @@ pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr);
 #ifndef LOADER
 
 #include <optional>
+#include <functional>
 
 #ifndef UNIT_TESTING
 #include <concurrency/hw_spinlock.h>
+
 #endif
 
 void initialize_pagetable_control();
@@ -156,6 +158,7 @@ std::optional<pageentr> get_pageentr(uint64_t addr);
  * @return True on success.
  */
 bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update);
+bool update_pageentr(uint64_t addr, std::function<void (pageentr &pe)>);
 
 #endif
 #endif //JEOKERNEL_PAGETABLE_H

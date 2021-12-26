@@ -25,22 +25,23 @@ multiboot_entrypoint:
     .short 1 /* optional */
     .long (multiboot_entrypoint_end - multiboot_entrypoint) /* size */
     .long bootstrap /* entrypoint addr */
+    .short 0 /* pad */
+    .short 0 /* pad */
 multiboot_entrypoint_end:
-    .short 0 /* pad */
-    .short 0 /* pad */
+    .short 5 /* framebuffer */
+    .short 0 /* flags */
+    .long (framebuffer_request_end - multiboot_entrypoint_end) /* size */
+    .long 1024 /* width */
+    .long 768 /* height */
+    .long 24 /* depth */
+    .short 0 /* padding */
+    .short 0 /* padding */
+framebuffer_request_end:
     /* end tag : */
     .short 0 /* end */
     .short 0
     .long 8 /* size */
 multiboot_header_end:
-       //.long MB_KERNEL_MAGIC
-       //.long (MB_HFLAG_MODALIGN|MB_HFLAG_MEMINFO|MB_HFLAG_KLUDGE)
-       //.long -(MB_KERNEL_MAGIC + (MB_HFLAG_MODALIGN|MB_HFLAG_MEMINFO|MB_HFLAG_KLUDGE))
-       //.long multiboot_header
-       //.long __text_start
-       //.long __data_end
-       //.long __end
-       //.long bootstrap
 
 stackBottom:
 
