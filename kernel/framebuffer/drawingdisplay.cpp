@@ -46,7 +46,12 @@ void drawingdisplay::Draw8x8Char(int x, int y, uint32_t color, uint32_t backgrou
 
 void drawingdisplay::ShiftUpLines(int lines, uint32_t color) {
     int width{GetWidth()};
-    int end{GetHeight() - lines};
+    int height{GetHeight()};
+    int end{height - lines};
+    if (end < 0) {
+        end = 0;
+        lines = height;
+    }
     int src_y = lines;
     for (int y = 0; y < end; y++, src_y++) {
         auto source = Line(0, src_y, width);
