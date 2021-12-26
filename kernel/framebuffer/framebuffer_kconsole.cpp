@@ -52,3 +52,17 @@ framebuffer_kconsole &framebuffer_kconsole::operator<<(const char *str) {
     }
     return *this;
 }
+
+void framebuffer_kconsole::MakeRoomForLinefeeds(unsigned int linefeeds) {
+    uint32_t pos{fbconsole->GetPosition()};
+    uint32_t width{fbconsole->GetWidth()};
+    uint32_t x{pos % fbconsole->GetWidth()};
+    uint32_t y{pos / fbconsole->GetWidth()};
+    uint32_t room{fbconsole->GetHeight() - y - 1};
+    if (room < linefeeds) {
+        uint32_t newlines{linefeeds - room};
+        fbconsole->ShiftUpLines(newlines, 0);
+        y -= newlines;
+        fbconsole->SetPosition(x, y);
+    }
+}

@@ -1,0 +1,131 @@
+//
+// Created by sigsegv on 12/26/21.
+//
+
+#include <string>
+#include "framebuffer_kcons_with_worker_thread.h"
+#include "framebuffer_kconsole.h"
+
+class framebuffer_kcons_cmd {
+public:
+    virtual ~framebuffer_kcons_cmd() { }
+    virtual int GetEstimatedLinefeeds() = 0;
+    virtual void Execute(std::shared_ptr<framebuffer_kconsole> targetObject) = 0;
+};
+
+class framebuffer_kcons_cmd_print_at : public framebuffer_kcons_cmd {
+private:
+    std::string str;
+    uint8_t col;
+    uint8_t row;
+public:
+    framebuffer_kcons_cmd_print_at(uint8_t col, uint8_t row, const char *str) : str(str), col(col), row(row) {
+    }
+    ~framebuffer_kcons_cmd_print_at();
+    int GetEstimatedLinefeeds() override;
+    void Execute(std::shared_ptr<framebuffer_kconsole> targetObject) override;
+};
+
+framebuffer_kcons_cmd_print_at::~framebuffer_kcons_cmd_print_at() noexcept {
+}
+
+int framebuffer_kcons_cmd_print_at::GetEstimatedLinefeeds() {
+    return 0;
+}
+void framebuffer_kcons_cmd_print_at::Execute(std::shared_ptr<framebuffer_kconsole> targetObject) {
+    targetObject->print_at(col, row, str.c_str());
+}
+
+class framebuffer_kcons_cmd_printstr : public framebuffer_kcons_cmd {
+private:
+    std::string str;
+public:
+    framebuffer_kcons_cmd_printstr(const char *str) : str(str) {
+    }
+    ~framebuffer_kcons_cmd_printstr();
+    int GetEstimatedLinefeeds() override;
+    void Execute(std::shared_ptr<framebuffer_kconsole> targetObject) override;
+};
+
+framebuffer_kcons_cmd_printstr::~framebuffer_kcons_cmd_printstr() noexcept {
+}
+
+int framebuffer_kcons_cmd_printstr::GetEstimatedLinefeeds() {
+    int ln{0};
+    char *str = this->str.c_str();
+    while (*str) {
+        if (*str == '\n') {
+            ++ln;
+        }
+        ++str;
+    }
+    return ln;
+}
+
+void framebuffer_kcons_cmd_printstr::Execute(std::shared_ptr<framebuffer_kconsole> targetObject) {
+    (*targetObject) << str.c_str();
+}
+
+framebuffer_kcons_with_worker_thread::framebuffer_kcons_with_worker_thread(std::shared_ptr<framebuffer_kconsole> targetObject) :
+    command(), targetObject(targetObject), spinlock(), semaphore(-1), terminate(false),
+    worker([this] () { WorkerThread(); }) {
+}
+
+framebuffer_kcons_with_worker_thread::~framebuffer_kcons_with_worker_thread() {
+    {
+        critical_section cli{};
+        std::lock_guard lock{spinlock};
+        terminate = true;
+    }
+    semaphore.release();
+    worker.join();
+}
+
+void framebuffer_kcons_with_worker_thread::WorkerThread() {
+    while (true) {
+        semaphore.acquire();
+        std::vector<std::shared_ptr<framebuffer_kcons_cmd>> cmds{};
+        {
+            critical_section cli{};
+            std::lock_guard lock{spinlock};
+            if (terminate) {
+                break;
+            }
+            for (std::shared_ptr<framebuffer_kcons_cmd> cmd : command) {
+                cmds.push_back(cmd);
+            }
+            command.clear();
+        }
+        int linefeeds{0};
+        for (std::shared_ptr<framebuffer_kcons_cmd> cmd : cmds) {
+            linefeeds += cmd->GetEstimatedLinefeeds();
+        }
+        if (linefeeds > 0) {
+            targetObject->MakeRoomForLinefeeds(linefeeds);
+        }
+        for (std::shared_ptr<framebuffer_kcons_cmd> cmd : cmds) {
+            cmd->Execute(targetObject);
+        }
+    }
+}
+
+void framebuffer_kcons_with_worker_thread::print_at(uint8_t col, uint8_t row, const char *str) {
+    std::shared_ptr<framebuffer_kcons_cmd> cmd{new framebuffer_kcons_cmd_print_at(col, row, str)};
+    {
+        critical_section cli{};
+        std::lock_guard lock{spinlock};
+        command.push_back(cmd);
+    }
+    semaphore.release();
+}
+
+framebuffer_kcons_with_worker_thread &framebuffer_kcons_with_worker_thread::operator<<(const char *str) {
+    std::shared_ptr<framebuffer_kcons_cmd> cmd{new framebuffer_kcons_cmd_printstr(str)};
+    {
+        critical_section cli{};
+        std::lock_guard lock{spinlock};
+        command.push_back(cmd);
+    }
+    semaphore.release();
+    return *this;
+}

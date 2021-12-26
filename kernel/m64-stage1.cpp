@@ -46,6 +46,7 @@
 #include "framebuffer/framebuffer_console.h"
 #include "framebuffer/framebuffer_kconsole.h"
 #include "framebuffer/framebuffer_kconsole_spinlocked.h"
+#include "framebuffer/framebuffer_kcons_with_worker_thread.h"
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -341,6 +342,7 @@ done_with_mem_extension:
             }
         }
 
+        std::shared_ptr<framebuffer_kconsole> kcons{};
         framebuffer_kconsole_spinlocked *fb_kcons_locked{nullptr};
         {
             const auto *part = multiboot2.first_part();
@@ -348,7 +350,7 @@ done_with_mem_extension:
                 if (part->type == 8) {
                     auto *fb = new framebuffer(part->get_type8());
                     std::shared_ptr<framebuffer_console> fb_cons{new framebuffer_console(*fb)};
-                    std::shared_ptr<framebuffer_kconsole> kcons{new framebuffer_kconsole(fb_cons)};
+                    kcons = std::shared_ptr<framebuffer_kconsole>(new framebuffer_kconsole(fb_cons));
                     fb_kcons_locked = new framebuffer_kconsole_spinlocked(kcons);
                     set_klogger(fb_kcons_locked);
                 }
@@ -683,6 +685,12 @@ done_with_mem_extension:
         scheduler = new tasklist;
         {
             scheduler->create_current_idle_task(0);
+        }
+
+        if (fb_kcons_locked != nullptr) {
+            auto *fb_kcons_wthread = new framebuffer_kcons_with_worker_thread(kcons);
+            set_klogger(fb_kcons_wthread);
+            delete fb_kcons_locked;
         }
 
 #ifndef DISABLE_MPFP
