@@ -14,9 +14,13 @@
 
 class framebuffer_kcons_cmd;
 
+#define RING_SIZE 1024
+
 class framebuffer_kcons_with_worker_thread : public KLogger {
 private:
-    std::vector<std::shared_ptr<framebuffer_kcons_cmd>> command;
+    framebuffer_kcons_cmd *command_ring[RING_SIZE];
+    unsigned int command_ring_extract;
+    unsigned int command_ring_insert;
     std::shared_ptr<framebuffer_kconsole> targetObject;
     hw_spinlock spinlock;
     raw_semaphore semaphore;
@@ -26,6 +30,8 @@ public:
     explicit framebuffer_kcons_with_worker_thread(std::shared_ptr<framebuffer_kconsole> targetObject);
     ~framebuffer_kcons_with_worker_thread() override;
     void WorkerThread();
+
+    bool InsertCommand(framebuffer_kcons_cmd *cmd);
 
     void print_at(uint8_t col, uint8_t row, const char *str) override;
     framebuffer_kcons_with_worker_thread & operator << (const char *str) override;

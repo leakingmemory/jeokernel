@@ -67,7 +67,7 @@ void framebuffer_kcons_cmd_printstr::Execute(std::shared_ptr<framebuffer_kconsol
 }
 
 framebuffer_kcons_with_worker_thread::framebuffer_kcons_with_worker_thread(std::shared_ptr<framebuffer_kconsole> targetObject) :
-    command(), targetObject(targetObject), spinlock(), semaphore(-1), terminate(false),
+    command_ring(), command_ring_extract(0), command_ring_insert(0), targetObject(targetObject), spinlock(), semaphore(-1), terminate(false),
     worker([this] () { WorkerThread(); }) {
 }
 
@@ -79,53 +79,79 @@ framebuffer_kcons_with_worker_thread::~framebuffer_kcons_with_worker_thread() {
     }
     semaphore.release();
     worker.join();
+    while (command_ring_extract != command_ring_insert) {
+        delete command_ring[command_ring_extract];
+        ++command_ring_extract;
+    }
 }
 
+#define EXTRACT_MAX 128
 void framebuffer_kcons_with_worker_thread::WorkerThread() {
     while (true) {
         semaphore.acquire();
-        std::vector<std::shared_ptr<framebuffer_kcons_cmd>> cmds{};
+        unsigned int num{0};
+        framebuffer_kcons_cmd *cmds[EXTRACT_MAX];
         {
             critical_section cli{};
             std::lock_guard lock{spinlock};
             if (terminate) {
                 break;
             }
-            for (std::shared_ptr<framebuffer_kcons_cmd> cmd : command) {
-                cmds.push_back(cmd);
+            while (command_ring_extract != command_ring_insert && num < EXTRACT_MAX) {
+                cmds[num] = command_ring[command_ring_extract];
+                ++num;
+                ++command_ring_extract;
+                if (command_ring_extract == RING_SIZE) {
+                    command_ring_extract = 0;
+                }
             }
-            command.clear();
         }
         int linefeeds{0};
-        for (std::shared_ptr<framebuffer_kcons_cmd> cmd : cmds) {
-            linefeeds += cmd->GetEstimatedLinefeeds();
+        for (int i = 0; i < num; i++) {
+            linefeeds += cmds[i]->GetEstimatedLinefeeds();
         }
         if (linefeeds > 0) {
             targetObject->MakeRoomForLinefeeds(linefeeds);
         }
-        for (std::shared_ptr<framebuffer_kcons_cmd> cmd : cmds) {
-            cmd->Execute(targetObject);
+        for (int i = 0; i < num; i++) {
+            cmds[i]->Execute(targetObject);
+            delete cmds[i];
         }
     }
 }
 
-void framebuffer_kcons_with_worker_thread::print_at(uint8_t col, uint8_t row, const char *str) {
-    std::shared_ptr<framebuffer_kcons_cmd> cmd{new framebuffer_kcons_cmd_print_at(col, row, str)};
+bool framebuffer_kcons_with_worker_thread::InsertCommand(framebuffer_kcons_cmd *cmd) {
+    bool success{false};
     {
         critical_section cli{};
         std::lock_guard lock{spinlock};
-        command.push_back(cmd);
+        unsigned int next = command_ring_insert + 1;
+        if (next == RING_SIZE) {
+            next = 0;
+        }
+        if (next != command_ring_extract) {
+            command_ring[command_ring_insert] = cmd;
+            command_ring_insert = next;
+            success = true;
+        }
     }
-    semaphore.release();
+    if (success) {
+        semaphore.release();
+    }
+    return success;
+}
+
+void framebuffer_kcons_with_worker_thread::print_at(uint8_t col, uint8_t row, const char *str) {
+    framebuffer_kcons_cmd *cmd{new framebuffer_kcons_cmd_print_at(col, row, str)};
+    if (!InsertCommand(cmd)) {
+        delete cmd;
+    }
 }
 
 framebuffer_kcons_with_worker_thread &framebuffer_kcons_with_worker_thread::operator<<(const char *str) {
-    std::shared_ptr<framebuffer_kcons_cmd> cmd{new framebuffer_kcons_cmd_printstr(str)};
-    {
-        critical_section cli{};
-        std::lock_guard lock{spinlock};
-        command.push_back(cmd);
+    framebuffer_kcons_cmd* cmd{new framebuffer_kcons_cmd_printstr(str)};
+    if (!InsertCommand(cmd)) {
+        delete cmd;
     }
-    semaphore.release();
     return *this;
 }
