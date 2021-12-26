@@ -2,19 +2,15 @@
 // Created by sigsegv on 12/26/21.
 //
 
-#include <mutex>
-#include <concurrency/critical_section.h>
 #include "framebuffer_kconsole.h"
 #include "framebuffer_console.h"
 
 framebuffer_kconsole::framebuffer_kconsole(std::shared_ptr<framebuffer_console> fbconsole) :
-    _lock(), fbconsole(fbconsole)
+    fbconsole(fbconsole)
 {
 }
 
 void framebuffer_kconsole::print_at(uint8_t col, uint8_t row, const char *str) {
-    critical_section cli{};
-    std::lock_guard lock{_lock};
     uint32_t pos{fbconsole->GetPosition()};
     fbconsole->SetPosition(col, row);
     while (*str) {
@@ -25,8 +21,6 @@ void framebuffer_kconsole::print_at(uint8_t col, uint8_t row, const char *str) {
 }
 
 framebuffer_kconsole &framebuffer_kconsole::operator<<(const char *str) {
-    critical_section cli{};
-    std::lock_guard lock{_lock};
     uint32_t width{fbconsole->GetWidth()};
     uint32_t height{fbconsole->GetHeight()};
     uint32_t end{width * height};

@@ -45,6 +45,7 @@
 #include "ApStartup.h"
 #include "framebuffer/framebuffer_console.h"
 #include "framebuffer/framebuffer_kconsole.h"
+#include "framebuffer/framebuffer_kconsole_spinlocked.h"
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -340,14 +341,16 @@ done_with_mem_extension:
             }
         }
 
+        framebuffer_kconsole_spinlocked *fb_kcons_locked{nullptr};
         {
             const auto *part = multiboot2.first_part();
             do {
                 if (part->type == 8) {
                     auto *fb = new framebuffer(part->get_type8());
                     std::shared_ptr<framebuffer_console> fb_cons{new framebuffer_console(*fb)};
-                    auto *kcons = new framebuffer_kconsole(fb_cons);
-                    set_klogger(kcons);
+                    std::shared_ptr<framebuffer_kconsole> kcons{new framebuffer_kconsole(fb_cons)};
+                    fb_kcons_locked = new framebuffer_kconsole_spinlocked(kcons);
+                    set_klogger(fb_kcons_locked);
                 }
                 if (part->hasNext(multiboot2)) {
                     part = part->next();

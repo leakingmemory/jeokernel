@@ -13,7 +13,6 @@ class framebuffer_console;
 
 class framebuffer_kconsole : public KLogger {
 private:
-    hw_spinlock _lock;
     std::shared_ptr<framebuffer_console> fbconsole;
 public:
     framebuffer_kconsole(std::shared_ptr<framebuffer_console> fbconsole);
