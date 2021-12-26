@@ -4,6 +4,7 @@
 
 #include <framebuffer/drawingdisplay.h>
 #include <cstdint>
+#include <string>
 
 void drawingdisplay::Draw8x8Char(int x, int y, uint32_t color, uint32_t background, uint64_t bitmap) {
     if (x < 0 || y < 0) {
@@ -50,10 +51,7 @@ void drawingdisplay::ShiftUpLines(int lines, uint32_t color) {
     for (int y = 0; y < end; y++, src_y++) {
         auto source = Line(0, src_y, width);
         auto dest = Line(0, y, width);
-        for (auto ch : source) {
-            *(dest.start) = ch;
-            ++dest.start;
-        }
+        memmove(dest.start, source.start, source.size);
     }
     uint8_t bits = GetBitsPerPixel();
     if (bits >= 8) {
