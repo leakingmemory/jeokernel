@@ -289,11 +289,11 @@ void *acpica_lib_impl::map_memory(uint64_t physaddr, size_t size) {
         auto pe = get_pageentr(vaddr + addr);
         pe->dirty = 0;
         pe->execution_disabled = 1;
-        pe->writeable = 0;
+        pe->writeable = 1;
         pe->accessed = 0;
         pe->user_access = 0;
-        pe->write_through = 0;
-        pe->cache_disabled = 0;
+        pe->write_through = 1;
+        pe->cache_disabled = 1;
         pe->page_ppn = (physpage + addr) >> 12;
         pe->present = 1;
         update_pageentr(vaddr + addr, *pe);
