@@ -53,7 +53,7 @@
 //#define MICROSLEEP_TESTS
 //#define SLEEP_TESTS
 //#define SEMAPHORE_TEST // depends on sleep tests
-//#define DISABLE_MPFP
+//#define SYNC_FB_CONSOLE // Synchronous FB console, worse performance, no cursor, but survives longer and displays more in a crash
 
 void init_keyboard();
 
@@ -67,7 +67,6 @@ static KernelElf *kernel_elf = nullptr;
 static hw_spinlock *aptimer_lock = nullptr;
 static uint64_t timer_ticks = 0;
 static uint64_t lapic_100ms = 0;
-static cpu_mpfp *mpfp = nullptr;
 static tasklist *scheduler = nullptr;
 static ApStartup *apStartup = nullptr;
 
@@ -102,10 +101,6 @@ void set_its(int cpun, struct InterruptTaskState *its) {
 }
 InterruptTaskState *get_its(int cpun) {
     return glob_int_task_state[cpun + 1];
-}
-
-cpu_mpfp *get_mpfp() {
-    return mpfp;
 }
 
 GlobalDescriptorTable *get_gdt() {
@@ -687,22 +682,15 @@ done_with_mem_extension:
             scheduler->create_current_idle_task(0);
         }
 
+#ifndef SYNC_FB_CONSOLE
         if (fb_kcons_locked != nullptr) {
             auto *fb_kcons_wthread = new framebuffer_kcons_with_worker_thread(kcons);
             set_klogger(fb_kcons_wthread);
             delete fb_kcons_locked;
         }
-
-#ifndef DISABLE_MPFP
-        mpfp = new cpu_mpfp{reserved_mem};
-        if (!mpfp->is_valid()) {
-            delete mpfp;
-            mpfp = nullptr;
-        }
-#else
-        mpfp = nullptr;
 #endif
-        LocalApic lapic{mpfp};
+
+        LocalApic lapic{nullptr};
         {
 
             /*int cpu_idx = lapic.get_cpu_num(*mpfp);
@@ -864,10 +852,10 @@ done_with_mem_extension:
         AcpiBoot acpi_boot{multiboot2};
 
         {
-            std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state]() {
+            std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state, reserved_mem]() {
                 acpi_boot.join();
 
-                apStartup = new ApStartup(gdt, mpfp, tss, int_task_state);
+                apStartup = new ApStartup(gdt, tss, int_task_state, reserved_mem);
                 apStartup->Init(&calib_timer);
 
                 detect_root_pcis();

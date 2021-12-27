@@ -18,15 +18,26 @@
 void set_tss(int cpun, struct TaskStateSegment *tss);
 void set_its(int cpun, struct InterruptTaskState *its);
 
-ApStartup::ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its) {
+ApStartup::ApStartup(GlobalDescriptorTable *gdt, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its, const std::vector<std::tuple<uint64_t,uint64_t>> &reserved_mem) :
+        mtx(), reserved_mem(reserved_mem) {
     auto &acpi = get_acpi_madt_provider();
     madtptr = acpi.get_madt();
     if (!madtptr) {
         get_klogger() << "Can't find a madt\n";
     }
-    apicsInfo = madtptr != nullptr ? madtptr->GetApicsInfo() : mpfp;
+    if (madtptr != nullptr) {
+        apicsInfo = madtptr->GetApicsInfo();
+    } else {
+        mpfp = std::unique_ptr<cpu_mpfp>(new cpu_mpfp(reserved_mem));
+        if (mpfp->is_valid()) {
+            apicsInfo = &(*mpfp);
+        } else {
+            mpfp = {};
+            apicsInfo = nullptr;
+        }
+    }
 
-    lapic = new LocalApic(mpfp);
+    lapic = new LocalApic(nullptr);
     ioapic = new IOApic(apicsInfo);
 
     uint8_t vectors = ioapic->get_num_vectors();
@@ -100,4 +111,15 @@ void ApStartup::Init(PITTimerCalib *calib_timer) {
 
 int ApStartup::GetCpuNum() const {
     return lapic->get_cpu_num(apicsInfo);
+}
+
+cpu_mpfp *ApStartup::GetMpTable() {
+    std::lock_guard lock{mtx};
+    if (!mpfp && apicsInfo != nullptr) {
+        mpfp = std::unique_ptr<cpu_mpfp>(new cpu_mpfp(reserved_mem));
+        if (!mpfp->is_valid()) {
+            mpfp = {};
+        }
+    }
+    return mpfp ? &(*mpfp) : nullptr;
 }

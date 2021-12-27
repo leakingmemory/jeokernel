@@ -5,6 +5,7 @@
 #ifndef JEOKERNEL_APSTARTUP_H
 #define JEOKERNEL_APSTARTUP_H
 
+#include <mutex>
 #include <core/LocalApic.h>
 #include "IOApic.h"
 
@@ -17,13 +18,16 @@ class acpi_madt_info;
 
 class ApStartup {
 private:
+    std::mutex mtx;
+    std::vector<std::tuple<uint64_t,uint64_t>> reserved_mem;
     std::shared_ptr<acpi_madt_info> madtptr;
+    std::unique_ptr<cpu_mpfp> mpfp;
     const apics_info *apicsInfo;
     LocalApic *lapic;
     IOApic *ioapic;
     int bsp_cpu_num;
 public:
-    ApStartup(GlobalDescriptorTable *gdt, cpu_mpfp *mpfp, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its);
+    ApStartup(GlobalDescriptorTable *gdt, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its, const std::vector<std::tuple<uint64_t,uint64_t>> &reserved_mem);
     ~ApStartup();
     void Init(PITTimerCalib *calib_timer);
     int GetCpuNum() const;
@@ -33,6 +37,9 @@ public:
     IOApic *GetIoapic() const {
         return ioapic;
     }
+
+    cpu_mpfp *GetMpTable();
+
     bool IsBsp(int cpu_num) const {
         return cpu_num == bsp_cpu_num;
     }

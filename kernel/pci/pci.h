@@ -133,7 +133,6 @@ private:
     std::vector<pci_irq*> irqs;
     IOApic *ioapic;
     LocalApic *lapic;
-    const cpu_mpfp *mpfp;
 public:
     pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func);
     ~pci() override;
@@ -153,9 +152,6 @@ public:
     }
     LocalApic &Lapic() {
         return *lapic;
-    }
-    const cpu_mpfp &Mpfp() {
-        return *mpfp;
     }
     bool IsPci() override {
         return true;

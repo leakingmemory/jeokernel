@@ -21,7 +21,7 @@ void ps2kbd::init() {
         get_klogger() << msg.str().c_str();
     }
     ps2dev.EnableIrq();
-    cpu_mpfp *mpfp = get_mpfp();
+    cpu_mpfp *mpfp = GetApStartup()->GetMpTable();
     uint8_t ioapic_intn{ps2dev.IrqNum()};
     {
         uint8_t isa_bus_id{0xFF};
