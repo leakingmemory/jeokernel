@@ -269,16 +269,16 @@ uint64_t vpagefree(uint64_t addr) {
     pagetable &pml4t = _get_pml4t();
     addr = addr >> 12;
     uint64_t first = addr;
-    uint64_t size;
+    uint64_t size{0};
     while (true) {
         uint64_t paddr = addr;
-        int l = paddr & 511;
+        int l = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int k = paddr & 511;
+        int k = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int j = paddr & 511;
+        int j = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int i = paddr & 511;
+        int i = (int) (paddr & 511);
         if (pml4t[i].present == 0) {
             break;
         }
@@ -310,16 +310,16 @@ uint64_t vpagesize(uint64_t addr) {
     const pagetable &pml4t = _get_pml4t();
     addr = addr >> 12;
     uint64_t first = addr;
-    uint64_t size;
+    uint64_t size{0};
     while (true) {
         uint64_t paddr = addr;
-        int l = paddr & 511;
+        int l = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int k = paddr & 511;
+        int k = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int j = paddr & 511;
+        int j = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int i = paddr & 511;
+        int i = (int) (paddr & 511);
         if (pml4t[i].present == 0) {
             break;
         }
@@ -550,13 +550,13 @@ void ppagefree(uint64_t addr, uint64_t size) {
     uint64_t first = addr;
     while (size > 0) {
         uint64_t paddr = addr;
-        int l = paddr & 511;
+        int l = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int k = paddr & 511;
+        int k = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int j = paddr & 511;
+        int j = (int) (paddr & 511);
         paddr = paddr >> 9;
-        int i = paddr & 511;
+        int i = (int) (paddr & 511);
         pageentr &pe = pml4t[i].get_subtable()[j].get_subtable()[k].get_subtable()[l];
         if (pe.os_phys_avail) {
             wild_panic("PFree pointed at available page");
