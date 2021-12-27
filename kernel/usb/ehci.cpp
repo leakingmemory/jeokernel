@@ -115,7 +115,7 @@ void ehci::init() {
         uint64_t pg_offset{addr & 0xFFF};
         mapped_registers_vm = std::make_unique<vmem>(size + pg_offset);
         {
-            uint64_t physaddr{addr & 0xFFFFF000};
+            uint64_t physaddr{addr & 0xFFFFFFFFFFFFF000};
             std::size_t pages = mapped_registers_vm->npages();
             for (std::size_t page = 0; page < pages; page++) {
                 mapped_registers_vm->page(page).rwmap(physaddr, true, !prefetch);

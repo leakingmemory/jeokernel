@@ -79,7 +79,7 @@ void ohci::init() {
     }
     mapped_registers_vm = std::make_unique<vmem>(size);
     {
-        uint64_t physaddr{addr};
+        uint64_t physaddr{addr & 0xFFFFFFFFFFFFFFF0};
         std::size_t pages = mapped_registers_vm->npages();
         for (std::size_t page = 0; page < pages; page++) {
             mapped_registers_vm->page(page).rwmap(physaddr, true, !prefetch);

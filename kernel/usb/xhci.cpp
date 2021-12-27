@@ -88,6 +88,18 @@ void xhci::init() {
     uint64_t size{0};
     bool prefetch{false};
     {
+        uint32_t statusCmd = read_pci_config(pciDeviceInformation.bus, pciDeviceInformation.slot,
+                                             pciDeviceInformation.func, 4);
+        uint32_t setStatusCmd = (statusCmd & ~((uint32_t) 1 << 10)) | 6 /* MA&BM */;
+        if (setStatusCmd != statusCmd) {
+            get_klogger() << "Config cmd pci/ohci " << statusCmd << "->" << setStatusCmd << "\n";
+            write_pci_config(pciDeviceInformation.bus, pciDeviceInformation.slot,
+                             pciDeviceInformation.func, 4, setStatusCmd);
+        } else {
+            get_klogger() << "Config cmd pci/ohci ok\n";
+        }
+    }
+    {
         PciBaseAddressRegister bar0 = pciDeviceInformation.readBaseAddressRegister(0);
         if (!bar0.is_memory()) {
             get_klogger() << "USB xhci controller is invalid (invalid BAR0, not memory)\n";
@@ -118,7 +130,7 @@ void xhci::init() {
     uint64_t pg_offset{addr & 0xFFF};
     mapped_registers_vm = std::make_unique<vmem>(size + pg_offset);
     {
-        uint64_t physaddr{addr & 0xFFFFF000};
+        uint64_t physaddr{addr & 0xFFFFFFFFFFFFF000};
         std::size_t pages = mapped_registers_vm->npages();
         for (std::size_t page = 0; page < pages; page++) {
             mapped_registers_vm->page(page).rwmap(physaddr, true, !prefetch);
