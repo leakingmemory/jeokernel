@@ -25,14 +25,19 @@ private:
     hw_spinlock spinlock;
     raw_semaphore semaphore;
     bool terminate;
+    bool cursorVisible;
     std::thread worker;
+    std::thread blink;
 public:
     explicit framebuffer_kcons_with_worker_thread(std::shared_ptr<framebuffer_kconsole> targetObject);
     ~framebuffer_kcons_with_worker_thread() override;
+private:
     void WorkerThread();
+    void Blink();
 
     bool InsertCommand(framebuffer_kcons_cmd *cmd);
 
+public:
     void print_at(uint8_t col, uint8_t row, const char *str) override;
     framebuffer_kcons_with_worker_thread & operator << (const char *str) override;
 };

@@ -20,6 +20,7 @@ public:
     framebuffer_kconsole & operator << (const char *str) override;
 
     void MakeRoomForLinefeeds(unsigned int linefeeds);
+    void SetCursorVisible(bool visibility);
 };
 
 

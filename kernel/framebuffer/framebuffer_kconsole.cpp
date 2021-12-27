@@ -66,3 +66,7 @@ void framebuffer_kconsole::MakeRoomForLinefeeds(unsigned int linefeeds) {
         fbconsole->SetPosition(x, y);
     }
 }
+
+void framebuffer_kconsole::SetCursorVisible(bool visibility) {
+    fbconsole->SetCursorVisibility(visibility, 0x7F7F7F7F);
+}

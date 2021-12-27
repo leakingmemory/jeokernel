@@ -67,8 +67,9 @@ void framebuffer_kcons_cmd_printstr::Execute(std::shared_ptr<framebuffer_kconsol
 }
 
 framebuffer_kcons_with_worker_thread::framebuffer_kcons_with_worker_thread(std::shared_ptr<framebuffer_kconsole> targetObject) :
-    command_ring(), command_ring_extract(0), command_ring_insert(0), targetObject(targetObject), spinlock(), semaphore(-1), terminate(false),
-    worker([this] () { WorkerThread(); }) {
+    command_ring(), command_ring_extract(0), command_ring_insert(0), targetObject(targetObject), spinlock(),
+    semaphore(-1), terminate(false), cursorVisible(false), worker([this] () { WorkerThread(); }),
+    blink([this] () { Blink(); }) {
 }
 
 framebuffer_kcons_with_worker_thread::~framebuffer_kcons_with_worker_thread() {
@@ -79,6 +80,7 @@ framebuffer_kcons_with_worker_thread::~framebuffer_kcons_with_worker_thread() {
     }
     semaphore.release();
     worker.join();
+    blink.join();
     while (command_ring_extract != command_ring_insert) {
         delete command_ring[command_ring_extract];
         ++command_ring_extract;
@@ -89,6 +91,7 @@ framebuffer_kcons_with_worker_thread::~framebuffer_kcons_with_worker_thread() {
 void framebuffer_kcons_with_worker_thread::WorkerThread() {
     while (true) {
         semaphore.acquire();
+        bool showCursor{false};
         unsigned int num{0};
         framebuffer_kcons_cmd *cmds[EXTRACT_MAX];
         {
@@ -105,6 +108,10 @@ void framebuffer_kcons_with_worker_thread::WorkerThread() {
                     command_ring_extract = 0;
                 }
             }
+            showCursor = cursorVisible;
+        }
+        if (num > 0) {
+            targetObject->SetCursorVisible(false);
         }
         int linefeeds{0};
         for (int i = 0; i < num; i++) {
@@ -117,6 +124,7 @@ void framebuffer_kcons_with_worker_thread::WorkerThread() {
             cmds[i]->Execute(targetObject);
             delete cmds[i];
         }
+        targetObject->SetCursorVisible(showCursor);
     }
 }
 
@@ -154,4 +162,19 @@ framebuffer_kcons_with_worker_thread &framebuffer_kcons_with_worker_thread::oper
         delete cmd;
     }
     return *this;
+}
+
+void framebuffer_kcons_with_worker_thread::Blink() {
+    while (true) {
+        {
+            critical_section cli{};
+            std::lock_guard lock{spinlock};
+            if (terminate) {
+                break;
+            }
+            cursorVisible = !cursorVisible;
+        }
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(500ms);
+    }
 }

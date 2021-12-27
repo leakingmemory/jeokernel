@@ -10,9 +10,19 @@
 #include <cstdint>
 #include <font/font8x8.h>
 
+constexpr int bytesPerPixel = 4;
+constexpr int cursorSize = 2 * 8;
+constexpr int cursorMemoryFootprint = cursorSize * bytesPerPixel;
+
 class framebuffer_console {
 private:
     drawingdisplay &display;
+    uint8_t cursorRestore[cursorMemoryFootprint];
+    uint32_t cursorRestoreSize;
+    uint32_t cursorX;
+    uint32_t cursorY;
+    uint32_t cursorWidth;
+    uint32_t cursorHeight;
     uint32_t width;
     uint32_t height;
     uint32_t pos;
@@ -51,6 +61,7 @@ public:
     void ShiftUpLines(int lines, uint32_t color) {
         display.ShiftUpLines(lines << 3, color);
     }
+    void SetCursorVisibility(bool visibility, uint32_t color);
 };
 
 
