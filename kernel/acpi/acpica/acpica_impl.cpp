@@ -66,7 +66,7 @@ void acpica_lib_impl::destroy_lock(void *lock) {
 }
 
 void *acpica_lib_impl::create_semaphore(uint32_t max, uint32_t initial) {
-    if (max < 0x7FFFFFFF && initial < 0x7FFFFFFF) {
+    if (initial < 0x7FFFFFFF) {
         return (void *) new raw_semaphore(((int32_t) initial) - 1);
     } else {
         return nullptr;
