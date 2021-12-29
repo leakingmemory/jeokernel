@@ -112,13 +112,13 @@ struct caller_stack {
     void *pointer;
     size_t size;
 
-    void *end() {
+    void *end() const {
         return (void *) (((uint8_t *) pointer) + size);
     }
-    size_t length() {
+    size_t length() const {
         return size;
     }
-    uint64_t operator [] (size_t i) {
+    uint64_t operator [] (size_t i) const {
         return (i+7) < size ? *((uint64_t *) (void *) &(((uint8_t *) pointer)[i])) : 0;
     }
 };
@@ -295,14 +295,15 @@ public:
     }
 
     caller_stack get_caller_stack() const;
+    caller_stack get_caller_stack(uint64_t framePointer) const;
 
     /**
      *
      * @return 64bit offset in stack and RIP address for each call
      */
-    [[nodiscard]] std::vector<std::tuple<size_t,uint64_t>> unwind_stack() const;
+    [[nodiscard]] std::vector<std::tuple<size_t,uint64_t>> unwind_stack(const caller_stack &stack, uint64_t rbp) const;
 
-    void print_debug() const;
+    void print_debug(bool double_fault = false) const;
 };
 
 #endif //JEOKERNEL_INTERRUPT_FRAME_H

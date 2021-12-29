@@ -15,10 +15,11 @@
 #include "HardwareInterrupts.h"
 #include "CpuInterrupts.h"
 #include "ApStartup.h"
+#include "DoubleFault.h"
 
 //#define PRINT_HANDLED_CPU_INTR
 
-void Interrupt::print_debug() const {
+void Interrupt::print_debug(bool double_fault) const {
     get_klogger() << "Interrupt " << _interrupt << " at " << cs() << ":" << rip() << " rflags " << rflags() << " err " << error_code() << "\n"
     << "ax=" << rax() << " bx="<< rbx() << " cx=" << rcx() << " dx="<< rdx() << "\n"
     << "si=" << rsi() << " di="<< rdi() << " bp=" << rbp() << " sp="<< rsp() << "\n"
@@ -58,8 +59,14 @@ void Interrupt::print_debug() const {
         get_klogger() << stack[i] << " ";
     }
     get_klogger() << "\n";*/
-    std::vector<std::tuple<size_t,uint64_t>> calls = unwind_stack();
-    caller_stack stack = get_caller_stack();
+    caller_stack stack{};
+    if (double_fault && ((rsp() - 8) >> 12) < (rbp() >> 12)) {
+        get_klogger() << " === LOOKS LIKE A STACK OVERFLOW ===\n";
+        stack = get_caller_stack(rbp());
+    } else {
+        stack = get_caller_stack();
+    }
+    std::vector<std::tuple<size_t,uint64_t>> calls = unwind_stack(stack, rbp());
     uint16_t count = 0;
     for (const std::tuple<size_t,uint64_t> &value : calls) {
         if (count > 0 && (count % 10) == 0) {
@@ -91,13 +98,11 @@ void Interrupt::print_debug() const {
     }
 }
 
-std::vector<std::tuple<size_t,uint64_t>> Interrupt::unwind_stack() const {
-    caller_stack stack = get_caller_stack();
+std::vector<std::tuple<size_t,uint64_t>> Interrupt::unwind_stack(const caller_stack &stack, uint64_t rbp) const {
     std::vector<std::tuple<size_t,uint64_t>> calls{};
     uint64_t stack_start = (uint64_t) stack.pointer;
     uint64_t stack_end = (uint64_t) stack.end();
-    uint64_t rbp = this->rbp();
-    while (rbp > stack_start && rbp < stack_end) {
+    while (rbp >= stack_start && rbp < stack_end) {
         size_t stack_off = rbp - stack_start;
         rbp = stack[stack_off];
         stack_off += 8;
@@ -107,11 +112,15 @@ std::vector<std::tuple<size_t,uint64_t>> Interrupt::unwind_stack() const {
 }
 
 caller_stack Interrupt::get_caller_stack() const {
-    caller_stack stack{};
-    uint8_t *ptr;
-    ptr = (uint8_t *) ((void *) &(_cpu_frame->ss));
+    uint64_t ptr;
+    ptr = (uint64_t) ((void *) &(_cpu_frame->ss));
     ptr += sizeof(_cpu_frame->ss);
-    stack.pointer = ptr;
+    return get_caller_stack(ptr);
+}
+
+caller_stack Interrupt::get_caller_stack(uint64_t framePointer) const {
+    caller_stack stack{};
+    stack.pointer = (uint8_t *) (void *) framePointer;
 
     uint64_t start = (uint64_t) stack.pointer;
     uint64_t end_vpage = start;
@@ -136,7 +145,6 @@ caller_stack Interrupt::get_caller_stack() const {
     stack.size = end_vpage - start;
     return stack;
 }
-
 
 bool Interrupt::has_error_code() const {
     return _has_error_code;
@@ -202,7 +210,7 @@ extern "C" {
             }
             case 8: {
                 interrupt.apply_error_code_correction();
-                CpuExceptionTrap trap{"double fault", interrupt};
+                DoubleFault trap{interrupt};
                 trap.handle();
                 break;
             }
