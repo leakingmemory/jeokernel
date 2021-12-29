@@ -238,6 +238,8 @@ void boot_stage1(void *multiboot_header_addr) {
             pt[i].page_ppn = i;
             pt[i].writeable = 1;
             pt[i].present = 1;
+        }
+        {
             pt2[i].page_ppn = i + 512;
             pt2[i].writeable = 1;
             pt2[i].present = 1;
