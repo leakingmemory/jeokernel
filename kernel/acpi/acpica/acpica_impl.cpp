@@ -345,6 +345,7 @@ bool acpica_lib_impl::write_pci_reg(uint16_t segment, uint16_t bus, uint16_t dev
             wild_panic("acpica: write pci 64bit reg not implemented");
         } break;
         default:
+            wild_panic("acpica: write pci // width??");
             return false;
     }
     return false;
@@ -366,6 +367,7 @@ bool acpica_lib_impl::read_pci_reg(uint16_t segment, uint16_t bus, uint16_t devi
             wild_panic("acpica: read pci 64bit reg not implemented");
         } break;
         default:
+            wild_panic("acpica: read pci // width??");
             return false;
     }
     return true;

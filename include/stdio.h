@@ -43,6 +43,13 @@ extern FILE *stderr;
 
 int sprintf(char *str, const char *fmt, ...);
 
+/*
+ * vsnprintf is implemented by acpica, second parameter should be size_t, but
+ * size_t might not be consistent with acpica's size_t, which is uint64_t on
+ * x86_64.
+ */
+int vsnprintf(char *str, uint64_t size, const char *fmt, va_list args);
+
 int vfprintf(FILE *file, const char *fmt, va_list args);
 
 int

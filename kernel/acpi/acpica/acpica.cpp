@@ -32,11 +32,35 @@ void acpica_lib::terminate() {
 
 }
 
+bool acpica_lib::set_ioapic_mode() {
+    ACPI_OBJECT picmode_arg;
+    picmode_arg.Type = ACPI_TYPE_INTEGER;
+    picmode_arg.Integer.Value = 1; /* IOAPIC */
+    ACPI_OBJECT_LIST args;
+    args.Count = 1;
+    args.Pointer = &picmode_arg;
+    ACPI_BUFFER return_value;
+    return_value.Pointer = NULL;
+    return_value.Length = ACPI_ALLOCATE_BUFFER;
+    ACPI_STATUS picstatus = AcpiEvaluateObject(NULL, "\\_PIC", &args, &return_value);
+    if (picstatus == AE_OK || picstatus == AE_NOT_FOUND) {
+        get_klogger() << "ACPI set to IOAPIC mode\n";
+        if (return_value.Pointer != NULL) {
+            ACPI_FREE(return_value.Pointer);
+        }
+        return true;
+    } else {
+        get_klogger() << "ERROR: Failed to set ACPI to IOAPIC mode\n";
+        return false;
+    }
+}
+
 void acpica_lib::bootstrap() {
     ACPI_STATUS Status;
 
     /* Initialize the ACPICA subsystem */
     pmemcounts();
+
     Status = AcpiInitializeSubsystem ();
     if (ACPI_FAILURE (Status)) {
         {
@@ -66,16 +90,20 @@ void acpica_lib::bootstrap() {
             }
             wild_panic("Failed to initialize acpica tables");
         }
-    }
 
-    Status = AcpiLoadTables();
-    if (ACPI_FAILURE(Status)) {
-        {
-            std::stringstream ss{};
-            ss << "Error code " << Status << " from acpica : " << AcpiFormatException(Status) << "\n";
-            get_klogger() << ss.str().c_str();
+        if (AcpiGbl_EnableInterpreterSlack) {
+            get_klogger() << "ACPICA interpreter is in slack mode\n";
         }
-        wild_panic("Failed to load acpica tables");
+
+        Status = AcpiLoadTables();
+        if (ACPI_FAILURE(Status)) {
+            {
+                std::stringstream ss{};
+                ss << "Error code " << Status << " from acpica : " << AcpiFormatException(Status) << "\n";
+                get_klogger() << ss.str().c_str();
+            }
+            wild_panic("Failed to load acpica tables");
+        }
     }
 
     {
@@ -104,31 +132,35 @@ void acpica_lib::bootstrap() {
         wild_panic("Failed to fully initialize acpica objects");
     }
 
+    Status = AcpiUpdateAllGpes();
+    if (ACPI_FAILURE(Status)) {
+        {
+            std::stringstream ss{};
+            ss << "Error code " << Status << " from acpica : " << AcpiFormatException(Status) << "\n";
+            get_klogger() << ss.str().c_str();
+        }
+        wild_panic("Failed to initialize GPEs");
+    }
+
     {
         std::stringstream ss{};
         ss << "ACPICA enabled subsystem and objects - completed initialization process\n";
         get_klogger() << ss.str().c_str();
     }
 
-    {
-        ACPI_OBJECT picmode_arg;
-        picmode_arg.Type = ACPI_TYPE_INTEGER;
-        picmode_arg.Integer.Value = 1; /* IOAPIC */
-        ACPI_OBJECT_LIST args;
-        args.Count = 1;
-        args.Pointer = &picmode_arg;
-        ACPI_BUFFER return_value;
-        return_value.Pointer = NULL;
-        return_value.Length = ACPI_ALLOCATE_BUFFER;
-        ACPI_STATUS picstatus = AcpiEvaluateObject(NULL, "\\_PIC", &args, &return_value);
-        if (picstatus == AE_OK || picstatus == AE_NOT_FOUND) {
-            get_klogger() << "ACPI set to IOAPIC mode\n";
-            if (return_value.Pointer != NULL) {
-                ACPI_FREE(return_value.Pointer);
-            }
-        } else {
-            get_klogger() << "ERROR: Failed to set ACPI to IOAPIC mode\n";
+    set_ioapic_mode();
+
+    for (int i = 0; i < 1024; i++) {
+        ACPI_TABLE_HEADER *hdr;
+        if (AcpiGetTableByIndex(i, &hdr) != AE_OK) {
+            break;
         }
+        std::stringstream str{};
+        char sig[5];
+        memmove(sig, hdr->Signature, 4);
+        sig[4] = '\0';
+        str << "Loaded ACPI-table " << sig << "\n";
+        get_klogger() << str.str().c_str();
     }
 }
 
@@ -398,12 +430,6 @@ ACPI_STATUS AcpiOsTerminate(void) {
         lib->terminate();
     }
     return AE_OK;
-}
-
-void *
-AcpiOsAllocateZeroed(
-        ACPI_SIZE Size) {
-    return get_acpica().allocate_zeroed(Size);
 }
 
 void *
@@ -742,12 +768,6 @@ AcpiOsGetRootPointer (
 #else
     return get_acpica().get_root_addr();
 #endif
-}
-
-ACPI_STATUS
-AcpiPurgeCachedObjects (
-        void) {
-    return AE_OK;
 }
 
 ACPI_STATUS

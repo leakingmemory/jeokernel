@@ -68,6 +68,7 @@ public:
     acpica_lib();
     virtual ~acpica_lib();
 
+    bool set_ioapic_mode();
     void bootstrap();
 
     bool evaluate_integer(void *acpi_handle, const char *method, uint64_t &value);
