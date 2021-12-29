@@ -48,7 +48,7 @@ void vmem_dump() {
 void boot_stage1(void *multiboot_header_addr) {
     {
         MultibootInfoHeader &header = *((MultibootInfoHeader *) multiboot_header_addr);
-        void *new_multiboot_header_addr = (void *) 0x1a000;
+        void *new_multiboot_header_addr = (void *) 0x1b000;
         memmove(new_multiboot_header_addr, multiboot_header_addr, header.total_size);
         multiboot_header_addr = new_multiboot_header_addr;
     }
