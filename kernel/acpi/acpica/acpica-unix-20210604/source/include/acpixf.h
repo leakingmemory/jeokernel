@@ -245,7 +245,7 @@
  * 5) Allow unresolved references (invalid target name) in package objects
  * 6) Enable warning messages for behavior that is not ACPI spec compliant
  */
-ACPI_INIT_GLOBAL (UINT8,            AcpiGbl_EnableInterpreterSlack, FALSE);
+ACPI_INIT_GLOBAL (UINT8,            AcpiGbl_EnableInterpreterSlack, TRUE);
 
 /*
  * Automatically serialize all methods that create named objects? Default
