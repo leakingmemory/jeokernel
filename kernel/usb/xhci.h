@@ -659,7 +659,7 @@ public:
     virtual uint64_t InputContextPhys() const = 0;
 };
 
-class xhci_port_enumerated_device : public usb_hw_enumerated_device {
+class xhci_port_enumerated_device : public usb_hw_enumerated_device, private control_request_trait {
 private:
     xhci &xhciRef;
     std::shared_ptr<xhci_device> deviceData;

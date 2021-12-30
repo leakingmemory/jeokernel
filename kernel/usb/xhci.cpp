@@ -690,6 +690,14 @@ bool xhci_port_enumerated_device::SetConfigurationValue(uint8_t configurationVal
             break;
         }
     }
+    if (!done) {
+        return done;
+    }
+
+    if (!ControlRequest(*endpoint0, usb_set_configuration(configurationValue))) {
+        return false;
+    }
+
     return done;
 }
 

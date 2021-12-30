@@ -50,6 +50,11 @@ struct usb_set_configuration : usb_control_request {
     : usb_control_request(0, 9, configValue, 0, 0) { }
 } __attribute__((__packed__));
 
+struct usb_set_interface : usb_control_request {
+    usb_set_interface(uint8_t interface, uint8_t alternateSetting)
+    : usb_control_request(1, 11, alternateSetting, interface, 0) { }
+};
+
 struct usb_minimum_device_descriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
