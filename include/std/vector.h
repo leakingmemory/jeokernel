@@ -217,7 +217,18 @@ namespace std {
             }
         }
 
+        constexpr size_type minimum_size() {
+            if (sizeof(T) > 16) {
+                return 1;
+            } else {
+                return 16 / sizeof(T);
+            }
+        }
+
         constexpr void reserve(size_type new_cap) {
+            if (new_cap < minimum_size()) {
+                new_cap = minimum_size();
+            }
             if (c._data != nullptr) {
                 if (c._capacity < new_cap) {
                     vector_container_element<T> *new_ptr = (vector_container_element<T> *) (void *) get_allocator().allocate(new_cap);
