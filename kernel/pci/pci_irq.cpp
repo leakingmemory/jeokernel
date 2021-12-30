@@ -21,6 +21,7 @@ pci_irq::pci_irq(pci &bus, const IRQLink &link, int index) : pci_irq(bus, (link.
 
 bool pci_irq::invoke(Interrupt &intr) {
     bool hit{false};
+    unsigned int misses{0};
     {
         std::lock_guard _lock(lock);
         for (auto &h : handlers) {
@@ -28,10 +29,22 @@ bool pci_irq::invoke(Interrupt &intr) {
                 hit = true;
             }
         }
+        if (!hit) {
+            ++missCount;
+            if (missCount >= missCountWarn) {
+                missCountWarn = missCountWarn << 1;
+                if (missCountWarn != 0) {
+                    misses = missCount;
+                } else {
+                    missCountWarn = 1024;
+                    missCount = 1;
+                }
+            }
+        }
     }
-    if (!hit) {
+    if (misses > 0) {
         std::stringstream msg{};
-        msg << "IRQ " << irq << "\n";
+        msg << "IRQ " << irq << " missed approx " << misses << " times\n";
         get_klogger() << msg.str().c_str();
     }
     return hit;

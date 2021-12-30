@@ -109,8 +109,10 @@ private:
     std::vector<std::function<bool ()>> handlers;
     uint8_t irq;
     hw_spinlock lock;
+    unsigned int missCount;
+    unsigned int missCountWarn;
 public:
-    pci_irq(pci &bus, uint8_t irq) : bus(bus), handlers(), irq(irq), lock() {}
+    pci_irq(pci &bus, uint8_t irq) : bus(bus), handlers(), irq(irq), lock(), missCount(0), missCountWarn(1) {}
     pci_irq(pci &bus, const IRQLink &link, int index);
     bool invoke(Interrupt &intr);
     void interrupt(Interrupt &intr);
