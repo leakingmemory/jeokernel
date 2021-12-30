@@ -51,6 +51,8 @@ void drawingdisplay::ShiftUpLines(int lines, uint32_t color) {
     if (end < 0) {
         end = 0;
         lines = height;
+    } else if (end >= height) {
+        return;
     }
     int src_y = lines;
     for (int y = 0; y < end; y++, src_y++) {

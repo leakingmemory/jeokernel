@@ -21,6 +21,8 @@ public:
 
     void MakeRoomForLinefeeds(unsigned int linefeeds);
     void SetCursorVisible(bool visibility);
+
+    uint32_t GetHeight();
 };
 
 

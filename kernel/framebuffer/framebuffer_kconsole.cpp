@@ -61,6 +61,9 @@ void framebuffer_kconsole::MakeRoomForLinefeeds(unsigned int linefeeds) {
     uint32_t room{fbconsole->GetHeight() - y - 1};
     if (room < linefeeds) {
         uint32_t newlines{linefeeds - room};
+        if (newlines >= y) {
+            newlines = y - 1;
+        }
         fbconsole->ShiftUpLines(newlines, 0);
         y -= newlines;
         fbconsole->SetPosition(x, y);
@@ -69,4 +72,8 @@ void framebuffer_kconsole::MakeRoomForLinefeeds(unsigned int linefeeds) {
 
 void framebuffer_kconsole::SetCursorVisible(bool visibility) {
     fbconsole->SetCursorVisibility(visibility, 0x7F7F7F7F);
+}
+
+uint32_t framebuffer_kconsole::GetHeight() {
+    return fbconsole->GetHeight();
 }
