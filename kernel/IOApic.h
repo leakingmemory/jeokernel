@@ -42,8 +42,8 @@ public:
         return IOApicReg(pointer, reg);
     }
 
-    uint8_t get_num_vectors() {
-        return (((*this)[1] >> 16) & 0xff);
+    uint16_t get_num_vectors() {
+        return (((*this)[1] >> 16) & 0xff) + 1;
     }
 
     void set_vector_interrupt(uint8_t vector, uint8_t intr) {

@@ -40,9 +40,9 @@ ApStartup::ApStartup(GlobalDescriptorTable *gdt, TaskStateSegment *cpu_tss, Inte
     lapic = new LocalApic(nullptr);
     ioapic = new IOApic(apicsInfo);
 
-    uint8_t vectors = ioapic->get_num_vectors();
+    uint16_t vectors = ioapic->get_num_vectors();
     get_klogger() << "ioapic vectors " << vectors << "\n";
-    for (uint8_t i = 0; i < vectors; i++) {
+    for (uint16_t i = 0; i < vectors; i++) {
         ioapic->set_vector_interrupt(i, 0x23 + i);
     }
 
