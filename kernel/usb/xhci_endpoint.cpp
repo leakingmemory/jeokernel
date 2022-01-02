@@ -7,6 +7,8 @@
 #include "xhci.h"
 #include "UsbBuffer32.h"
 
+//#define XHCI_ENDPOINT_DUMP_TRB
+
 struct xhci_endpoint_data {
     xhci_trb_ring<256> transferRing;
     xhci_endpoint_data(uint64_t physAddr) : transferRing(physAddr) {}
@@ -193,11 +195,19 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
     trb->Data.TransferLength = size;
     trb->Data.TDSize = 0;
     trb->Data.InterrupterTarget = 0;
-    trb->Flags = direction == usb_transfer_direction::OUT ? XHCI_TRB_DIR_OUT : XHCI_TRB_DIR_IN;
+    if (endpoint != 0) {
+        trb->Flags = 0;
+    } else {
+        trb->Flags = direction == usb_transfer_direction::OUT ? XHCI_TRB_DIR_OUT : XHCI_TRB_DIR_IN;
+    }
     if (size == 0) {
         trb->Command |= XHCI_TRB_STATUS | XHCI_TRB_IMMEDIATE_DATA | XHCI_TRB_INTERRUPT_ON_COMPLETE;
     } else {
-        trb->Command |= XHCI_TRB_DATA | XHCI_TRB_INTERRUPT_ON_COMPLETE;
+        if (endpoint != 0) {
+            trb->Command |= XHCI_TRB_NORMAL | XHCI_TRB_INTERRUPT_ON_COMPLETE | XHCI_TRB_INTERRUPT_ON_SHORT;
+        } else {
+            trb->Command |= XHCI_TRB_DATA | XHCI_TRB_INTERRUPT_ON_COMPLETE | XHCI_TRB_INTERRUPT_ON_SHORT;
+        }
     }
     CommitCommand(trb);
     std::shared_ptr<usb_transfer> transfer{};
@@ -206,6 +216,12 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
         transferRing[index] = xhciTransfer;
         transfer = xhciTransfer;
     }
+#ifdef XHCI_ENDPOINT_DUMP_TRB
+    {
+        uint8_t endpointIndex = ((endpoint << 1) - (dir == usb_endpoint_direction::OUT ? 1 : 0));
+        xhciRef.resources->DCBAA()->contexts[slot]->DumpEndpoint(endpointIndex, xhciRef.contextSize64);
+    }
+#endif
     return transfer;
 }
 
@@ -246,29 +262,34 @@ void xhci_endpoint::CommitCommand(xhci_trb *trb) {
     doorbell = doorbell << 16;
     doorbell |= doorbellTarget;
     xhciRef.doorbellregs->doorbells[slot] = doorbell; /* Ring the bell */
+
+#ifdef XHCI_ENDPOINT_DUMP_TRB
+    std::stringstream str{};
+    const uint32_t *trb_r = (uint32_t *) trb;
+    str << "TRB " << std::hex << trb_r[0] << " " << trb_r[1] << " " << trb_r[2] << " " << trb_r[3] << " doorbell " << doorbell << " slot " << slot << "\n";
+    get_klogger() << str.str().c_str();
+#endif
 }
 
 void xhci_endpoint::TransferEvent(uint64_t trbaddr, uint32_t transferLength, uint8_t completionCode) {
     uint64_t trboffset{trbaddr - ringContainer->RingPhysAddr()};
     uint64_t trbindex{trboffset / sizeof(xhci_trb)};
-    if (trbindex < ringContainer->LengthIncludingLink()) {
-        unsigned int nextindex{1};
-        nextindex += trbindex;
-        if (nextindex == (ringContainer->LengthIncludingLink() - 1)) {
-            ++nextindex;
-        }
-        if (nextindex == ringContainer->LengthIncludingLink()) {
-            nextindex = 0;
-        }
+    if (trbindex < (ringContainer->LengthIncludingLink() - 1)) {
         std::shared_ptr<xhci_transfer> transfer = transferRing[trbindex];
+        barrier = ringContainer->Trb(trbindex);
         if (transfer) {
             transfer->SetStatus(completionCode);
         } else {
             std::stringstream str{};
             str << "XHCI endpoint transfer event trb=" << std::hex << trbaddr << " index " << std::dec << trbindex
-                << " barrier " << nextindex << "\n";
+                << " code " << completionCode << "\n";
             get_klogger() << str.str().c_str();
         }
+    } else {
+        std::stringstream str{};
+        str << "XHCI endpoint transfer event trb=" << std::hex << trbaddr << " index " << std::dec << trbindex
+            << " code " << completionCode << "\n";
+        get_klogger() << str.str().c_str();
     }
 }
 
@@ -276,8 +297,11 @@ xhci_endpoint::xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_c
                              std::shared_ptr<xhci_input_context_container> inputctx_container, uint8_t slot,
                              uint8_t endpoint, usb_endpoint_direction dir, uint16_t streamId) :
         xhciRef(xhciRef), ringContainer(ringContainer), transferRing(nullptr), inputctx_container(inputctx_container),
-        barrier(nullptr), dir(dir), index(0), streamId(streamId), slot(slot), endpoint(endpoint), doorbellTarget(endpoint + 1),
+        barrier(nullptr), dir(dir), index(0), streamId(streamId), slot(slot), endpoint(endpoint), doorbellTarget(endpoint << 1),
         cycle(0) {
+    if (dir != usb_endpoint_direction::OUT) {
+        ++doorbellTarget;
+    }
     auto length = ringContainer->LengthIncludingLink();
     transferRing = (std::shared_ptr<xhci_transfer> *) malloc(sizeof(*transferRing) * length);
     for (int i = 0; i < length; i++) {

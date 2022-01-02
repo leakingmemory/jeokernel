@@ -29,7 +29,9 @@ enum class usb_endpoint_direction {
 enum usb_speed {
     LOW,
     FULL,
-    HIGH
+    HIGH,
+    SUPER,
+    SUPERPLUS
 };
 
 enum class usb_endpoint_type {
@@ -181,6 +183,9 @@ public:
     }
     std::shared_ptr<usb_endpoint> Endpoint0() {
         return endpoint0;
+    }
+    usb_speed Speed() {
+        return speed;
     }
     std::shared_ptr<usb_endpoint> InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs);
     const std::vector<UsbInterfaceInformation> &ReadConfigurations(const UsbDeviceInformation &devInfo);

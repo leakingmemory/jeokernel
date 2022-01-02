@@ -2,12 +2,15 @@
 // Created by sigsegv on 12/18/21.
 //
 
+#include <strings.h>
 #include "xhci_input_context_container_32.h"
 
 xhci_input_context_container_32::xhci_input_context_container_32() :
     page(sizeof(*inputctx)),
-    inputctx(new (page.Pointer()) xhci_input_context())
+    inputctx(nullptr)
 {
+    bzero(page.Pointer(), sizeof(*inputctx));
+    inputctx = new (page.Pointer()) xhci_input_context();
 }
 
 xhci_input_context_container_32::~xhci_input_context_container_32() {

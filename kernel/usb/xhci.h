@@ -113,6 +113,38 @@ union xhci_legsup_cap {
     }
 };
 
+struct xhci_supported_protocol_cap {
+    uint8_t cap_id;
+    uint8_t next_ptr;
+    uint8_t rev_min;
+    uint8_t rev_maj;
+    char name[4];
+    uint8_t compat_port_num;
+    uint8_t compat_port_count;
+    uint16_t protocol_def_field : 12;
+    uint8_t protocol_speed_id_count : 4;
+    uint8_t protocol_slot_type : 5;
+    uint32_t reserved : 27;
+    uint32_t speeds[1];
+
+    bool is_2_0() {
+        return (rev_maj == 2 && rev_min == 0);
+    }
+    bool is_3_0() {
+        return (rev_maj == 3 && rev_min == 0);
+    }
+    bool is_3_1() {
+        return (rev_maj == 3 && rev_min == 0x10);
+    }
+    bool is_3_2() {
+        return (rev_maj == 3 && rev_min == 0x20);
+    }
+    bool is_3() {
+        return rev_maj == 3;
+    }
+} __attribute__((__packed__));
+static_assert(sizeof(xhci_supported_protocol_cap) == 20);
+
 struct xhci_ext_cap {
     uint32_t *pointer;
     union {
@@ -152,6 +184,13 @@ struct xhci_ext_cap {
     xhci_legsup_cap *legsup() {
         if (cap_id == 1) {
             return (xhci_legsup_cap *) (void *) pointer;
+        } else {
+            return nullptr;
+        }
+    }
+    xhci_supported_protocol_cap *supported_protocol() {
+        if (cap_id == 2) {
+            return (xhci_supported_protocol_cap *) (void *) pointer;
         } else {
             return nullptr;
         }
@@ -313,6 +352,13 @@ struct xhci_trb_transfer_event {
 };
 static_assert(sizeof(xhci_trb_transfer_event) == 2);
 
+struct xhci_trb_reset_endpoint {
+    uint8_t EndpointId : 5;
+    uint8_t Reserved : 3;
+    uint8_t SlotId;
+} __attribute__((__packed__));
+static_assert(sizeof(xhci_trb_reset_endpoint) == 2);
+
 #define XHCI_TRB_DIR_OUT    0
 #define XHCI_TRB_DIR_IN     1
 struct xhci_trb {
@@ -326,6 +372,7 @@ struct xhci_trb {
         xhci_trb_enable_slot EnableSlot;
         xhci_trb_setup Setup;
         xhci_trb_transfer_event TransferEvent;
+        xhci_trb_reset_endpoint ResetEndpoint;
         uint16_t Flags;
     };
 } __attribute__((__packed__));
@@ -359,6 +406,7 @@ static_assert(sizeof(xhci_trb) == 16);
 
 #define XHCI_TRB_IMMEDIATE_DATA         (1 << 6)
 #define XHCI_TRB_INTERRUPT_ON_COMPLETE  (1 << 5)
+#define XHCI_TRB_INTERRUPT_ON_SHORT     (1 << 2)
 #define XHCI_TRB_CYCLE                  1
 
 template <int n> struct xhci_trb_ring {
@@ -566,6 +614,11 @@ struct xhci_slot_data {
         return (xhci_endpoint_context *) pointer;
     }
 
+    uint8_t GetEndpointState(int index, bool contextSize64) {
+        auto *endp = EndpointContext(index, contextSize64);
+        return endp->endpointState;
+    }
+
     void SetEndpoint(int index, xhci_endpoint *endpoint) {
         Endpoints[index] = endpoint;
     }
@@ -578,6 +631,13 @@ struct xhci_slot_data {
 
     xhci_endpoint *Endpoint(int index) {
         return Endpoints[index];
+    }
+
+    void DumpEndpoint(int index, bool contextSize64) {
+        uint32_t *endp = (uint32_t *) EndpointContext(index, contextSize64);
+        std::stringstream str{};
+        str << "Endpoint dump " << std::hex << endp[0] << " " << endp[1] << " " << endp[2] << " " << endp[3] << " " << endp[4] << "\n";
+        get_klogger() << str.str().c_str();
     }
 };
 static_assert(sizeof(xhci_slot_data) <= 4096);
@@ -719,6 +779,7 @@ private:
     xhci_runtime_registers *runtimeregs;
     xhci_doorbell_registers *doorbellregs;
     std::unique_ptr<xhci_resources> resources;
+    std::vector<xhci_supported_protocol_cap *> supported_protocol_list;
     hw_spinlock xhcilock;
     raw_semaphore event_sema;
     std::thread *event_thread;
@@ -726,8 +787,10 @@ private:
     xhci_trb *commandBarrier;
     uint32_t commandIndex;
     uint32_t primaryEventIndex;
+    uint16_t u2Exit;
     uint16_t numInterrupters;
     uint16_t eventRingSegmentTableMax;
+    uint8_t u1Exit;
     uint8_t numSlots;
     uint8_t numPorts;
     uint8_t commandCycle : 1;
@@ -737,9 +800,9 @@ private:
     bool contextSize64 : 1;
 public:
     xhci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("xhci", bus), pciDeviceInformation(deviceInformation),
-    xhcilock(), event_sema(-1), event_thread(nullptr), commands(), commandBarrier(nullptr), commandIndex(0), primaryEventIndex(0),
-    numInterrupters(0), eventRingSegmentTableMax(0), numSlots(0), numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false),
-    controller64bit(false), contextSize64(false) {}
+    supported_protocol_list(), xhcilock(), event_sema(-1), event_thread(nullptr), commands(), commandBarrier(nullptr),
+    commandIndex(0), primaryEventIndex(0), u2Exit(0), numInterrupters(0), eventRingSegmentTableMax(0), u1Exit(0), numSlots(0),
+    numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false), controller64bit(false), contextSize64(false) {}
     ~xhci();
     void init() override;
     uint32_t Pagesize();
@@ -751,6 +814,7 @@ public:
     void EnablePort(int port) override;
     void DisablePort(int port) override;
     void ResetPort(int port) override;
+    xhci_supported_protocol_cap *SupportedProtocolsForPort(int port);
     usb_speed PortSpeed(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
     std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) override;
@@ -850,6 +914,23 @@ public:
         trb->Command |= XHCI_TRB_EVALUATE_CONTEXT;
         trb->EnableSlot.SlotId = SlotId;
         trb->Data.DataPtr = inputContextAddr;
+        CommitCommand(trb);
+        std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
+        commands.push_back(ptr);
+        return ptr;
+    }
+    std::shared_ptr<xhci_command> ResetEndpoint(uint8_t slot, uint8_t endpoint_id) {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        auto addr_trb = NextCommand();
+        uint64_t addr = std::get<0>(addr_trb);
+        xhci_trb *trb = std::get<1>(addr_trb);
+        if (trb == nullptr) {
+            return {};
+        }
+        trb->Command |= XHCI_TRB_RESET_ENDPOINT;
+        trb->ResetEndpoint.SlotId = slot;
+        trb->ResetEndpoint.EndpointId = endpoint_id;
         CommitCommand(trb);
         std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
         commands.push_back(ptr);

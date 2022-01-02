@@ -2,6 +2,7 @@
 // Created by sigsegv on 11/27/21.
 //
 
+#include <strings.h>
 #include "xhci_resources_32.h"
 
 xhci_resources_32::xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize) :
@@ -61,6 +62,7 @@ std::shared_ptr<xhci_device> xhci_resources_32::CreateDeviceData() const {
 #define XHCI_DEVICE_SLOT_SIZE 4096
 static_assert(sizeof(xhci_slot_data) <= XHCI_DEVICE_SLOT_SIZE);
 xhci_device_32::xhci_device_32() : page(XHCI_DEVICE_SLOT_SIZE) {
+    bzero(page.Pointer(), XHCI_DEVICE_SLOT_SIZE);
     new (page.Pointer()) xhci_slot_data(page.PhysAddr());
 }
 

@@ -99,6 +99,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
             }
             return;
         }
+        speed = hub.PortSpeed(port);
         get_klogger() << "USB port configured\n";
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(100ms);
