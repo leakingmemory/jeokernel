@@ -12,7 +12,7 @@ Phys32Page::Phys32Page(size_t size) : vm(size), size(size) {
         wild_panic("Unable to allocate 32bit memory");
     }
     for (size_t i = 0; i < vm.npages(); i++) {
-        vm.page(i).rwmap(physaddr + (i << 12));
+        vm.page(i).rwmap(physaddr + (i << 12), true, true);
     }
 }
 
