@@ -7,6 +7,22 @@
 
 #include <stdint.h>
 
+enum class usb_control_direction {
+    HOST_TO_DEVICE, DEVICE_TO_HOST
+};
+
+enum class usb_control_request_type {
+    STANDARD, CLASS, VENDOR
+};
+
+enum class usb_control_endpoint_direction {
+    IN, OUT
+};
+
+enum class usb_control_recepient {
+    DEVICE, INTERFACE, ENDPOINT, OTHER
+};
+
 struct usb_control_request {
     uint8_t bmRequestType;
     uint8_t bRequest;
@@ -26,6 +42,38 @@ struct usb_control_request {
             wValue(wValue),
             wIndex(wIndex),
             wLength(wLength) {}
+
+    constexpr uint8_t RequestType(usb_control_direction dir, usb_control_request_type req_type, usb_control_recepient recip) {
+        uint8_t reqType{0};
+        if (dir == usb_control_direction::DEVICE_TO_HOST) {
+            reqType = 0x80;
+        }
+        switch (req_type) {
+            case usb_control_request_type::STANDARD:
+                break;
+            case usb_control_request_type::CLASS:
+                reqType |= 0x20;
+                break;
+            case usb_control_request_type::VENDOR:
+                reqType |= 0x40;
+                break;
+            default:
+                reqType |= 0x60;
+        }
+        switch (recip) {
+            case usb_control_recepient::DEVICE:
+                break;
+            case usb_control_recepient::INTERFACE:
+                reqType |= 1;
+                break;
+            case usb_control_recepient::ENDPOINT:
+                reqType |= 2;
+                break;
+            default:
+                reqType |= 3;
+        }
+        return reqType;
+    }
 } __attribute__((__packed__));
 
 struct usb_set_address : usb_control_request {
@@ -53,6 +101,52 @@ struct usb_set_configuration : usb_control_request {
 struct usb_set_interface : usb_control_request {
     usb_set_interface(uint8_t interface, uint8_t alternateSetting)
     : usb_control_request(1, 11, alternateSetting, interface, 0) { }
+};
+
+enum class usb_feature {
+    ENDPOINT_HALT, DEVICE_REMOTE_WAKEUP, TEST_MODE
+};
+
+struct usb_get_status : usb_control_request {
+    usb_get_status(usb_control_recepient recip, uint8_t id)
+    : usb_control_request(RequestType(usb_control_direction::DEVICE_TO_HOST, usb_control_request_type::STANDARD, recip), 0, 0, id, 2) { }
+    usb_get_status(usb_control_endpoint_direction dir, uint8_t endpoint)
+    : usb_get_status(usb_control_recepient::ENDPOINT, Endpoint(dir, endpoint)) { }
+
+    constexpr uint16_t Endpoint(usb_control_endpoint_direction dir, uint8_t endpoint) {
+        uint16_t id{endpoint};
+        if (dir == usb_control_endpoint_direction::IN) {
+            id |= 0x80;
+        }
+        return id;
+    }
+};
+
+struct usb_clear_feature : usb_control_request {
+    usb_clear_feature(usb_control_recepient recip, usb_feature feature, uint8_t id)
+            : usb_control_request(RequestType(usb_control_direction::HOST_TO_DEVICE, usb_control_request_type::STANDARD, recip), 1, Selector(feature), id, 0) { }
+    usb_clear_feature(usb_feature feature, usb_control_endpoint_direction dir, uint8_t endpoint)
+            : usb_clear_feature(usb_control_recepient::ENDPOINT, feature, Endpoint(dir, endpoint)) { }
+
+    constexpr uint8_t Selector(usb_feature feature) {
+        switch (feature) {
+            case usb_feature::ENDPOINT_HALT:
+                return 0;
+            case usb_feature::DEVICE_REMOTE_WAKEUP:
+                return 1;
+            case usb_feature::TEST_MODE:
+                return 2;
+            default:
+                return 0xFF;
+        }
+    }
+    constexpr uint16_t Endpoint(usb_control_endpoint_direction dir, uint8_t endpoint) {
+        uint16_t id{endpoint};
+        if (dir == usb_control_endpoint_direction::IN) {
+            id |= 0x80;
+        }
+        return id;
+    }
 };
 
 struct usb_minimum_device_descriptor {
