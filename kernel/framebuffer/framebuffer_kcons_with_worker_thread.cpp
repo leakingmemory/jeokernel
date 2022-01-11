@@ -110,35 +110,39 @@ void framebuffer_kcons_with_worker_thread::WorkerThread() {
             }
             showCursor = cursorVisible;
         }
-        if (num > 0) {
-            targetObject->SetCursorVisible(false);
-        }
-        unsigned int remaining{num};
-        int height = (int) targetObject->GetHeight();
-        do {
-            int linefeeds{0};
-            for (int i = 0; i < num; i++) {
-                auto estimate = cmds[i]->GetEstimatedLinefeeds();
-                if ((linefeeds + estimate) >= (height - 1) && i > 0) {
-                    num = i;
-                    break;
+        {
+            critical_section cli{};
+
+            if (num > 0) {
+                targetObject->SetCursorVisible(false);
+            }
+            unsigned int remaining{num};
+            int height = (int) targetObject->GetHeight();
+            do {
+                int linefeeds{0};
+                for (int i = 0; i < num; i++) {
+                    auto estimate = cmds[i]->GetEstimatedLinefeeds();
+                    if ((linefeeds + estimate) >= (height - 1) && i > 0) {
+                        num = i;
+                        break;
+                    }
+                    linefeeds += estimate;
                 }
-                linefeeds += estimate;
-            }
-            if (linefeeds > 0) {
-                targetObject->MakeRoomForLinefeeds(linefeeds);
-            }
-            for (int i = 0; i < num; i++) {
-                cmds[i]->Execute(targetObject);
-                delete cmds[i];
-            }
-            for (unsigned int i = num; i < remaining; i++) {
-                cmds[i - num] = cmds[i];
-            }
-            remaining -= num;
-            num = remaining;
-        } while (num > 0);
-        targetObject->SetCursorVisible(showCursor);
+                if (linefeeds > 0) {
+                    targetObject->MakeRoomForLinefeeds(linefeeds);
+                }
+                for (int i = 0; i < num; i++) {
+                    cmds[i]->Execute(targetObject);
+                    delete cmds[i];
+                }
+                for (unsigned int i = num; i < remaining; i++) {
+                    cmds[i - num] = cmds[i];
+                }
+                remaining -= num;
+                num = remaining;
+            } while (num > 0);
+            targetObject->SetCursorVisible(showCursor);
+        }
     }
 }
 
