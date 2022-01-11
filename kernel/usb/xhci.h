@@ -333,6 +333,13 @@ struct xhci_trb_transfer_completion {
 } __attribute__((__packed__));
 static_assert(sizeof(xhci_trb_transfer_completion) == 12);
 
+struct xhci_trb_set_dequeue {
+    uint64_t TransferPtr;
+    uint16_t Reserved;
+    uint16_t StreamId;
+} __attribute__((__packed__));
+static_assert(sizeof(xhci_trb_set_dequeue) == 12);
+
 struct xhci_trb_enable_slot {
     uint8_t SlotType;
     uint8_t SlotId;
@@ -366,6 +373,7 @@ struct xhci_trb {
         xhci_trb_data Data;
         xhci_trb_command_completion CommandCompletion;
         xhci_trb_transfer_completion TransferCompletion;
+        xhci_trb_set_dequeue SetDequeue;
     };
     uint16_t Command;
     union {
@@ -633,10 +641,18 @@ struct xhci_slot_data {
         return Endpoints[index];
     }
 
+    void DumpSlotContext() {
+        uint32_t *slotp = (uint32_t *) (void *) &(slotContext[0]);
+        uint64_t pointer = (uint64_t) slotp;
+        std::stringstream str{};
+        str << "Slot dump " << std::hex << pointer << ": " << slotp[0] << " " << slotp[1] << " " << slotp[2] << " " << slotp[3] << "\n";
+        get_klogger() << str.str().c_str();
+    }
     void DumpEndpoint(int index, bool contextSize64) {
         uint32_t *endp = (uint32_t *) EndpointContext(index, contextSize64);
+        uint64_t pointer = (uint64_t) endp;
         std::stringstream str{};
-        str << "Endpoint dump " << std::hex << endp[0] << " " << endp[1] << " " << endp[2] << " " << endp[3] << " " << endp[4] << "\n";
+        str << "Endpoint dump " << std::hex << pointer << ": " << endp[0] << " " << endp[1] << " " << endp[2] << " " << endp[3] << " " << endp[4] << "\n";
         get_klogger() << str.str().c_str();
     }
 };
@@ -929,6 +945,43 @@ public:
             return {};
         }
         trb->Command |= XHCI_TRB_RESET_ENDPOINT;
+        trb->ResetEndpoint.SlotId = slot;
+        trb->ResetEndpoint.EndpointId = endpoint_id;
+        CommitCommand(trb);
+        std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
+        commands.push_back(ptr);
+        return ptr;
+    }
+    std::shared_ptr<xhci_command> SetDequeuePtr(uint8_t slot, uint8_t endpoint_id, uint8_t sct, uint16_t streamId, uint64_t dequeue) {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        auto addr_trb = NextCommand();
+        uint64_t addr = std::get<0>(addr_trb);
+        xhci_trb *trb = std::get<1>(addr_trb);
+        if (trb == nullptr) {
+            return {};
+        }
+        trb->Command |= XHCI_TRB_SET_TR_DEQUE_PTR;
+        trb->SetDequeue.TransferPtr = dequeue & 0xFFFFFFFFFFFFFFF1;
+        trb->SetDequeue.TransferPtr |= (sct << 1) & 0x0E;
+        trb->SetDequeue.StreamId = streamId;
+        trb->ResetEndpoint.SlotId = slot;
+        trb->ResetEndpoint.EndpointId = endpoint_id;
+        CommitCommand(trb);
+        std::shared_ptr<xhci_command> ptr{new xhci_command(trb, addr)};
+        commands.push_back(ptr);
+        return ptr;
+    }
+    std::shared_ptr<xhci_command> StopEndpoint(uint8_t slot, uint8_t endpoint_id) {
+        critical_section cli{};
+        std::lock_guard lock{xhcilock};
+        auto addr_trb = NextCommand();
+        uint64_t addr = std::get<0>(addr_trb);
+        xhci_trb *trb = std::get<1>(addr_trb);
+        if (trb == nullptr) {
+            return {};
+        }
+        trb->Command |= XHCI_TRB_STOP_ENDPOINT;
         trb->ResetEndpoint.SlotId = slot;
         trb->ResetEndpoint.EndpointId = endpoint_id;
         CommitCommand(trb);

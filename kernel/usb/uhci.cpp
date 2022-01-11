@@ -609,6 +609,10 @@ void uhci_endpoint::IntWithLock() {
     }
 }
 
+bool uhci_endpoint::ClearStall() {
+    return false;
+}
+
 uhci_buffer::uhci_buffer(uhci &uhci) : bufferPtr(uhci.bufPool.Alloc()){
 }
 

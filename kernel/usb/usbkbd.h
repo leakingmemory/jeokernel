@@ -49,6 +49,7 @@ class usbkbd : public Device {
     friend UsbKeycode;
 private:
     UsbIfacedevInformation devInfo;
+    usb_endpoint_descriptor endpoint;
     std::shared_ptr<usb_endpoint> poll_endpoint;
     std::shared_ptr<usb_transfer> poll_transfer;
     uint64_t transfercount;
@@ -62,11 +63,12 @@ private:
     usbkbd_report kbrep;
     UsbKeycode *keycodes[USBKB_MAX_KEYS];
     bool stop;
+    bool stalled;
     uint8_t mod_status;
     uint8_t modifiers;
 public:
-    usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), rep_thread(nullptr), mtx(), semaphore(-1),
-                                                        kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), keycodes(), stop(false), mod_status(MOD_STAT_NUMLOCK), modifiers(0) {
+    usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), endpoint(), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), rep_thread(nullptr),
+    mtx(), semaphore(-1), kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), keycodes(), stop(false), stalled(false), mod_status(MOD_STAT_NUMLOCK), modifiers(0) {
         for (int i = 0; i < USBKB_MAX_KEYS; i++) {
             keycodes[i] = nullptr;
         }

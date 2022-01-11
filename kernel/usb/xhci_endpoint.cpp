@@ -98,7 +98,9 @@ xhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
                                       std::function<void()> doneCall, bool bufferRounding, uint16_t delayInterrupt,
                                       int8_t dataToggle) {
     auto transfer = CreateTransferWithLock(commitTransaction, nullptr, size, direction, bufferRounding, delayInterrupt, dataToggle);
-    transfer->SetDoneCall(doneCall);
+    if (transfer) {
+        transfer->SetDoneCall(doneCall);
+    }
     return transfer;
 }
 
@@ -201,13 +203,15 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
         trb->Flags = direction == usb_transfer_direction::OUT ? XHCI_TRB_DIR_OUT : XHCI_TRB_DIR_IN;
     }
     if (size == 0) {
-        trb->Command |= XHCI_TRB_STATUS | XHCI_TRB_IMMEDIATE_DATA | XHCI_TRB_INTERRUPT_ON_COMPLETE;
+        trb->Command |= XHCI_TRB_STATUS | XHCI_TRB_INTERRUPT_ON_COMPLETE;
     } else {
+        uint16_t flags{XHCI_TRB_INTERRUPT_ON_SHORT | XHCI_TRB_INTERRUPT_ON_COMPLETE};
         if (endpoint != 0) {
-            trb->Command |= XHCI_TRB_NORMAL | XHCI_TRB_INTERRUPT_ON_COMPLETE | XHCI_TRB_INTERRUPT_ON_SHORT;
+            flags |= XHCI_TRB_NORMAL;
         } else {
-            trb->Command |= XHCI_TRB_DATA | XHCI_TRB_INTERRUPT_ON_COMPLETE | XHCI_TRB_INTERRUPT_ON_SHORT;
+            flags |= XHCI_TRB_DATA;
         }
+        trb->Command |= flags;
     }
     CommitCommand(trb);
     std::shared_ptr<usb_transfer> transfer{};
@@ -219,6 +223,7 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
 #ifdef XHCI_ENDPOINT_DUMP_TRB
     {
         uint8_t endpointIndex = ((endpoint << 1) - (dir == usb_endpoint_direction::OUT ? 1 : 0));
+        xhciRef.resources->DCBAA()->contexts[slot]->DumpSlotContext();
         xhciRef.resources->DCBAA()->contexts[slot]->DumpEndpoint(endpointIndex, xhciRef.contextSize64);
     }
 #endif
@@ -295,10 +300,12 @@ void xhci_endpoint::TransferEvent(uint64_t trbaddr, uint32_t transferLength, uin
 
 xhci_endpoint::xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_container> ringContainer,
                              std::shared_ptr<xhci_input_context_container> inputctx_container, uint8_t slot,
-                             uint8_t endpoint, usb_endpoint_direction dir, uint16_t streamId) :
+                             uint8_t endpoint, usb_endpoint_direction dir, usb_endpoint_type endpointType,
+                             uint16_t streamId) :
         xhciRef(xhciRef), ringContainer(ringContainer), transferRing(nullptr), inputctx_container(inputctx_container),
-        barrier(nullptr), dir(dir), index(0), streamId(streamId), slot(slot), endpoint(endpoint), doorbellTarget(endpoint << 1),
-        cycle(0) {
+        barrier(nullptr), dir(dir), endpointType(endpointType), index(0), streamId(streamId), slot(slot),
+
+        endpoint(endpoint), doorbellTarget(endpoint << 1), cycle(0) {
     if (dir != usb_endpoint_direction::OUT) {
         ++doorbellTarget;
     }
@@ -308,6 +315,181 @@ xhci_endpoint::xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_c
         new (&(transferRing[i])) std::shared_ptr<xhci_transfer>();
     }
     xhciRef.resources->DCBAA()->contexts[slot]->SetEndpoint(endpoint, this);
+}
+
+bool xhci_endpoint::WaitForEndpointState(uint8_t state) {
+    uint8_t endpointIndex = endpoint << ((uint8_t)1);
+    if (dir != usb_endpoint_direction::OUT) {
+        ++endpointIndex;
+    }
+    auto *slt = xhciRef.resources->DCBAA()->contexts[slot];
+    int timeout = 5;
+    while (slt->GetEndpointState(endpointIndex, xhciRef.contextSize64) != state) {
+        --timeout;
+        if (timeout == 0) {
+            return false;
+        }
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(10ms);
+    }
+    return true;
+}
+
+bool xhci_endpoint::ResetEndpoint() {
+    uint8_t endpointIndex = endpoint << ((uint8_t)1);
+    if (dir != usb_endpoint_direction::OUT) {
+        ++endpointIndex;
+    }
+
+    auto resetEndpointCommand = xhciRef.ResetEndpoint(slot, endpointIndex);
+    bool done{false};
+    int timeout = 5;
+    while (--timeout > 0) {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(10ms);
+        if (resetEndpointCommand->IsDone()) {
+            done = true;
+            break;
+        }
+    }
+    if (!done) {
+        get_klogger() << "Failed to reset xhci endpoint\n";
+    }
+    return done;
+}
+
+bool xhci_endpoint::StopEndpoint() {
+    uint8_t endpointIndex = endpoint << ((uint8_t)1);
+    if (dir != usb_endpoint_direction::OUT) {
+        ++endpointIndex;
+    }
+
+    auto stopEndpointCommand = xhciRef.StopEndpoint(slot, endpointIndex);
+    bool done{false};
+    int timeout = 5;
+    using namespace std::literals::chrono_literals;
+    while (--timeout > 0) {
+        std::this_thread::sleep_for(10ms);
+        if (stopEndpointCommand->IsDone()) {
+            done = true;
+            break;
+        }
+    }
+    if (!done) {
+        get_klogger() << "Failed to reset xhci endpoint\n";
+        return false;
+    }
+    std::this_thread::sleep_for(10ms);
+    return true;
+}
+
+bool xhci_endpoint::SetDequeuePtr(uint64_t ptr) {
+    uint8_t endpointIndex = endpoint << ((uint8_t)1);
+    if (dir != usb_endpoint_direction::OUT) {
+        ++endpointIndex;
+    }
+
+    auto setDeq = xhciRef.SetDequeuePtr(slot, endpointIndex, 0, 0, ptr);
+    bool done{false};
+    int timeout = 5;
+    while (--timeout > 0) {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(10ms);
+        if (setDeq->IsDone()) {
+            done = true;
+            break;
+        }
+    }
+    if (!done) {
+        get_klogger() << "Failed to set dequeue ptr after reset xhci endpoint\n";
+        return false;
+    }
+    return true;
+}
+
+bool xhci_endpoint::ReconfigureEndpoint(uint64_t dequeueuPtr) {
+    uint8_t endpointIndex = endpoint << ((uint8_t)1);
+    if (dir != usb_endpoint_direction::OUT) {
+        ++endpointIndex;
+    }
+
+    auto *inputContext = inputctx_container->InputContext();
+    inputContext->context[0].addContextFlags = (1 << endpointIndex) | 1;
+    inputContext->context[0].dropContextFlags = 1 << endpointIndex;
+    auto *endpoint = inputContext->EndpointContext(endpointIndex - 1, xhciRef.contextSize64);
+    endpoint->trDequePointer = dequeueuPtr;
+
+    auto stopEndpointCommand = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
+    bool done{false};
+    int timeout = 5;
+    using namespace std::literals::chrono_literals;
+    while (--timeout > 0) {
+        std::this_thread::sleep_for(10ms);
+        if (stopEndpointCommand->IsDone()) {
+            done = true;
+            break;
+        }
+    }
+    if (!done) {
+        get_klogger() << "Failed to reset xhci endpoint\n";
+        return false;
+    }
+    std::this_thread::sleep_for(10ms);
+    return true;
+}
+
+bool xhci_endpoint::ClearStall() {
+    uint8_t endpointIndex = endpoint << ((uint8_t)1);
+    if (dir != usb_endpoint_direction::OUT) {
+        ++endpointIndex;
+    }
+
+    auto *endpointContext = xhciRef.resources->DCBAA()->contexts[slot]->EndpointContext(endpointIndex - 1, xhciRef.contextSize64);
+
+    uint64_t trbaddr{endpointContext->trDequePointer & 0xFFFFFFFFFFFFFFF0};
+    uint64_t nextCycle{endpointContext->trDequePointer & 1};
+
+    uint64_t trboffset{trbaddr - ringContainer->RingPhysAddr()};
+    uint64_t nextIndex{trboffset / sizeof(xhci_trb)};
+
+    auto *cancel_trb = ringContainer->Trb(nextIndex);
+    cancel_trb->Command = (cancel_trb->Command & 0xFFFE) | ((cancel_trb->Command & 1) == 0 ? 1 : 0);
+
+    if (nextIndex != (ringContainer->LengthIncludingLink() - 1)) {
+        ++nextIndex;
+        if (nextIndex == (ringContainer->LengthIncludingLink() - 1)) {
+            nextIndex = 0;
+            nextCycle = (nextCycle == 0 ? 1 : 0);
+        }
+    } else {
+        nextIndex = 0;
+    }
+
+    uint64_t dequePointer = ((nextIndex * sizeof(xhci_trb)) + ringContainer->RingPhysAddr()) | (nextCycle & 1);
+
+
+    if (!SetDequeuePtr(dequePointer) && WaitForEndpointState(1)) {
+        get_klogger() << "XHCI post reset and stop endpoint set dequeue pointer failed\n";
+        return false;
+    }
+
+    if (!ResetEndpoint() && WaitForEndpointState(1)) {
+        get_klogger() << "XHCI reset endpoint failed\n";
+        return false;
+    }
+
+    if (!StopEndpoint() && WaitForEndpointState(3)) {
+        get_klogger() << "XHCI post reset stop endpoint failed\n";
+        return false;
+    }
+
+    if (!SetDequeuePtr(dequePointer) && WaitForEndpointState(1)) {
+        get_klogger() << "XHCI post reset and stop endpoint set dequeue pointer failed\n";
+        return false;
+    }
+    cancel_trb->Command = (cancel_trb->Command & 0xFFFE) | ((cancel_trb->Command & 1) == 0 ? 1 : 0);
+
+    return true;
 }
 
 xhci_endpoint_ring_container_endpoints::xhci_endpoint_ring_container_endpoints() : page(sizeof(*data)), data(new (page.Pointer()) xhci_endpoint_data(page.PhysAddr())) {

@@ -74,7 +74,7 @@ Device *usbkbd_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
 
 void usbkbd::init() {
     std::shared_ptr<usb_endpoint> endpoint0 = devInfo.port.Endpoint0();
-    if (!devInfo.port.SetConfigurationValue(devInfo.descr.bConfigurationValue, devInfo.iface.bInterfaceNumber, devInfo.iface.bAlternateSetting)) {
+    if (!devInfo.port.SetConfigurationValue(devInfo.descr.bConfigurationValue, 0, 0)) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Error: USB keyboard set config failed\n";
         get_klogger() << str.str().c_str();
@@ -112,7 +112,12 @@ void usbkbd::init() {
 
     for (auto &endpoint : devInfo.endpoints) {
         if (endpoint.IsInterrupt() && endpoint.IsDirectionIn()) {
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": Endpoint " << endpoint.Address() << "\n";
+            get_klogger() << str.str().c_str();
+            this->endpoint = endpoint;
             poll_endpoint = devInfo.port.InterruptEndpoint(endpoint.MaxPacketSize(), endpoint.Address(), usb_endpoint_direction::IN, endpoint.bInterval);
+            break;
         }
     }
 
@@ -128,7 +133,28 @@ void usbkbd::init() {
     }, true, 1, (int8_t) (transfercount++ & 1));
 
     std::stringstream str{};
-    str << DeviceType() << DeviceId() << ": USB keyboard\n";
+    str << DeviceType() << DeviceId() << ": USB";
+    {
+        auto speed = devInfo.port.Speed();
+        switch (speed) {
+            case LOW:
+                str << " low speed";
+                break;
+            case FULL:
+                str << " full speed";
+                break;
+            case HIGH:
+                str << " high speed";
+                break;
+            case SUPER:
+                str << " super speed";
+                break;
+            case SUPERPLUS:
+                str << " super speed plus";
+                break;
+        }
+    }
+    str << " keyboard\n";
     get_klogger() << str.str().c_str();
 
     kbd_thread = new std::thread([this] () {
@@ -141,8 +167,22 @@ void usbkbd::init() {
 
 void usbkbd::interrupt() {
     std::shared_ptr<usb_buffer> report = poll_transfer->Buffer();
-    report->CopyTo(kbrep_backlog[kbrep_windex++ & KBREP_BACKLOG_INDEX_MASK]);
-    semaphore.release();
+    if (poll_transfer->IsSuccessful()) {
+        report->CopyTo(kbrep_backlog[kbrep_windex++ & KBREP_BACKLOG_INDEX_MASK]);
+        semaphore.release();
+    } else {
+        if (poll_transfer->GetStatus() == usb_transfer_status::STALL || poll_transfer->GetStatus() == usb_transfer_status::DEVICE_NOT_RESPONDING) {
+            stalled = true;
+            semaphore.release();
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": error " << poll_transfer->GetStatusStr() << "\n";
+            get_klogger() << str.str().c_str();
+            return;
+        }
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": error " << poll_transfer->GetStatusStr() << "\n";
+        get_klogger() << str.str().c_str();
+    }
     poll_transfer = poll_endpoint->CreateTransferWithLock(true, 8, usb_transfer_direction::IN, [this] () {
         this->interrupt();
     }, true, 1, (int8_t) (transfercount++ & 1));
@@ -176,6 +216,48 @@ void usbkbd::worker_thread() {
     auto &kbd = Keyboard();
     while (true) {
         semaphore.acquire();
+
+        if (stalled && !stop) {
+            {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": Clearing stall condition\n";
+                get_klogger() << str.str().c_str();
+            }
+            auto statusResponse = devInfo.port.ControlRequest(*(devInfo.port.Endpoint0()), usb_get_status(usb_control_endpoint_direction::IN, endpoint.Address()));
+            if (statusResponse) {
+                uint16_t status{0};
+                statusResponse->CopyTo(status);
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": Device endpoint status is " << std::hex << status << "\n";
+                get_klogger() << str.str().c_str();
+            }
+            if (devInfo.port.ControlRequest(*(devInfo.port.Endpoint0()), usb_clear_feature(usb_feature::ENDPOINT_HALT, usb_control_endpoint_direction::IN, endpoint.Address()))) {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": Cleared device stall condition\n";
+                get_klogger() << str.str().c_str();
+                transfercount = 0;
+            } else {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": Clear device stall failed\n";
+                get_klogger() << str.str().c_str();
+            }
+            if (poll_endpoint->ClearStall()) {
+                {
+                    std::stringstream str{};
+                    str << DeviceType() << DeviceId() << ": Cleared host stall condition\n";
+                    get_klogger() << str.str().c_str();
+                }
+            } else {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": Clear host stall failed\n";
+                get_klogger() << str.str().c_str();
+            }
+            stalled = false;
+            poll_transfer = poll_endpoint->CreateTransfer(true, 8, usb_transfer_direction::IN, [this] () {
+                this->interrupt();
+            }, true, 1, (int8_t) (transfercount++ & 1));
+            continue;
+        }
 
         std::lock_guard lock{mtx};
 

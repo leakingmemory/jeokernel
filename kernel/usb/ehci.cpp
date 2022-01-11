@@ -908,3 +908,7 @@ void ehci_endpoint::IntWithLock() {
         transfer->SetDone();
     }
 }
+
+bool ehci_endpoint::ClearStall() {
+    return false;
+}

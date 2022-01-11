@@ -276,6 +276,7 @@ void xhci::init() {
     {
         std::stringstream msg;
         msg << DeviceType() << (unsigned int) DeviceId() << ": hcspa2=" << std::hex << capabilities->hcsparams2
+            << " hcc2=" << capabilities->hccparams2
             << " max-scratchpad=" << maxScratchpadBuffers << std::dec << " ev-seg=" << eventRingSegmentTableMax
             << " slots=" << numSlots << " ports=" << numPorts << " inter=" << numInterrupters
             << " crng=" << opregs->commandRingControl << " dboff=" << capabilities->dboff
@@ -780,7 +781,11 @@ bool xhci_port_enumerated_device::SetConfigurationValue(uint8_t configurationVal
     inputctx->alternateSetting = alternateSetting;
     inputctx->interfaceNumber = interfaceNumber;
     inputctx->configurationValue = configurationValue;
-    return true;
+    if (ControlRequest(*endpoint0, usb_set_configuration(configurationValue))) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 std::shared_ptr<usb_endpoint>
@@ -788,18 +793,18 @@ xhci_port_enumerated_device::CreateInterruptEndpoint(uint32_t maxPacketSize, uin
                                                      usb_endpoint_direction dir, int pollingIntervalMs) {
     uint8_t interval{0};
     if (speed == LOW || speed == FULL) {
-        int intervalUnits{pollingIntervalMs};
+        if (pollingIntervalMs < 1) {
+            pollingIntervalMs = 1;
+        }
+        int intervalUnits{pollingIntervalMs-1};
         while (intervalUnits > 0) {
             intervalUnits = intervalUnits >> 1;
             ++interval;
         }
-        if (interval < 1) {
-            interval = 1;
+        if (interval > 7) {
+            interval = 7;
         }
-        if (interval > 8) {
-            interval = 8;
-        }
-        interval += 2;
+        interval += 3;
     } else {
         interval = pollingIntervalMs;
         if (interval < 1) {
@@ -810,7 +815,7 @@ xhci_port_enumerated_device::CreateInterruptEndpoint(uint32_t maxPacketSize, uin
         }
         --interval;
     }
-    uint32_t maxBurst{1};
+    uint32_t maxBurst{0};
     uint32_t maxESITpayload{0};
     switch (speed) {
         case LOW:
@@ -828,25 +833,11 @@ xhci_port_enumerated_device::CreateInterruptEndpoint(uint32_t maxPacketSize, uin
     auto *inputctx = &(inputctx_container->InputContext()->context[0]);
     uint8_t endpointIndex = ((endpointNum << 1) + (dir == usb_endpoint_direction::IN ? 1 : 0));
     auto *slotContext = inputctx_container->InputContext()->GetSlotContext(xhciRef.contextSize64);
-    if (slotContext->contextEntries == 1) {
+    if (slotContext->contextEntries <= endpointIndex) {
         inputctx->addContextFlags = 1;
         inputctx->dropContextFlags = 0;
-        slotContext->contextEntries = 31;
-        auto evalContextCommand = xhciRef.EvaluateContext(inputctx_container->InputContextPhys(), slot);
-        bool done{false};
-        int timeout = 5;
-        while (--timeout > 0) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
-            if (evalContextCommand->IsDone()) {
-                done = true;
-                break;
-            }
-        }
-        if (!done) {
-            get_klogger() << "XHCI: Failed to enable endpoints in slot context\n";
-            return {};
-        }
+        slotContext->maxExitLatency = 0;
+        slotContext->contextEntries = endpointIndex + 1;
     }
     inputctx->addContextFlags = (1 << endpointIndex) | 1;
     --endpointIndex;
@@ -893,7 +884,7 @@ xhci_port_enumerated_device::CreateInterruptEndpoint(uint32_t maxPacketSize, uin
         get_klogger() << str.str().c_str();
     }
 #endif
-    xhci_endpoint *xhciEndpoint = new xhci_endpoint(xhciRef, endpointRing, inputctx_container, slot, endpointNum, dir, 0);
+    xhci_endpoint *xhciEndpoint = new xhci_endpoint(xhciRef, endpointRing, inputctx_container, slot, endpointNum, dir, usb_endpoint_type::INTERRUPT, 0);
     std::shared_ptr<usb_endpoint> uendpoint{xhciEndpoint};
     {
         critical_section cli{};
@@ -965,11 +956,27 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
     xhciRef.resources->DCBAA()->phys[slot] = deviceData->SlotContextPhys();
     inputctx_container = std::shared_ptr<xhci_input_context_container>(new xhci_input_context_container_32);
     xhci_input_context *inputctx = inputctx_container->InputContext();
-
     {
         xhci_input_control_context *inputContext = &(inputctx->context[0]);
         xhci_slot_context *slotContext = inputctx->GetSlotContext(xhciRef.contextSize64);
         inputContext->addContextFlags = 3; // A0+A1
+        auto speed = xhciRef.PortSpeed(port);
+        switch (speed) {
+            case LOW:
+                slotContext->was_speed_now_deprecated = 2;
+                break;
+            case FULL:
+                slotContext->was_speed_now_deprecated = 1;
+                break;
+            case HIGH:
+                slotContext->was_speed_now_deprecated = 3;
+                break;
+            case SUPER:
+                slotContext->was_speed_now_deprecated = 4;
+                break;
+            default:
+                slotContext->was_speed_now_deprecated = 0;
+        }
         slotContext->rootHubPortNumber = port + 1;
         slotContext->routeString = 0;
         slotContext->contextEntries = 1;
@@ -1006,7 +1013,7 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
         memmove(inputctx->GetSlotContext(xhciRef.contextSize64), slotContext, 64);
     }
     std::shared_ptr<xhci_endpoint_ring_container> ringContainer{new xhci_endpoint_ring_container_endpoint0(deviceData)};
-    std::shared_ptr<xhci_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, {}, slot, 0, usb_endpoint_direction::BOTH, 0)};
+    std::shared_ptr<xhci_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, {}, slot, 0, usb_endpoint_direction::BOTH, usb_endpoint_type::CONTROL, 0)};
     usb_minimum_device_descriptor minDevDesc{};
     {
         usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
