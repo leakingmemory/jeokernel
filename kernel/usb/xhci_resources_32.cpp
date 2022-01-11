@@ -17,6 +17,7 @@ xhci_resources_32::xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize
         for (int i = 0; i < maxScratchpadBuffers; i++) {
             scratchpad_pages.emplace_back(new Phys32Page(pagesize));
             buffers[i] = scratchpad_pages[i]->PhysAddr();
+            bzero(scratchpad_pages[i]->Pointer(), pagesize);
         }
     }
     new (rings_page.Pointer()) xhci_rings(rings_page.PhysAddr());
