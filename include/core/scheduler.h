@@ -9,6 +9,9 @@
 #include <klogger.h>
 #include <concurrency/hw_spinlock.h>
 
+#define PREALLOC_TASK_SLOTS 8192
+#define PREALLOC_EVENT_LOOP 64
+
 /*
  * Hard grouping: Realtime always first, normal always before low and idle,
  * low always before idle, idle only when there is nothing else to do
@@ -179,7 +182,7 @@ public:
         return bits.cpu_pinned;
     }
 
-    void event(uint64_t v1, uint64_t v2, uint64_t v3) {
+    void event(std::vector<task_event_handler *> &event_handler_loop, uint64_t v1, uint64_t v2, uint64_t v3) {
         /*
          * Because event handlers may remove themselves from the
          * list. First copy the list, then call the handlers.
@@ -187,12 +190,12 @@ public:
         if (event_handlers.empty()) {
             return;
         }
-        std::vector<task_event_handler *> event_handlers{};
+        event_handler_loop.clear();
         event_handlers.reserve(this->event_handlers.size());
         for (task_event_handler *eh : this->event_handlers) {
-            event_handlers.push_back(eh);
+            event_handler_loop.push_back(eh);
         }
-        for (task_event_handler *eh : event_handlers) {
+        for (task_event_handler *eh : event_handler_loop) {
             eh->event(v1, v2, v3);
         }
     }
@@ -234,12 +237,15 @@ private:
     uint32_t serial;
     bool multicpu;
     std::vector<task *> tasks;
+    std::vector<task_event_handler *> event_handler_loop;
 private:
     uint32_t get_next_id();
     void ticks_millisleep(uint64_t ms);
     void tsc_nanosleep(uint64_t nanos);
 public:
-    tasklist() : _lock(), tick_counter(0), serial(0), multicpu(false), tasks() {
+    tasklist() : _lock(), tick_counter(0), serial(0), multicpu(false), tasks(), event_handler_loop() {
+        tasks.reserve(PREALLOC_TASK_SLOTS);
+        event_handler_loop.reserve(PREALLOC_EVENT_LOOP);
     }
     bool is_multicpu();
     uint32_t create_current_idle_task(uint8_t cpu);

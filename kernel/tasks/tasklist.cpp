@@ -78,7 +78,7 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
 
     for (task *t : tasks) {
         if (nanos_avail) {
-            t->event(TASK_EVENT_NANOTIME, nanos, cpu);
+            t->event(event_handler_loop, TASK_EVENT_NANOTIME, nanos, cpu);
         }
         if (!multicpu || t->get_cpu() == cpu) {
             if (t->is_stack_quarantined()) {
@@ -264,7 +264,7 @@ void tasklist::exit(uint8_t cpu, bool returnToCallerIfNotTerminatedImmediately) 
 
         for (task *t : tasks) {
             if (t != current_task) {
-                t->event(TASK_EVENT_EXIT, current_task->get_id(), 0);
+                t->event(event_handler_loop, TASK_EVENT_EXIT, current_task->get_id(), 0);
             }
         }
     }
@@ -432,7 +432,7 @@ void tasklist::event(uint64_t v0, uint64_t v1, uint64_t v2, int8_t res_acq) {
         tick_counter = v1;
     }
     for (task *t : tasks) {
-        t->event(v0, v1, v2);
+        t->event(event_handler_loop, v0, v1, v2);
     }
     if (res_acq != 0) {
         get_current_task_with_lock().resource_acq(res_acq);
