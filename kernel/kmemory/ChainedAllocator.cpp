@@ -6,6 +6,7 @@
 #include <klogger.h>
 #include <mutex>
 #include "ChainedAllocator.h"
+#include "concurrency/critical_section.h"
 
 ChainedAllocator *CreateChainedAllocator() {
     auto allocator = CreateBasicMemoryAllocator();
@@ -25,6 +26,7 @@ void * ChainedAllocator::sm_allocate(uint32_t sz) {
     void *ptr = allocator->sm_allocate(sz);
     if (ptr == nullptr) {
         {
+            critical_section cli{};
             std::lock_guard lock(chain_lock);
             if (next == nullptr) {
                 next = CreateChainedAllocator();
@@ -51,6 +53,7 @@ bool ChainedAllocator::sm_owned(void *ptr) {
     }
     ChainedAllocator *n = nullptr;
     {
+        critical_section cli{};
         std::lock_guard lock{chain_lock};
         n = next;
     }
@@ -67,6 +70,7 @@ uint32_t ChainedAllocator::sm_sizeof(void *ptr) {
     }
     ChainedAllocator *n = nullptr;
     {
+        critical_section cli{};
         std::lock_guard lock{chain_lock};
         n = next;
     }
