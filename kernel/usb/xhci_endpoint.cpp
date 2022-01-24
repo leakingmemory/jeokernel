@@ -6,6 +6,7 @@
 #include "xhci_endpoint.h"
 #include "xhci.h"
 #include "UsbBuffer32.h"
+#include "strings.h"
 
 //#define XHCI_ENDPOINT_DUMP_TRB
 
@@ -191,6 +192,8 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
         buffer = std::shared_ptr<usb_buffer>(new UsbBuffer32(size));
         if (direction == usb_transfer_direction::OUT) {
             memcpy(buffer->Pointer(), data, size);
+        } else {
+            bzero(buffer->Pointer(), size);
         }
         trb->Data.DataPtr = buffer->Addr();
     }
