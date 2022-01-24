@@ -415,6 +415,7 @@ static_assert(sizeof(xhci_trb) == 16);
 #define XHCI_TRB_IMMEDIATE_DATA         (1 << 6)
 #define XHCI_TRB_INTERRUPT_ON_COMPLETE  (1 << 5)
 #define XHCI_TRB_INTERRUPT_ON_SHORT     (1 << 2)
+#define XHCI_TRB_LINK_TOGGLE_CYCLE      2
 #define XHCI_TRB_CYCLE                  1
 
 template <int n> struct xhci_trb_ring {
@@ -431,7 +432,7 @@ template <int n> struct xhci_trb_ring {
             ring[i].EnableSlot.SlotType = 0;
         }
         ring[n-1].Data.DataPtr = physAddr;
-        ring[n-1].Command = XHCI_TRB_LINK;
+        ring[n-1].Command = XHCI_TRB_LINK | XHCI_TRB_LINK_TOGGLE_CYCLE;
     }
 
     constexpr int LengthIncludingLink() {
