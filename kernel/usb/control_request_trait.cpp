@@ -131,15 +131,33 @@ bool control_request_trait::ControlRequest(usb_endpoint &endpoint, const usb_con
             usb_transfer_direction::SETUP, true,
             1, 0
     );
+    if (!t_req) {
+        std::stringstream str{};
+        str << "Usb control transfer failed (setup): Failed to set up transfer\n";
+        get_klogger() << str.str().c_str();
+        return false;
+    }
     std::shared_ptr<usb_transfer> data_stage_tr = endpoint.CreateTransfer(
             false, data, request.wLength,
             usb_transfer_direction::OUT, true,
             1, 1);
+    if (!data_stage_tr) {
+        std::stringstream str{};
+        str << "Usb control transfer failed (data): Failed to set up transfer\n";
+        get_klogger() << str.str().c_str();
+        return false;
+    }
     std::shared_ptr<usb_transfer> status_stage = endpoint.CreateTransfer(
             true, 0,
             usb_transfer_direction::IN, true,
             1, 1
     );
+    if (!status_stage) {
+        std::stringstream str{};
+        str << "Usb control transfer failed (status): Failed to set up transfer\n";
+        get_klogger() << str.str().c_str();
+        return false;
+    }
     timeout_wait(*t_req);
     if (!t_req->IsSuccessful()) {
         std::stringstream str{};
