@@ -63,15 +63,13 @@ void tasklist::start_multi_cpu(uint8_t cpu) {
 }
 
 void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
-    std::vector<task *> task_pool{};
-    std::vector<task *> next_task_pool{};
     task *current_task;
-
-    task_pool.reserve(16);
-    next_task_pool.reserve(16);
 
     critical_section cli{};
     std::lock_guard lock{_lock};
+
+    task_pool.clear();
+    next_task_pool.clear();
 
     bool nanos_avail = is_nanotime_available();
     uint64_t nanos{nanos_avail ? get_nanotime_ref() : 0};

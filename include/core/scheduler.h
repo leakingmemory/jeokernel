@@ -9,8 +9,9 @@
 #include <klogger.h>
 #include <concurrency/hw_spinlock.h>
 
-#define PREALLOC_TASK_SLOTS 8192
-#define PREALLOC_EVENT_LOOP 64
+#define PREALLOC_TASK_SLOTS         8192
+#define PREALLOC_EVENT_LOOP         64
+#define PREALLIC_SWITCH_TASK_TMP    256
 
 /*
  * Hard grouping: Realtime always first, normal always before low and idle,
@@ -238,14 +239,19 @@ private:
     bool multicpu;
     std::vector<task *> tasks;
     std::vector<task_event_handler *> event_handler_loop;
+    /* switch task tmps: */
+    std::vector<task *> task_pool;
+    std::vector<task *> next_task_pool;
 private:
     uint32_t get_next_id();
     void ticks_millisleep(uint64_t ms);
     void tsc_nanosleep(uint64_t nanos);
 public:
-    tasklist() : _lock(), tick_counter(0), serial(0), multicpu(false), tasks(), event_handler_loop() {
+    tasklist() : _lock(), tick_counter(0), serial(0), multicpu(false), tasks(), event_handler_loop(), task_pool(), next_task_pool() {
         tasks.reserve(PREALLOC_TASK_SLOTS);
         event_handler_loop.reserve(PREALLOC_EVENT_LOOP);
+        task_pool.reserve(PREALLIC_SWITCH_TASK_TMP);
+        next_task_pool.reserve(PREALLIC_SWITCH_TASK_TMP);
     }
     bool is_multicpu();
     uint32_t create_current_idle_task(uint8_t cpu);
