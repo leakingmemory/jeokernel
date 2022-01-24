@@ -235,26 +235,17 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
 
 std::tuple<uint32_t, uint64_t, xhci_trb *> xhci_endpoint::NextTransfer() {
     uint32_t trb_index{index};
-    xhci_trb *trb = ringContainer->Trb(index);
+    if (trb_index == (ringContainer->LengthIncludingLink() - 1)) {
+        trb_index = 0;
+    }
+    xhci_trb *trb = ringContainer->Trb(trb_index);
     if (barrier == nullptr) {
         barrier = trb;
     } else if (barrier == trb) {
         return std::make_tuple<uint32_t,uint64_t,xhci_trb *>(0, 0, nullptr);
     }
     uint64_t physaddr{ringContainer->RingPhysAddr()};
-    physaddr += sizeof(*trb) * index;
-    if (index == 0) {
-        cycle = cycle != 0 ? 0 : 1;
-    }
-    ++index;
-    if (index == (ringContainer->LengthIncludingLink() - 1)) {
-        auto *link = ringContainer->Trb(index);
-        uint16_t cmd{link->Command};
-        cmd &= 0xFFFE;
-        cmd |= cycle;
-        link->Command = cmd;
-        index = 0;
-    }
+    physaddr += sizeof(*trb) * trb_index;
     trb->Data.DataPtr = 0;
     trb->Data.TransferLength = 0;
     trb->Data.TDSize = 0;
@@ -265,7 +256,23 @@ std::tuple<uint32_t, uint64_t, xhci_trb *> xhci_endpoint::NextTransfer() {
 }
 
 void xhci_endpoint::CommitCommand(xhci_trb *trb) {
-    trb->Command = (trb->Command & 0xFFFE) | (cycle & 1);
+    while (true) {
+        if (index == (ringContainer->LengthIncludingLink() - 1)) {
+            auto *link = ringContainer->Trb(index);
+            uint16_t cmd{link->Command};
+            cmd &= 0xFFFE;
+            cmd |= cycle;
+            link->Command = cmd;
+            index = 0;
+            cycle = cycle != 0 ? 0 : 1;
+        }
+        xhci_trb *f_trb = ringContainer->Trb(index);
+        ++index;
+        f_trb->Command = (f_trb->Command & 0xFFFE) | (cycle & 1);
+        if (f_trb == trb) {
+            break;
+        }
+    }
     uint32_t doorbell{streamId};
     doorbell = doorbell << 16;
     doorbell |= doorbellTarget;
@@ -307,8 +314,7 @@ xhci_endpoint::xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_c
                              uint16_t streamId) :
         xhciRef(xhciRef), ringContainer(ringContainer), transferRing(nullptr), inputctx_container(inputctx_container),
         barrier(nullptr), dir(dir), endpointType(endpointType), index(0), streamId(streamId), slot(slot),
-
-        endpoint(endpoint), doorbellTarget(endpoint << 1), cycle(0) {
+        endpoint(endpoint), doorbellTarget(endpoint << 1), cycle(1) {
     if (dir != usb_endpoint_direction::OUT) {
         ++doorbellTarget;
     }
