@@ -208,9 +208,9 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
     if (size == 0) {
         trb->Command |= XHCI_TRB_STATUS | XHCI_TRB_INTERRUPT_ON_COMPLETE;
     } else {
-        uint16_t flags{XHCI_TRB_INTERRUPT_ON_SHORT | XHCI_TRB_INTERRUPT_ON_COMPLETE};
+        uint16_t flags{XHCI_TRB_INTERRUPT_ON_COMPLETE};
         if (endpoint != 0) {
-            flags |= XHCI_TRB_NORMAL;
+            flags |= XHCI_TRB_INTERRUPT_ON_SHORT | XHCI_TRB_NORMAL;
         } else {
             flags |= XHCI_TRB_DATA;
         }
