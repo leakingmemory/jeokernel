@@ -41,6 +41,8 @@ std::string usb_transfer::GetStatusStr() {
 }
 
 void usb_transfer::SetDone() {
-    done = true;
-    doneCall();
+    if (!done) {
+        done = true;
+        doneCall();
+    }
 }
