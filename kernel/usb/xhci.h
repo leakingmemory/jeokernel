@@ -605,7 +605,7 @@ struct xhci_slot_data {
     xhci_trb_ring<32> Endpoint0Ring;
     xhci_endpoint *Endpoints[31];
 
-    xhci_slot_data(uint64_t physaddr) : Endpoint0Ring(physaddr), slotContext() { }
+    xhci_slot_data(uint64_t physaddr) : Endpoint0Ring(physaddr + Endpoint0RingOffset()), slotContext() { }
 
     constexpr uint32_t SlotContextOffset() {
         return 0;
