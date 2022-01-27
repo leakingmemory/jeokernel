@@ -38,6 +38,8 @@ public:
         return ioapic;
     }
 
+    uint16_t GetIsaIoapicPin(uint8_t isaIrq);
+
     cpu_mpfp *GetMpTable();
 
     bool IsBsp(int cpu_num) const {

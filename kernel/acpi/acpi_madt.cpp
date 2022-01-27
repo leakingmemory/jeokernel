@@ -143,6 +143,9 @@ void acpi_madt_info::Visit(const acpi_madt_ioapic &ioapic) {
 }
 
 void acpi_madt_info::Visit(const acpi_madt_ioapic_interrupt_source_override &intr) {
+    if (intr.BusSource == 0) {
+        isaIrqRedirects.push_back(std::make_tuple<uint8_t,uint16_t>(intr.IrqSource, intr.GlobalSystemInterrupt));
+    }
     std::stringstream str{};
     str << std::hex << "ACPI IO-APIC irq source " << intr.IrqSource << " bus " << intr.BusSource << " flags " << intr.Flags
         << " global system int " << intr.GlobalSystemInterrupt << "\n";
@@ -187,4 +190,20 @@ int acpi_madt_info::GetNumberOfCpus() const {
 
 int acpi_madt_info::GetLocalApicId(int cpu) const {
     return localApicIds.at(cpu);
+}
+
+uint16_t acpi_madt_info::GetIsaIoapicPin(uint8_t isaIrq) const {
+    for (auto &mapping : isaIrqRedirects) {
+        uint8_t source = std::get<0>(mapping);
+        uint16_t pin = std::get<1>(mapping);
+        {
+            std::stringstream str{};
+            str << "ISA " << source << " connected to pin " << pin << "\n";
+            get_klogger() << str.str().c_str();
+        }
+        if (isaIrq == source) {
+            return pin;
+        }
+    }
+    return isaIrq;
 }

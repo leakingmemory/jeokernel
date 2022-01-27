@@ -123,3 +123,24 @@ cpu_mpfp *ApStartup::GetMpTable() {
     }
     return mpfp ? &(*mpfp) : nullptr;
 }
+
+uint16_t ApStartup::GetIsaIoapicPin(uint8_t isaIrq) {
+    if (madtptr) {
+        return madtptr->GetIsaIoapicPin(isaIrq);
+    } else {
+        uint8_t isa_bus_id{0xFF};
+        for (int i = 0; i < mpfp->get_num_bus(); i++) {
+            const mp_bus_entry &bus = mpfp->get_bus(i);
+            if (bus.bus_type[0] == 'I' && bus.bus_type[1] == 'S' && bus.bus_type[2] == 'A') {
+                isa_bus_id = bus.bus_id;
+            }
+        }
+        for (int i = 0; i < mpfp->get_num_ioapic_ints(); i++) {
+            const mp_ioapic_interrupt_entry &ioapic_int = mpfp->get_ioapic_int(i);
+            if (ioapic_int.source_bus_irq == isaIrq && ioapic_int.source_bus_id == isa_bus_id) {
+                return ioapic_int.ioapic_intin;
+            }
+        }
+        return isaIrq;
+    }
+}

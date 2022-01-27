@@ -6,7 +6,9 @@
 #define JEOKERNEL_ACPI_MADT_H
 
 #include <vector>
+#include <tuple>
 #include <core/apics_info.h>
+#include "core/acpi_isa_irq.h"
 
 struct acpi_madt_processor;
 struct acpi_madt_ioapic;
@@ -101,16 +103,18 @@ public:
     virtual void Visit(const acpi_madt_processor_local_x2apic &) = 0;
 };
 
-class acpi_madt_info : private acpi_madt_visitor, public apics_info {
+class acpi_madt_info : private acpi_madt_visitor, public apics_info, public acpi_isa_irq {
 private:
     std::vector<uint64_t> ioapicAddrs;
     std::vector<int> localApicIds;
+    std::vector<std::tuple<uint8_t,uint16_t>> isaIrqRedirects;
 public:
     acpi_madt_info(void *);
     int GetNumberOfIoapics() const override;
     uint64_t GetIoapicAddr(int) const override;
     int GetNumberOfCpus() const override;
     int GetLocalApicId(int cpu) const override;
+    uint16_t GetIsaIoapicPin(uint8_t isaIrq) const override;
 private:
     void Visit(const acpi_madt_processor &) override;
     void Visit(const acpi_madt_ioapic &) override;
