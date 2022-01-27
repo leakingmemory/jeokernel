@@ -47,6 +47,7 @@
 #include "framebuffer/framebuffer_kconsole.h"
 #include "framebuffer/framebuffer_kconsole_spinlocked.h"
 #include "framebuffer/framebuffer_kcons_with_worker_thread.h"
+#include <acpi/acpi_8042.h>
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -863,6 +864,13 @@ done_with_mem_extension:
                     ps2 *ps2dev = new ps2();
                     devices().add(*ps2dev);
                     ps2dev->init();
+                } else {
+                    acpi_8042 pnp8042{};
+                    if (pnp8042.has_ps2_keyboard()) {
+                        ps2 *ps2dev = new ps2();
+                        devices().add(*ps2dev);
+                        ps2dev->init();
+                    }
                 }
             }};
             pci_scan_thread.detach();
