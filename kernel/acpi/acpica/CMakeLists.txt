@@ -16,7 +16,7 @@ add_subdirectory(acpica-unix-20210604/source/components/resources)
 add_subdirectory(acpica-unix-20210604/source/components/tables)
 add_subdirectory(acpica-unix-20210604/source/components/utilities)
 
-add_library(acpica STATIC acpica.cpp acpica_impl.cpp acpica_c.c)
+add_library(acpica STATIC acpica.cpp acpica_impl.cpp acpica_c.c acpi_8042.cpp)
 
 target_link_libraries(acpica PRIVATE acpica-common)
 target_link_libraries(acpica PRIVATE acpica-dispatcher)

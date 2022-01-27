@@ -238,6 +238,20 @@ bool acpica_lib::find_pci_bridges(std::function<void (void *handle, ACPI_DEVICE_
     return Status == AE_OK;
 }
 
+bool acpica_lib::Accept(AcpiDeviceVisitor &visitor) {
+    void *retv;
+    dev_walk_func func = [&visitor] (ACPI_HANDLE handle, uint32_t depth, void **retvp) mutable {
+        ACPI_DEVICE_INFO *dev_info;
+        ACPI_STATUS Status = AcpiGetObjectInfo(handle, &dev_info);
+        if (Status == AE_OK) {
+            visitor.Visit(*dev_info);
+        }
+        return AE_OK;
+    };
+    ACPI_STATUS Status = AcpiGetDevices((char *) NULL, wf_dev_walk, (void *) &func, &retv);
+    return Status == AE_OK;
+}
+
 bool acpica_lib::determine_pci_id(ACPI_PCI_ID &pciId, void *vhandle) {
     ACPI_HANDLE handle = (ACPI_HANDLE) vhandle;
     ACPI_DEVICE_INFO *dev_info;

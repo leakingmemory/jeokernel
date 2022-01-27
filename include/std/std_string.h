@@ -199,6 +199,7 @@ namespace std {
     class basic_string {
     public:
         typedef typename allocator::size_type size_type;
+        typedef CharT char_type;
     private:
         struct _data_container : allocator {
             union {
@@ -464,6 +465,25 @@ namespace std {
                 return larger ? 1 : -1;
             }
             return diff;
+        }
+        int compare(const CharT *str, std::size_t len) const {
+            bool equal_s{false};
+            bool larger{false};
+            if (len == size()) {
+                equal_s = true;
+            } else if (len > size()) {
+                larger = true;
+                len = size();
+            }
+            int diff = Traits::compare(data(), str, len);
+            if (diff == 0 && !equal_s) {
+                return larger ? 1 : -1;
+            }
+            return diff;
+        }
+
+        bool operator==(const CharT *rhs ) {
+            return compare(rhs, Traits::length(rhs)) == 0;
         }
     };
 

@@ -17,6 +17,8 @@
 #include <acpi/pci_irq_rt.h>
 #include "acpi_madt_provider.h"
 
+#include <acpi/acpi_visitors.h>
+
 enum AcpiExecuteType
 {
     GLOBAL_LOCK_HANDLER,
@@ -75,6 +77,8 @@ public:
 
     bool find_resources(void *handle, std::function<void (ACPI_RESOURCE *)> wfunc);
     bool find_pci_bridges(std::function<void (void *handle, ACPI_DEVICE_INFO *dev_info)> wfunc);
+
+    bool Accept(AcpiDeviceVisitor &visitor);
 
     bool walk_namespace(void *handle, std::function<void (std::string pathname, uint32_t object_type, void *handle)> wfunc);
     bool walk_namespace(std::function<void (std::string pathname, uint32_t object_type, void *handle)> wfunc);
