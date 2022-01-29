@@ -47,6 +47,7 @@
 #include "framebuffer/framebuffer_kconsole.h"
 #include "framebuffer/framebuffer_kconsole_spinlocked.h"
 #include "framebuffer/framebuffer_kcons_with_worker_thread.h"
+#include "kshell/kshell.h"
 #include <acpi/acpi_8042.h>
 
 //#define THREADING_TESTS // Master switch
@@ -872,6 +873,8 @@ done_with_mem_extension:
                         ps2dev->init();
                     }
                 }
+
+                new kshell();
             }};
             pci_scan_thread.detach();
         }

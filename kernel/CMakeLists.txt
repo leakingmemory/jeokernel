@@ -21,6 +21,7 @@ add_subdirectory(strutil)
 add_subdirectory(fstreams)
 add_subdirectory(framebuffer)
 add_subdirectory(font)
+add_subdirectory(kshell)
 
 add_library(bootstrap bootstrap.S)
 
@@ -44,3 +45,4 @@ target_link_libraries(kernel PRIVATE strutil)
 target_link_libraries(kernel PRIVATE fstreams)
 target_link_libraries(kernel PRIVATE framebuffer)
 target_link_libraries(kernel PRIVATE font)
+target_link_libraries(kernel PRIVATE kshell)

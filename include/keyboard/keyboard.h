@@ -26,7 +26,11 @@
 #define KEYBOARD_CODE_PRINTSCREEN 0x0200
 #define KEYBOARD_CODE_PAUSE       (0x0201 | KEYBOARD_CODE_BIT_RELEASE)
 
+#define KEYBOARD_CODE_BACKSPACE   0x2A
+
 #include <cstdint>
+#include "concurrency/hw_spinlock.h"
+#include "vector"
 
 class keyboard_type2_state_machine {
 private:
@@ -52,11 +56,38 @@ public:
 
 uint32_t keycode_type2_to_usb(uint32_t keycode);
 
-class keyboard {
+class keyboard_codepage {
 public:
+    virtual uint32_t Translate(uint32_t keycode) = 0;
+};
+
+class keycode_consumer {
+public:
+    virtual bool Consume(uint32_t keycode) = 0;
+};
+
+class keyboard {
+private:
+    hw_spinlock lock;
+    std::shared_ptr<keycode_consumer> consumer;
+    std::vector<std::shared_ptr<keycode_consumer>> consumers;
+public:
+    keyboard() : lock(), consumer(), consumers() {}
     void keycode(uint32_t code);
+    void consume(std::shared_ptr<keycode_consumer> consumer);
 };
 
 keyboard &Keyboard();
+void KeyboardCodepage(std::shared_ptr<keyboard_codepage> codepage);
+std::shared_ptr<keyboard_codepage> KeyboardCodepage();
+
+class keyboard_line_consumer : public keycode_consumer {
+private:
+    std::shared_ptr<keyboard_codepage> codepage;
+public:
+    keyboard_line_consumer(std::shared_ptr<keyboard_codepage> codepage) : codepage(codepage) {}
+    keyboard_line_consumer() : keyboard_line_consumer(KeyboardCodepage()) {}
+    bool Consume(uint32_t keycode) override;
+};
 
 #endif //JEOKERNEL_KEYBOARD_H

@@ -1,6 +1,11 @@
 
 #include <keyboard/keyboard.h>
 #include <klogger.h>
+#include "concurrency/critical_section.h"
+#include "mutex"
+#include "keyboard/keyboard_en.h"
+
+//#define KEYBOARD_DUMP_ALL_CODES
 
 void keyboard_type2_state_machine::raw_code(uint8_t ch) {
     bool ignore{false};
@@ -493,15 +498,62 @@ uint32_t keycode_type2_to_usb(uint32_t keycode) {
 }
 
 static keyboard *kbd = nullptr;
+static std::shared_ptr<keyboard_codepage> *codepage = nullptr;
 
 void init_keyboard() {
     kbd = new keyboard();
+    codepage = new std::shared_ptr<keyboard_codepage>();
+    KeyboardCodepage(std::make_shared<keyboard_en_codepage>());
 }
 
 keyboard &Keyboard() {
     return *kbd;
 }
 
+void KeyboardCodepage(std::shared_ptr<keyboard_codepage> new_codepage) {
+    *codepage = new_codepage;
+}
+std::shared_ptr<keyboard_codepage> KeyboardCodepage() {
+    if (codepage != nullptr) {
+        return *codepage;
+    } else {
+        return {};
+    }
+}
+
 void keyboard::keycode(uint32_t code) {
+#ifdef KEYBOARD_DUMP_ALL_CODES
     get_klogger() << code;
+#endif
+
+    critical_section cli{};
+    std::lock_guard lck{lock};
+    if (!consumer) {
+        auto iterator = consumers.begin();
+        if (iterator != consumers.end()) {
+            consumer = *iterator;
+            consumers.erase(iterator);
+        }
+    }
+    if (consumer) {
+        if (!consumer->Consume(code)) {
+            consumer = nullptr;
+        }
+    }
+}
+
+void keyboard::consume(std::shared_ptr<keycode_consumer> consumer) {
+    critical_section cli{};
+    std::lock_guard lck{lock};
+    consumers.push_back(consumer);
+}
+
+bool keyboard_line_consumer::Consume(uint32_t keycode) {
+    if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
+        char ch[2] = {(char) this->codepage->Translate(keycode), 0};
+        if (ch[0] != 0) {
+            get_klogger() << ch;
+        }
+    }
+    return true;
 }
