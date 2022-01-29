@@ -443,6 +443,47 @@ namespace std {
             return append(str.data(), str.size());
         }
 
+        constexpr void resize( size_type count) {
+            resize(count, ' ');
+        }
+        constexpr void resize( size_type count, CharT ch ) {
+            size_type size{0};
+            if (c.shrt.is_short()) {
+                size = c.shrt.get_size();
+                if (size == count) {
+                    return;
+                }
+                if (count < size) {
+                    c.shrt.set_size(count);
+                    return;
+                }
+                if (count <= c.shrt.get_capacity()) {
+                    for (auto pos = size; pos < count; pos++) {
+                        c.shrt.str[pos] = ch;
+                    }
+                    c.shrt.set_size(count);
+                    return;
+                }
+                reserve(count);
+            } else {
+                size = c.ptr.get_size();
+                if (count == size) {
+                    return;
+                }
+                if (count < size) {
+                    c.ptr.set_size(count);
+                    return;
+                }
+                if (count > capacity()) {
+                    reserve(count);
+                }
+            }
+            for (auto pos = size; pos < count; pos++) {
+                c.ptr.pointer[pos] = ch;
+            }
+            c.ptr.set_size(count);
+        }
+
         ~basic_string() {
             if (!c.shrt.is_short()) {
                 get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
