@@ -24,3 +24,9 @@ void b8000logger::print_at(uint8_t col, uint8_t row, const char *str) {
     std::lock_guard lock(_lock);
     cons.print_at(col, row, str);
 }
+
+void b8000logger::erase(int backtrack, int erase) {
+    critical_section cli{};
+    std::lock_guard lock(_lock);
+    cons.erase(backtrack, erase);
+}

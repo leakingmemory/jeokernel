@@ -18,3 +18,9 @@ framebuffer_kconsole_spinlocked &framebuffer_kconsole_spinlocked::operator<<(con
     (*targetObject) << str;
     return *this;
 }
+
+void framebuffer_kconsole_spinlocked::erase(int backtrack, int erase) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    targetObject->erase(backtrack, erase);
+}

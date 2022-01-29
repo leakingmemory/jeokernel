@@ -98,3 +98,18 @@ void b8000::print_at(uint8_t col, uint8_t row, const char *str) {
         }
     }
 }
+
+void b8000::erase(int backtrack, int clear) {
+    if (cpos > backtrack) {
+        cpos -= backtrack;
+    } else {
+        cpos = 0;
+    }
+    if (clear > ((80*25) - cpos)) {
+        clear = (80*25) - cpos;
+    }
+    for (int i = 0; i < clear; i++) {
+        videobuf[i+cpos].chr = ' ';
+    }
+    cursor();
+}

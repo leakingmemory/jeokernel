@@ -18,6 +18,7 @@ public:
     framebuffer_kconsole_spinlocked(std::shared_ptr<KLogger> targetObject) : _lock(), targetObject(targetObject) {
     }
     void print_at(uint8_t col, uint8_t row, const char *str) override;
+    void erase(int backtrack, int erase) override;
     framebuffer_kconsole_spinlocked & operator << (const char *str) override;
 };
 

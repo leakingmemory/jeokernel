@@ -66,6 +66,29 @@ void framebuffer_kcons_cmd_printstr::Execute(std::shared_ptr<framebuffer_kconsol
     (*targetObject) << str.c_str();
 }
 
+class framebuffer_kcons_cmd_erase : public framebuffer_kcons_cmd {
+private:
+    int backtrack;
+    int erase;
+public:
+    framebuffer_kcons_cmd_erase(int backtrack, int erase) : backtrack(backtrack), erase(erase) {
+    }
+    ~framebuffer_kcons_cmd_erase() override;
+    int GetEstimatedLinefeeds() override;
+    void Execute(std::shared_ptr<framebuffer_kconsole> targetObject) override;
+};
+
+framebuffer_kcons_cmd_erase::~framebuffer_kcons_cmd_erase() noexcept {
+}
+
+int framebuffer_kcons_cmd_erase::GetEstimatedLinefeeds() {
+    return 0;
+}
+
+void framebuffer_kcons_cmd_erase::Execute(std::shared_ptr<framebuffer_kconsole> targetObject) {
+    targetObject->erase(backtrack, erase);
+}
+
 framebuffer_kcons_with_worker_thread::framebuffer_kcons_with_worker_thread(std::shared_ptr<framebuffer_kconsole> targetObject) :
     command_ring(), command_ring_extract(0), command_ring_insert(0), targetObject(targetObject), spinlock(),
     semaphore(-1), terminate(false), cursorVisible(false), worker([this] () { WorkerThread(); }),
@@ -194,5 +217,12 @@ void framebuffer_kcons_with_worker_thread::Blink() {
         }
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(500ms);
+    }
+}
+
+void framebuffer_kcons_with_worker_thread::erase(int backtrack, int erase) {
+    framebuffer_kcons_cmd* cmd{new framebuffer_kcons_cmd_erase(backtrack, erase)};
+    if (!InsertCommand(cmd)) {
+        delete cmd;
     }
 }

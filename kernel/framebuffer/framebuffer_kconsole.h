@@ -17,6 +17,7 @@ private:
 public:
     framebuffer_kconsole(std::shared_ptr<framebuffer_console> fbconsole);
     void print_at(uint8_t col, uint8_t row, const char *str) override;
+    void erase(int backtrack, int erase) override;
     framebuffer_kconsole & operator << (const char *str) override;
 
     void MakeRoomForLinefeeds(unsigned int linefeeds);

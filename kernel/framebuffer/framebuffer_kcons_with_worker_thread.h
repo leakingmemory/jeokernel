@@ -39,6 +39,7 @@ private:
 
 public:
     void print_at(uint8_t col, uint8_t row, const char *str) override;
+    void erase(int backtrack, int erase) override;
     framebuffer_kcons_with_worker_thread & operator << (const char *str) override;
 };
 

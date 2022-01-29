@@ -23,6 +23,7 @@ public:
     b8000();
     void lnbreak();
     void print_at(uint8_t col, uint8_t row, const char *str);
+    void erase(int backtrack, int clear);
     b8000 & operator << (const char *str);
 
     b8000 &print_u8(uint8_t bnum) {

@@ -14,6 +14,9 @@ public:
     virtual void print_at(uint8_t col, uint8_t row, const char *str) {
     }
 
+    virtual void erase(int backtrack, int erase) {
+    }
+
     virtual KLogger & operator << (const char *str) {
         return *this;
     };

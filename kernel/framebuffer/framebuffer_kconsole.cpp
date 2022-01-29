@@ -77,3 +77,25 @@ void framebuffer_kconsole::SetCursorVisible(bool visibility) {
 uint32_t framebuffer_kconsole::GetHeight() {
     return fbconsole->GetHeight();
 }
+
+void framebuffer_kconsole::erase(int backtrack, int erase) {
+    uint32_t pos{fbconsole->GetPosition()};
+    if (backtrack < pos) {
+        pos -= backtrack;
+    } else {
+        pos = 0;
+    }
+    uint32_t width{fbconsole->GetWidth()};
+    uint32_t height{fbconsole->GetHeight()};
+    {
+        uint32_t maxerase{(width * height) - pos};
+        if (erase > maxerase) {
+            erase = (int) maxerase;
+        }
+    }
+    fbconsole->SetPosition(pos);
+    for (int i = 0; i < erase; i++) {
+        fbconsole->printch(' ', 0x00FFFFFF, 0);
+    }
+    fbconsole->SetPosition(pos);
+}
