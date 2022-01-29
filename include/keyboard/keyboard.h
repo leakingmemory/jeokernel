@@ -31,6 +31,8 @@
 #include <cstdint>
 #include "concurrency/hw_spinlock.h"
 #include "vector"
+#include "string"
+#include "concurrency/raw_semaphore.h"
 
 class keyboard_type2_state_machine {
 private:
@@ -81,13 +83,28 @@ keyboard &Keyboard();
 void KeyboardCodepage(std::shared_ptr<keyboard_codepage> codepage);
 std::shared_ptr<keyboard_codepage> KeyboardCodepage();
 
-class keyboard_line_consumer : public keycode_consumer {
-private:
-    std::shared_ptr<keyboard_codepage> codepage;
+class keyboard_blocking_string {
 public:
-    keyboard_line_consumer(std::shared_ptr<keyboard_codepage> codepage) : codepage(codepage) {}
+    virtual const std::string &GetString() = 0;
+    virtual keyboard_blocking_string *GetBlockingString() {
+        return this;
+    }
+};
+
+class keyboard_line_consumer : public keycode_consumer, private keyboard_blocking_string {
+private:
+    raw_semaphore sema;
+    std::shared_ptr<keyboard_codepage> codepage;
+    std::string str;
+public:
+    explicit keyboard_line_consumer(std::shared_ptr<keyboard_codepage> codepage) : keyboard_blocking_string(), sema(-1), codepage(codepage), str() {}
     keyboard_line_consumer() : keyboard_line_consumer(KeyboardCodepage()) {}
     bool Consume(uint32_t keycode) override;
+    keyboard_blocking_string *GetBlockingString() override {
+        return keyboard_blocking_string::GetBlockingString();
+    }
+private:
+    const std::string &GetString() override;
 };
 
 #endif //JEOKERNEL_KEYBOARD_H

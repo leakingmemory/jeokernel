@@ -16,7 +16,21 @@ kshell::~kshell() {
     shell.join();
 }
 
-void kshell::run() {
-    Keyboard().consume(std::make_shared<keyboard_line_consumer>());
+[[noreturn]] void kshell::run() {
+    std::string input{};
+    while(true) {
+        std::shared_ptr<keyboard_line_consumer> consumer{new keyboard_line_consumer()};
+        get_klogger() << "# ";
+        Keyboard().consume(consumer);
+        keyboard_blocking_string *stringGetter = consumer->GetBlockingString();
+        input.clear();
+        input.append("\n");
+        {
+            const std::string &keyboardString = stringGetter->GetString();
+            input.append(keyboardString);
+        }
+        input.append("\n");
+        get_klogger() << input.c_str();
+    }
 }
 

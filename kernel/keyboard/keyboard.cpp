@@ -550,10 +550,27 @@ void keyboard::consume(std::shared_ptr<keycode_consumer> consumer) {
 
 bool keyboard_line_consumer::Consume(uint32_t keycode) {
     if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
-        char ch[2] = {(char) this->codepage->Translate(keycode), 0};
-        if (ch[0] != 0) {
-            get_klogger() << ch;
+        uint32_t specificKeycode = keycode & KEYBOARD_CODE_MASK;
+        if (specificKeycode == KEYBOARD_CODE_BACKSPACE) {
+            if (str.size() > 0) {
+                str.resize(str.size() - 1);
+                get_klogger().erase(1, 1);
+            }
+        } else {
+            char ch[2] = {(char) this->codepage->Translate(keycode), 0};
+            if (ch[0] == '\n') {
+                sema.release();
+                return false;
+            } else if (ch[0] != 0) {
+                str.append(ch, 1);
+                get_klogger() << ch;
+            }
         }
     }
     return true;
+}
+
+const std::string &keyboard_line_consumer::GetString() {
+    sema.acquire();
+    return str;
 }

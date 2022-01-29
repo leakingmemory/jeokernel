@@ -15,7 +15,8 @@ private:
 public:
     kshell();
     ~kshell();
-    void run();
+
+    [[noreturn]] void run();
 };
 
 #endif //JEOKERNEL_KSHELL_H
