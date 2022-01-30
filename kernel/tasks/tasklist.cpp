@@ -596,3 +596,15 @@ bool tasklist::clear_stack_quarantines(uint8_t cpu) {
 
     return runnable;
 }
+
+std::vector<task_info> tasklist::get_task_infos() {
+    std::vector<task_info> infos{};
+    {
+        critical_section cli{};
+        std::lock_guard lock{_lock};
+        for (task *t : tasks) {
+            infos.push_back(t->get_task_info());
+        }
+    }
+    return infos;
+}

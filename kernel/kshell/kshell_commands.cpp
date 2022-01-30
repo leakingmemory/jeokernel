@@ -4,6 +4,7 @@
 
 #include "kshell_commands.h"
 #include "sstream"
+#include "kshell_ps.h"
 
 class kshell_echo : public kshell_command {
 private:
@@ -36,4 +37,5 @@ public:
 
 kshell_commands::kshell_commands(kshell &shell) {
     shell.AddCommand(std::make_shared<kshell_echo>());
+    shell.AddCommand(std::make_shared<kshell_ps>());
 }

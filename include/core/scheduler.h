@@ -8,6 +8,7 @@
 #include <interrupt_frame.h>
 #include <klogger.h>
 #include <concurrency/hw_spinlock.h>
+#include <string>
 
 #define PREALLOC_TASK_SLOTS         8192
 #define PREALLOC_EVENT_LOOP         64
@@ -84,6 +85,11 @@ public:
 
     virtual void event(uint64_t v1, uint64_t v2, uint64_t v3) {
     }
+};
+
+struct task_info {
+    task_bits bits;
+    std::string name;
 };
 
 class task {
@@ -229,6 +235,14 @@ public:
     uint8_t get_resources() {
         return this->bits.resources;
     }
+
+    task_info get_task_info() {
+        task_info info{
+            .bits = bits,
+            .name = "[]"
+        };
+        return info;
+    }
 };
 
 class tasklist {
@@ -298,6 +312,8 @@ public:
      * @return
      */
     bool clear_stack_quarantines(uint8_t cpu);
+
+    std::vector<task_info> get_task_infos();
 };
 
 tasklist *get_scheduler();
