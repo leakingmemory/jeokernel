@@ -15,7 +15,8 @@
 #include <thread>
 #include <acpi/acpica_types.h>
 #include <acpi/pci_irq_rt.h>
-#include "acpi_madt_provider.h"
+#include <acpi/acpi_madt_provider.h>
+#include <acpi/acpica_interface.h>
 
 #include <acpi/acpi_visitors.h>
 
@@ -65,7 +66,7 @@ public:
     }
 };
 
-class acpica_lib : public acpi_madt_provider {
+class acpica_lib : public acpi_madt_provider, public acpica_interface {
 public:
     acpica_lib();
     virtual ~acpica_lib();
@@ -92,6 +93,9 @@ public:
     std::optional<IRQLink> get_extended_irq(void *handle);
 
     std::shared_ptr<acpi_madt_info> get_madt() override;
+
+    bool reboot() override;
+    bool poweroff() override;
 
     virtual void terminate() = 0;
     virtual void *allocate_zeroed(std::size_t size) = 0;

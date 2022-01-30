@@ -417,6 +417,19 @@ std::shared_ptr<acpi_madt_info> acpica_lib::get_madt() {
     return madt_info;
 }
 
+bool acpica_lib::reboot() {
+    return AcpiReset() == AE_OK;
+}
+
+bool acpica_lib::poweroff() {
+    AcpiEnterSleepStatePrep(5);
+    {
+        critical_section cli{};
+        AcpiEnterSleepState(5);
+    }
+    return false;
+}
+
 static acpica_lib *acpica_lib_singleton = nullptr;
 
 void init_acpica(uint64_t root_table_addr) {
@@ -430,6 +443,10 @@ acpica_lib *get_acpica_ptr() {
 
 acpica_lib &get_acpica() {
     return *acpica_lib_singleton;
+}
+
+acpica_interface &get_acpica_interface() {
+    return get_acpica();
 }
 
 acpi_madt_provider &get_acpi_madt_provider() {
@@ -788,6 +805,13 @@ ACPI_STATUS
 AcpiOsSignal (
         UINT32                  Function,
         void                    *Info) {
+    return AE_OK;
+}
+
+ACPI_STATUS
+AcpiOsEnterSleep(    UINT8                   SleepState,
+                     UINT32                  RegaValue,
+                     UINT32                  RegbValue) {
     return AE_OK;
 }
 
