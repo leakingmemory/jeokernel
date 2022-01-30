@@ -49,6 +49,7 @@
 #include "framebuffer/framebuffer_kcons_with_worker_thread.h"
 #include "kshell/kshell.h"
 #include "kshell/kshell_commands.h"
+#include "usb/usbhub.h"
 #include <acpi/acpi_8042.h>
 
 //#define THREADING_TESTS // Master switch
@@ -852,6 +853,7 @@ done_with_mem_extension:
         get_drivers().AddDriver(new xhci_driver());
         get_drivers().AddDriver(new usbifacedev_driver());
         get_drivers().AddDriver(new usbkbd_driver());
+        get_drivers().AddDriver(new usbhub_driver());
 
         AcpiBoot acpi_boot{multiboot2};
 

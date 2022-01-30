@@ -218,4 +218,11 @@ struct usb_endpoint_descriptor {
     }
 }  __attribute__((__packed__));
 
+struct usb_req_hubdesc : usb_control_request {
+    usb_req_hubdesc(uint16_t length) : usb_control_request(
+            RequestType(usb_control_direction::DEVICE_TO_HOST, usb_control_request_type::CLASS, usb_control_recepient::DEVICE),
+            6, 0x2900, 0, length
+            ) { }
+};
+
 #endif //JEOKERNEL_USB_CONTROL_REQ_H
