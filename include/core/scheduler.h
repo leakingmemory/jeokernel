@@ -100,8 +100,9 @@ private:
     task_bits bits;
     std::vector<task_resource *> resources;
     std::vector<task_event_handler *> event_handlers;
+    std::string name;
 public:
-    task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL), resources(), event_handlers() {
+    task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL), resources(), event_handlers(), name("[]") {
     }
     task(const InterruptCpuFrame &cpuFrame, const InterruptStackFrame &stackFrame, const x86_fpu_state &fpusse_state, const std::vector<task_resource *> resources)
     : cpu_frame(cpuFrame), cpu_state(stackFrame), fpu_sse_state(fpusse_state), bits(PRIO_GROUP_NORMAL), resources(resources), event_handlers() {
@@ -239,9 +240,13 @@ public:
     task_info get_task_info() {
         task_info info{
             .bits = bits,
-            .name = "[]"
+            .name = name
         };
         return info;
+    }
+
+    void set_name(const std::string &name) {
+        this->name = name;
     }
 };
 
@@ -314,6 +319,8 @@ public:
     bool clear_stack_quarantines(uint8_t cpu);
 
     std::vector<task_info> get_task_infos();
+
+    void set_name(const std::string &name);
 };
 
 tasklist *get_scheduler();

@@ -91,8 +91,8 @@ void framebuffer_kcons_cmd_erase::Execute(std::shared_ptr<framebuffer_kconsole> 
 
 framebuffer_kcons_with_worker_thread::framebuffer_kcons_with_worker_thread(std::shared_ptr<framebuffer_kconsole> targetObject) :
     command_ring(), command_ring_extract(0), command_ring_insert(0), targetObject(targetObject), spinlock(),
-    semaphore(-1), terminate(false), cursorVisible(false), worker([this] () { WorkerThread(); }),
-    blink([this] () { Blink(); }) {
+    semaphore(-1), terminate(false), cursorVisible(false), worker([this] () { std::this_thread::set_name("[kconsworker]"); WorkerThread(); }),
+    blink([this] () { std::this_thread::set_name("[kconscursor]"); Blink(); }) {
 }
 
 framebuffer_kcons_with_worker_thread::~framebuffer_kcons_with_worker_thread() {

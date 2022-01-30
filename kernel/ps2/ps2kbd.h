@@ -50,7 +50,7 @@ public:
     ps2kbd(ps2 &ps2, ps2_device_interface &ps2dev) : Device("ps2kbd", &ps2),
     code_state_machine(*this),
     spinlock(), sema(-1), command_sema(0), stop(false),
-    extractor_thread([this] () { this->extractor(); }), ps2dev(ps2dev), ioapic(), lapic(),
+    extractor_thread([this] () { std::this_thread::set_name("[ps2kdbextr]"); this->extractor(); }), ps2dev(ps2dev), ioapic(), lapic(),
     buffer(), inspos(0), outpos(0), cmd_length(0), cmd() {}
     ~ps2kbd() {
         {

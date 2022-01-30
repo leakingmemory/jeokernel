@@ -6,7 +6,7 @@
 #include "keyboard/keyboard.h"
 #include "sstream"
 
-kshell::kshell() : mtx(), exit(false), shell([this] () { run(); }) {
+kshell::kshell() : mtx(), exit(false), shell([this] () { std::this_thread::set_name("[kshell]"); run(); }) {
 }
 
 kshell::~kshell() {

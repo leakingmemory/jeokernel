@@ -105,6 +105,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         std::this_thread::sleep_for(100ms);
 
         thread = new std::thread([this, usbDevice] () {
+            std::this_thread::set_name("[usbconn]");
             this->start(usbDevice);
         });
         return;

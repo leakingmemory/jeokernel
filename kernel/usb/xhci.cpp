@@ -343,6 +343,7 @@ void xhci::init() {
 
     event_thread = new std::thread(
             [this] () {
+                std::this_thread::set_name("[xhcievent]");
                 while (true) {
                     event_sema.acquire();
                     {

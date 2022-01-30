@@ -5,6 +5,7 @@
 #include "AcpiBoot.h"
 
 AcpiBoot::AcpiBoot(const MultibootInfoHeader &multiboot) : has8042(false), acpi_thread([this, &multiboot] () {
+    std::this_thread::set_name("[acpiboot]");
     if (!multiboot.has_parts()) {
         return;
     }

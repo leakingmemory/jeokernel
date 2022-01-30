@@ -101,7 +101,10 @@ acpica_lock_context *acpica_lib_impl::acquire_lock(hw_spinlock &lock) {
 }
 
 void acpica_lib_impl::execute(AcpiExecuteType type, std::function<void()> func) {
-    std::thread thread{func};
+    std::thread thread{[func] () mutable {
+        std::this_thread::set_name("[acpi]");
+        func();
+    }};
     thread.detach();
 }
 

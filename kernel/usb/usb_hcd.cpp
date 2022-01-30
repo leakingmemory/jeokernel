@@ -47,6 +47,7 @@
 
 void usb_hcd::Run() {
     std::thread thread{[this] () {
+        std::this_thread::set_name("[usbhcd]");
         this->BusInit();
     }};
     thread.detach();

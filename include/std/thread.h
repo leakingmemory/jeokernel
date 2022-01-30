@@ -132,6 +132,10 @@ namespace std {
             std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds> (sleep_duration);
             get_scheduler()->nanosleep(ns.count());
         }
+
+        inline void set_name(const std::string &name) {
+            get_scheduler()->set_name(name);
+        }
     }
 }
 

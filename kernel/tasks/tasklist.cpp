@@ -608,3 +608,10 @@ std::vector<task_info> tasklist::get_task_infos() {
     }
     return infos;
 }
+
+void tasklist::set_name(const std::string &name) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    task &t = get_current_task_with_lock();
+    t.set_name(name);
+}

@@ -810,6 +810,7 @@ done_with_mem_extension:
         std::mutex cons_mtx{};
 
         std::thread clock_thread{[&cons_mtx] () {
+            std::this_thread::set_name("[uptime]");
             while (true) {
                 std::stringstream clocktxt{};
                 clocktxt << std::dec << " T+";
@@ -856,6 +857,7 @@ done_with_mem_extension:
 
         {
             std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state, reserved_mem]() {
+                std::this_thread::set_name("[pciscan]");
                 acpi_boot.join();
 
                 apStartup = new ApStartup(gdt, tss, int_task_state, reserved_mem);
@@ -881,6 +883,7 @@ done_with_mem_extension:
         }
 
         auto *scheduler = get_scheduler();
+        scheduler->set_name("[idle]");
 
 #ifdef THREADING_TESTS
 #ifdef SLEEP_TESTS

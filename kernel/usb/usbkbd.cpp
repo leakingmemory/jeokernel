@@ -158,9 +158,11 @@ void usbkbd::init() {
     get_klogger() << str.str().c_str();
 
     kbd_thread = new std::thread([this] () {
+        std::this_thread::set_name("[usbkdb]");
         worker_thread();
     });
     rep_thread = new std::thread([this] () {
+        std::this_thread::set_name("[usbkbdrep]");
         repeat_thread();
     });
 }
