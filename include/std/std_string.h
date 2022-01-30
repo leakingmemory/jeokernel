@@ -195,11 +195,70 @@ namespace std {
     static_assert(string_pointer_s<uint32_t, uint32_t, 8>().pad_capacity(16) == 16);
     static_assert(string_pointer_s<uint32_t, uint32_t, 8>().pad_capacity(17) == 18);
 
+    template<class CharT> class basic_string_iterator;
+
+    template<class CharT> class basic_string_iterator_base {
+        friend basic_string_iterator<CharT>;
+    private:
+        CharT *ptr;
+        basic_string_iterator_base(CharT *ptr) : ptr(ptr) {}
+    public:
+        constexpr CharT & operator *() {
+            return *ptr;
+        }
+
+        constexpr bool operator ==(const basic_string_iterator_base &other) const noexcept {
+            return ptr == other.ptr;
+        }
+        constexpr bool operator !=(const basic_string_iterator_base &other) const noexcept {
+            return ptr != other.ptr;
+        }
+        constexpr bool operator <=(const basic_string_iterator_base &other) const noexcept {
+            return ptr <= other.ptr;
+        }
+        constexpr bool operator >=(const basic_string_iterator_base &other) const noexcept{
+            return ptr >= other.ptr;
+        }
+        constexpr bool operator <(const basic_string_iterator_base &other) const noexcept {
+            return ptr < other.ptr;
+        }
+        constexpr bool operator >(const basic_string_iterator_base &other) const noexcept {
+            return ptr > other.ptr;
+        }
+    };
+    template<class CharT> class basic_string_iterator : public basic_string_iterator_base<CharT> {
+    public:
+        explicit basic_string_iterator(CharT *ptr) : basic_string_iterator_base<CharT>(ptr) {}
+
+        constexpr basic_string_iterator operator ++() noexcept {
+            return basic_string_iterator<CharT>(this->ptr++);
+        }
+        constexpr basic_string_iterator &operator ++(int) noexcept {
+            ++this->ptr;
+            return *this;
+        }
+        constexpr basic_string_iterator operator --() noexcept {
+            return basic_string_iterator<CharT>(this->ptr--);
+        }
+        constexpr basic_string_iterator &operator --(int) noexcept {
+            ++this->ptr;
+            return *this;
+        }
+        constexpr basic_string_iterator &operator +=(int diff) noexcept {
+            this->ptr += diff;
+            return *this;
+        }
+        constexpr basic_string_iterator &operator -=(int diff) noexcept {
+            this->ptr -= diff;
+            return *this;
+        }
+    };
     template<class CharT, class Traits = char_traits<CharT>, class allocator = std::allocator<CharT>>
     class basic_string {
     public:
         typedef typename allocator::size_type size_type;
-        typedef CharT char_type;
+        typedef basic_string_iterator<CharT> iterator;
+        typedef basic_string_iterator<const CharT> const_iterator;
     private:
         struct _data_container : allocator {
             union {
@@ -236,6 +295,20 @@ namespace std {
             } else {
                 return c.ptr.get_data();
             }
+        }
+
+        constexpr iterator begin() noexcept {
+            return iterator(data());
+        }
+        constexpr iterator end() noexcept {
+            return iterator(data() + size());
+        }
+
+        constexpr const_iterator cbegin() const noexcept {
+            return const_iterator(data());
+        }
+        constexpr const_iterator cend() const noexcept {
+            return const_iterator(data() + size());
         }
 
         constexpr CharT *c_str() {
