@@ -48,6 +48,7 @@
 #include "framebuffer/framebuffer_kconsole_spinlocked.h"
 #include "framebuffer/framebuffer_kcons_with_worker_thread.h"
 #include "kshell/kshell.h"
+#include "kshell/kshell_commands.h"
 #include <acpi/acpi_8042.h>
 
 //#define THREADING_TESTS // Master switch
@@ -874,7 +875,7 @@ done_with_mem_extension:
                     }
                 }
 
-                new kshell();
+                kshell_commands shell{*(new kshell())};
             }};
             pci_scan_thread.detach();
         }
