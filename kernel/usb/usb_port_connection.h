@@ -8,35 +8,12 @@
 #include <devices/devices.h>
 #include "usb_control_req.h"
 #include "control_request_trait.h"
+#include "usb_types.h"
+#include "usb_hub.h"
 #include <thread>
 
 template <int n> struct usb_byte_buffer {
     uint8_t data[n];
-};
-
-enum class usb_transfer_direction {
-    SETUP,
-    IN,
-    OUT
-};
-
-enum class usb_endpoint_direction {
-    IN,
-    OUT,
-    BOTH
-};
-
-enum usb_speed {
-    LOW,
-    FULL,
-    HIGH,
-    SUPER,
-    SUPERPLUS
-};
-
-enum class usb_endpoint_type {
-    CONTROL,
-    INTERRUPT
 };
 
 class usb_hw_enumerated_device {
@@ -106,32 +83,6 @@ public:
 
     virtual int GetAddr() const = 0;
     virtual ~usb_func_addr() { }
-};
-
-class usb_hub : public Bus {
-public:
-    explicit usb_hub(std::string hubType, Bus &parentBus) : Bus(hubType, &parentBus) { }
-    virtual void dumpregs() = 0;
-    virtual int GetNumberOfPorts() = 0;
-    virtual uint32_t GetPortStatus(int port) = 0;
-    virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
-    virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) = 0;
-    virtual void SwitchPortOff(int port) = 0;
-    virtual void SwitchPortOn(int port) = 0;
-    virtual void ClearStatusChange(int port, uint32_t statuses) = 0;
-    virtual void EnablePort(int port) = 0;
-    virtual void DisablePort(int port) = 0;
-    virtual void ResetPort(int port) = 0;
-    virtual bool ResettingPort(int port) = 0;
-    virtual bool EnabledPort(int port) = 0;
-    virtual usb_speed PortSpeed(int port) = 0;
-    virtual std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) {
-        return {};
-    }
-    virtual std::shared_ptr<usb_func_addr> GetFuncAddr() = 0;
-    virtual bool PortResetEnablesPort() {
-        return true;
-    }
 };
 
 class usb_port_connection;

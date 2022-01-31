@@ -43,6 +43,10 @@ void usbhub::init() {
         str << DeviceType() << DeviceId() << ": ports=" << descr.portCount << " type=" << descr.type << " flags=" << descr.flags << " port-time=" << descr.portPowerTime << " current=" << descr.current << (individualPortPower ? " individual port power" : " global port power") << "\n";
         get_klogger() << str.str().c_str();
     }
+    {
+        std::lock_guard lock{ready_mtx};
+        ready = true;
+    }
 }
 
 void usbhub::dumpregs() {
