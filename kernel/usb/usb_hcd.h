@@ -48,14 +48,7 @@ public:
     virtual ~usb_hcd() {
         wild_panic("usb_hcd: delete not implemented");
     }
-    virtual void dumpregs() = 0;
     virtual int GetNumberOfPorts() = 0;
-    virtual uint32_t GetPortStatus(int port) = 0;
-    virtual void SwitchPortOff(int port) = 0;
-    virtual void SwitchPortOn(int port) = 0;
-    virtual void ClearStatusChange(int port, uint32_t statuses) = 0;
-    virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override = 0;
-    virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override = 0;
     virtual size_t TransferBufferSize() = 0;
     virtual hw_spinlock &HcdSpinlock() = 0;
 private:

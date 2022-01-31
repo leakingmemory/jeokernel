@@ -23,6 +23,12 @@ enum class usb_control_recepient {
     DEVICE, INTERFACE, ENDPOINT, OTHER
 };
 
+enum class usb_control_request_num {
+    GET_STATUS, CLEAR_FEATURE, SET_FEATURE, SET_ADDRESS, GET_DESCRIPTOR,
+    SET_DESCRIPTOR, GET_CONFIGURATION, SET_CONFIGURATION, GET_INTERFACE,
+    SET_INTERFACE
+};
+
 struct usb_control_request {
     uint8_t bmRequestType;
     uint8_t bRequest;
@@ -43,7 +49,7 @@ struct usb_control_request {
             wIndex(wIndex),
             wLength(wLength) {}
 
-    constexpr uint8_t RequestType(usb_control_direction dir, usb_control_request_type req_type, usb_control_recepient recip) {
+    constexpr static uint8_t RequestType(usb_control_direction dir, usb_control_request_type req_type, usb_control_recepient recip) {
         uint8_t reqType{0};
         if (dir == usb_control_direction::DEVICE_TO_HOST) {
             reqType = 0x80;
@@ -74,6 +80,30 @@ struct usb_control_request {
         }
         return reqType;
     }
+    constexpr static uint8_t Request(usb_control_request_num req) {
+        switch (req) {
+            case usb_control_request_num::GET_STATUS:
+                return 0;
+            case usb_control_request_num::CLEAR_FEATURE:
+                return 1;
+            case usb_control_request_num::SET_FEATURE:
+                return 3;
+            case usb_control_request_num::SET_ADDRESS:
+                return 5;
+            case usb_control_request_num::GET_DESCRIPTOR:
+                return 6;
+            case usb_control_request_num::SET_DESCRIPTOR:
+                return 7;
+            case usb_control_request_num::GET_CONFIGURATION:
+                return 8;
+            case usb_control_request_num::SET_CONFIGURATION:
+                return 9;
+            case usb_control_request_num::GET_INTERFACE:
+                return 10;
+            case usb_control_request_num::SET_INTERFACE:
+                return 11;
+        }
+    }
 } __attribute__((__packed__));
 
 struct usb_set_address : usb_control_request {
@@ -90,17 +120,17 @@ struct usb_set_address : usb_control_request {
 #define DESCRIPTOR_TYPE_INTERFACE_POWER             8
 struct usb_get_descriptor : usb_control_request {
     usb_get_descriptor(uint8_t descriptorType, uint8_t descriptorIndex, uint8_t descriptorLength, uint8_t languageId = 0)
-    : usb_control_request(0x80, 6, (descriptorType << 8) + descriptorIndex, languageId, descriptorLength) { }
+    : usb_control_request(0x80, Request(usb_control_request_num::GET_DESCRIPTOR), (descriptorType << 8) + descriptorIndex, languageId, descriptorLength) { }
 } __attribute__((__packed__));
 
 struct usb_set_configuration : usb_control_request {
     usb_set_configuration(uint8_t configValue)
-    : usb_control_request(0, 9, configValue, 0, 0) { }
+    : usb_control_request(0, Request(usb_control_request_num::SET_CONFIGURATION), configValue, 0, 0) { }
 } __attribute__((__packed__));
 
 struct usb_set_interface : usb_control_request {
     usb_set_interface(uint8_t interface, uint8_t alternateSetting)
-    : usb_control_request(1, 11, alternateSetting, interface, 0) { }
+    : usb_control_request(1, Request(usb_control_request_num::SET_INTERFACE), alternateSetting, interface, 0) { }
 };
 
 enum class usb_feature {
@@ -221,8 +251,55 @@ struct usb_endpoint_descriptor {
 struct usb_req_hubdesc : usb_control_request {
     usb_req_hubdesc(uint16_t length) : usb_control_request(
             RequestType(usb_control_direction::DEVICE_TO_HOST, usb_control_request_type::CLASS, usb_control_recepient::DEVICE),
-            6, 0x2900, 0, length
+            Request(usb_control_request_num::GET_DESCRIPTOR), 0x2900, 0, length
             ) { }
+};
+
+struct usb_req_hubportstatus : usb_control_request {
+    usb_req_hubportstatus(uint16_t port) : usb_control_request(
+            RequestType(usb_control_direction::DEVICE_TO_HOST, usb_control_request_type::CLASS, usb_control_recepient::OTHER),
+            Request(usb_control_request_num::GET_STATUS), 0, port + 1, 4
+            ) { }
+};
+
+enum class usb_hub_port_feature {
+    ENABLE, RESET, POWER, CONNECTION_CHANGE, ENABLE_CHANGE, SUSPEND_CHANGE, OVERCURRENT_CHANGE, RESET_CHANGE
+};
+struct usb_req_port_feature : usb_control_request {
+    usb_req_port_feature(uint16_t port, uint8_t request, usb_hub_port_feature feature) : usb_control_request(
+            RequestType(usb_control_direction::HOST_TO_DEVICE, usb_control_request_type::CLASS, usb_control_recepient::OTHER),
+            request, PortFeature(feature), port + 1, 0
+            ) { }
+    constexpr static uint16_t PortFeature(usb_hub_port_feature feature) {
+        switch (feature) {
+            case usb_hub_port_feature::ENABLE:
+                return 1;
+            case usb_hub_port_feature::RESET:
+                return 4;
+            case usb_hub_port_feature::POWER:
+                return 8;
+            case usb_hub_port_feature::CONNECTION_CHANGE:
+                return 16;
+            case usb_hub_port_feature::ENABLE_CHANGE:
+                return 17;
+            case usb_hub_port_feature::SUSPEND_CHANGE:
+                return 18;
+            case usb_hub_port_feature::OVERCURRENT_CHANGE:
+                return 19;
+            case usb_hub_port_feature::RESET_CHANGE:
+                return 20;
+        }
+    }
+};
+struct usb_req_set_port_feature : usb_req_port_feature {
+    usb_req_set_port_feature(uint16_t port, usb_hub_port_feature feature) : usb_req_port_feature(
+            port, Request(usb_control_request_num::SET_FEATURE), feature
+            ) { }
+};
+struct usb_req_clear_port_feature : usb_req_port_feature {
+    usb_req_clear_port_feature(uint16_t port, usb_hub_port_feature feature) : usb_req_port_feature(
+            port, Request(usb_control_request_num::CLEAR_FEATURE), feature
+    ) { }
 };
 
 #endif //JEOKERNEL_USB_CONTROL_REQ_H

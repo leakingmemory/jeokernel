@@ -112,9 +112,13 @@ class usb_hub : public Bus {
 public:
     explicit usb_hub(std::string hubType, Bus &parentBus) : Bus(hubType, &parentBus) { }
     virtual void dumpregs() = 0;
+    virtual int GetNumberOfPorts() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) = 0;
+    virtual void SwitchPortOff(int port) = 0;
+    virtual void SwitchPortOn(int port) = 0;
+    virtual void ClearStatusChange(int port, uint32_t statuses) = 0;
     virtual void EnablePort(int port) = 0;
     virtual void DisablePort(int port) = 0;
     virtual void ResetPort(int port) = 0;
@@ -187,6 +191,9 @@ public:
     }
     usb_speed Speed() {
         return speed;
+    }
+    usb_hub &Hub() {
+        return hub;
     }
     std::shared_ptr<usb_endpoint> InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs);
     bool ClearStall(uint8_t endpointNum, usb_endpoint_direction direction);
