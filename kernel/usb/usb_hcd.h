@@ -6,7 +6,7 @@
 #define JEOKERNEL_USB_HCD_H
 
 #include <memory>
-#include <concurrency/raw_semaphore.h>
+#include <concurrency/mul_semaphore.h>
 #include "usb_port_connection.h"
 
 class usb_hcd;
@@ -26,10 +26,10 @@ public:
 class usb_hcd : public usb_hub {
     friend usb_hcd_addr;
 private:
-    raw_semaphore hub_sema;
+    mul_semaphore hub_sema;
     uint32_t func_addr_map[4];
 public:
-    usb_hcd(std::string hcdType, Bus &parentBus) : usb_hub(hcdType, parentBus), hub_sema(0), func_addr_map{1, 0, 0, 0} {}
+    usb_hcd(std::string hcdType, Bus &parentBus) : usb_hub(hcdType, parentBus), hub_sema(), func_addr_map{1, 0, 0, 0} {}
     virtual ~usb_hcd() {
         wild_panic("usb_hcd: delete not implemented");
     }

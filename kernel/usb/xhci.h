@@ -13,6 +13,7 @@
 
 #endif
 
+#include <concurrency/raw_semaphore.h>
 #include <sstream>
 #include <memory>
 

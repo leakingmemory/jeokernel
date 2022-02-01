@@ -10,12 +10,7 @@
 [[noreturn]] void usb_hcd::BusInit() {
     InitHubPorts();
     while (true) {
-        if (!PollPorts()) {
-            hub_sema.acquire();
-        } else {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(1s);
-        }
+        hub_sema.acquire(1000);
         RunPollPorts();
     }
 }
