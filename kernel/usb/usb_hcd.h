@@ -28,8 +28,11 @@ class usb_hcd : public usb_hub {
 private:
     mul_semaphore hub_sema;
     uint32_t func_addr_map[4];
+    std::mutex children_mtx;
+    std::vector<usb_hub *> new_children;
+    std::vector<usb_hub *> children;
 public:
-    usb_hcd(std::string hcdType, Bus &parentBus) : usb_hub(hcdType, parentBus), hub_sema(), func_addr_map{1, 0, 0, 0} {}
+    usb_hcd(std::string hcdType, Bus &parentBus) : usb_hub(hcdType, parentBus), hub_sema(), func_addr_map{1, 0, 0, 0}, children_mtx(), new_children(), children() {}
     virtual ~usb_hcd() {
         wild_panic("usb_hcd: delete not implemented");
     }
@@ -62,6 +65,9 @@ public:
             return {};
         }
     }
+
+    void RegisterHub(usb_hub *child) override;
+    void UnregisterHub(usb_hub *child) override;
 };
 
 #endif //JEOKERNEL_USB_HCD_H

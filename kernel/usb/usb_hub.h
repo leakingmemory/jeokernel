@@ -55,8 +55,13 @@ public:
     virtual bool PortResetEnablesPort() {
         return true;
     }
+
+    virtual void RegisterHub(usb_hub *child) = 0;
+    virtual void UnregisterHub(usb_hub *child) = 0;
+
     void PortConnected(uint8_t port);
     void PortDisconnected(uint8_t port);
+
     bool InitHubPorts();
     void RunPollPorts();
 };

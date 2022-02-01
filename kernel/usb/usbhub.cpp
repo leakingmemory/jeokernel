@@ -22,7 +22,9 @@ Device *usbhub_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
 }
 
 usbhub::~usbhub() {
-
+    if (ready) {
+        usbDeviceInformation.port.Hub().UnregisterHub(this);
+    }
 }
 
 void usbhub::init() {
@@ -43,6 +45,7 @@ void usbhub::init() {
         str << DeviceType() << DeviceId() << ": ports=" << descr.portCount << " type=" << descr.type << " flags=" << descr.flags << " port-time=" << descr.portPowerTime << " current=" << descr.current << (individualPortPower ? " individual port power" : " global port power") << "\n";
         get_klogger() << str.str().c_str();
     }
+    usbDeviceInformation.port.Hub().RegisterHub(this);
     {
         std::lock_guard lock{ready_mtx};
         ready = true;
@@ -258,4 +261,12 @@ usbhub::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, ui
 
 std::shared_ptr<usb_func_addr> usbhub::GetFuncAddr() {
     return usbDeviceInformation.port.Hub().GetFuncAddr();
+}
+
+void usbhub::RegisterHub(usb_hub *child) {
+    usbDeviceInformation.port.Hub().RegisterHub(child);
+}
+
+void usbhub::UnregisterHub(usb_hub *child) {
+    usbDeviceInformation.port.Hub().UnregisterHub(child);
 }

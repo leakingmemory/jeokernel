@@ -12,6 +12,33 @@
     while (true) {
         hub_sema.acquire(1000);
         RunPollPorts();
+
+        {
+            std::vector<usb_hub *> incoming{};
+            {
+                std::lock_guard lock{children_mtx};
+                for (usb_hub *hub : new_children) {
+                    incoming.push_back(hub);
+                }
+                new_children.clear();
+            }
+            for (usb_hub *hub : incoming) {
+                hub->InitHubPorts();
+                children.push_back(hub);
+            }
+            incoming.clear();
+            for (usb_hub *hub : children) {
+                incoming.push_back(hub);
+            }
+            for (usb_hub *hub : incoming) {
+                for (usb_hub *check : children) {
+                    if (hub == check) {
+                        hub->RunPollPorts();
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -64,6 +91,33 @@ void usb_hcd::ReleaseFuncAddr(int addr) {
 
 bool usb_hcd::PollPorts() {
     return false;
+}
+
+void usb_hcd::RegisterHub(usb_hub *child) {
+    std::lock_guard lock{children_mtx};
+    new_children.push_back(child);
+}
+
+void usb_hcd::UnregisterHub(usb_hub *child) {
+    {
+        std::lock_guard lock{children_mtx};
+        auto iterator = new_children.begin();
+        while (iterator != new_children.end()) {
+            if (*iterator == child) {
+                new_children.erase(iterator);
+                return;
+            }
+            ++iterator;
+        }
+    }
+    auto iterator = children.begin();
+    while (iterator != children.end()) {
+        if (*iterator == child) {
+            children.erase(iterator);
+            break;
+        }
+        ++iterator;
+    }
 }
 
 usb_hcd_addr::~usb_hcd_addr() {
