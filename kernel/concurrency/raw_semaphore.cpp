@@ -114,6 +114,11 @@ void raw_semaphore::release() {
     get_scheduler()->event(TASK_EVENT_SEMAPHORE, (uint64_t) this, released);
 }
 
+void raw_semaphore::release_from_event() {
+    uint32_t released = release_ticket();
+    get_scheduler()->event_in_event_handler(TASK_EVENT_SEMAPHORE, (uint64_t) this, released);
+}
+
 void raw_semaphore::acquire() {
     uint32_t current_tic = create_ticket();
     uint32_t ticket_lim = current_limit();

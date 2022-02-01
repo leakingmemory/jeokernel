@@ -7,7 +7,10 @@
 
 #include <cstdint>
 
+class waiting_mul_semaphore;
+
 class raw_semaphore {
+    friend waiting_mul_semaphore;
 private:
     uint32_t _before_cacheline[16];
     uint32_t cacheline[16];
@@ -30,6 +33,9 @@ private:
 public:
     bool try_acquire();
     void release();
+private:
+    void release_from_event();
+public:
     void acquire();
 };
 

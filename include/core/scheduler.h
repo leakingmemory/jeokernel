@@ -87,12 +87,18 @@ public:
     }
 };
 
+class task_event_handler_ref {
+};
+
 struct task_info {
     task_bits bits;
     std::string name;
 };
 
+class task_timeout100hz_handler_ref;
+
 class task {
+    friend task_timeout100hz_handler_ref;
 private:
     InterruptCpuFrame cpu_frame;
     InterruptStackFrame cpu_state;
@@ -250,7 +256,15 @@ public:
     }
 };
 
+struct event_call {
+    uint64_t v0;
+    uint64_t v1;
+    uint64_t v2;
+    uint8_t res_acq;
+};
+
 class tasklist {
+    friend task_timeout100hz_handler_ref;
 private:
     hw_spinlock _lock;
     uint64_t tick_counter;
@@ -258,7 +272,9 @@ private:
     bool multicpu;
     std::vector<task *> tasks;
     std::vector<task_event_handler *> event_handler_loop;
+    std::vector<event_call> events_in_event;
     /* switch task tmps: */
+    std::vector<event_call> events_in_event_tmp;
     std::vector<task *> task_pool;
     std::vector<task *> next_task_pool;
 private:
@@ -266,7 +282,7 @@ private:
     void ticks_millisleep(uint64_t ms);
     void tsc_nanosleep(uint64_t nanos);
 public:
-    tasklist() : _lock(), tick_counter(0), serial(0), multicpu(false), tasks(), event_handler_loop(), task_pool(), next_task_pool() {
+    tasklist() : _lock(), tick_counter(0), serial(0), multicpu(false), tasks(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool() {
         tasks.reserve(PREALLOC_TASK_SLOTS);
         event_handler_loop.reserve(PREALLOC_EVENT_LOOP);
         task_pool.reserve(PREALLIC_SWITCH_TASK_TMP);
@@ -299,7 +315,10 @@ public:
      */
     void set_blocked(bool blocked, int8_t resource_acq = 0);
 
+    void event_in_event_handler(uint64_t v0, uint64_t v1, uint64_t v2, uint8_t res_acq = 0);
+
     void event(uint64_t v0, uint64_t v1, uint64_t v2, int8_t res_acq = 0);
+    void event_with_lock(uint64_t v0, uint64_t v1, uint64_t v2, int8_t res_acq);
 
     void millisleep(uint64_t ms);
 
@@ -308,6 +327,8 @@ public:
     }
     void usleep(uint64_t us);
     void nanosleep(uint64_t us);
+
+    std::shared_ptr<task_event_handler_ref> set_timeout_millis(uint64_t ms, const std::function<void ()> &callback);
 
     /**
      * Returns true when tasks are now runnable for _current_ cpu. If

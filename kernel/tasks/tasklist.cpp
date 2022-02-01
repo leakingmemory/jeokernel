@@ -420,10 +420,32 @@ task &tasklist::get_current_task_with_lock() {
     return *current_task;
 }
 
+void tasklist::event_in_event_handler(uint64_t v0, uint64_t v1, uint64_t v2, uint8_t res_acq) {
+    event_call ev{
+        .v0 = v0,
+        .v1 = v1,
+        .v2 = v2,
+        .res_acq = res_acq
+    };
+    events_in_event.push_back(ev);
+}
+
 void tasklist::event(uint64_t v0, uint64_t v1, uint64_t v2, int8_t res_acq) {
     critical_section cli{};
     std::lock_guard lock{_lock};
-
+    event_with_lock(v0, v1, v2, res_acq);
+    while (!events_in_event.empty()) {
+        events_in_event_tmp.clear();
+        for (const auto &ev : events_in_event) {
+            events_in_event_tmp.push_back(ev);
+        }
+        events_in_event.clear();
+        for (const auto &ev: events_in_event_tmp) {
+            event_with_lock(ev.v0, ev.v1, ev.v2, ev.res_acq);
+        }
+    }
+}
+void tasklist::event_with_lock(uint64_t v0, uint64_t v1, uint64_t v2, int8_t res_acq) {
     reload_pagetables();
 
     if (v0 == TASK_EVENT_TIMER100HZ) {
@@ -479,6 +501,39 @@ public:
             delete this;
         }
     }
+};
+
+class task_timeout100hz_handler : public task_event_handler {
+private:
+    uint64_t wakeup_time;
+    uint32_t current_task_id;
+    std::function<void ()> callback;
+public:
+    task_timeout100hz_handler(uint32_t current_task_id, uint64_t wakeup_time, const std::function<void ()> &callback) :
+    task_event_handler(), current_task_id(current_task_id), wakeup_time(wakeup_time), callback(callback) {
+    }
+
+    ~task_timeout100hz_handler() {
+    }
+
+    void event(uint64_t event_id, uint64_t currect_tick, uint64_t ignored) override {
+        if (event_id == TASK_EVENT_TIMER100HZ && currect_tick >= wakeup_time) {
+            task &t = get_scheduler()->get_task_with_lock(current_task_id);
+            t.remove_event_handler(this);
+            callback();
+            delete this;
+        }
+    }
+};
+
+class task_timeout100hz_handler_ref : public task_event_handler_ref {
+private:
+    tasklist *scheduler;
+    task *the_task;
+    task_timeout100hz_handler *handler;
+public:
+    task_timeout100hz_handler_ref(tasklist *scheduler, task *the_task, task_timeout100hz_handler *handler);
+    ~task_timeout100hz_handler_ref();
 };
 
 void tasklist::ticks_millisleep(uint64_t ms) {
@@ -614,4 +669,31 @@ void tasklist::set_name(const std::string &name) {
     std::lock_guard lock{_lock};
     task &t = get_current_task_with_lock();
     t.set_name(name);
+}
+
+std::shared_ptr<task_event_handler_ref> tasklist::set_timeout_millis(uint64_t ms, const std::function<void ()> &callback) {
+    uint64_t ticks100hz = (ms / 10) + 1;
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    task &t = get_current_task_with_lock();
+    auto *handler = new task_timeout100hz_handler(t.get_id(), ticks100hz + tick_counter, callback);
+    t.add_event_handler(handler);
+    std::shared_ptr<task_timeout100hz_handler_ref> ref{new task_timeout100hz_handler_ref(this, &t, handler)};
+    return ref;
+}
+
+task_timeout100hz_handler_ref::task_timeout100hz_handler_ref(tasklist *scheduler, task *the_task, task_timeout100hz_handler *handler) : scheduler(scheduler), the_task(the_task), handler(handler) {}
+
+task_timeout100hz_handler_ref::~task_timeout100hz_handler_ref() {
+    critical_section cli{};
+    std::lock_guard lock{scheduler->_lock};
+    auto iterator = the_task->event_handlers.begin();
+    while (iterator != the_task->event_handlers.end()) {
+        if (*iterator == handler) {
+            the_task->event_handlers.erase(iterator);
+            delete handler;
+            break;
+        }
+        ++iterator;
+    }
 }
