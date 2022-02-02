@@ -264,7 +264,7 @@ void ehci::init() {
     }
 
     qh = qhtdPool.Alloc();
-    qh->Pointer()->qh.HorizLink = EHCI_POINTER_TERMINATE;
+    qh->Pointer()->qh.HorizLink = qh->Phys() | EHCI_POINTER_QH;
     qh->Pointer()->qh.DeviceAddress = 0;
     qh->Pointer()->qh.InactivateOnNext = false;
     qh->Pointer()->qh.EndpointNumber = 0;
