@@ -183,6 +183,7 @@ private:
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> qh;
     std::shared_ptr<ehci_transfer> pending;
     std::shared_ptr<ehci_transfer> active;
+    usb_endpoint_type endpointType;
 public:
     ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs = 0);
     ~ehci_endpoint() override;

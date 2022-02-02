@@ -590,6 +590,7 @@ bool ehci::irq() {
         if ((status & EHCI_STATUS_USB_ERROR) != 0) {
             clear |= EHCI_STATUS_USB_ERROR;
             get_klogger() << "EHCI USB error\n";
+            usbint();
         }
         if ((status & EHCI_STATUS_USBINT) != 0) {
             clear |= EHCI_STATUS_USBINT;
@@ -649,7 +650,7 @@ usb_transfer_status ehci_transfer::GetStatus() {
 
 ehci_endpoint::ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                              usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs) :
-                             ehciRef(ehciRef), head(), qh(ehciRef.qhtdPool.Alloc()) {
+                             ehciRef(ehciRef), head(), qh(ehciRef.qhtdPool.Alloc()), endpointType(endpointType) {
     if (endpointType == usb_endpoint_type::CONTROL) {
         head = ehciRef.qh;
     }
@@ -879,19 +880,38 @@ bool ehci_endpoint::Addressing64bit() {
 void ehci_endpoint::IntWithLock() {
     auto &qhv = qh->Pointer()->qh;
     std::vector<std::shared_ptr<ehci_transfer>> done{};
+    uint8_t status{0};
     while (active) {
         auto a_phys = active->td->Phys();
         if (a_phys == (qhv.NextQTd & 0xFFFFFFE0) || (a_phys == (qhv.CurrentQTd & 0xFFFFFFE0) && (qhv.Status & EHCI_QTD_STATUS_ACTIVE) != 0)) {
             break;
         }
+        status = active->td->Pointer()->qtd.status;
         done.push_back(active);
         active = active->next;
+    }
+    if ((status & EHCI_QTD_STATUS_HALTED) != 0 && endpointType == usb_endpoint_type::CONTROL) {
+        {
+            std::stringstream str{};
+            str << "qTD with error status " << status << "\n";
+            get_klogger() << str.str().c_str();
+        }
+        while (active) {
+            active->qTD().status = status;
+            done.push_back(active);
+            active = active->next;
+        }
     }
     if (!active) {
         if (this->pending) {
             active = this->pending;
             this->pending = std::shared_ptr<ehci_transfer>();
-            qhv.NextQTd = active->td->Phys();
+            if (endpointType == usb_endpoint_type::CONTROL && (qhv.Status & EHCI_QTD_STATUS_HALTED) != 0) {
+                qhv.NextQTd = active->td->Phys();
+                qhv.Status = qhv.Status & ~(EHCI_QTD_STATUS_ACTIVE | EHCI_QTD_STATUS_HALTED);
+            } else {
+                qhv.NextQTd = active->td->Phys();
+            }
         } else {
             auto iter = ehciRef.watchList.begin();
             while (iter != ehciRef.watchList.end()) {
