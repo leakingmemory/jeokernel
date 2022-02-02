@@ -528,7 +528,7 @@ void ehci::ResetPort(int port) {
 }
 
 usb_speed ehci::PortSpeed(int port) {
-    return LOW;
+    return HIGH;
 }
 
 void ehci::ClearStatusChange(int port, uint32_t statuses) {
