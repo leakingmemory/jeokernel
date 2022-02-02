@@ -21,14 +21,14 @@ struct usb_hub_descr {
 
 class usbhub : public usb_hub {
 private:
-    UsbDeviceInformation usbDeviceInformation;
+    UsbInterfaceInformation usbInterfaceInformation;
     std::shared_ptr<usb_endpoint> endpoint0;
     usb_hub_descr descr;
     bool individualPortPower;
     std::mutex ready_mtx;
     bool ready;
 public:
-    usbhub(Bus &bus, const UsbDeviceInformation &usbDeviceInformation) : usb_hub("usbhub", bus), usbDeviceInformation(usbDeviceInformation), endpoint0(), descr(), individualPortPower(false), ready_mtx(), ready(false) {}
+    usbhub(Bus &bus, const UsbInterfaceInformation &usbInterfaceInformation) : usb_hub("usbhub", bus), usbInterfaceInformation(usbInterfaceInformation), endpoint0(), descr(), individualPortPower(false), ready_mtx(), ready(false) {}
     ~usbhub() override;
     void init() override;
 

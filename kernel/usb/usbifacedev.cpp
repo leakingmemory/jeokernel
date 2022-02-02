@@ -36,12 +36,13 @@ usbifacedev::~usbifacedev() {
 
 Device *usbifacedev_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     auto *usbInfo = deviceInformation.GetUsbInformation();
+    bool interfaceDevice = deviceInformation.device_class == 0 &&
+                           deviceInformation.device_subclass == 0 &&
+                           deviceInformation.prog_if == 0;
     if (
-            deviceInformation.device_class == 0 &&
-            deviceInformation.device_subclass == 0 &&
-            deviceInformation.prog_if == 0 &&
             usbInfo != nullptr &&
-            usbInfo->GetUsbInterfaceInformation() == nullptr
+            usbInfo->GetUsbInterfaceInformation() == nullptr &&
+            (interfaceDevice || deviceInformation.device_class == 9/*hub*/)
             ) {
         auto *dev = new usbifacedev(bus, *(deviceInformation.GetUsbInformation()));
         usbInfo->port.SetDevice(*dev);

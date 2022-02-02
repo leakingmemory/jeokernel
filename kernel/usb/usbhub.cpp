@@ -13,9 +13,12 @@ Device *usbhub_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (deviceInformation.device_class == 9) {
         auto *usbInfo = deviceInformation.GetUsbInformation();
         if (usbInfo != nullptr) {
-            auto *dev = new usbhub(bus, *usbInfo);
-            usbInfo->port.SetDevice(*dev);
-            return dev;
+            UsbInterfaceInformation *ifaceInfo = usbInfo->GetUsbInterfaceInformation();
+            if (ifaceInfo != nullptr && ifaceInfo->iface.bInterfaceClass == 9) {
+                auto *dev = new usbhub(bus, *ifaceInfo);
+                usbInfo->port.SetDevice(*dev);
+                return dev;
+            }
         }
     }
     return nullptr;
@@ -23,14 +26,22 @@ Device *usbhub_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
 
 usbhub::~usbhub() {
     if (ready) {
-        usbDeviceInformation.port.Hub().UnregisterHub(this);
+        usbInterfaceInformation.port.Hub().UnregisterHub(this);
     }
 }
 
 void usbhub::init() {
-    endpoint0 = usbDeviceInformation.port.Endpoint0();
+    endpoint0 = usbInterfaceInformation.port.Endpoint0();
+
+    if (!usbInterfaceInformation.port.SetConfigurationValue(usbInterfaceInformation.descr.bConfigurationValue, 0, 0)) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Error: USB hub set config failed\n";
+        get_klogger() << str.str().c_str();
+        return;
+    }
+
     {
-        auto buffer = usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_hubdesc(sizeof(descr)));
+        auto buffer = usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_hubdesc(sizeof(descr)));
         if (!buffer) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": failed to get hub descriptor\n";
@@ -45,7 +56,7 @@ void usbhub::init() {
         str << DeviceType() << DeviceId() << ": ports=" << descr.portCount << " type=" << descr.type << " flags=" << descr.flags << " port-time=" << descr.portPowerTime << " current=" << descr.current << (individualPortPower ? " individual port power" : " global port power") << "\n";
         get_klogger() << str.str().c_str();
     }
-    usbDeviceInformation.port.Hub().RegisterHub(this);
+    usbInterfaceInformation.port.Hub().RegisterHub(this);
     {
         std::lock_guard lock{ready_mtx};
         ready = true;
@@ -62,7 +73,7 @@ int usbhub::GetNumberOfPorts() {
 uint32_t usbhub::GetPortStatus(int port) {
     uint32_t hwstatus{0};
     {
-        auto buffer = usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_hubportstatus(port));
+        auto buffer = usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_hubportstatus(port));
         if (!buffer) {
             return 0;
         }
@@ -97,7 +108,7 @@ uint32_t usbhub::GetPortStatus(int port) {
     if ((hwstatus & (1 << 18)) != 0) {
         status |= USB_PORT_STATUS_OCIC;
     }
-    switch (usbDeviceInformation.port.Speed()) {
+    switch (usbInterfaceInformation.port.Speed()) {
         case LOW:
             status |= USB_PORT_STATUS_LSDA;
             break;
@@ -111,7 +122,7 @@ uint32_t usbhub::GetPortStatus(int port) {
 
 void usbhub::SwitchPortOff(int port) {
     if (individualPortPower) {
-        if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::POWER))) {
+        if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::POWER))) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": Failed port power off request\n";
             get_klogger() << str.str().c_str();
@@ -121,7 +132,7 @@ void usbhub::SwitchPortOff(int port) {
 
 void usbhub::SwitchPortOn(int port) {
     if (individualPortPower) {
-        if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_set_port_feature(port, usb_hub_port_feature::POWER))) {
+        if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_set_port_feature(port, usb_hub_port_feature::POWER))) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": Failed port power request\n";
             get_klogger() << str.str().c_str();
@@ -131,35 +142,35 @@ void usbhub::SwitchPortOn(int port) {
 
 void usbhub::ClearStatusChange(int port, uint32_t statuses) {
     if ((statuses & USB_PORT_STATUS_CSC) != 0) {
-        if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::CONNECTION_CHANGE))) {
+        if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::CONNECTION_CHANGE))) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": Failed port connection change clear\n";
             get_klogger() << str.str().c_str();
         }
     }
     if ((statuses & USB_PORT_STATUS_PESC) != 0) {
-        if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::ENABLE_CHANGE))) {
+        if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::ENABLE_CHANGE))) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": Failed port enable change clear\n";
             get_klogger() << str.str().c_str();
         }
     }
     if ((statuses & USB_PORT_STATUS_OCIC) != 0) {
-        if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::OVERCURRENT_CHANGE))) {
+        if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::OVERCURRENT_CHANGE))) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": Failed port overcurrent change clear\n";
             get_klogger() << str.str().c_str();
         }
     }
     if ((statuses & USB_PORT_STATUS_PSSC) != 0) {
-        if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::SUSPEND_CHANGE))) {
+        if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::SUSPEND_CHANGE))) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": Failed port suspend change clear\n";
             get_klogger() << str.str().c_str();
         }
     }
     if ((statuses & USB_PORT_STATUS_PRSC) != 0) {
-        if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::RESET_CHANGE))) {
+        if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::RESET_CHANGE))) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": Failed port reset change clear\n";
             get_klogger() << str.str().c_str();
@@ -171,7 +182,7 @@ void usbhub::EnablePort(int port) {
 }
 
 void usbhub::DisablePort(int port) {
-    if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::ENABLE))) {
+    if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::ENABLE))) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Failed port disable request\n";
         get_klogger() << str.str().c_str();
@@ -179,7 +190,7 @@ void usbhub::DisablePort(int port) {
 }
 
 void usbhub::ResetPort(int port) {
-    if (!usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_set_port_feature(port, usb_hub_port_feature::RESET))) {
+    if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_set_port_feature(port, usb_hub_port_feature::RESET))) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Failed port disable request\n";
         get_klogger() << str.str().c_str();
@@ -197,7 +208,7 @@ bool usbhub::EnabledPort(int port) {
 usb_speed usbhub::PortSpeed(int port) {
     uint32_t hwstatus{0};
     {
-        auto buffer = usbDeviceInformation.port.ControlRequest(*endpoint0, usb_req_hubportstatus(port));
+        auto buffer = usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_hubportstatus(port));
         if (!buffer) {
             std::stringstream str{};
             str << DeviceType() << DeviceId() << ": Failed to read port speed\n";
@@ -207,7 +218,7 @@ usb_speed usbhub::PortSpeed(int port) {
         buffer->CopyTo(hwstatus);
     }
     uint32_t speed{(hwstatus >> 9) & 3};
-    auto hubSpeed = usbDeviceInformation.port.Speed();
+    auto hubSpeed = usbInterfaceInformation.port.Speed();
     switch (hubSpeed) {
         case HIGH:
             if ((speed & 2) != 0) {
@@ -244,7 +255,7 @@ usb_speed usbhub::PortSpeed(int port) {
 std::shared_ptr<usb_endpoint>
 usbhub::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                               usb_endpoint_direction dir, usb_speed speed) {
-    return usbDeviceInformation.port.Hub().CreateControlEndpoint(
+    return usbInterfaceInformation.port.Hub().CreateControlEndpoint(
             maxPacketSize, functionAddr, endpointNum,
             dir, speed
     );
@@ -253,20 +264,20 @@ usbhub::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint
 std::shared_ptr<usb_endpoint>
 usbhub::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
                                 usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
-    return usbDeviceInformation.port.Hub().CreateInterruptEndpoint(
+    return usbInterfaceInformation.port.Hub().CreateInterruptEndpoint(
             maxPacketSize, functionAddr, endpointNum,
             dir, speed, pollingIntervalMs
     );
 }
 
 std::shared_ptr<usb_func_addr> usbhub::GetFuncAddr() {
-    return usbDeviceInformation.port.Hub().GetFuncAddr();
+    return usbInterfaceInformation.port.Hub().GetFuncAddr();
 }
 
 void usbhub::RegisterHub(usb_hub *child) {
-    usbDeviceInformation.port.Hub().RegisterHub(child);
+    usbInterfaceInformation.port.Hub().RegisterHub(child);
 }
 
 void usbhub::UnregisterHub(usb_hub *child) {
-    usbDeviceInformation.port.Hub().UnregisterHub(child);
+    usbInterfaceInformation.port.Hub().UnregisterHub(child);
 }
