@@ -547,19 +547,21 @@ void ehci::ClearStatusChange(int port, uint32_t statuses) {
 }
 
 std::shared_ptr<usb_endpoint>
-ehci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                            usb_endpoint_direction dir, usb_speed speed) {
+ehci::CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                            uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir,
+                            usb_speed speed) {
     std::shared_ptr<ehci_endpoint> endpoint{
-            new ehci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::CONTROL)};
+            new ehci_endpoint(*this, portRouting, hubAddress, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::CONTROL)};
     std::shared_ptr<usb_endpoint> usbEndpoint{endpoint};
     return usbEndpoint;
 }
 
 std::shared_ptr<usb_endpoint>
-ehci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                              usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
+ehci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                              uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir,
+                              usb_speed speed, int pollingIntervalMs) {
     std::shared_ptr<ehci_endpoint> endpoint{
-            new ehci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::INTERRUPT,
+            new ehci_endpoint(*this, portRouting, hubAddress, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::INTERRUPT,
                               pollingIntervalMs)};
     std::shared_ptr<usb_endpoint> usbEndpoint{endpoint};
     return usbEndpoint;
@@ -648,8 +650,9 @@ usb_transfer_status ehci_transfer::GetStatus() {
     return usb_transfer_status::NO_ERROR;
 }
 
-ehci_endpoint::ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                             usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs) :
+ehci_endpoint::ehci_endpoint(ehci &ehciRef, const std::vector<uint8_t> &portRouting, uint8_t hubAddress,
+                             uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_speed speed,
+                             usb_endpoint_type endpointType, int pollingRateMs) :
                              ehciRef(ehciRef), head(), qh(ehciRef.qhtdPool.Alloc()), endpointType(endpointType) {
     if (endpointType == usb_endpoint_type::CONTROL) {
         head = ehciRef.qh;
@@ -676,7 +679,16 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t func
         qh->Pointer()->qh.DeviceAddress = functionAddr;
         qh->Pointer()->qh.InactivateOnNext = false;
         qh->Pointer()->qh.EndpointNumber = endpointNum;
-        qh->Pointer()->qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_HIGH;
+        switch (speed) {
+            case LOW:
+                qh->Pointer()->qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_LOW;
+                break;
+            case FULL:
+                qh->Pointer()->qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_FULL;
+                break;
+            default:
+                qh->Pointer()->qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_HIGH;
+        }
         qh->Pointer()->qh.DataToggleControl = 1;
         qh->Pointer()->qh.HeadOfReclamationList = false;
         qh->Pointer()->qh.MaxPacketLength = maxPacketSize;
@@ -692,8 +704,8 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t func
             qh->Pointer()->qh.InterruptScheduleMask = 0;
         }
         qh->Pointer()->qh.SplitCompletionMask = 0;
-        qh->Pointer()->qh.HubAddress = 0;
-        qh->Pointer()->qh.PortNumber = 0;
+        qh->Pointer()->qh.HubAddress = hubAddress;
+        qh->Pointer()->qh.PortNumber = portRouting[portRouting.size() - 1];
         qh->Pointer()->qh.HighBandwidthPipeMultiplier = 1;
         qh->Pointer()->qh.CurrentQTd = EHCI_POINTER_TERMINATE;
         qh->Pointer()->qh.NextQTd = EHCI_POINTER_TERMINATE;

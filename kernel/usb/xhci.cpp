@@ -572,14 +572,15 @@ void xhci::ClearStatusChange(int port, uint32_t statuses) {
 }
 
 std::shared_ptr<usb_endpoint>
-xhci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                            usb_endpoint_direction dir, usb_speed speed) {
+xhci::CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                            uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
     return {};
 }
 
 std::shared_ptr<usb_endpoint>
-xhci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                              usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
+xhci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                              uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed,
+                              int pollingIntervalMs) {
     return {};
 }
 
@@ -790,7 +791,8 @@ bool xhci_port_enumerated_device::SetConfigurationValue(uint8_t configurationVal
 }
 
 std::shared_ptr<usb_endpoint>
-xhci_port_enumerated_device::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum,
+xhci_port_enumerated_device::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress,
+                                                     uint32_t maxPacketSize, uint8_t endpointNum,
                                                      usb_endpoint_direction dir, int pollingIntervalMs) {
     uint8_t interval{0};
     if (speed == LOW || speed == FULL) {
@@ -1008,8 +1010,9 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
     }
     {
         auto *slotContext = &(slotData->slotContext[0]);
+        this->addr = slotContext->deviceAddress;
         std::stringstream str{};
-        str << "XHCI enabled slot with ID " << slot << " addr " << slotContext->deviceAddress << "\n";
+        str << "XHCI enabled slot with ID " << slot << " addr " << this->addr << "\n";
         get_klogger() << str.str().c_str();
         memmove(inputctx->GetSlotContext(xhciRef.contextSize64), slotContext, 64);
     }
@@ -1074,6 +1077,10 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
                 )
     };
     return enumeratedDevice;
+}
+
+uint8_t xhci_port_enumeration_addressing::get_address() {
+    return addr;
 }
 
 void xhci_port_enumeration_addressing::disable_slot() {

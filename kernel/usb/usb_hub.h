@@ -37,8 +37,8 @@ public:
     virtual void dumpregs() = 0;
     virtual int GetNumberOfPorts() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
-    virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
-    virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) = 0;
+    virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
+    virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) = 0;
     virtual void SwitchPortOff(int port) = 0;
     virtual void SwitchPortOn(int port) = 0;
     virtual void ClearStatusChange(int port, uint32_t statuses) = 0;
@@ -55,6 +55,8 @@ public:
     virtual bool PortResetEnablesPort() {
         return true;
     }
+    virtual void PortRouting(std::vector<uint8_t> &route, uint8_t port) = 0;
+    virtual uint8_t GetHubAddress() = 0;
 
     virtual void RegisterHub(usb_hub *child) = 0;
     virtual void UnregisterHub(usb_hub *child) = 0;

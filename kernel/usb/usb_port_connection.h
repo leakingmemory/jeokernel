@@ -22,12 +22,13 @@ public:
     virtual usb_minimum_device_descriptor MinDesc() const = 0;
     virtual std::shared_ptr<usb_endpoint> Endpoint0() const = 0;
     virtual bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) = 0;
-    virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) = 0;
+    virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) = 0;
 };
 
 class usb_hw_enumeration_addressing {
 public:
     virtual std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) = 0;
+    virtual uint8_t get_address() = 0;
 };
 
 class usb_hw_enumeration {
@@ -120,6 +121,7 @@ private:
     usb_hub &hub;
     uint8_t port;
     std::shared_ptr<usb_func_addr> addr;
+    uint8_t final_addr;
     usb_speed speed;
     std::thread *thread;
     std::shared_ptr<usb_endpoint> endpoint0;
@@ -127,6 +129,7 @@ private:
     usb_device_descriptor deviceDescriptor;
     Device *device;
     std::vector<UsbInterfaceInformation> interfaces;
+    std::vector<uint8_t> portRouting;
 public:
     usb_port_connection(usb_hub &hub, uint8_t port);
     ~usb_port_connection();
@@ -145,6 +148,9 @@ public:
     }
     usb_hub &Hub() {
         return hub;
+    }
+    uint8_t Address() {
+        return final_addr;
     }
     std::shared_ptr<usb_endpoint> InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs);
     bool ClearStall(uint8_t endpointNum, usb_endpoint_direction direction);

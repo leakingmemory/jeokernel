@@ -120,6 +120,14 @@ void usb_hcd::UnregisterHub(usb_hub *child) {
     }
 }
 
+void usb_hcd::PortRouting(std::vector<uint8_t> &route, uint8_t port) {
+    route.push_back(port);
+}
+
+uint8_t usb_hcd::GetHubAddress() {
+    return 0;
+}
+
 usb_hcd_addr::~usb_hcd_addr() {
     hcd.ReleaseFuncAddr(addr);
 }

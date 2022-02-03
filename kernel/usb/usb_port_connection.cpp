@@ -16,21 +16,23 @@ private:
     usb_speed speed;
     usb_minimum_device_descriptor minDesc;
     std::shared_ptr<usb_endpoint> endpoint0;
+    std::vector<uint8_t> portRouting;
     uint8_t addr;
 public:
-    legacy_usb_enumerated(usb_hub &hub, uint8_t func, usb_speed speed, usb_minimum_device_descriptor minDesc) : hub(hub), speed(speed), minDesc(minDesc), endpoint0(), addr(func) {
+    legacy_usb_enumerated(usb_hub &hub, uint8_t port, uint8_t func, usb_speed speed, usb_minimum_device_descriptor minDesc) : hub(hub), speed(speed), minDesc(minDesc), endpoint0(), portRouting(), addr(func) {
         {
             std::stringstream str{};
             str << std::hex << "Creating endpoint0 for addr " << func << "\n";
             get_klogger() << str.str().c_str();
         }
-        endpoint0 = hub.CreateControlEndpoint(minDesc.bMaxPacketSize0, func, 0, usb_endpoint_direction::BOTH, speed);
+        hub.PortRouting(portRouting, port);
+        endpoint0 = hub.CreateControlEndpoint(portRouting, hub.GetHubAddress(), minDesc.bMaxPacketSize0, func, 0, usb_endpoint_direction::BOTH, speed);
     }
     usb_speed Speed() const override;
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
-    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
 };
 
 usb_speed legacy_usb_enumerated::Speed() const {
@@ -55,9 +57,10 @@ bool legacy_usb_enumerated::SetConfigurationValue(uint8_t configurationValue, ui
 }
 
 std::shared_ptr<usb_endpoint>
-legacy_usb_enumerated::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir,
+legacy_usb_enumerated::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress,
+                                               uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir,
                                                int pollingIntervalMs) {
-    return hub.CreateInterruptEndpoint(maxPacketSize, addr, endpointNum, dir, speed, pollingIntervalMs);
+    return hub.CreateInterruptEndpoint(portRouting, hubAddress, maxPacketSize, addr, endpointNum, dir, speed, pollingIntervalMs);
 }
 
 usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
@@ -65,7 +68,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         addr(hub.GetFuncAddr()), speed(LOW),
         thread(nullptr), endpoint0(), enumeratedDevice(),
         deviceDescriptor(), device(nullptr),
-        interfaces() {
+        interfaces(), portRouting() {
     if (!addr) {
         get_klogger() << "Couldn't assign address to usb device\n";
     }
@@ -99,7 +102,9 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
             }
             return;
         }
+        final_addr = addressing->get_address();
         speed = hub.PortSpeed(port);
+        hub.PortRouting(portRouting, port);
         get_klogger() << "USB port configured\n";
         using namespace std::literals::chrono_literals;
         std::this_thread::sleep_for(100ms);
@@ -146,9 +151,11 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
             get_klogger() << str.str().c_str();
         }
         speed = hub.PortSpeed(port);
+        hub.PortRouting(portRouting, port);
         {
-            std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(8, 0, 0, usb_endpoint_direction::BOTH,
-                                                                               speed);
+            std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(portRouting, hub.GetHubAddress(),
+                                                                               8, 0, 0,
+                                                                               usb_endpoint_direction::BOTH, speed);
             if (ctrl_0_0) {
                 usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
                 std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*ctrl_0_0, get_descr0);
@@ -179,6 +186,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
                 uint8_t func = addr->GetAddr();
                 usb_set_address set_addr{func};
                 if (ControlRequest(*ctrl_0_0, set_addr)) {
+                    final_addr = func;
                     std::stringstream str{};
                     str << std::hex << "Usb set address " << func << " success.\n";
                     get_klogger() << str.str().c_str();
@@ -200,7 +208,7 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
 
     thread = new std::thread([this, minDevDesc] () {
         std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
-            new legacy_usb_enumerated(this->hub, addr->GetAddr(), speed, minDevDesc)
+            new legacy_usb_enumerated(this->hub, this->port, addr->GetAddr(), speed, minDevDesc)
         };
         this->start(enumeratedDevice);
     });
@@ -224,7 +232,7 @@ usb_port_connection::~usb_port_connection() {
 }
 
 std::shared_ptr<usb_endpoint> usb_port_connection::InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs) {
-    return enumeratedDevice->CreateInterruptEndpoint(maxPacketSize, endpointNum, direction, pollingIntervalMs);
+    return enumeratedDevice->CreateInterruptEndpoint(portRouting, hub.GetHubAddress(), maxPacketSize, endpointNum, direction, pollingIntervalMs);
 }
 
 void usb_port_connection::start(std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice) {

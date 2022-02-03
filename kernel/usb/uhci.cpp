@@ -251,8 +251,8 @@ void uhci::ClearStatusChange(int port, uint32_t statuses) {
 }
 
 std::shared_ptr<usb_endpoint>
-uhci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                            usb_endpoint_direction dir, usb_speed speed) {
+uhci::CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                            uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
     if (speed == LOW || speed == FULL) {
         std::shared_ptr<uhci_endpoint> endpoint{
                 new uhci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::CONTROL)};
@@ -264,8 +264,9 @@ uhci::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_
 }
 
 std::shared_ptr<usb_endpoint>
-uhci::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                              usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
+uhci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                              uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed,
+                              int pollingIntervalMs) {
     if (speed == LOW || speed == FULL) {
         std::shared_ptr<uhci_endpoint> endpoint{
                 new uhci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::INTERRUPT,

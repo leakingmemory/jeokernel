@@ -65,6 +65,8 @@ public:
             return {};
         }
     }
+    void PortRouting(std::vector<uint8_t> &route, uint8_t port) override;
+    uint8_t GetHubAddress() override;
 
     void RegisterHub(usb_hub *child) override;
     void UnregisterHub(usb_hub *child) override;

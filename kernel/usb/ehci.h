@@ -185,7 +185,7 @@ private:
     std::shared_ptr<ehci_transfer> active;
     usb_endpoint_type endpointType;
 public:
-    ehci_endpoint(ehci &ehciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs = 0);
+    ehci_endpoint(ehci &ehciRef, const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_speed speed, usb_endpoint_type endpointType, int pollingRateMs = 0);
     ~ehci_endpoint() override;
 private:
     std::shared_ptr<usb_transfer> CreateTransferWithLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size, usb_transfer_direction direction, int8_t dataToggle, std::function<void (ehci_transfer &transfer)> &applyFunc);
@@ -243,8 +243,8 @@ public:
     void ResetPort(int port) override;
     usb_speed PortSpeed(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
-    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
-    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
+    std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     size_t TransferBufferSize() override {
         return EHCI_TRANSFER_BUFFER_SIZE;
     }

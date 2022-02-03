@@ -755,7 +755,7 @@ public:
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
-    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
 };
 
 class xhci_port_enumeration_addressing : public usb_hw_enumeration_addressing, private control_request_trait {
@@ -765,9 +765,11 @@ private:
     std::shared_ptr<xhci_input_context_container> inputctx_container;
     uint8_t port;
     uint8_t slot;
+    uint8_t addr;
 public:
     xhci_port_enumeration_addressing(xhci &xhciRef, uint8_t port) : xhciRef(xhciRef), port(port) {}
     std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override;
+    uint8_t get_address() override;
     void disable_slot();
 };
 
@@ -836,8 +838,8 @@ public:
     usb_speed PortSpeed(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
     std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) override;
-    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
-    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
+    std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     size_t TransferBufferSize() override {
         return XHCI_TRANSFER_BUFFER_SIZE;
     }

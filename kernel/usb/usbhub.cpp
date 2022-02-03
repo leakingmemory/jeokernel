@@ -253,18 +253,21 @@ usb_speed usbhub::PortSpeed(int port) {
 }
 
 std::shared_ptr<usb_endpoint>
-usbhub::CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                              usb_endpoint_direction dir, usb_speed speed) {
+usbhub::CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                              uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
     return usbInterfaceInformation.port.Hub().CreateControlEndpoint(
+            portRouting, hubAddress,
             maxPacketSize, functionAddr, endpointNum,
             dir, speed
     );
 }
 
 std::shared_ptr<usb_endpoint>
-usbhub::CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
-                                usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) {
+usbhub::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                                uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed,
+                                int pollingIntervalMs) {
     return usbInterfaceInformation.port.Hub().CreateInterruptEndpoint(
+            portRouting, hubAddress,
             maxPacketSize, functionAddr, endpointNum,
             dir, speed, pollingIntervalMs
     );
@@ -280,4 +283,13 @@ void usbhub::RegisterHub(usb_hub *child) {
 
 void usbhub::UnregisterHub(usb_hub *child) {
     usbInterfaceInformation.port.Hub().UnregisterHub(child);
+}
+
+void usbhub::PortRouting(std::vector<uint8_t> &route, uint8_t port) {
+    usbInterfaceInformation.port.Hub().PortRouting(route, usbInterfaceInformation.port.Port());
+    route.push_back(port);
+}
+
+uint8_t usbhub::GetHubAddress() {
+    return usbInterfaceInformation.port.Address();
 }

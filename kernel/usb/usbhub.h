@@ -44,9 +44,11 @@ public:
     bool ResettingPort(int port) override;
     bool EnabledPort(int port) override;
     usb_speed PortSpeed(int port) override;
-    std::shared_ptr<usb_endpoint> CreateControlEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
-    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
+    std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
+    std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     std::shared_ptr<usb_func_addr> GetFuncAddr() override;
+    void PortRouting(std::vector<uint8_t> &route, uint8_t port) override;
+    uint8_t GetHubAddress() override;
 
     void RegisterHub(usb_hub *child) override;
     void UnregisterHub(usb_hub *child) override;
