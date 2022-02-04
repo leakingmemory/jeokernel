@@ -726,6 +726,16 @@ ehci_endpoint::~ehci_endpoint() {
     if (head) {
         critical_section cli{};
         std::lock_guard lock{ehciRef.ehcilock};
+        {
+            auto iterator = ehciRef.watchList.begin();
+            while (iterator != ehciRef.watchList.end()) {
+                if (*iterator == this) {
+                    ehciRef.watchList.erase(iterator);
+                    break;
+                }
+                ++iterator;
+            }
+        }
         auto *qh = &(head->Pointer()->qh);
         bool found{false};
         while (qh != nullptr) {
