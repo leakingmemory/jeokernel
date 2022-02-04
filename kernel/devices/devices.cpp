@@ -20,6 +20,7 @@ void Devices::add(Device &device) {
 }
 
 void Devices::remove(Device &device) {
+    device.stop();
     std::lock_guard lock{mtx};
     for (DeviceGroup &grp : deviceGroups) {
         grp.remove(device);

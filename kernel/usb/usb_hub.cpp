@@ -80,3 +80,10 @@ usb_hub::~usb_hub() {
         delete connection;
     }
 }
+
+void usb_hub::stop() {
+    for (auto *connection : connections) {
+        delete connection;
+    }
+    connections.clear();
+}

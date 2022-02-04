@@ -37,6 +37,8 @@ public:
     }
     virtual void init() {
     }
+    virtual void stop() {
+    }
     virtual bool IsBus() {
         return false;
     }

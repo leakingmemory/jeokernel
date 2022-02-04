@@ -34,6 +34,7 @@ private:
 public:
     explicit usb_hub(std::string hubType, Bus &parentBus) : Bus(hubType, &parentBus), connections() { }
     ~usb_hub() override;
+    void stop() override;
     virtual void dumpregs() = 0;
     virtual int GetNumberOfPorts() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
