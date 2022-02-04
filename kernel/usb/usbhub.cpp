@@ -131,12 +131,10 @@ void usbhub::SwitchPortOff(int port) {
 }
 
 void usbhub::SwitchPortOn(int port) {
-    if (individualPortPower) {
-        if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_set_port_feature(port, usb_hub_port_feature::POWER))) {
-            std::stringstream str{};
-            str << DeviceType() << DeviceId() << ": Failed port power request\n";
-            get_klogger() << str.str().c_str();
-        }
+    if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_set_port_feature(port, usb_hub_port_feature::POWER))) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Failed port power request\n";
+        get_klogger() << str.str().c_str();
     }
 }
 
