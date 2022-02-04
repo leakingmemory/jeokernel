@@ -699,11 +699,17 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, const std::vector<uint8_t> &portRout
         }
         qh->Pointer()->qh.NakCountReload = 0;
         if (endpointType == usb_endpoint_type::INTERRUPT) {
-            qh->Pointer()->qh.InterruptScheduleMask = 1 << (ehciRef.intcycle & 7);
+            if (speed != LOW && speed != FULL) {
+                qh->Pointer()->qh.InterruptScheduleMask = 1 << (ehciRef.intcycle & 7);
+                qh->Pointer()->qh.SplitCompletionMask = 0;
+            } else {
+                qh->Pointer()->qh.InterruptScheduleMask = 1;
+                qh->Pointer()->qh.SplitCompletionMask = 0x1C;
+            }
         } else {
             qh->Pointer()->qh.InterruptScheduleMask = 0;
+            qh->Pointer()->qh.SplitCompletionMask = 0;
         }
-        qh->Pointer()->qh.SplitCompletionMask = 0;
         qh->Pointer()->qh.HubAddress = hubAddress;
         qh->Pointer()->qh.PortNumber = portRouting[portRouting.size() - 1];
         qh->Pointer()->qh.HighBandwidthPipeMultiplier = 1;
