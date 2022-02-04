@@ -82,6 +82,14 @@ int usbhub::GetNumberOfPorts() {
     return descr.portCount;
 }
 
+usb_speed usbhub::HubSpeed() {
+    return usbInterfaceInformation.port.Speed();
+}
+
+uint8_t usbhub::HubSlotId() {
+    return usbInterfaceInformation.port.SlotId();
+}
+
 uint32_t usbhub::GetPortStatus(int port) {
     uint32_t hwstatus{0};
     {
@@ -304,6 +312,6 @@ uint8_t usbhub::GetHubAddress() {
     return usbInterfaceInformation.port.Address();
 }
 
-std::shared_ptr<usb_hw_enumeration_addressing> usbhub::EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) {
-    return usbInterfaceInformation.port.Hub().EnumerateHubPort(portRouting, speed);
+std::shared_ptr<usb_hw_enumeration_addressing> usbhub::EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed, usb_speed hubSpeed, uint8_t hubSlot) {
+    return usbInterfaceInformation.port.Hub().EnumerateHubPort(portRouting, speed, hubSpeed, hubSlot);
 }

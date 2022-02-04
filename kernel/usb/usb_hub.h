@@ -38,6 +38,10 @@ public:
     void stop() override;
     virtual void dumpregs() = 0;
     virtual int GetNumberOfPorts() = 0;
+    virtual usb_speed HubSpeed() = 0;
+    virtual uint8_t HubSlotId() {
+        return 0;
+    }
     virtual uint32_t GetPortStatus(int port) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) = 0;
@@ -53,7 +57,7 @@ public:
     virtual std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) {
         return {};
     }
-    virtual std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) {
+    virtual std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed, usb_speed hubSpeed, uint8_t hubSlot) {
         return {};
     }
     virtual std::shared_ptr<usb_func_addr> GetFuncAddr() = 0;

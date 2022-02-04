@@ -388,6 +388,9 @@ public:
     int GetNumberOfPorts() override {
         return no_ports;
     }
+    usb_speed HubSpeed() override {
+        return FULL;
+    }
     uint32_t GetPortStatus(int port) override;
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;

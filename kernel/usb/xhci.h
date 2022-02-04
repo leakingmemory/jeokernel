@@ -754,6 +754,7 @@ public:
     xhciRef(xhciRef), deviceData(deviceData), endpoint0(endpoint0), inputctx_container(inputctx_container), minDesc(minDesc), speed(speed), slot(slot) {}
     ~xhci_port_enumerated_device();
     usb_speed Speed() const override;
+    uint8_t SlotId() const override;
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
     bool SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) override;
@@ -782,7 +783,7 @@ public:
         return slot;
     }
     xhci_slot_data *enable_slot();
-    xhci_input_context *set_address(xhci_slot_data &slotData, usb_speed speed, uint32_t routeString=0);
+    xhci_input_context *set_address(xhci_slot_data &slotData, usb_speed speed, uint32_t routeString=0, uint8_t hubSlot = 0, usb_speed hubSpeed = HIGH, uint8_t hubPort = 0);
     std::shared_ptr<usb_endpoint> configure_baseline(usb_minimum_device_descriptor &minDevDesc, xhci_input_context &inputctx);
     virtual std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override = 0;
     uint8_t get_address() override;
@@ -803,9 +804,12 @@ class xhci_hub_port_enumeration_addressing : public xhci_port_enumeration_addres
 private:
     xhci &xhciRef;
     usb_speed speed;
+    usb_speed hubSpeed;
     uint32_t routeString;
+    uint8_t hubSlot;
+    uint8_t hubPort;
 public:
-    xhci_hub_port_enumeration_addressing(xhci &xhciRef, const std::vector<uint8_t> &portRouting, usb_speed speed);
+    xhci_hub_port_enumeration_addressing(xhci &xhciRef, const std::vector<uint8_t> &portRouting, usb_speed speed, uint8_t hubSlot, usb_speed hubSpeed);
     std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override;
 };
 
@@ -864,6 +868,9 @@ public:
     uint32_t Pagesize();
     void dumpregs() override;
     int GetNumberOfPorts() override;
+    usb_speed HubSpeed() override {
+        return SUPERPLUS;
+    }
     uint32_t GetPortStatus(int port) override;
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;
@@ -874,7 +881,7 @@ public:
     usb_speed PortSpeed(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
     std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) override;
-    std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) override;
+    std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed, usb_speed hubSpeed, uint8_t hubSlot) override;
     std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     size_t TransferBufferSize() override {

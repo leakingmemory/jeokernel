@@ -19,6 +19,7 @@ template <int n> struct usb_byte_buffer {
 class usb_hw_enumerated_device {
 public:
     virtual usb_speed Speed() const = 0;
+    virtual uint8_t SlotId() const = 0;
     virtual usb_minimum_device_descriptor MinDesc() const = 0;
     virtual std::shared_ptr<usb_endpoint> Endpoint0() const = 0;
     virtual bool SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) = 0;
@@ -148,6 +149,9 @@ public:
     }
     usb_speed Speed() {
         return speed;
+    }
+    uint8_t SlotId() {
+        return enumeratedDevice->SlotId();
     }
     usb_hub &Hub() {
         return hub;

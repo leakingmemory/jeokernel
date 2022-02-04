@@ -37,6 +37,7 @@ public:
         wild_panic("usb_hcd: delete not implemented");
     }
     virtual int GetNumberOfPorts() = 0;
+    virtual usb_speed HubSpeed() override = 0;
     virtual size_t TransferBufferSize() = 0;
     virtual hw_spinlock &HcdSpinlock() = 0;
 private:

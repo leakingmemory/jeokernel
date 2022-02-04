@@ -235,6 +235,9 @@ public:
     void init() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;
+    usb_speed HubSpeed() override {
+        return HIGH;
+    }
     uint32_t GetPortStatus(int port) override;
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;

@@ -148,6 +148,9 @@ public:
     bool reset();
     void dumpregs() override;
     int GetNumberOfPorts() override;
+    usb_speed HubSpeed() override {
+        return FULL;
+    }
     uint32_t GetPortStatus(int port) override;
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;

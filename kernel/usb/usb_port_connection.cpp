@@ -29,6 +29,7 @@ public:
         endpoint0 = hub.CreateControlEndpoint(portRouting, hub.GetHubAddress(), minDesc.bMaxPacketSize0, func, 0, usb_endpoint_direction::BOTH, speed);
     }
     usb_speed Speed() const override;
+    uint8_t SlotId() const override;
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
     bool SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) override;
@@ -38,6 +39,10 @@ public:
 
 usb_speed legacy_usb_enumerated::Speed() const {
     return speed;
+}
+
+uint8_t legacy_usb_enumerated::SlotId() const {
+    return 0;
 }
 
 usb_minimum_device_descriptor legacy_usb_enumerated::MinDesc() const {
@@ -157,7 +162,31 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
         }
         speed = hub.PortSpeed(port);
         hub.PortRouting(portRouting, port);
-        {
+        auto hw_enumerate_hub = hub.EnumerateHubPort(portRouting, speed, hub.HubSpeed(), hub.HubSlotId());
+        if (hw_enumerate_hub) {
+            auto usbDevice = hw_enumerate_hub->set_address(addr->GetAddr());
+            if (!usbDevice) {
+                get_klogger() << "USB port failed to set address\n";
+                using namespace std::literals::chrono_literals;
+                std::this_thread::sleep_for(100ms);
+                if (hub.EnabledPort(port)) {
+                    hub.DisablePort(port);
+                }
+                return;
+            }
+            final_addr = hw_enumerate_hub->get_address();
+            speed = hub.PortSpeed(port);
+            hub.PortRouting(portRouting, port);
+            get_klogger() << "USB port configured\n";
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(100ms);
+
+            thread = new std::thread([this, usbDevice] () {
+                std::this_thread::set_name("[usbconn]");
+                this->start(usbDevice);
+            });
+            return;
+        } else {
             std::shared_ptr<usb_endpoint> ctrl_0_0 = hub.CreateControlEndpoint(portRouting, hub.GetHubAddress(),
                                                                                8, 0, 0,
                                                                                usb_endpoint_direction::BOTH, speed);

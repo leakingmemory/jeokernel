@@ -617,8 +617,8 @@ std::shared_ptr<usb_hw_enumeration> xhci::EnumeratePort(int port) {
     return std::shared_ptr<usb_hw_enumeration>(new xhci_port_enumeration(*this, port));
 }
 
-std::shared_ptr<usb_hw_enumeration_addressing> xhci::EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) {
-    return std::shared_ptr<usb_hw_enumeration_addressing>(new xhci_hub_port_enumeration_addressing(*this, portRouting, speed));
+std::shared_ptr<usb_hw_enumeration_addressing> xhci::EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed, usb_speed hubSpeed, uint8_t hubSlot) {
+    return std::shared_ptr<usb_hw_enumeration_addressing>(new xhci_hub_port_enumeration_addressing(*this, portRouting, speed, hubSlot, hubSpeed));
 }
 
 void xhci::HcEvent() {
@@ -770,6 +770,10 @@ xhci_port_enumerated_device::~xhci_port_enumerated_device() {
 
 usb_speed xhci_port_enumerated_device::Speed() const {
     return speed;
+}
+
+uint8_t xhci_port_enumerated_device::SlotId() const {
+    return slot;
 }
 
 usb_minimum_device_descriptor xhci_port_enumerated_device::MinDesc() const {
@@ -1000,7 +1004,7 @@ xhci_slot_data *xhci_port_enumeration_addressing::enable_slot() {
     return slotData;
 }
 
-xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data &slotData, usb_speed speed, uint32_t routeString) {
+xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data &slotData, usb_speed speed, uint32_t routeString, uint8_t hubSlot, usb_speed hubSpeed, uint8_t hubPort) {
     inputctx_container = std::shared_ptr<xhci_input_context_container>(new xhci_input_context_container_32);
     xhci_input_context *inputctx = inputctx_container->InputContext();
     {
@@ -1027,6 +1031,28 @@ xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data
         slotContext->routeString = routeString;
         slotContext->contextEntries = 1;
         slotContext->maxExitLatency = 0;
+        if (routeString == 0 || speed == HIGH) {
+            slotContext->parentHubSlotId = 0;
+            slotContext->parentPortNumber = 0;
+        } else {
+            if (speed == LOW || speed == FULL) {
+                if (hubSpeed == LOW || hubSpeed == FULL) {
+                    slotContext->parentHubSlotId = 0;
+                    slotContext->parentPortNumber = 0;
+                } else {
+                    slotContext->parentHubSlotId = hubSlot;
+                    slotContext->parentPortNumber = hubPort + 1;
+                }
+            } else {
+                if (hubSpeed == SUPERPLUS && speed != hubSpeed) {
+                    slotContext->parentHubSlotId = hubSlot;
+                    slotContext->parentPortNumber = hubPort + 1;
+                } else {
+                    slotContext->parentHubSlotId = 0;
+                    slotContext->parentPortNumber = 0;
+                }
+            }
+        }
         auto *endpoint0 = inputctx->EndpointContext(0, xhciRef.contextSize64);
         endpoint0->trDequePointer = deviceData->Endpoint0RingPhys() | XHCI_TRB_CYCLE;
         endpoint0->maxPacketSize = 8;
@@ -1170,14 +1196,16 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_root_port_enumeration_addressing:
 
 xhci_hub_port_enumeration_addressing::xhci_hub_port_enumeration_addressing(xhci &xhciRef,
                                                                            const std::vector<uint8_t> &portRouting,
-                                                                           usb_speed speed) :
-        xhci_port_enumeration_addressing(xhciRef, portRouting[0]), xhciRef(xhciRef), speed(speed), routeString(0) {
+                                                                           usb_speed speed, uint8_t hubSlot,
+                                                                           usb_speed hubSpeed) :
+        xhci_port_enumeration_addressing(xhciRef, portRouting[0]), xhciRef(xhciRef), speed(speed), routeString(0), hubSlot(hubSlot), hubSpeed(hubSpeed) {
     auto iterator = portRouting.begin();
     if (iterator != portRouting.end()) {
         ++iterator;
         uint8_t shift = 0;
         while (iterator != portRouting.end() && shift < 16) {
-            uint32_t bits = ((uint32_t) (*iterator)) & 0xF;
+            hubPort = *iterator;
+            uint32_t bits = ((uint32_t) hubPort) & 0xF;
             bits = bits << shift;
             routeString |= bits;
             shift += 4;
@@ -1190,7 +1218,7 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_hub_port_enumeration_addressing::
     if (slotData == nullptr) {
         return {};
     }
-    auto *inputctx = xhci_port_enumeration_addressing::set_address(*slotData, speed, routeString);
+    auto *inputctx = xhci_port_enumeration_addressing::set_address(*slotData, speed, routeString, hubSlot, hubSpeed, hubPort);
     if (inputctx == nullptr) {
         return {};
     }

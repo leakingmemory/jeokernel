@@ -34,6 +34,8 @@ public:
 
     void dumpregs() override;
     int GetNumberOfPorts() override;
+    usb_speed HubSpeed() override;
+    uint8_t HubSlotId() override;
     uint32_t GetPortStatus(int port) override;
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;
@@ -44,7 +46,7 @@ public:
     bool ResettingPort(int port) override;
     bool EnabledPort(int port) override;
     usb_speed PortSpeed(int port) override;
-    std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) override;
+    std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed, usb_speed hubSpeed, uint8_t hubSlot) override;
     std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     std::shared_ptr<usb_func_addr> GetFuncAddr() override;
