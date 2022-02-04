@@ -542,6 +542,9 @@ struct xhci_input_control_context {
 };
 static_assert(sizeof(xhci_input_control_context) == 32);
 
+#define XHCI_SLOT_CONTEXT_FLAG_MTT  2
+#define XHCI_SLOT_CONTEXT_FLAG_HUB  4
+
 struct xhci_slot_context {
     uint32_t routeString : 20;
     uint8_t was_speed_now_deprecated : 4;
@@ -745,15 +748,15 @@ private:
     std::shared_ptr<xhci_input_context_container> inputctx_container;
     usb_minimum_device_descriptor minDesc;
     usb_speed speed;
-    uint8_t port;
     uint8_t slot;
 public:
-    xhci_port_enumerated_device(xhci &xhciRef, std::shared_ptr<xhci_device> deviceData, std::shared_ptr<usb_endpoint> endpoint0, std::shared_ptr<xhci_input_context_container> inputctx_container, usb_minimum_device_descriptor minDesc, usb_speed speed, uint8_t port, uint8_t slot) :
-    xhciRef(xhciRef), deviceData(deviceData), endpoint0(endpoint0), inputctx_container(inputctx_container), minDesc(minDesc), speed(speed), port(port), slot(slot) {}
+    xhci_port_enumerated_device(xhci &xhciRef, std::shared_ptr<xhci_device> deviceData, std::shared_ptr<usb_endpoint> endpoint0, std::shared_ptr<xhci_input_context_container> inputctx_container, usb_minimum_device_descriptor minDesc, usb_speed speed, uint8_t slot) :
+    xhciRef(xhciRef), deviceData(deviceData), endpoint0(endpoint0), inputctx_container(inputctx_container), minDesc(minDesc), speed(speed), slot(slot) {}
     ~xhci_port_enumerated_device();
     usb_speed Speed() const override;
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
+    bool SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) override;
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
 };
@@ -779,7 +782,7 @@ public:
         return slot;
     }
     xhci_slot_data *enable_slot();
-    xhci_input_context *set_address(xhci_slot_data &slotData);
+    xhci_input_context *set_address(xhci_slot_data &slotData, usb_speed speed, uint32_t routeString=0);
     std::shared_ptr<usb_endpoint> configure_baseline(usb_minimum_device_descriptor &minDevDesc, xhci_input_context &inputctx);
     virtual std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override = 0;
     uint8_t get_address() override;
@@ -793,6 +796,16 @@ private:
 public:
     xhci_root_port_enumeration_addressing(xhci &xhciRef, uint8_t port) : xhci_port_enumeration_addressing(xhciRef, port), xhciRef(xhciRef), port(port) {
     }
+    std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override;
+};
+
+class xhci_hub_port_enumeration_addressing : public xhci_port_enumeration_addressing {
+private:
+    xhci &xhciRef;
+    usb_speed speed;
+    uint32_t routeString;
+public:
+    xhci_hub_port_enumeration_addressing(xhci &xhciRef, const std::vector<uint8_t> &portRouting, usb_speed speed);
     std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override;
 };
 
@@ -861,7 +874,7 @@ public:
     usb_speed PortSpeed(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
     std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) override;
-    std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting) override;
+    std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) override;
     std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     size_t TransferBufferSize() override {

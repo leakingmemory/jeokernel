@@ -617,8 +617,8 @@ std::shared_ptr<usb_hw_enumeration> xhci::EnumeratePort(int port) {
     return std::shared_ptr<usb_hw_enumeration>(new xhci_port_enumeration(*this, port));
 }
 
-std::shared_ptr<usb_hw_enumeration_addressing> xhci::EnumerateHubPort(const std::vector<uint8_t> &portRouting) {
-    return {};
+std::shared_ptr<usb_hw_enumeration_addressing> xhci::EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) {
+    return std::shared_ptr<usb_hw_enumeration_addressing>(new xhci_hub_port_enumeration_addressing(*this, portRouting, speed));
 }
 
 void xhci::HcEvent() {
@@ -778,6 +778,41 @@ usb_minimum_device_descriptor xhci_port_enumerated_device::MinDesc() const {
 
 std::shared_ptr<usb_endpoint> xhci_port_enumerated_device::Endpoint0() const {
     return endpoint0;
+}
+
+bool xhci_port_enumerated_device::SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) {
+    ttThinkTime -= 8;
+    ttThinkTime = (ttThinkTime >> 3) & 3;
+    auto *inputctx = inputctx_container->InputContext();
+    {
+        xhci_input_control_context *inputContext = &(inputctx->context[0]);
+        xhci_slot_context *slotContext = inputctx->GetSlotContext(xhciRef.contextSize64);
+        inputContext->addContextFlags = 1; // A0
+        slotContext->flags = XHCI_SLOT_CONTEXT_FLAG_HUB;
+        if (multiTT) {
+            slotContext->flags |= XHCI_SLOT_CONTEXT_FLAG_MTT;
+        }
+        slotContext->numberOfPorts = numberOfPorts;
+        slotContext->ttThinkTime = ttThinkTime;
+        auto configCmd = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
+        bool done{false};
+        int timeout = 5;
+        while (--timeout > 0) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if (configCmd->IsDone()) {
+                done = true;
+                break;
+            }
+        }
+        if (!done) {
+            std::stringstream str{};
+            str << "XHCI evaluate context (set hub) failed with code " << configCmd->CompletionCode() << "\n";
+            get_klogger() << str.str().c_str();
+            return false;
+        }
+    }
+    return true;
 }
 
 bool xhci_port_enumerated_device::SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) {
@@ -965,14 +1000,13 @@ xhci_slot_data *xhci_port_enumeration_addressing::enable_slot() {
     return slotData;
 }
 
-xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data &slotData) {
+xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data &slotData, usb_speed speed, uint32_t routeString) {
     inputctx_container = std::shared_ptr<xhci_input_context_container>(new xhci_input_context_container_32);
     xhci_input_context *inputctx = inputctx_container->InputContext();
     {
         xhci_input_control_context *inputContext = &(inputctx->context[0]);
         xhci_slot_context *slotContext = inputctx->GetSlotContext(xhciRef.contextSize64);
         inputContext->addContextFlags = 3; // A0+A1
-        auto speed = xhciRef.PortSpeed(rootHubPort);
         switch (speed) {
             case LOW:
                 slotContext->was_speed_now_deprecated = 2;
@@ -990,7 +1024,7 @@ xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data
                 slotContext->was_speed_now_deprecated = 0;
         }
         slotContext->rootHubPortNumber = rootHubPort + 1;
-        slotContext->routeString = 0;
+        slotContext->routeString = routeString;
         slotContext->contextEntries = 1;
         slotContext->maxExitLatency = 0;
         auto *endpoint0 = inputctx->EndpointContext(0, xhciRef.contextSize64);
@@ -1119,16 +1153,52 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_root_port_enumeration_addressing:
     if (slotData == nullptr) {
         return {};
     }
-    auto *inputctx = xhci_port_enumeration_addressing::set_address(*slotData);
+    auto speed = xhciRef.PortSpeed(port);
+    auto *inputctx = xhci_port_enumeration_addressing::set_address(*slotData, speed);
     if (inputctx == nullptr) {
         return {};
     }
-    auto speed = xhciRef.PortSpeed(port);
     usb_minimum_device_descriptor minDevDesc{};
     std::shared_ptr<usb_endpoint> endpoint0 = configure_baseline(minDevDesc, *inputctx);
     std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
             new xhci_port_enumerated_device(
-                    xhciRef, DeviceData(), endpoint0, InputContextContainer(), minDevDesc, speed, port, Slot()
+                    xhciRef, DeviceData(), endpoint0, InputContextContainer(), minDevDesc, speed, Slot()
+            )
+    };
+    return enumeratedDevice;
+}
+
+xhci_hub_port_enumeration_addressing::xhci_hub_port_enumeration_addressing(xhci &xhciRef,
+                                                                           const std::vector<uint8_t> &portRouting,
+                                                                           usb_speed speed) :
+        xhci_port_enumeration_addressing(xhciRef, portRouting[0]), xhciRef(xhciRef), speed(speed), routeString(0) {
+    auto iterator = portRouting.begin();
+    if (iterator != portRouting.end()) {
+        ++iterator;
+        uint8_t shift = 0;
+        while (iterator != portRouting.end() && shift < 16) {
+            uint32_t bits = ((uint32_t) (*iterator)) & 0xF;
+            bits = bits << shift;
+            routeString |= bits;
+            shift += 4;
+        }
+    }
+}
+
+std::shared_ptr<usb_hw_enumerated_device> xhci_hub_port_enumeration_addressing::set_address(uint8_t addr) {
+    auto *slotData = enable_slot();
+    if (slotData == nullptr) {
+        return {};
+    }
+    auto *inputctx = xhci_port_enumeration_addressing::set_address(*slotData, speed, routeString);
+    if (inputctx == nullptr) {
+        return {};
+    }
+    usb_minimum_device_descriptor minDevDesc{};
+    std::shared_ptr<usb_endpoint> endpoint0 = configure_baseline(minDevDesc, *inputctx);
+    std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
+            new xhci_port_enumerated_device(
+                    xhciRef, DeviceData(), endpoint0, InputContextContainer(), minDevDesc, speed, Slot()
             )
     };
     return enumeratedDevice;

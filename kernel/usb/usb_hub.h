@@ -53,7 +53,7 @@ public:
     virtual std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) {
         return {};
     }
-    virtual std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting) {
+    virtual std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) {
         return {};
     }
     virtual std::shared_ptr<usb_func_addr> GetFuncAddr() = 0;

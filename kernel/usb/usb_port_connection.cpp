@@ -31,6 +31,7 @@ public:
     usb_speed Speed() const override;
     usb_minimum_device_descriptor MinDesc() const override;
     std::shared_ptr<usb_endpoint> Endpoint0() const override;
+    bool SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) override;
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
 };
@@ -45,6 +46,10 @@ usb_minimum_device_descriptor legacy_usb_enumerated::MinDesc() const {
 
 std::shared_ptr<usb_endpoint> legacy_usb_enumerated::Endpoint0() const {
     return endpoint0;
+}
+
+bool legacy_usb_enumerated::SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) {
+    return true;
 }
 
 bool legacy_usb_enumerated::SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) {
@@ -353,6 +358,10 @@ const std::vector<UsbInterfaceInformation> &usb_port_connection::ReadConfigurati
 
 bool usb_port_connection::SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) {
     return enumeratedDevice->SetConfigurationValue(configurationValue, interfaceNumber, alternateSetting);
+}
+
+bool usb_port_connection::SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) {
+    return enumeratedDevice->SetHub(numberOfPorts, multiTT, ttThinkTime);
 }
 
 UsbDeviceInformation::UsbDeviceInformation(const usb_device_descriptor &devDesc, usb_port_connection &port) : DeviceInformation(), port(port) {

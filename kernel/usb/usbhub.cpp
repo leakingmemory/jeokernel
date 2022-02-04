@@ -51,10 +51,22 @@ void usbhub::init() {
         buffer->CopyTo(descr);
     }
     individualPortPower = (descr.flags & HUB_PORT_POWER_MASK) == HUB_PORT_POWER_INDIVIDUAL;
+
+    uint8_t ttThink = descr.flags & 0x60;
+    ttThink = ttThink >> 2;
+    ttThink += 8;
+
     {
         std::stringstream str{};
-        str << DeviceType() << DeviceId() << ": ports=" << descr.portCount << " type=" << descr.type << " flags=" << descr.flags << " port-time=" << descr.portPowerTime << " current=" << descr.current << (individualPortPower ? " individual port power" : " global port power") << "\n";
+        str << DeviceType() << DeviceId() << ": ports=" << descr.portCount << " type=" << descr.type << " flags=" << descr.flags << " port-time=" << descr.portPowerTime << " current=" << descr.current << (individualPortPower ? " individual port power" : " global port power") << " ttt=" << ttThink << "\n";
         get_klogger() << str.str().c_str();
+    }
+
+    if (!usbInterfaceInformation.port.SetHub(descr.portCount, usbInterfaceInformation.prog_if == 2/*HSHUBMTT*/, ttThink)) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": failed xhci configuration of hub\n";
+        get_klogger() << str.str().c_str();
+        return;
     }
     usbInterfaceInformation.port.Hub().RegisterHub(this);
     {
@@ -292,6 +304,6 @@ uint8_t usbhub::GetHubAddress() {
     return usbInterfaceInformation.port.Address();
 }
 
-std::shared_ptr<usb_hw_enumeration_addressing> usbhub::EnumerateHubPort(const std::vector<uint8_t> &portRouting) {
-    return usbInterfaceInformation.port.Hub().EnumerateHubPort(portRouting);
+std::shared_ptr<usb_hw_enumeration_addressing> usbhub::EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed) {
+    return usbInterfaceInformation.port.Hub().EnumerateHubPort(portRouting, speed);
 }
