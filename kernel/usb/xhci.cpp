@@ -617,6 +617,10 @@ std::shared_ptr<usb_hw_enumeration> xhci::EnumeratePort(int port) {
     return std::shared_ptr<usb_hw_enumeration>(new xhci_port_enumeration(*this, port));
 }
 
+std::shared_ptr<usb_hw_enumeration_addressing> xhci::EnumerateHubPort(const std::vector<uint8_t> &portRouting) {
+    return {};
+}
+
 void xhci::HcEvent() {
     uint32_t iman{runtimeregs->interrupters[0].interrupterManagement};
     if ((iman & XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_PENDING) != 0) {
@@ -913,7 +917,7 @@ std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate(
     if ((status & USB_PORT_STATUS_PES) != 0) {
         /* USB3 */
         return std::shared_ptr<usb_hw_enumeration_addressing>(
-                new xhci_port_enumeration_addressing(xhciRef, port)
+                new xhci_root_port_enumeration_addressing(xhciRef, port)
                 );
     } else if ((xhciRef.opregs->portRegisters[port].portStatusControl & XHCI_PORT_SC_PORT_LINK_STATE_MASK) == XHCI_PORT_SC_PLS_STATE_POLLING){
         /* USB2 */
@@ -925,45 +929,50 @@ std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate(
                 pls == XHCI_PORT_SC_PLS_STATE_U0
                 ) {
             return std::shared_ptr<usb_hw_enumeration_addressing>(
-                    new xhci_port_enumeration_addressing(xhciRef, port)
+                    new xhci_root_port_enumeration_addressing(xhciRef, port)
             );
         }
     }
     return {};
 }
 
-std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_address(uint8_t addr) {
-    {
-        auto enableSlotCommand = xhciRef.EnableSlot(0);
-        bool done{false};
-        int timeout = 5;
-        while (--timeout > 0) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
-            if (enableSlotCommand->IsDone()) {
-                done = true;
-                break;
-            }
+xhci_port_enumeration_addressing::~xhci_port_enumeration_addressing() noexcept {
+}
+
+xhci_slot_data *xhci_port_enumeration_addressing::enable_slot() {
+    auto enableSlotCommand = xhciRef.EnableSlot(0);
+    bool done{false};
+    int timeout = 5;
+    while (--timeout > 0) {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(10ms);
+        if (enableSlotCommand->IsDone()) {
+            done = true;
+            break;
         }
-        if (!done) {
-            std::stringstream str{};
-            str << "XHCI enable slot failed with code "<< enableSlotCommand->CompletionCode() << "\n";
-            get_klogger() << str.str().c_str();
-            return {};
-        }
-        slot = enableSlotCommand->SlotId();
     }
+    if (!done) {
+        std::stringstream str{};
+        str << "XHCI enable slot failed with code "<< enableSlotCommand->CompletionCode() << "\n";
+        get_klogger() << str.str().c_str();
+        return nullptr;
+    }
+    slot = enableSlotCommand->SlotId();
     deviceData = xhciRef.resources->CreateDeviceData();
     auto *slotData = deviceData->SlotData();
     xhciRef.resources->DCBAA()->contexts[slot] = slotData;
     xhciRef.resources->DCBAA()->phys[slot] = deviceData->SlotContextPhys();
+    return slotData;
+}
+
+xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data &slotData) {
     inputctx_container = std::shared_ptr<xhci_input_context_container>(new xhci_input_context_container_32);
     xhci_input_context *inputctx = inputctx_container->InputContext();
     {
         xhci_input_control_context *inputContext = &(inputctx->context[0]);
         xhci_slot_context *slotContext = inputctx->GetSlotContext(xhciRef.contextSize64);
         inputContext->addContextFlags = 3; // A0+A1
-        auto speed = xhciRef.PortSpeed(port);
+        auto speed = xhciRef.PortSpeed(rootHubPort);
         switch (speed) {
             case LOW:
                 slotContext->was_speed_now_deprecated = 2;
@@ -980,7 +989,7 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
             default:
                 slotContext->was_speed_now_deprecated = 0;
         }
-        slotContext->rootHubPortNumber = port + 1;
+        slotContext->rootHubPortNumber = rootHubPort + 1;
         slotContext->routeString = 0;
         slotContext->contextEntries = 1;
         slotContext->maxExitLatency = 0;
@@ -1004,21 +1013,24 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
                 str << "XHCI set address failed with code " << setAddressCommand->CompletionCode() << "\n";
                 get_klogger() << str.str().c_str();
                 disable_slot();
-                return {};
+                return nullptr;
             }
         }
     }
     {
-        auto *slotContext = &(slotData->slotContext[0]);
+        auto *slotContext = &(slotData.slotContext[0]);
         this->addr = slotContext->deviceAddress;
         std::stringstream str{};
         str << "XHCI enabled slot with ID " << slot << " addr " << this->addr << "\n";
         get_klogger() << str.str().c_str();
         memmove(inputctx->GetSlotContext(xhciRef.contextSize64), slotContext, 64);
     }
+    return inputctx;
+}
+
+std::shared_ptr<usb_endpoint> xhci_port_enumeration_addressing::configure_baseline(usb_minimum_device_descriptor &minDevDesc, xhci_input_context &inputctx) {
     std::shared_ptr<xhci_endpoint_ring_container> ringContainer{new xhci_endpoint_ring_container_endpoint0(deviceData)};
     std::shared_ptr<xhci_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, {}, slot, 0, usb_endpoint_direction::BOTH, usb_endpoint_type::CONTROL, 0)};
-    usb_minimum_device_descriptor minDevDesc{};
     {
         usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
         std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*endpoint0, get_descr0);
@@ -1040,9 +1052,9 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
         }
     }
     {
-        auto *inputContext = &(inputctx->context[0]);
+        auto *inputContext = &(inputctx.context[0]);
         inputContext->addContextFlags = 2; // A1=endpoint0
-        auto *endpoint0_ctx = inputctx->EndpointContext(0, xhciRef.contextSize64);
+        auto *endpoint0_ctx = inputctx.EndpointContext(0, xhciRef.contextSize64);
         {
             uint64_t phys = deviceData->Endpoint0RingPhys();
             phys += sizeof(xhci_trb) * endpoint0->index;
@@ -1070,13 +1082,7 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_port_enumeration_addressing::set_
             }
         }
     }
-    auto speed = xhciRef.PortSpeed(port);
-    std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
-        new xhci_port_enumerated_device(
-                xhciRef, deviceData, endpoint0, inputctx_container, minDevDesc, speed, port, slot
-                )
-    };
-    return enumeratedDevice;
+    return endpoint0;
 }
 
 uint8_t xhci_port_enumeration_addressing::get_address() {
@@ -1106,4 +1112,24 @@ void xhci_port_enumeration_addressing::disable_slot() {
         str << "XHCI disabled slot with ID " << slot << "\n";
         get_klogger() << str.str().c_str();
     }
+}
+
+std::shared_ptr<usb_hw_enumerated_device> xhci_root_port_enumeration_addressing::set_address(uint8_t addr) {
+    auto *slotData = enable_slot();
+    if (slotData == nullptr) {
+        return {};
+    }
+    auto *inputctx = xhci_port_enumeration_addressing::set_address(*slotData);
+    if (inputctx == nullptr) {
+        return {};
+    }
+    auto speed = xhciRef.PortSpeed(port);
+    usb_minimum_device_descriptor minDevDesc{};
+    std::shared_ptr<usb_endpoint> endpoint0 = configure_baseline(minDevDesc, *inputctx);
+    std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
+            new xhci_port_enumerated_device(
+                    xhciRef, DeviceData(), endpoint0, InputContextContainer(), minDevDesc, speed, port, Slot()
+            )
+    };
+    return enumeratedDevice;
 }

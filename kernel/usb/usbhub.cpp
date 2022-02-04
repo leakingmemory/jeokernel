@@ -291,3 +291,7 @@ void usbhub::PortRouting(std::vector<uint8_t> &route, uint8_t port) {
 uint8_t usbhub::GetHubAddress() {
     return usbInterfaceInformation.port.Address();
 }
+
+std::shared_ptr<usb_hw_enumeration_addressing> usbhub::EnumerateHubPort(const std::vector<uint8_t> &portRouting) {
+    return usbInterfaceInformation.port.Hub().EnumerateHubPort(portRouting);
+}

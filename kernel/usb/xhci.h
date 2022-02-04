@@ -763,14 +763,37 @@ private:
     xhci &xhciRef;
     std::shared_ptr<xhci_device> deviceData;
     std::shared_ptr<xhci_input_context_container> inputctx_container;
-    uint8_t port;
+    uint8_t rootHubPort;
     uint8_t slot;
     uint8_t addr;
 public:
-    xhci_port_enumeration_addressing(xhci &xhciRef, uint8_t port) : xhciRef(xhciRef), port(port) {}
-    std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override;
+    xhci_port_enumeration_addressing(xhci &xhciRef, uint8_t rootHubPort) : xhciRef(xhciRef), rootHubPort(rootHubPort) {}
+    virtual ~xhci_port_enumeration_addressing() override;
+    std::shared_ptr<xhci_device> DeviceData() {
+        return deviceData;
+    }
+    std::shared_ptr<xhci_input_context_container> InputContextContainer() {
+        return inputctx_container;
+    }
+    uint8_t Slot() {
+        return slot;
+    }
+    xhci_slot_data *enable_slot();
+    xhci_input_context *set_address(xhci_slot_data &slotData);
+    std::shared_ptr<usb_endpoint> configure_baseline(usb_minimum_device_descriptor &minDevDesc, xhci_input_context &inputctx);
+    virtual std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override = 0;
     uint8_t get_address() override;
     void disable_slot();
+};
+
+class xhci_root_port_enumeration_addressing : public xhci_port_enumeration_addressing {
+private:
+    xhci &xhciRef;
+    uint8_t port;
+public:
+    xhci_root_port_enumeration_addressing(xhci &xhciRef, uint8_t port) : xhci_port_enumeration_addressing(xhciRef, port), xhciRef(xhciRef), port(port) {
+    }
+    std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override;
 };
 
 class xhci_port_enumeration : public usb_hw_enumeration {
@@ -838,6 +861,7 @@ public:
     usb_speed PortSpeed(int port) override;
     void ClearStatusChange(int port, uint32_t statuses) override;
     std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) override;
+    std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting) override;
     std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     size_t TransferBufferSize() override {

@@ -27,6 +27,8 @@ public:
 
 class usb_hw_enumeration_addressing {
 public:
+    virtual ~usb_hw_enumeration_addressing() {
+    }
     virtual std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) = 0;
     virtual uint8_t get_address() = 0;
 };

@@ -25,6 +25,7 @@
 
 class usb_endpoint;
 class usb_hw_enumeration;
+class usb_hw_enumeration_addressing;
 class usb_func_addr;
 class usb_port_connection;
 
@@ -50,6 +51,9 @@ public:
     virtual bool EnabledPort(int port) = 0;
     virtual usb_speed PortSpeed(int port) = 0;
     virtual std::shared_ptr<usb_hw_enumeration> EnumeratePort(int port) {
+        return {};
+    }
+    virtual std::shared_ptr<usb_hw_enumeration_addressing> EnumerateHubPort(const std::vector<uint8_t> &portRouting) {
         return {};
     }
     virtual std::shared_ptr<usb_func_addr> GetFuncAddr() = 0;
