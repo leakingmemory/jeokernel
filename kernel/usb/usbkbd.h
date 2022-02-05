@@ -62,19 +62,20 @@ private:
     uint8_t kbrep_rindex;
     usbkbd_report kbrep;
     UsbKeycode *keycodes[USBKB_MAX_KEYS];
-    bool stop;
+    bool stop_threads;
     bool stalled;
     uint8_t mod_status;
     uint8_t modifiers;
 public:
     usbkbd(Bus &bus, UsbIfacedevInformation &devInfo) : Device("usbkbd", &bus), devInfo(devInfo), endpoint(), poll_endpoint(), poll_transfer(), transfercount(0), kbd_thread(nullptr), rep_thread(nullptr),
-    mtx(), semaphore(-1), kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), keycodes(), stop(false), stalled(false), mod_status(MOD_STAT_NUMLOCK), modifiers(0) {
+    mtx(), semaphore(-1), kbrep_backlog(), kbrep_windex(0), kbrep_rindex(0), kbrep(), keycodes(), stop_threads(false), stalled(false), mod_status(MOD_STAT_NUMLOCK), modifiers(0) {
         for (int i = 0; i < USBKB_MAX_KEYS; i++) {
             keycodes[i] = nullptr;
         }
     }
     ~usbkbd() override;
     void init() override;
+    void stop() override;
     void submit(uint32_t modifiers, uint8_t keycode);
     uint32_t keyboard_modifiers();
 private:

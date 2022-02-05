@@ -167,6 +167,14 @@ void usbkbd::init() {
     });
 }
 
+void usbkbd::stop() {
+    critical_section cli{};
+    std::lock_guard lock{devInfo.port.Hub().HcdSpinlock()};
+    if (poll_transfer) {
+        poll_transfer->SetDoneCall([] () {});
+    }
+}
+
 void usbkbd::interrupt() {
     std::shared_ptr<usb_buffer> report = poll_transfer->Buffer();
     if (poll_transfer->IsSuccessful()) {
@@ -191,7 +199,7 @@ void usbkbd::interrupt() {
 }
 
 usbkbd::~usbkbd() {
-    stop = true;
+    stop_threads = true;
     if (poll_transfer) {
         poll_transfer->SetDoneCall([] () {});
     }
@@ -219,7 +227,7 @@ void usbkbd::worker_thread() {
     while (true) {
         semaphore.acquire();
 
-        if (stalled && !stop) {
+        if (stalled && !stop_threads) {
             {
                 std::stringstream str{};
                 str << DeviceType() << DeviceId() << ": Clearing stall condition\n";
@@ -263,7 +271,7 @@ void usbkbd::worker_thread() {
 
         std::lock_guard lock{mtx};
 
-        if (stop) {
+        if (stop_threads) {
             break;
         }
         uint32_t kmods{keyboard_modifiers()};
@@ -462,7 +470,7 @@ uint32_t usbkbd::keyboard_modifiers() {
 void usbkbd::repeat_thread() {
     auto &kbd = Keyboard();
     while (true) {
-        if (stop) {
+        if (stop_threads) {
             break;
         }
         {
