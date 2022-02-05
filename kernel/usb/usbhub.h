@@ -23,19 +23,26 @@ class usbhub : public usb_hub {
 private:
     UsbInterfaceInformation usbInterfaceInformation;
     std::shared_ptr<usb_endpoint> endpoint0;
+    std::shared_ptr<usb_endpoint> poll_endpoint;
+    std::shared_ptr<usb_transfer> poll_transfer;
+    usb_endpoint_descriptor endpoint;
+    uint64_t transfercount;
     usb_hub_descr descr;
     bool individualPortPower;
     std::mutex ready_mtx;
     bool ready;
 public:
-    usbhub(Bus &bus, const UsbInterfaceInformation &usbInterfaceInformation) : usb_hub("usbhub", bus), usbInterfaceInformation(usbInterfaceInformation), endpoint0(), descr(), individualPortPower(false), ready_mtx(), ready(false) {}
+    usbhub(Bus &bus, const UsbInterfaceInformation &usbInterfaceInformation) : usb_hub("usbhub", bus), usbInterfaceInformation(usbInterfaceInformation), endpoint0(), poll_endpoint(), poll_transfer(),
+                                                                               endpoint(), transfercount(0), descr(), individualPortPower(false), ready_mtx(), ready(false) {}
     ~usbhub() override;
     void init() override;
-
+    void stop() override;
+    void RootHubStatusChange() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;
     usb_speed HubSpeed() override;
     uint8_t HubSlotId() override;
+    hw_spinlock &HcdSpinlock() override;
     uint32_t GetPortStatus(int port) override;
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;
@@ -55,6 +62,8 @@ public:
 
     void RegisterHub(usb_hub *child) override;
     void UnregisterHub(usb_hub *child) override;
+
+    void interrupt();
 };
 
 class usbhub_driver : public Driver {

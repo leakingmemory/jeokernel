@@ -39,12 +39,12 @@ public:
     virtual int GetNumberOfPorts() = 0;
     virtual usb_speed HubSpeed() override = 0;
     virtual size_t TransferBufferSize() = 0;
-    virtual hw_spinlock &HcdSpinlock() = 0;
+    virtual hw_spinlock &HcdSpinlock() override = 0;
 private:
     [[noreturn]] void BusInit();
 public:
     void Run();
-    void RootHubStatusChange();
+    void RootHubStatusChange() override;
     virtual bool PollPorts();
     virtual void EnablePort(int port) override = 0;
     virtual void DisablePort(int port) override = 0;

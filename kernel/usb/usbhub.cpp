@@ -3,6 +3,7 @@
 //
 
 #include "usbhub.h"
+#include "usb_transfer.h"
 #include "sstream"
 
 #define HUB_PORT_POWER_MASK         3
@@ -73,6 +74,34 @@ void usbhub::init() {
         std::lock_guard lock{ready_mtx};
         ready = true;
     }
+
+    for (auto &endpoint : usbInterfaceInformation.endpoints) {
+        if (endpoint.IsInterrupt() && endpoint.IsDirectionIn()) {
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": Endpoint " << endpoint.Address() << " poll-packet-size=" << endpoint.MaxPacketSize() << "\n";
+            get_klogger() << str.str().c_str();
+            this->endpoint = endpoint;
+            poll_endpoint = usbInterfaceInformation.port.InterruptEndpoint(endpoint.MaxPacketSize(), endpoint.Address(), usb_endpoint_direction::IN, endpoint.bInterval);
+            break;
+        }
+    }
+
+    if (poll_endpoint) {
+        poll_transfer = poll_endpoint->CreateTransfer(true, endpoint.MaxPacketSize(), usb_transfer_direction::IN, [this]() {
+            this->interrupt();
+        }, true, 1, (int8_t) (transfercount++ & 1));
+    }
+}
+
+void usbhub::stop() {
+    {
+        critical_section cli{};
+        std::lock_guard lock{usbInterfaceInformation.port.Hub().HcdSpinlock()};
+        if (poll_transfer) {
+            poll_transfer->SetDoneCall([] () {});
+        }
+    }
+    usb_hub::stop();
 }
 
 void usbhub::dumpregs() {
@@ -88,6 +117,10 @@ usb_speed usbhub::HubSpeed() {
 
 uint8_t usbhub::HubSlotId() {
     return usbInterfaceInformation.port.SlotId();
+}
+
+hw_spinlock &usbhub::HcdSpinlock() {
+    return usbInterfaceInformation.port.Hub().HcdSpinlock();
 }
 
 uint32_t usbhub::GetPortStatus(int port) {
@@ -314,4 +347,15 @@ uint8_t usbhub::GetHubAddress() {
 
 std::shared_ptr<usb_hw_enumeration_addressing> usbhub::EnumerateHubPort(const std::vector<uint8_t> &portRouting, usb_speed speed, usb_speed hubSpeed, uint8_t hubSlot) {
     return usbInterfaceInformation.port.Hub().EnumerateHubPort(portRouting, speed, hubSpeed, hubSlot);
+}
+
+void usbhub::RootHubStatusChange() {
+    usbInterfaceInformation.port.Hub().RootHubStatusChange();
+}
+
+void usbhub::interrupt() {
+    poll_transfer = poll_endpoint->CreateTransferWithLock(true, endpoint.MaxPacketSize(), usb_transfer_direction::IN, [this] () {
+        this->interrupt();
+    }, true, 1, (int8_t) (transfercount++ & 1));
+    RootHubStatusChange();
 }

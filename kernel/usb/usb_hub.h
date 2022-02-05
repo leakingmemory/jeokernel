@@ -8,6 +8,7 @@
 #include <devices/devices.h>
 #include <string>
 #include "usb_types.h"
+#include "concurrency/hw_spinlock.h"
 
 #define USB_PORT_STATUS_CCS    0x000001 // Current Connection Status
 #define USB_PORT_STATUS_PES    0x000002 // Port Enable Status
@@ -35,6 +36,7 @@ private:
 public:
     explicit usb_hub(std::string hubType, Bus &parentBus) : Bus(hubType, &parentBus), connections() { }
     ~usb_hub() override;
+    virtual void RootHubStatusChange() = 0;
     void stop() override;
     virtual void dumpregs() = 0;
     virtual int GetNumberOfPorts() = 0;
@@ -42,6 +44,7 @@ public:
     virtual uint8_t HubSlotId() {
         return 0;
     }
+    virtual hw_spinlock &HcdSpinlock() = 0;
     virtual uint32_t GetPortStatus(int port) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) = 0;
