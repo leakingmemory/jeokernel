@@ -1186,6 +1186,9 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_root_port_enumeration_addressing:
     }
     usb_minimum_device_descriptor minDevDesc{};
     std::shared_ptr<usb_endpoint> endpoint0 = configure_baseline(minDevDesc, *inputctx);
+    if (!endpoint0) {
+        return {};
+    }
     std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
             new xhci_port_enumerated_device(
                     xhciRef, DeviceData(), endpoint0, InputContextContainer(), minDevDesc, speed, Slot()
@@ -1224,6 +1227,9 @@ std::shared_ptr<usb_hw_enumerated_device> xhci_hub_port_enumeration_addressing::
     }
     usb_minimum_device_descriptor minDevDesc{};
     std::shared_ptr<usb_endpoint> endpoint0 = configure_baseline(minDevDesc, *inputctx);
+    if (!endpoint0) {
+        return {};
+    }
     std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice{
             new xhci_port_enumerated_device(
                     xhciRef, DeviceData(), endpoint0, InputContextContainer(), minDevDesc, speed, Slot()

@@ -274,6 +274,10 @@ void usb_port_connection::start(std::shared_ptr<usb_hw_enumerated_device> enumer
     usb_minimum_device_descriptor minDesc{enumeratedDevice->MinDesc()};
     this->enumeratedDevice = enumeratedDevice;
     endpoint0 = enumeratedDevice->Endpoint0();
+    if (!endpoint0) {
+        get_klogger() << "Failed to get endpoint0 for device\n";
+        return;
+    }
     if (minDesc.bLength >= sizeof(deviceDescriptor)) {
         usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, sizeof(deviceDescriptor)};
         std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*endpoint0, get_descr0);
