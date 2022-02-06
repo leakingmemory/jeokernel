@@ -31,9 +31,10 @@ private:
     bool individualPortPower;
     std::mutex ready_mtx;
     bool ready;
+    bool disconnected;
 public:
     usbhub(Bus &bus, const UsbInterfaceInformation &usbInterfaceInformation) : usb_hub("usbhub", bus), usbInterfaceInformation(usbInterfaceInformation), endpoint0(), poll_endpoint(), poll_transfer(),
-                                                                               endpoint(), transfercount(0), descr(), individualPortPower(false), ready_mtx(), ready(false) {}
+                                                                               endpoint(), transfercount(0), descr(), individualPortPower(false), ready_mtx(), ready(false), disconnected(false) {}
     ~usbhub() override;
     void init() override;
     void stop() override;

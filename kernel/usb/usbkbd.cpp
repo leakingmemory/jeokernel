@@ -168,10 +168,24 @@ void usbkbd::init() {
 }
 
 void usbkbd::stop() {
-    critical_section cli{};
-    std::lock_guard lock{devInfo.port.Hub().HcdSpinlock()};
-    if (poll_transfer) {
-        poll_transfer->SetDoneCall([] () {});
+    stop_threads = true;
+    {
+        critical_section cli{};
+        std::lock_guard lock{devInfo.port.Hub().HcdSpinlock()};
+        if (poll_transfer) {
+            poll_transfer->SetDoneCall([]() {});
+        }
+    }
+    semaphore.release();
+    if (kbd_thread != nullptr) {
+        kbd_thread->join();
+        delete kbd_thread;
+        kbd_thread = nullptr;
+    }
+    if (rep_thread != nullptr) {
+        rep_thread->join();
+        delete rep_thread;
+        rep_thread = nullptr;
     }
 }
 
@@ -199,20 +213,10 @@ void usbkbd::interrupt() {
 }
 
 usbkbd::~usbkbd() {
-    stop_threads = true;
     if (poll_transfer) {
+        critical_section cli{};
+        std::lock_guard lock{devInfo.port.Hub().HcdSpinlock()};
         poll_transfer->SetDoneCall([] () {});
-    }
-    semaphore.release();
-    if (kbd_thread != nullptr) {
-        kbd_thread->join();
-        delete kbd_thread;
-        kbd_thread = nullptr;
-    }
-    if (rep_thread != nullptr) {
-        rep_thread->join();
-        delete rep_thread;
-        rep_thread = nullptr;
     }
     for (int i = 0; i < USBKB_MAX_KEYS; i++) {
         if (keycodes[i] != nullptr) {

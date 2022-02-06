@@ -34,6 +34,7 @@ void usb_hub::PortDisconnected(uint8_t port) {
         auto *connection = *iterator;
         if (connection->Port() == port) {
             connections.erase(iterator);
+            connection->stop();
             delete connection;
             return;
         }
@@ -77,12 +78,14 @@ void usb_hub::RunPollPorts() {
 
 usb_hub::~usb_hub() {
     for (auto *connection : connections) {
+        connection->stop();
         delete connection;
     }
 }
 
 void usb_hub::stop() {
     for (auto *connection : connections) {
+        connection->stop();
         delete connection;
     }
     connections.clear();

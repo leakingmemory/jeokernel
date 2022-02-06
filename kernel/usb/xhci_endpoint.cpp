@@ -29,6 +29,11 @@ uint64_t xhci_endpoint_ring_container_endpoint0::RingPhysAddr() {
 }
 
 xhci_endpoint::~xhci_endpoint() {
+    {
+        critical_section cli{};
+        std::lock_guard lock{xhciRef.xhcilock};
+        xhciRef.resources->DCBAA()->contexts[slot]->UnsetEndpoint(endpoint, this);
+    }
     if (endpoint != 0) {
         uint8_t endpointBit = ((endpoint << 1) + (dir == usb_endpoint_direction::IN ? 1 : 0));
         auto *inputctx = &(inputctx_container->InputContext()->context[0]);
@@ -55,11 +60,6 @@ xhci_endpoint::~xhci_endpoint() {
             str << "Failed to deconfigure endpoint " << endpoint << ": TRB command ring full?\n";
             get_klogger() << str.str().c_str();
         }
-    }
-    {
-        critical_section cli{};
-        std::lock_guard lock{xhciRef.xhcilock};
-        xhciRef.resources->DCBAA()->contexts[slot]->UnsetEndpoint(endpoint, this);
     }
     auto length = ringContainer->LengthIncludingLink();
     for (int i = 0; i < length; i++) {
@@ -293,6 +293,13 @@ void xhci_endpoint::CommitCommand(xhci_trb *trb) {
 }
 
 void xhci_endpoint::TransferEvent(uint64_t trbaddr, uint32_t transferLength, uint8_t completionCode) {
+    if (!ringContainer) {
+        std::stringstream str{};
+        str << "XHCI endpoint (err=with no ring) transfer event trb=" << std::hex << trbaddr << " endpoint " << std::dec << endpoint
+            << " code " << completionCode << "\n";
+        get_klogger() << str.str().c_str();
+        return;
+    }
     uint64_t trboffset{trbaddr - ringContainer->RingPhysAddr()};
     uint64_t trbindex{trboffset / sizeof(xhci_trb)};
     if (trbindex < (ringContainer->LengthIncludingLink() - 1)) {

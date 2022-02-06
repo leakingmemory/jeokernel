@@ -760,7 +760,14 @@ void xhci::TransferEvent(const xhci_trb &event) {
     auto *slotContext = resources->DCBAA()->contexts[event.TransferEvent.SlotId];
     if (slotContext != nullptr) {
         auto *eventContext = slotContext->Endpoint(event.TransferEvent.EndpointId - 1);
-        eventContext->TransferEvent(event.TransferCompletion.TransferPtr, event.TransferCompletion.TransferLength, event.TransferCompletion.CompletionCode);
+        if (eventContext != nullptr) {
+            eventContext->TransferEvent(event.TransferCompletion.TransferPtr, event.TransferCompletion.TransferLength,
+                                        event.TransferCompletion.CompletionCode);
+        } else {
+            std::stringstream str{};
+            str << "XHCI transfer event without a recipient endp " << (event.TransferEvent.EndpointId - 1) << " addr " << std::hex << event.TransferCompletion.TransferPtr << " code " << event.TransferCompletion.CompletionCode << "\n";
+            get_klogger() << str.str().c_str();
+        }
     }
 }
 
@@ -793,6 +800,12 @@ xhci_port_enumerated_device::~xhci_port_enumerated_device() {
         str << "XHCI disabled slot with ID " << slot << "\n";
         get_klogger() << str.str().c_str();
     }
+}
+
+void xhci_port_enumerated_device::Stop() {
+    critical_section cli{};
+    std::lock_guard lock{xhciRef.xhcilock};
+    xhciRef.resources->DCBAA()->contexts[slot]->Stop();
 }
 
 usb_speed xhci_port_enumerated_device::Speed() const {

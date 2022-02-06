@@ -29,6 +29,7 @@ usbhub::~usbhub() {
     if (ready) {
         usbInterfaceInformation.port.Hub().UnregisterHub(this);
     }
+    endpoint0 = nullptr;
 }
 
 void usbhub::init() {
@@ -100,6 +101,10 @@ void usbhub::stop() {
         if (poll_transfer) {
             poll_transfer->SetDoneCall([] () {});
         }
+    }
+    {
+        std::lock_guard lock{ready_mtx};
+        disconnected = true;
     }
     usb_hub::stop();
 }
@@ -174,6 +179,12 @@ uint32_t usbhub::GetPortStatus(int port) {
 }
 
 void usbhub::SwitchPortOff(int port) {
+    {
+        std::lock_guard lock{ready_mtx};
+        if (disconnected) {
+            return;
+        }
+    }
     if (individualPortPower) {
         if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::POWER))) {
             std::stringstream str{};
@@ -184,6 +195,12 @@ void usbhub::SwitchPortOff(int port) {
 }
 
 void usbhub::SwitchPortOn(int port) {
+    {
+        std::lock_guard lock{ready_mtx};
+        if (disconnected) {
+            return;
+        }
+    }
     if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_set_port_feature(port, usb_hub_port_feature::POWER))) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Failed port power request\n";
@@ -192,6 +209,12 @@ void usbhub::SwitchPortOn(int port) {
 }
 
 void usbhub::ClearStatusChange(int port, uint32_t statuses) {
+    {
+        std::lock_guard lock{ready_mtx};
+        if (disconnected) {
+            return;
+        }
+    }
     if ((statuses & USB_PORT_STATUS_CSC) != 0) {
         if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::CONNECTION_CHANGE))) {
             std::stringstream str{};
@@ -233,6 +256,12 @@ void usbhub::EnablePort(int port) {
 }
 
 void usbhub::DisablePort(int port) {
+    {
+        std::lock_guard lock{ready_mtx};
+        if (disconnected) {
+            return;
+        }
+    }
     if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_clear_port_feature(port, usb_hub_port_feature::ENABLE))) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Failed port disable request\n";
@@ -241,6 +270,12 @@ void usbhub::DisablePort(int port) {
 }
 
 void usbhub::ResetPort(int port) {
+    {
+        std::lock_guard lock{ready_mtx};
+        if (disconnected) {
+            return;
+        }
+    }
     if (!usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_set_port_feature(port, usb_hub_port_feature::RESET))) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Failed port disable request\n";
@@ -249,14 +284,32 @@ void usbhub::ResetPort(int port) {
 }
 
 bool usbhub::ResettingPort(int port) {
+    {
+        std::lock_guard lock{ready_mtx};
+        if (disconnected) {
+            return false;
+        }
+    }
     return (GetPortStatus(port) & USB_PORT_STATUS_PRS) != 0;
 }
 
 bool usbhub::EnabledPort(int port) {
+    {
+        std::lock_guard lock{ready_mtx};
+        if (disconnected) {
+            return false;
+        }
+    }
     return (GetPortStatus(port) & USB_PORT_STATUS_PES) != 0;
 }
 
 usb_speed usbhub::PortSpeed(int port) {
+    {
+        std::lock_guard lock{ready_mtx};
+        if (disconnected) {
+            return LOW;
+        }
+    }
     uint32_t hwstatus{0};
     {
         auto buffer = usbInterfaceInformation.port.ControlRequest(*endpoint0, usb_req_hubportstatus(port));

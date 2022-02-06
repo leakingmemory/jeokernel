@@ -608,14 +608,19 @@ struct xhci_slot_data {
     xhci_slot_context slotContext[64];
     xhci_trb_ring<32> Endpoint0Ring;
     xhci_endpoint *Endpoints[31];
+    bool stopped;
 
-    xhci_slot_data(uint64_t physaddr) : Endpoint0Ring(physaddr + Endpoint0RingOffset()), slotContext() { }
+    xhci_slot_data(uint64_t physaddr) : Endpoint0Ring(physaddr + Endpoint0RingOffset()), slotContext(), stopped(false) { }
 
     constexpr uint32_t SlotContextOffset() {
         return 0;
     }
     constexpr uint32_t Endpoint0RingOffset() {
         return SlotContextOffset() + sizeof(slotContext);
+    }
+
+    void Stop() {
+        stopped = true;
     }
 
     xhci_endpoint_context *EndpointContext(int index, bool contextSize64) {
@@ -639,11 +644,15 @@ struct xhci_slot_data {
     void UnsetEndpoint(int index, xhci_endpoint *endpoint) {
         if (Endpoints[index] == endpoint) {
             Endpoints[index] = nullptr;
+        } else {
+            std::stringstream str{};
+            str << "Not unset event handling for endpoint " << index << "\n";
+            get_klogger() << str.str().c_str();
         }
     }
 
     xhci_endpoint *Endpoint(int index) {
-        return Endpoints[index];
+        return stopped ? nullptr : Endpoints[index];
     }
 
     void DumpSlotContext() {
@@ -753,6 +762,7 @@ public:
     xhci_port_enumerated_device(xhci &xhciRef, std::shared_ptr<xhci_device> deviceData, std::shared_ptr<usb_endpoint> endpoint0, std::shared_ptr<xhci_input_context_container> inputctx_container, usb_minimum_device_descriptor minDesc, usb_speed speed, uint8_t slot) :
     xhciRef(xhciRef), deviceData(deviceData), endpoint0(endpoint0), inputctx_container(inputctx_container), minDesc(minDesc), speed(speed), slot(slot) {}
     ~xhci_port_enumerated_device();
+    void Stop() override;
     usb_speed Speed() const override;
     uint8_t SlotId() const override;
     usb_minimum_device_descriptor MinDesc() const override;

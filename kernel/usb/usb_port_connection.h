@@ -18,6 +18,9 @@ template <int n> struct usb_byte_buffer {
 
 class usb_hw_enumerated_device {
 public:
+    virtual ~usb_hw_enumerated_device() {
+    }
+    virtual void Stop() = 0;
     virtual usb_speed Speed() const = 0;
     virtual uint8_t SlotId() const = 0;
     virtual usb_minimum_device_descriptor MinDesc() const = 0;
@@ -37,6 +40,8 @@ public:
 
 class usb_hw_enumeration {
 public:
+    virtual ~usb_hw_enumeration() {
+    }
     virtual std::shared_ptr<usb_hw_enumeration_addressing> enumerate() = 0;
 };
 
@@ -137,6 +142,7 @@ private:
 public:
     usb_port_connection(usb_hub &hub, uint8_t port);
     ~usb_port_connection();
+    void stop();
     uint8_t Port() {
         return port;
     }

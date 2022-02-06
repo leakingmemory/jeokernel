@@ -28,6 +28,7 @@ public:
         hub.PortRouting(portRouting, port);
         endpoint0 = hub.CreateControlEndpoint(portRouting, hub.GetHubAddress(), minDesc.bMaxPacketSize0, func, 0, usb_endpoint_direction::BOTH, speed);
     }
+    void Stop() override;
     usb_speed Speed() const override;
     uint8_t SlotId() const override;
     usb_minimum_device_descriptor MinDesc() const override;
@@ -36,6 +37,9 @@ public:
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
 };
+
+void legacy_usb_enumerated::Stop() {
+}
 
 usb_speed legacy_usb_enumerated::Speed() const {
     return speed;
@@ -249,6 +253,15 @@ usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
 }
 
 usb_port_connection::~usb_port_connection() {
+    enumeratedDevice = nullptr;
+    endpoint0 = nullptr;
+    get_klogger() << "USB port disconnected\n";
+}
+
+void usb_port_connection::stop() {
+    if (enumeratedDevice) {
+        enumeratedDevice->Stop();
+    }
     if (device != nullptr) {
         devices().remove(*device);
         delete device;
@@ -258,11 +271,11 @@ usb_port_connection::~usb_port_connection() {
         thread->join();
         delete thread;
     }
-    enumeratedDevice = {};
+    enumeratedDevice = nullptr;
     if (addr) {
         hub.DisablePort(port);
     }
-    get_klogger() << "USB port disconnected\n";
+    get_klogger() << "USB port disabled\n";
 }
 
 std::shared_ptr<usb_endpoint> usb_port_connection::InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs) {
