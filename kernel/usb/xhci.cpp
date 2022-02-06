@@ -738,7 +738,9 @@ void xhci::CommandCompletion(const xhci_trb &event) {
         if (cmd->phys == phys) {
             cmd->code = code;
             cmd->slotID = slotId;
+            auto *trb = cmd->trb;
             cmd->SetDone();
+            commandBarrier = trb;
             break;
         }
     }
