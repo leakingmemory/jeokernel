@@ -745,6 +745,12 @@ void xhci::TransferEvent(const xhci_trb &event) {
 
 xhci_port_enumerated_device::~xhci_port_enumerated_device() {
     auto disableSlotCommand = xhciRef.DisableSlot(slot);
+    if (!disableSlotCommand) {
+        std::stringstream str{};
+        str << "XHCI disable slot failed: Couldn't create command TRB on ring\n";
+        get_klogger() << str.str().c_str();
+        return;
+    }
     {
         bool done{false};
         int timeout = 5;
@@ -799,6 +805,12 @@ bool xhci_port_enumerated_device::SetHub(uint8_t numberOfPorts, bool multiTT, ui
         slotContext->numberOfPorts = numberOfPorts;
         slotContext->ttThinkTime = ttThinkTime;
         auto configCmd = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
+        if (!configCmd) {
+            std::stringstream str{};
+            str << "XHCI evaluate context (set hub) failed: Couldn't create command on ring\n";
+            get_klogger() << str.str().c_str();
+            return false;
+        }
         bool done{false};
         int timeout = 5;
         while (--timeout > 0) {
@@ -908,6 +920,9 @@ xhci_port_enumerated_device::CreateInterruptEndpoint(const std::vector<uint8_t> 
     endpoint->maxESITPayloadLow = maxESITpayload;
     {
         auto evalContextCommand = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
+        if (!evalContextCommand) {
+            return {};
+        }
         bool done{false};
         int timeout = 5;
         while (--timeout > 0) {
@@ -980,6 +995,12 @@ xhci_port_enumeration_addressing::~xhci_port_enumeration_addressing() noexcept {
 
 xhci_slot_data *xhci_port_enumeration_addressing::enable_slot() {
     auto enableSlotCommand = xhciRef.EnableSlot(0);
+    if (!enableSlotCommand) {
+        std::stringstream str{};
+        str << "XHCI enable slot failed: Couldn't create command TRB on ring\n";
+        get_klogger() << str.str().c_str();
+        return nullptr;
+    }
     bool done{false};
     int timeout = 5;
     while (--timeout > 0) {
@@ -1058,6 +1079,13 @@ xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data
         endpoint0->maxPacketSize = 8;
         {
             auto setAddressCommand = xhciRef.SetAddress(inputctx_container->InputContextPhys(), slot);
+            if (!setAddressCommand) {
+                std::stringstream str{};
+                str << "XHCI set address failed: Couldn't create command TRB on ring\n";
+                get_klogger() << str.str().c_str();
+                disable_slot();
+                return nullptr;
+            }
             bool done{false};
             int timeout = 5;
             while (--timeout > 0) {
@@ -1123,6 +1151,13 @@ std::shared_ptr<usb_endpoint> xhci_port_enumeration_addressing::configure_baseli
         endpoint0_ctx->maxPacketSize = minDevDesc.bMaxPacketSize0;
         {
             auto evalContextCommand = xhciRef.EvaluateContext(inputctx_container->InputContextPhys(), slot);
+            if (!evalContextCommand) {
+                std::stringstream str{};
+                str << "XHCI evaluate context failed to create command TRB on ring\n";
+                get_klogger() << str.str().c_str();
+                disable_slot();
+                return {};
+            }
             bool done{false};
             int timeout = 5;
             while (--timeout > 0) {
@@ -1151,6 +1186,12 @@ uint8_t xhci_port_enumeration_addressing::get_address() {
 
 void xhci_port_enumeration_addressing::disable_slot() {
     auto disableSlotCommand = xhciRef.DisableSlot(slot);
+    if (!disableSlotCommand) {
+        std::stringstream str{};
+        str << "XHCI disable slot failed: Failed to create command TRB on ring\n";
+        get_klogger() << str.str().c_str();
+        return;
+    }
     {
         bool done{false};
         int timeout = 5;

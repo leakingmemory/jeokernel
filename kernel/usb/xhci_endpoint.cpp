@@ -34,19 +34,25 @@ xhci_endpoint::~xhci_endpoint() {
         auto *inputctx = &(inputctx_container->InputContext()->context[0]);
         inputctx->dropContextFlags = 1 << endpointBit;
         auto evalContextCommand = xhciRef.EvaluateContext(inputctx_container->InputContextPhys(), slot);
-        bool done{false};
-        int timeout = 5;
-        while (--timeout > 0) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
-            if (evalContextCommand->IsDone()) {
-                done = true;
-                break;
+        if (evalContextCommand) {
+            bool done{false};
+            int timeout = 5;
+            while (--timeout > 0) {
+                using namespace std::literals::chrono_literals;
+                std::this_thread::sleep_for(10ms);
+                if (evalContextCommand->IsDone()) {
+                    done = true;
+                    break;
+                }
             }
-        }
-        if (!done) {
+            if (!done) {
+                std::stringstream str{};
+                str << "Failed to deconfigure endpoint " << endpoint << "\n";
+                get_klogger() << str.str().c_str();
+            }
+        } else {
             std::stringstream str{};
-            str <<  "Failed to deconfigure endpoint " << endpoint << "\n";
+            str << "Failed to deconfigure endpoint " << endpoint << ": TRB command ring full?\n";
             get_klogger() << str.str().c_str();
         }
     }
@@ -351,20 +357,25 @@ bool xhci_endpoint::ResetEndpoint() {
     }
 
     auto resetEndpointCommand = xhciRef.ResetEndpoint(slot, endpointIndex);
-    bool done{false};
-    int timeout = 5;
-    while (--timeout > 0) {
-        using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(10ms);
-        if (resetEndpointCommand->IsDone()) {
-            done = true;
-            break;
+    if (resetEndpointCommand) {
+        bool done{false};
+        int timeout = 5;
+        while (--timeout > 0) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if (resetEndpointCommand->IsDone()) {
+                done = true;
+                break;
+            }
         }
+        if (!done) {
+            get_klogger() << "Failed to reset xhci endpoint\n";
+        }
+        return done;
+    } else {
+        get_klogger() << "Failed to reset xhci endpoint: TRB command ring full?\n";
+        return false;
     }
-    if (!done) {
-        get_klogger() << "Failed to reset xhci endpoint\n";
-    }
-    return done;
 }
 
 bool xhci_endpoint::StopEndpoint() {
@@ -375,17 +386,19 @@ bool xhci_endpoint::StopEndpoint() {
 
     auto stopEndpointCommand = xhciRef.StopEndpoint(slot, endpointIndex);
     bool done{false};
-    int timeout = 5;
     using namespace std::literals::chrono_literals;
-    while (--timeout > 0) {
-        std::this_thread::sleep_for(10ms);
-        if (stopEndpointCommand->IsDone()) {
-            done = true;
-            break;
+    if (stopEndpointCommand) {
+        int timeout = 5;
+        while (--timeout > 0) {
+            std::this_thread::sleep_for(10ms);
+            if (stopEndpointCommand->IsDone()) {
+                done = true;
+                break;
+            }
         }
     }
     if (!done) {
-        get_klogger() << "Failed to reset xhci endpoint\n";
+        get_klogger() << "Failed to stop xhci endpoint\n";
         return false;
     }
     std::this_thread::sleep_for(10ms);
@@ -400,13 +413,15 @@ bool xhci_endpoint::SetDequeuePtr(uint64_t ptr) {
 
     auto setDeq = xhciRef.SetDequeuePtr(slot, endpointIndex, 0, 0, ptr);
     bool done{false};
-    int timeout = 5;
-    while (--timeout > 0) {
-        using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(10ms);
-        if (setDeq->IsDone()) {
-            done = true;
-            break;
+    if (setDeq) {
+        int timeout = 5;
+        while (--timeout > 0) {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(10ms);
+            if (setDeq->IsDone()) {
+                done = true;
+                break;
+            }
         }
     }
     if (!done) {
@@ -428,15 +443,17 @@ bool xhci_endpoint::ReconfigureEndpoint(uint64_t dequeueuPtr) {
     auto *endpoint = inputContext->EndpointContext(endpointIndex - 1, xhciRef.contextSize64);
     endpoint->trDequePointer = dequeueuPtr;
 
-    auto stopEndpointCommand = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
+    auto configureEndpointCommand = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
     bool done{false};
-    int timeout = 5;
     using namespace std::literals::chrono_literals;
-    while (--timeout > 0) {
-        std::this_thread::sleep_for(10ms);
-        if (stopEndpointCommand->IsDone()) {
-            done = true;
-            break;
+    if (configureEndpointCommand) {
+        int timeout = 5;
+        while (--timeout > 0) {
+            std::this_thread::sleep_for(10ms);
+            if (configureEndpointCommand->IsDone()) {
+                done = true;
+                break;
+            }
         }
     }
     if (!done) {
