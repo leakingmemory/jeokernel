@@ -353,7 +353,7 @@ void xhci::init() {
                             break;
                         }
                     }
-                    HcEvent();
+                    PrimaryEventRingAsync();
                 }
             }
     );
@@ -374,7 +374,7 @@ bool xhci::irq() {
         uint32_t clear{0};
         if ((status & XHCI_STATUS_EVENT_INTERRUPT) != 0) {
             clear |= XHCI_STATUS_EVENT_INTERRUPT;
-            event_sema.release();
+            HcEvent();
         }
         if (clear == 0) {
             break;
@@ -646,36 +646,55 @@ xhci::~xhci() {
 void xhci::PrimaryEventRing() {
     uint32_t index{0};
     uint8_t cycle{0};
-    {
-        critical_section cli{};
-        std::lock_guard lock{xhcilock};
-        cycle = primaryEventCycle;
-        index = primaryEventIndex;
-    }
+    critical_section cli{};
+    std::lock_guard lock{xhcilock};
+    cycle = primaryEventCycle;
+    index = primaryEventIndex;
+    bool hasEvents{false};
     while (true) {
         xhci_trb event = resources->Rings()->PrimaryEventRing.ring[index];
         if ((event.Command & XHCI_TRB_CYCLE) != cycle) {
             break;
         }
-        uint16_t trbtype{event.Command};
-        trbtype = trbtype >> 10;
-        Event(trbtype, event);
+        events.push_back(event);
+        hasEvents = true;
         ++index;
         if (index == resources->Rings()->PrimaryEventRing.Length()) {
             cycle = cycle != 0 ? 0 : 1;
             index = 0;
         }
     }
+    primaryEventCycle = cycle;
+    primaryEventIndex = index;
+
+    if (hasEvents) {
+        event_sema.release();
+    }
+
+    uint64_t dequeptr{resources->PrimaryFirstEventPhys()};
+    dequeptr += sizeof(resources->Rings()->PrimaryEventRing.ring[0]) * index;
+    runtimeregs->interrupters[0].eventRingDequeuePointer = dequeptr |
+                                                           XHCI_INTERRUPTER_DEQ_HANDLER_BUSY;
+}
+
+void xhci::PrimaryEventRingAsync() {
+    std::vector<xhci_trb> events{};
+
     {
         critical_section cli{};
         std::lock_guard lock{xhcilock};
-        primaryEventCycle = cycle;
-        primaryEventIndex = index;
 
-        uint64_t dequeptr{resources->PrimaryFirstEventPhys()};
-        dequeptr += sizeof(resources->Rings()->PrimaryEventRing.ring[0]) * index;
-        runtimeregs->interrupters[0].eventRingDequeuePointer = dequeptr |
-                                                               XHCI_INTERRUPTER_DEQ_HANDLER_BUSY;
+        for (xhci_trb trb : this->events) {
+            events.push_back(trb);
+        }
+
+        this->events.clear();
+    }
+
+    for (xhci_trb event : events) {
+        uint16_t trbtype{event.Command};
+        trbtype = trbtype >> 10;
+        Event(trbtype, event);
     }
 }
 

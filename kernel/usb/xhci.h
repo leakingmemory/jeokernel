@@ -844,6 +844,7 @@ private:
     raw_semaphore event_sema;
     std::thread *event_thread;
     std::vector<std::shared_ptr<xhci_command>> commands;
+    std::vector<xhci_trb> events;
     xhci_trb *commandBarrier;
     uint32_t commandIndex;
     uint32_t primaryEventIndex;
@@ -860,7 +861,7 @@ private:
     bool contextSize64 : 1;
 public:
     xhci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("xhci", bus), pciDeviceInformation(deviceInformation),
-    supported_protocol_list(), xhcilock(), event_sema(-1), event_thread(nullptr), commands(), commandBarrier(nullptr),
+    supported_protocol_list(), xhcilock(), event_sema(-1), event_thread(nullptr), commands(), events(), commandBarrier(nullptr),
     commandIndex(0), primaryEventIndex(0), u2Exit(0), numInterrupters(0), eventRingSegmentTableMax(0), u1Exit(0), numSlots(0),
     numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false), controller64bit(false), contextSize64(false) {}
     ~xhci();
@@ -1041,6 +1042,7 @@ private:
     bool irq();
     void HcEvent();
     void PrimaryEventRing();
+    void PrimaryEventRingAsync();
     void Event(uint8_t trbtype, const xhci_trb &event);
     void CommandCompletion(const xhci_trb &event);
     void TransferEvent(const xhci_trb &event);
