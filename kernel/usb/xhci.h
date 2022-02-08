@@ -13,6 +13,7 @@
 
 #endif
 
+#include "StructPool.h"
 #include <concurrency/raw_semaphore.h>
 #include <sstream>
 #include <memory>
@@ -717,6 +718,25 @@ static_assert(sizeof(xhci_dcbaa) <= 4096);
 
 class xhci_device;
 
+#define XHCI_BUFFER_SHORT   64
+
+template <int n, class PhysPtr> class xhci_buffer : public usb_buffer {
+private:
+    std::shared_ptr<StructPoolPointer<usb_byte_buffer<n>, PhysPtr>> buffer;
+public:
+    xhci_buffer(std::shared_ptr<StructPoolPointer<usb_byte_buffer<n>, PhysPtr>> buffer) : buffer(buffer) {
+    }
+    void *Pointer() override {
+        return buffer->Pointer();
+    }
+    uint64_t Addr() override{
+        return buffer->Phys();
+    }
+    size_t Size() override {
+        return n;
+    }
+};
+
 class xhci_resources {
 private:
     uint8_t CommandCycle : 1;
@@ -732,6 +752,7 @@ public:
     virtual uint64_t PrimaryEventSegmentsPhys() const = 0;
     virtual xhci_rings *Rings() const = 0;
     virtual std::shared_ptr<xhci_device> CreateDeviceData() const = 0;
+    virtual std::shared_ptr<usb_buffer> Alloc(size_t size) = 0;
 };
 
 class xhci_device {
@@ -898,6 +919,7 @@ public:
     size_t TransferBufferSize() override {
         return XHCI_TRANSFER_BUFFER_SIZE;
     }
+    std::shared_ptr<usb_buffer> Alloc(size_t size);
     hw_spinlock &HcdSpinlock() override {
         return xhcilock;
     }

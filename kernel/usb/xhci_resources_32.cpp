@@ -4,9 +4,10 @@
 
 #include <strings.h>
 #include "xhci_resources_32.h"
+#include "UsbBuffer32.h"
 
 xhci_resources_32::xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize) :
-        dcbaa_page(4096), scratchpad_array(), scratchpad_pages(), rings_page(sizeof(xhci_rings)) {
+        dcbaa_page(4096), scratchpad_array(), scratchpad_pages(), rings_page(sizeof(xhci_rings)), bufPool() {
     if (pagesize > 4096) {
         wild_panic("Pagesize other than 4096 is not supported by driver due to alignment issues.");
     }
@@ -58,6 +59,16 @@ uint64_t xhci_resources_32::PrimaryEventSegmentsPhys() const {
 std::shared_ptr<xhci_device> xhci_resources_32::CreateDeviceData() const {
     std::shared_ptr<xhci_device> deviceData{new xhci_device_32};
     return deviceData;
+}
+
+std::shared_ptr<usb_buffer> xhci_resources_32::Alloc(size_t size) {
+    if (size <= XHCI_BUFFER_SHORT) {
+        std::shared_ptr<usb_buffer> buffer{new xhci_buffer<XHCI_BUFFER_SHORT,uint32_t>(bufPool.Alloc())};
+        return buffer;
+    } else {
+        std::shared_ptr<usb_buffer> buffer{new UsbBuffer32(size)};
+        return buffer;
+    }
 }
 
 #define XHCI_DEVICE_SLOT_SIZE 4096

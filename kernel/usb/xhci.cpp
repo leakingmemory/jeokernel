@@ -584,6 +584,10 @@ xhci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t h
     return {};
 }
 
+std::shared_ptr<usb_buffer> xhci::Alloc(size_t size) {
+    return resources->Alloc(size);
+}
+
 std::tuple<uint64_t,xhci_trb *> xhci::NextCommand() {
     xhci_trb *trb = &(resources->Rings()->CommandRing.ring[commandIndex]);
     if (commandBarrier == nullptr) {

@@ -195,7 +195,7 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
     }
     std::shared_ptr<usb_buffer> buffer;
     if (size > 0) {
-        buffer = std::shared_ptr<usb_buffer>(new UsbBuffer32(size));
+        buffer = xhciRef.Alloc(size);
         if (direction == usb_transfer_direction::OUT) {
             memcpy(buffer->Pointer(), data, size);
         } else {

@@ -14,6 +14,7 @@ private:
     std::unique_ptr<Phys32Page> scratchpad_array;
     std::vector<std::shared_ptr<Phys32Page>> scratchpad_pages;
     Phys32Page rings_page;
+    StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<XHCI_BUFFER_SHORT>>> bufPool;
 public:
     xhci_resources_32(int maxScratchpadBuffers, uint16_t pagesize);
     ~xhci_resources_32() override;
@@ -25,6 +26,7 @@ public:
     uint64_t PrimaryEventSegmentsPhys() const override;
     xhci_rings *Rings() const override;
     std::shared_ptr<xhci_device> CreateDeviceData() const override;
+    std::shared_ptr<usb_buffer> Alloc(size_t size) override;
 };
 
 class xhci_device_32 : public xhci_device {
