@@ -206,6 +206,25 @@ struct ehci_endpoint_cleanup {
     std::shared_ptr<ehci_transfer> transfers;
 };
 
+#define EHCI_BUFFER_SHORT   64
+
+template <int n> class ehci_buffer : public usb_buffer {
+private:
+    std::shared_ptr<StructPoolPointer<usb_byte_buffer<n>, uint32_t>> buffer;
+public:
+    ehci_buffer(std::shared_ptr<StructPoolPointer<usb_byte_buffer<n>, uint32_t>> buffer) : buffer(buffer) {
+    }
+    void *Pointer() override {
+        return buffer->Pointer();
+    }
+    uint64_t Addr() override{
+        return buffer->Phys();
+    }
+    size_t Size() override {
+        return n;
+    }
+};
+
 class ehci : public usb_hcd {
     friend ehci_endpoint;
     friend ehci_transfer;
@@ -224,14 +243,16 @@ private:
     std::vector<std::shared_ptr<ehci_endpoint_cleanup>> delayedDestruction;
     std::vector<std::shared_ptr<ehci_endpoint_cleanup>> nextForDestruction;
     std::vector<ehci_endpoint *> watchList;
+    StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<EHCI_BUFFER_SHORT>>> bufPool;
     hw_spinlock ehcilock;
     uint8_t numPorts;
     bool portPower;
 public:
     ehci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("ehci", bus), pciDeviceInformation(deviceInformation),
                                                               FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()), qhtdPool(),
-                                                              qh(), intqhroots(), intqhs(), intcycle(0), watchList(), delayedDestruction(),
-                                                              nextForDestruction(), ehcilock(), numPorts(0), portPower(false) {}
+                                                              qh(), intqhroots(), intqhs(), intcycle(0), watchList(), bufPool(),
+                                                              delayedDestruction(), nextForDestruction(), ehcilock(), numPorts(0),
+                                                              portPower(false) {}
     void init() override;
     void dumpregs() override;
     int GetNumberOfPorts() override;
@@ -251,6 +272,7 @@ public:
     size_t TransferBufferSize() override {
         return EHCI_TRANSFER_BUFFER_SIZE;
     }
+    std::shared_ptr<usb_buffer> Alloc(size_t size);
     hw_spinlock &HcdSpinlock() override {
         return ehcilock;
     }

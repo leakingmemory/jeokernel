@@ -567,6 +567,16 @@ ehci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t h
     return usbEndpoint;
 }
 
+std::shared_ptr<usb_buffer> ehci::Alloc(size_t size) {
+    if (size <= EHCI_BUFFER_SHORT) {
+        std::shared_ptr<usb_buffer> buffer{new ehci_buffer<EHCI_BUFFER_SHORT>(bufPool.Alloc())};
+        return buffer;
+    } else {
+        std::shared_ptr<usb_buffer> buffer{new UsbBuffer32(size)};
+        return buffer;
+    }
+}
+
 bool ehci::irq() {
     bool handled{false};
     std::lock_guard lock{ehcilock};
@@ -776,7 +786,7 @@ ehci_endpoint::CreateTransferWithLock(bool commitTransaction, std::shared_ptr<us
     } else if (size > 0) {
         return {};
     }
-    if (buffer_phys > 0xFFFFFFFF || (buffer_phys & 4095) != 0) {
+    if (buffer_phys > 0xFFFFFFFF) {
         return {};
     }
     if (size > 4096) {
@@ -851,7 +861,7 @@ ehci_endpoint::CreateTransferWithoutLock(bool commitTransaction, std::shared_ptr
 std::shared_ptr<usb_transfer>
 ehci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction,
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
-    std::shared_ptr<usb_buffer> buffer = Alloc();
+    std::shared_ptr<usb_buffer> buffer = ehciRef.Alloc(size);
     memcpy(buffer->Pointer(), data, size);
     std::function<void (ehci_transfer &)> applyFunc = [] (ehci_transfer &) {};
     return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
@@ -862,7 +872,7 @@ ehci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = ehciRef.Alloc(size);
     }
     std::function<void (ehci_transfer &)> applyFunc = [] (ehci_transfer &) {};
     return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
@@ -874,7 +884,7 @@ ehci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
                               int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = ehciRef.Alloc(size);
     }
     std::function<void (ehci_transfer &)> applyFunc = [doneCall] (ehci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
@@ -888,7 +898,7 @@ ehci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
                                       int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = ehciRef.Alloc(size);
     }
     std::function<void (ehci_transfer &)> applyFunc = [doneCall] (ehci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
