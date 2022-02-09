@@ -278,6 +278,18 @@ uhci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t h
     }
 }
 
+std::shared_ptr<usb_buffer> uhci::Alloc(size_t size) {
+    if (size <= UHCI_TRANSFER_SHORT_SIZE) {
+        std::shared_ptr<usb_buffer> buffer{new uhci_buffer<UHCI_TRANSFER_SHORT_SIZE>(shortBufPool.Alloc())};
+        return buffer;
+    } else if (size <= UHCI_TRANSFER_BUFFER_SIZE) {
+        std::shared_ptr<usb_buffer> buffer{new uhci_buffer<UHCI_TRANSFER_BUFFER_SIZE>(bufPool.Alloc())};
+        return buffer;
+    } else {
+        return {};
+    }
+}
+
 void uhci::EnablePort(int port) {
     uint32_t reg = iobase + REG_PORTSC1 + (port * 2);
     outportw(reg, UHCI_PORT_ENABLED);
@@ -379,8 +391,11 @@ bool uhci::PollPorts() {
 }
 
 std::shared_ptr<usb_buffer> uhci_endpoint::Alloc() {
-    std::shared_ptr<usb_buffer> buffer{new uhci_buffer(uhciRef)};
-    return buffer;
+    return {};
+}
+
+std::shared_ptr<usb_buffer> uhci_endpoint::Alloc(size_t size) {
+    return uhciRef.Alloc(size);
 }
 
 uhci_endpoint::uhci_endpoint(uhci &uhciRef, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum,
@@ -497,7 +512,7 @@ uhci_endpoint::CreateTransferWithoutLock(bool commitTransaction, std::shared_ptr
 std::shared_ptr<usb_transfer>
 uhci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
                               uint16_t delayInterrupt, int8_t dataToggle) {
-    std::shared_ptr<usb_buffer> buffer = Alloc();
+    std::shared_ptr<usb_buffer> buffer = Alloc(size);
     memcpy(buffer->Pointer(), data, size);
     std::function<void (uhci_transfer &)> applyFunc = [] (uhci_transfer &) {};
     return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
@@ -508,7 +523,7 @@ uhci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
                               uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = Alloc(size);
     }
     std::function<void (uhci_transfer &)> applyFunc = [] (uhci_transfer &) {};
     return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
@@ -519,7 +534,7 @@ uhci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = Alloc(size);
     }
     std::function<void (uhci_transfer &)> applyFunc = [doneCall] (uhci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
@@ -532,7 +547,7 @@ uhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
                                       bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = Alloc(size);
     }
     std::function<void (uhci_transfer &)> applyFunc = [doneCall] (uhci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
@@ -612,9 +627,6 @@ void uhci_endpoint::IntWithLock() {
 
 bool uhci_endpoint::ClearStall() {
     return false;
-}
-
-uhci_buffer::uhci_buffer(uhci &uhci) : bufferPtr(uhci.bufPool.Alloc()){
 }
 
 uhci_transfer::uhci_transfer(uhci &uhciRef) : td(uhciRef.qhtdPool.Alloc()), buffer(), next() {

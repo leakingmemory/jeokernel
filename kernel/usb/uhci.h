@@ -12,7 +12,9 @@
 #include "usb_hcd.h"
 #include "usb_transfer.h"
 
-#define UHCI_TRANSFER_BUFFER_SIZE 64
+#define UHCI_TRANSFER_SHORT_SIZE    64
+#define UHCI_TRANSFER_BUFFER_SIZE   1024
+#define UHCI_TRANSFER_MAX_SIZE      1024
 
 class uhci_endpoint;
 
@@ -51,11 +53,11 @@ static_assert(sizeof(uhci_qh_or_td) == 32);
 
 class uhci;
 
-class uhci_buffer : public usb_buffer {
+template <int n> class uhci_buffer : public usb_buffer {
 private:
-    std::shared_ptr<StructPoolPointer<usb_byte_buffer<UHCI_TRANSFER_BUFFER_SIZE>,uint32_t>> bufferPtr;
+    std::shared_ptr<StructPoolPointer<usb_byte_buffer<n>,uint32_t>> bufferPtr;
 public:
-    explicit uhci_buffer(uhci &uhci);
+    explicit uhci_buffer(std::shared_ptr<StructPoolPointer<usb_byte_buffer<n>,uint32_t>> bufferPtr) : bufferPtr(bufferPtr) { }
     void *Pointer() override {
         return bufferPtr->Pointer();
     }
@@ -63,7 +65,7 @@ public:
         return bufferPtr->Phys();
     }
     size_t Size() override {
-        return UHCI_TRANSFER_BUFFER_SIZE;
+        return n;
     }
 };
 
@@ -112,6 +114,7 @@ public:
     std::shared_ptr<usb_transfer> CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
     std::shared_ptr<usb_transfer> CreateTransferWithLock(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
     std::shared_ptr<usb_buffer> Alloc() override;
+    std::shared_ptr<usb_buffer> Alloc(size_t size);
     bool ClearStall() override;
     void IntWithLock();
 };
@@ -123,7 +126,6 @@ struct uhci_endpoint_cleanup {
 
 class uhci : public usb_hcd {
     friend uhci_endpoint;
-    friend uhci_buffer;
     friend uhci_transfer;
 private:
     PciDeviceInformation pciDeviceInformation;
@@ -134,6 +136,7 @@ private:
     std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> intqhroots[0x20];
     std::shared_ptr<StructPoolPointer<uhci_qh_or_td,uint32_t>> intqhs[0x1F];
     unsigned int intcycle;
+    StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<UHCI_TRANSFER_SHORT_SIZE>>> shortBufPool;
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<UHCI_TRANSFER_BUFFER_SIZE>>> bufPool;
     std::vector<uhci_endpoint *> watchList;
     std::vector<std::shared_ptr<uhci_endpoint_cleanup>> delayedDestruction;
@@ -143,7 +146,8 @@ public:
     uhci(Bus &bus, PciDeviceInformation &deviceInformation) :
         usb_hcd("uhci", bus), pciDeviceInformation(deviceInformation),
         FramesPhys(4096), Frames((uint32_t *) FramesPhys.Pointer()),
-        qhtdPool(), qh(), intqhroots(), intqhs(), intcycle(0), bufPool(), watchList(), delayedDestruction(), uhcilock() {}
+        qhtdPool(), qh(), intqhroots(), intqhs(), intcycle(0), shortBufPool(), bufPool(), watchList(),
+        delayedDestruction(), uhcilock() {}
     void init() override;
     bool reset();
     void dumpregs() override;
@@ -163,8 +167,9 @@ public:
     std::shared_ptr<usb_endpoint> CreateControlEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed, int pollingIntervalMs) override;
     size_t TransferBufferSize() override {
-        return UHCI_TRANSFER_BUFFER_SIZE;
+        return UHCI_TRANSFER_MAX_SIZE;
     }
+    std::shared_ptr<usb_buffer> Alloc(size_t size);
     hw_spinlock &HcdSpinlock() override {
         return uhcilock;
     }
