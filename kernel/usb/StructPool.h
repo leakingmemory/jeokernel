@@ -9,6 +9,9 @@
 #include <optional>
 #include <klogger.h>
 #include <vector>
+#include <mutex>
+#include <concurrency/hw_spinlock.h>
+#include <concurrency/critical_section.h>
 
 template <typename Struct, typename PhysPtr> class StructPoolPointer {
 private:
@@ -47,8 +50,9 @@ private:
     Pagealloc page;
     uint32_t allocated;
     uint32_t map[((4096 / 32) / sizeof(type)) + 1];
+    hw_spinlock &spinlock;
 public:
-    StructPoolAllocator() : page(4096), allocated(0), map() {
+    StructPoolAllocator(hw_spinlock &spinlock) : page(4096), allocated(0), map(), spinlock(spinlock) {
         for (int i = 0; i <= (ItemsPerPage() / 32); i++) {
             map[i] = 0;
         }
@@ -57,12 +61,16 @@ public:
         return 4096 / sizeof(type);
     }
     bool IsFree(size_t i) {
+        critical_section cli{};
+        std::lock_guard lock{spinlock};
         size_t index = i >> 5;
         uint32_t bit = (uint32_t) (i & 31);
         bit = 1 << bit;
         return (map[index] & bit) == 0;
     }
     void Free(PhysPtr phys) {
+        critical_section cli{};
+        std::lock_guard lock{spinlock};
         PhysPtr offset = phys - page.PhysAddr();
         PhysPtr i = offset / sizeof(type);
         size_t index = i >> 5;
@@ -111,8 +119,11 @@ public:
     typedef typename Allocator::PhysPtr PhysPtr;
 private:
     std::vector<Allocator *> allocators;
+    hw_spinlock spinlock;
 public:
     std::shared_ptr<StructPoolPointer<type, PhysPtr>> Alloc() {
+        critical_section cli{};
+        std::lock_guard lock{spinlock};
         for (Allocator *allocator : allocators) {
             std::optional<PhysPtr> phys = allocator->Alloc();
             if (phys) {
@@ -120,7 +131,7 @@ public:
                 return std::shared_ptr<StructPoolPointer<type, PhysPtr>>(p);
             }
         }
-        auto *allocator = new Allocator();
+        auto *allocator = new Allocator(spinlock);
         std::optional<PhysPtr> phys = allocator->Alloc();
         allocators.push_back(allocator);
         auto *p = new StructPoolPointerImpl<Allocator, type, PhysPtr>(*allocator, allocator->PointerTo(*phys), *phys);
