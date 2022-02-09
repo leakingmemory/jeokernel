@@ -906,11 +906,6 @@ ehci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
     return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
 }
 
-std::shared_ptr<usb_buffer> ehci_endpoint::Alloc() {
-    std::shared_ptr<usb_buffer> buffer{new UsbBuffer32(4096)};
-    return buffer;
-}
-
 bool ehci_endpoint::Addressing64bit() {
     return false;
 }

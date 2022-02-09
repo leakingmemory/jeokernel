@@ -111,10 +111,6 @@ xhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
     return transfer;
 }
 
-std::shared_ptr<usb_buffer> xhci_endpoint::Alloc() {
-    return {};
-}
-
 class xhci_setup_packet_buffer : public usb_buffer {
 private:
     uint8_t buf[8];

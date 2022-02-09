@@ -252,15 +252,16 @@ struct ohci_registers {
 } __attribute__((__packed__));
 static_assert(sizeof(ohci_registers) == 0x58);
 
-#define OHCI_TRANSFER_BUFSIZE 64
+#define OHCI_SHORT_TRANSFER_BUFSIZE 64
+#define OHCI_TRANSFER_BUFSIZE       1024
 
 class ohci;
 
-class ohci_buffer : public usb_buffer {
+template <int n> class ohci_buffer : public usb_buffer {
 private:
-    std::shared_ptr<StructPoolPointer<usb_byte_buffer<OHCI_TRANSFER_BUFSIZE>,uint32_t>> bufferPtr;
+    std::shared_ptr<StructPoolPointer<usb_byte_buffer<n>,uint32_t>> bufferPtr;
 public:
-    explicit ohci_buffer(ohci &ohci);
+    explicit ohci_buffer(std::shared_ptr<StructPoolPointer<usb_byte_buffer<n>,uint32_t>> bufferPtr) : bufferPtr(bufferPtr) {}
     void *Pointer() override {
         return bufferPtr->Pointer();
     }
@@ -268,7 +269,7 @@ public:
         return bufferPtr->Phys();
     }
     size_t Size() override {
-        return OHCI_TRANSFER_BUFSIZE;
+        return n;
     }
 };
 
@@ -338,7 +339,7 @@ public:
     std::shared_ptr<usb_transfer> CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) override;
     std::shared_ptr<usb_transfer> CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
     std::shared_ptr<usb_transfer> CreateTransferWithLock(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void ()> doneCall, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0) override;
-    std::shared_ptr<usb_buffer> Alloc() override;
+    std::shared_ptr<usb_buffer> Alloc(size_t size);
     bool ClearStall() override;
 };
 
@@ -346,7 +347,6 @@ class ohci : public usb_hcd {
     friend ohci_endpoint;
     friend ohci_endpoint_cleanup;
     friend ohci_transfer;
-    friend ohci_buffer;
 private:
     PciDeviceInformation pciDeviceInformation;
     std::unique_ptr<vmem> mapped_registers_vm;
@@ -359,6 +359,7 @@ private:
     std::vector<ohci_endpoint_cleanup> destroyEds;
     ohci_endpoint controlEndpointEnd;
     ohci_endpoint *controlHead;
+    StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<OHCI_SHORT_TRANSFER_BUFSIZE>>> shortBufPool;
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<OHCI_TRANSFER_BUFSIZE>>> bufPool;
     StructPool<StructPoolAllocator<Phys32Page,ohci_transfer_descriptor>> xPool;
     std::vector<std::shared_ptr<usb_transfer>> transfersInProgress;
@@ -367,7 +368,7 @@ private:
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         usb_hcd("ohci", bus), pciDeviceInformation(deviceInformation),
-        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, usb_endpoint_type::CONTROL), controlHead(&controlEndpointEnd), bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, usb_endpoint_type::CONTROL), controlHead(&controlEndpointEnd), shortBufPool(), bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
     void init() override;
     void dumpregs() override;
 
@@ -400,6 +401,7 @@ public:
     size_t TransferBufferSize() override {
         return OHCI_TRANSFER_BUFSIZE;
     }
+    std::shared_ptr<usb_buffer> Alloc(size_t size);
     hw_spinlock &HcdSpinlock() override {
         return ohcilock;
     }

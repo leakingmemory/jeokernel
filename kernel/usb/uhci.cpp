@@ -390,10 +390,6 @@ bool uhci::PollPorts() {
     return true;
 }
 
-std::shared_ptr<usb_buffer> uhci_endpoint::Alloc() {
-    return {};
-}
-
 std::shared_ptr<usb_buffer> uhci_endpoint::Alloc(size_t size) {
     return uhciRef.Alloc(size);
 }

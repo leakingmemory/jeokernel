@@ -464,6 +464,18 @@ std::shared_ptr<usb_endpoint> ohci::CreateInterruptEndpoint(const std::vector<ui
     }
 }
 
+std::shared_ptr<usb_buffer> ohci::Alloc(size_t size) {
+    if (size <= OHCI_SHORT_TRANSFER_BUFSIZE) {
+        std::shared_ptr<usb_buffer> buffer{new ohci_buffer<OHCI_SHORT_TRANSFER_BUFSIZE>(shortBufPool.Alloc())};
+        return buffer;
+    } else if (size <= OHCI_TRANSFER_BUFSIZE) {
+        std::shared_ptr<usb_buffer> buffer{new ohci_buffer<OHCI_SHORT_TRANSFER_BUFSIZE>(shortBufPool.Alloc())};
+        return buffer;
+    } else {
+        return {};
+    }
+}
+
 usb_speed ohci::PortSpeed(int port) {
     return (ohciRegisters->PortStatus[port] & OHCI_PORT_STATUS_LSDA) == 0 ? FULL : LOW;
 }
@@ -824,7 +836,7 @@ ohci_endpoint::CreateTransferWithLock(std::shared_ptr<usb_buffer> buffer, uint32
 std::shared_ptr<usb_transfer>
 ohci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding,
                               uint16_t delayInterrupt, int8_t dataToggle) {
-    std::shared_ptr<usb_buffer> buffer = Alloc();
+    std::shared_ptr<usb_buffer> buffer = Alloc(size);
     memcpy(buffer->Pointer(), data, size);
     std::function<void (ohci_transfer &)> applyFunc = [] (ohci_transfer &) {};
     return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
@@ -835,7 +847,7 @@ ohci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
                               uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = Alloc(size);
     }
     std::function<void (ohci_transfer &)> applyFunc = [] (ohci_transfer &) {};
     return CreateTransfer(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
@@ -846,7 +858,7 @@ ohci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = Alloc(size);
     }
     std::function<void (ohci_transfer &)> applyFunc = [doneCall] (ohci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
@@ -859,7 +871,7 @@ ohci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};
     if (size > 0) {
-        buffer = Alloc();
+        buffer = Alloc(size);
     }
     std::function<void (ohci_transfer &)> applyFunc = [doneCall] (ohci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
@@ -867,9 +879,8 @@ ohci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
     return CreateTransferWithLock(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
 }
 
-std::shared_ptr<usb_buffer> ohci_endpoint::Alloc() {
-    std::shared_ptr<usb_buffer> buffer{std::make_shared<ohci_buffer>(ohciRef)};
-    return buffer;
+std::shared_ptr<usb_buffer> ohci_endpoint::Alloc(size_t size) {
+    return ohciRef.Alloc(size);
 }
 
 void ohci_endpoint::SetSkip(bool skip) {
@@ -957,9 +968,6 @@ ohci_transfer::~ohci_transfer() {
         get_klogger() << str.str().c_str();
     }
 #endif
-}
-
-ohci_buffer::ohci_buffer(ohci &ohci) : bufferPtr(ohci.bufPool.Alloc()) {
 }
 
 ohci_endpoint_cleanup::~ohci_endpoint_cleanup() {
