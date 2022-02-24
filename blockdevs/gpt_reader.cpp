@@ -3,6 +3,7 @@
 //
 
 #include <blockdevs/gpt_reader.h>
+#include <hashfunc/crc32.h>
 #include <cstring>
 
 struct GptGuid {
@@ -234,6 +235,12 @@ public:
         }
         return *((Entry *) (void *) ptr);
     }
+
+    uint32_t Crc32() const {
+        crc32 crc{};
+        crc.byte_hashfunc::encode((const void *) buf, size);
+        return crc.complete();
+    }
 };
 
 class gpt_parttable_entry : public parttable_entry {
@@ -309,11 +316,12 @@ std::shared_ptr<raw_parttable> gpt_reader::ReadParttable(std::shared_ptr<blockde
 
     gpt_header_container hdr_container{};
 
+    std::size_t lastgptblock{0};
     {
         std::size_t gptoffset = sectorSize;
         std::size_t gptsize = sizeof(GptHeader);
         std::size_t gptblock = gptoffset / blockdev->GetBlocksize();
-        std::size_t lastgptblock = (gptoffset + gptsize - 1) / blockdev->GetBlocksize();
+        lastgptblock = (gptoffset + gptsize - 1) / blockdev->GetBlocksize();
         gptoffset = gptoffset % blockdev->GetBlocksize();
 
         hdr_container.Resize(((lastgptblock - gptblock + 1) * blockdev->GetBlocksize()) - gptoffset);
@@ -331,9 +339,32 @@ std::shared_ptr<raw_parttable> gpt_reader::ReadParttable(std::shared_ptr<blockde
         return {};
     }
 
-    /* TODO - Read full length if length of gpt header is more that we've read */
+    /* Read full length if length of gpt header is more that we've read */
+    std::size_t firstread{hdr_container.Size()};
+    if (firstread < hdr_container.ConstHeader().headerSize) {
+        uint32_t remainingSize = hdr_container.ConstHeader().headerSize - firstread;
+        uint32_t remainingBlocks = (remainingSize % blockdev->GetBlocksize()) > 0 ? 1 : 0;
+        remainingBlocks += remainingSize / blockdev->GetBlocksize();
 
-    /* TODO - CRC32 of header */
+        std::size_t readSize{remainingBlocks * blockdev->GetBlocksize()};
+
+        hdr_container.Resize(firstread + readSize);
+
+        auto blocks = blockdev->ReadBlock(lastgptblock + 1, remainingBlocks);
+
+        memcpy(((uint8_t *) hdr_container.Buf()) + firstread, blocks->Pointer(), readSize);
+    }
+
+    {
+        uint32_t hdrcrc32{hdr_container.ConstHeader().headerCrc32};
+        hdr_container.Header().headerCrc32 = 0;
+        crc32 crc{};
+        crc.byte_hashfunc::encode(hdr_container.Buf(), hdr_container.ConstHeader().headerSize);
+        hdr_container.Header().headerCrc32 = hdrcrc32;
+        if (crc.complete() != hdrcrc32) {
+            return {};
+        }
+    }
 
     gpt_table_container<GptPartEntry> partTable;
     {
@@ -364,7 +395,9 @@ std::shared_ptr<raw_parttable> gpt_reader::ReadParttable(std::shared_ptr<blockde
             }
         }
 
-        /* TODO - CRC32 of partition table */
+        if (partTable.Crc32() != hdr_container.ConstHeader().partitionTableCrc32) {
+            return {};
+        }
     }
 
     std::shared_ptr<raw_parttable> pt{new gpt_parttable(hdr_container.ConstHeader(), sectorSize, blockdev->GetBlocksize(), partTable)};
