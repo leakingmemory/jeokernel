@@ -272,6 +272,7 @@ private:
     std::vector<std::shared_ptr<parttable_entry>> partitions;
 public:
     gpt_parttable(const GptHeader &header, std::size_t sectorSize, std::size_t blockSize, const gpt_table_container<GptPartEntry> &table);
+    std::string GetTableType() const override;
     uint64_t GetSignature() override;
     std::size_t GetBlockSize() override;
     std::vector<std::shared_ptr<parttable_entry>> GetEntries() override;
@@ -294,6 +295,10 @@ gpt_parttable::gpt_parttable(const GptHeader &header, std::size_t sectorSize, st
         std::shared_ptr<parttable_entry> pt_entry{new gpt_parttable_entry(blocks_offset, blocks_size)};
         partitions.push_back(pt_entry);
     }
+}
+
+std::string gpt_parttable::GetTableType() const {
+    return "GPT";
 }
 
 uint64_t gpt_parttable::GetSignature() {
@@ -351,6 +356,9 @@ std::shared_ptr<raw_parttable> gpt_reader::ReadParttable(std::shared_ptr<blockde
         hdr_container.Resize(firstread + readSize);
 
         auto blocks = blockdev->ReadBlock(lastgptblock + 1, remainingBlocks);
+        if (!blocks || blocks->Size() < readSize) {
+            return {};
+        }
 
         memcpy(((uint8_t *) hdr_container.Buf()) + firstread, blocks->Pointer(), readSize);
     }

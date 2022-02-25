@@ -13,6 +13,7 @@
 class raw_parttable {
 public:
     virtual ~raw_parttable() { }
+    virtual std::string GetTableType() const = 0;
     virtual uint64_t GetSignature() = 0;
     virtual std::size_t GetBlockSize() = 0;
     virtual std::vector<std::shared_ptr<parttable_entry>> GetEntries() = 0;

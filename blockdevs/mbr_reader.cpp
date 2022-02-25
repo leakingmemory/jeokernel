@@ -106,6 +106,7 @@ public:
         }
     }
 
+    std::string GetTableType() const override;
     uint64_t GetSignature() override;
     std::size_t GetBlockSize() override;
     std::vector<std::shared_ptr<parttable_entry>> GetEntries() override;
@@ -136,6 +137,10 @@ void ReadExtendedPartition(const mbr_reader &reader, mbr_parttable &parttable, s
             parttable.Add(add_entry);
         }
     }
+}
+
+std::string mbr_parttable::GetTableType() const {
+    return "MBR";
 }
 
 uint64_t mbr_parttable::GetSignature() {

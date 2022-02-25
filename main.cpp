@@ -31,6 +31,7 @@ int cppmain(std::vector<std::string> args) {
     std::cout << blockdev << " blocksize " << blocksize << " - partitions:\n";
     parttable_readers parttableReaders{};
     auto parttable = parttableReaders.ReadParttable(fblockdev);
+    std::cout << "Partition table of type " << parttable->GetTableType() << ":\n";
     for (auto entry : parttable->GetEntries()) {
         std::cout << " " << entry->GetOffset() << ", " << entry->GetSize() << ", " << entry->GetType() << "\n";
     }
