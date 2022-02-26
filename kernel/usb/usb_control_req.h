@@ -234,16 +234,19 @@ struct usb_endpoint_descriptor {
     uint16_t wMaxPacketSize;
     uint8_t bInterval;
 
-    bool IsDirectionIn() {
+    bool IsDirectionIn() const {
         return (bEndpointAddress & 0x80) != 0;
     }
-    uint8_t Address() {
+    uint8_t Address() const {
         return bEndpointAddress & 0xF;
     }
-    bool IsInterrupt() {
+    bool IsInterrupt() const {
         return (bmAttributes & 3) == 3;
     }
-    uint16_t MaxPacketSize() {
+    bool IsBulk() const {
+        return (bmAttributes & 3) == 2;
+    }
+    uint16_t MaxPacketSize() const {
         return wMaxPacketSize & 0x3FF;
     }
 }  __attribute__((__packed__));

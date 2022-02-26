@@ -48,6 +48,37 @@ void usbstorage::init() {
         this->maxLun = maxLun;
     }
 
+    usb_endpoint_descriptor bulkInDesc{};
+    usb_endpoint_descriptor bulkOutDesc{};
+    {
+        bool bulkInFound{false};
+        bool bulkOutFound{false};
+        for (const auto &endpoint: devInfo.endpoints) {
+            if (endpoint.IsBulk()) {
+                if (endpoint.IsDirectionIn()) {
+                    bulkInDesc = endpoint;
+                    bulkInFound = true;
+                } else {
+                    bulkOutDesc = endpoint;
+                    bulkOutFound = true;
+                }
+            }
+        }
+        if (!bulkInFound || !bulkOutFound) {
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": Bulk endpoint, ";
+            if (bulkInFound) {
+                str << "out";
+            } else if (bulkOutFound) {
+                str << "in";
+            } else {
+                str << "both";
+            }
+            str << ", not found\n";
+            get_klogger() << str.str().c_str();
+        }
+    }
+
     std::stringstream str{};
     str << DeviceType() << DeviceId() << ": subclass=" << subclass << " luns=" << (((int) maxLun) + 1) << "\n";
     get_klogger() << str.str().c_str();
