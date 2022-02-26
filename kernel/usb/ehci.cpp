@@ -567,6 +567,12 @@ ehci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t h
     return usbEndpoint;
 }
 
+std::shared_ptr<usb_endpoint>
+ehci::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                         uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
+    return {};
+}
+
 std::shared_ptr<usb_buffer> ehci::Alloc(size_t size) {
     if (size <= EHCI_BUFFER_SHORT) {
         std::shared_ptr<usb_buffer> buffer{new ehci_buffer<EHCI_BUFFER_SHORT>(bufPool.Alloc())};

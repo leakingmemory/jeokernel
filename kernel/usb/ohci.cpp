@@ -464,6 +464,12 @@ std::shared_ptr<usb_endpoint> ohci::CreateInterruptEndpoint(const std::vector<ui
     }
 }
 
+std::shared_ptr<usb_endpoint>
+ohci::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                         uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
+    return {};
+}
+
 std::shared_ptr<usb_buffer> ohci::Alloc(size_t size) {
     if (size <= OHCI_SHORT_TRANSFER_BUFSIZE) {
         std::shared_ptr<usb_buffer> buffer{new ohci_buffer<OHCI_SHORT_TRANSFER_BUFSIZE>(shortBufPool.Alloc())};

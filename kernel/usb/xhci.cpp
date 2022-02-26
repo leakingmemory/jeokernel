@@ -584,6 +584,12 @@ xhci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t h
     return {};
 }
 
+std::shared_ptr<usb_endpoint>
+xhci::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                         uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
+    return {};
+}
+
 std::shared_ptr<usb_buffer> xhci::Alloc(size_t size) {
     return resources->Alloc(size);
 }
@@ -991,6 +997,13 @@ xhci_port_enumerated_device::CreateInterruptEndpoint(const std::vector<uint8_t> 
         xhciRef.resources->DCBAA()->contexts[slot]->SetEndpoint(endpointIndex, xhciEndpoint);
     }
     return uendpoint;
+}
+
+std::shared_ptr<usb_endpoint>
+xhci_port_enumerated_device::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress,
+                                                uint32_t maxPacketSize, uint8_t endpointNum,
+                                                usb_endpoint_direction dir) {
+    return {};
 }
 
 std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate() {

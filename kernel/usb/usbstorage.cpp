@@ -76,7 +76,24 @@ void usbstorage::init() {
             }
             str << ", not found\n";
             get_klogger() << str.str().c_str();
+            return;
         }
+    }
+    bulkInEndpoint = devInfo.port.BulkEndpoint(bulkInDesc.wMaxPacketSize, bulkInDesc.bEndpointAddress, usb_endpoint_direction::IN);
+    bulkOutEndpoint = devInfo.port.BulkEndpoint(bulkOutDesc.wMaxPacketSize, bulkOutDesc.bEndpointAddress, usb_endpoint_direction::OUT);
+    if (!bulkInEndpoint || !bulkOutEndpoint) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Failed to create bulk endpoint, ";
+        if (bulkInEndpoint) {
+            str << "out";
+        } else if (bulkOutEndpoint) {
+            str << "in";
+        } else {
+            str << "both";
+        }
+        str << "\n";
+        get_klogger() << str.str().c_str();
+        return;
     }
 
     std::stringstream str{};

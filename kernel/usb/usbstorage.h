@@ -11,10 +11,12 @@
 class usbstorage : public Device {
 private:
     UsbIfacedevInformation devInfo;
+    std::shared_ptr<usb_endpoint> bulkInEndpoint;
+    std::shared_ptr<usb_endpoint> bulkOutEndpoint;
     uint8_t subclass;
     uint8_t maxLun;
 public:
-    usbstorage(Bus *bus, UsbIfacedevInformation &devInfo, uint8_t subclass) : Device("usbstorage", bus), devInfo(devInfo), subclass(subclass), maxLun(0) {
+    usbstorage(Bus *bus, UsbIfacedevInformation &devInfo, uint8_t subclass) : Device("usbstorage", bus), devInfo(devInfo), bulkInEndpoint(), bulkOutEndpoint(), subclass(subclass), maxLun(0) {
     }
     ~usbstorage();
     void init() override;

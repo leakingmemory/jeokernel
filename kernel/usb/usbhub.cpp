@@ -377,6 +377,16 @@ usbhub::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t
     );
 }
 
+std::shared_ptr<usb_endpoint>
+usbhub::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                           uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
+    return usbInterfaceInformation.port.Hub().CreateBulkEndpoint(
+            portRouting, hubAddress,
+            maxPacketSize, functionAddr, endpointNum,
+            dir, speed
+            );
+}
+
 std::shared_ptr<usb_func_addr> usbhub::GetFuncAddr() {
     return usbInterfaceInformation.port.Hub().GetFuncAddr();
 }

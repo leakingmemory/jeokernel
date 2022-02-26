@@ -36,6 +36,7 @@ public:
     bool SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) override;
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) override;
     std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) override;
+    std::shared_ptr<usb_endpoint> CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir) override;
 };
 
 void legacy_usb_enumerated::Stop() {
@@ -75,6 +76,12 @@ legacy_usb_enumerated::CreateInterruptEndpoint(const std::vector<uint8_t> &portR
                                                uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir,
                                                int pollingIntervalMs) {
     return hub.CreateInterruptEndpoint(portRouting, hubAddress, maxPacketSize, addr, endpointNum, dir, speed, pollingIntervalMs);
+}
+
+std::shared_ptr<usb_endpoint>
+legacy_usb_enumerated::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress,
+                                          uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir) {
+    return {};
 }
 
 usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
@@ -280,6 +287,11 @@ void usb_port_connection::stop() {
 
 std::shared_ptr<usb_endpoint> usb_port_connection::InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs) {
     return enumeratedDevice->CreateInterruptEndpoint(portRouting, hub.GetHubAddress(), maxPacketSize, endpointNum, direction, pollingIntervalMs);
+}
+
+std::shared_ptr<usb_endpoint>
+usb_port_connection::BulkEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction) {
+    return enumeratedDevice->CreateBulkEndpoint(portRouting, hub.GetHubAddress(), maxPacketSize, endpointNum, direction);
 }
 
 void usb_port_connection::start(std::shared_ptr<usb_hw_enumerated_device> enumeratedDevice) {

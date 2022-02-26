@@ -278,6 +278,12 @@ uhci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t h
     }
 }
 
+std::shared_ptr<usb_endpoint>
+uhci::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
+                         uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
+    return {};
+}
+
 std::shared_ptr<usb_buffer> uhci::Alloc(size_t size) {
     if (size <= UHCI_TRANSFER_SHORT_SIZE) {
         std::shared_ptr<usb_buffer> buffer{new uhci_buffer<UHCI_TRANSFER_SHORT_SIZE>(shortBufPool.Alloc())};

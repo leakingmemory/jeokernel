@@ -28,6 +28,7 @@ public:
     virtual bool SetHub(uint8_t numberOfPorts, bool multiTT, uint8_t ttThinkTime) = 0;
     virtual bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting) = 0;
     virtual std::shared_ptr<usb_endpoint> CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir, int pollingIntervalMs) = 0;
+    virtual std::shared_ptr<usb_endpoint> CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir) = 0;
 };
 
 class usb_hw_enumeration_addressing {
@@ -165,6 +166,7 @@ public:
         return final_addr;
     }
     std::shared_ptr<usb_endpoint> InterruptEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction, int pollingIntervalMs);
+    std::shared_ptr<usb_endpoint> BulkEndpoint(int maxPacketSize, uint8_t endpointNum, usb_endpoint_direction direction);
     bool ClearStall(uint8_t endpointNum, usb_endpoint_direction direction);
     const std::vector<UsbInterfaceInformation> &ReadConfigurations(const UsbDeviceInformation &devInfo);
     bool SetConfigurationValue(uint8_t configurationValue, uint8_t interfaceNumber, uint8_t alternateSetting);
