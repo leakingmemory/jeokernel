@@ -81,7 +81,7 @@ legacy_usb_enumerated::CreateInterruptEndpoint(const std::vector<uint8_t> &portR
 std::shared_ptr<usb_endpoint>
 legacy_usb_enumerated::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress,
                                           uint32_t maxPacketSize, uint8_t endpointNum, usb_endpoint_direction dir) {
-    return {};
+    return hub.CreateBulkEndpoint(portRouting, hubAddress, maxPacketSize, addr, endpointNum, dir, speed);
 }
 
 usb_port_connection::usb_port_connection(usb_hub &hub, uint8_t port) :
