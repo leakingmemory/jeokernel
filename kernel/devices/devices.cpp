@@ -49,3 +49,7 @@ PciDeviceInformation *DeviceInformation::GetPciInformation() {
 UsbDeviceInformation *DeviceInformation::GetUsbInformation() {
     return nullptr;
 }
+
+ScsiDevDeviceInformation *DeviceInformation::GetScsiDevDeviceInformation() {
+    return nullptr;
+}

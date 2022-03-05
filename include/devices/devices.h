@@ -130,6 +130,7 @@ public:
 
 struct PciDeviceInformation;
 struct UsbDeviceInformation;
+class ScsiDevDeviceInformation;
 
 struct DeviceInformation {
     uint16_t vendor_id;
@@ -138,7 +139,7 @@ struct DeviceInformation {
     uint8_t device_class;
     uint8_t prog_if;
 
-    DeviceInformation() {}
+    DeviceInformation() : vendor_id(0), device_id(0), device_subclass(0), device_class(0), prog_if(0) {}
     DeviceInformation(const DeviceInformation &) = delete;
     DeviceInformation(DeviceInformation &&) = delete;
     DeviceInformation & operator = (const DeviceInformation &) = default;
@@ -146,6 +147,7 @@ struct DeviceInformation {
 
     virtual PciDeviceInformation *GetPciInformation();
     virtual UsbDeviceInformation *GetUsbInformation();
+    virtual ScsiDevDeviceInformation *GetScsiDevDeviceInformation();
 };
 
 void init_devices();
