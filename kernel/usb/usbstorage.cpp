@@ -190,6 +190,8 @@ public:
     }
     std::shared_ptr<ScsiDevDeviceInformation> Clone() override;
     ScsiDevDeviceInformation *GetScsiDevDeviceInformation() override;
+    uint8_t GetLun() const override;
+    std::shared_ptr<InquiryResult> GetInquiryResult() override;
     void SetDevice(Device *device) override;
     std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const std::function<void ()> &done) override;
 };
@@ -201,6 +203,14 @@ std::shared_ptr<ScsiDevDeviceInformation> usbstorage_scsi_dev::Clone() {
 
 ScsiDevDeviceInformation *usbstorage_scsi_dev::GetScsiDevDeviceInformation() {
     return this;
+}
+
+uint8_t usbstorage_scsi_dev::GetLun() const {
+    return lun;
+}
+
+std::shared_ptr<InquiryResult> usbstorage_scsi_dev::GetInquiryResult() {
+    return {};
 }
 
 void usbstorage_scsi_dev::SetDevice(Device *device) {
