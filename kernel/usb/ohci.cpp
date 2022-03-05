@@ -495,24 +495,32 @@ usb_speed ohci::PortSpeed(int port) {
 void ohci::ProcessDoneQueue() {
     uint32_t doneHead = hcca.Hcca().HccaDoneHead & 0xFFFFFFF0;
     uint32_t prevHead = 0;
-    while (doneHead != 0) {
+    {
+        std::vector<std::shared_ptr<usb_transfer>> doneItems{};
+        while (doneHead != 0) {
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
-        {
-            std::stringstream str{};
-            str << std::hex << "Done queue item " << doneHead << "\n";
-            get_klogger() << str.str().c_str();
-        }
+            {
+                std::stringstream str{};
+                str << std::hex << "Done queue item " << doneHead << "\n";
+                get_klogger() << str.str().c_str();
+            }
 #endif
-        std::shared_ptr<usb_transfer> item = ExtractDoneQueueItem(doneHead);
-        if (!item) {
-            std::stringstream str{};
-            str << "done queue item " << std::hex << doneHead << " not found after " << prevHead;
-            wild_panic(str.str().c_str());
+            std::shared_ptr<usb_transfer> item = ExtractDoneQueueItem(doneHead);
+            if (!item) {
+                std::stringstream str{};
+                str << "done queue item " << std::hex << doneHead << " not found after " << prevHead;
+                wild_panic(str.str().c_str());
+            }
+            doneItems.push_back(item);
+            ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*item));
+            prevHead = doneHead;
+            doneHead = ohciTransfer.TD()->NextTD;
         }
-        item->SetDone();
-        ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*item));
-        prevHead = doneHead;
-        doneHead = ohciTransfer.TD()->NextTD;
+        auto iterator = doneItems.end();
+        while (iterator != doneItems.begin()) {
+            --iterator;
+            (*iterator)->SetDone();
+        }
     }
     auto iter = transfersInProgress.begin();
     while (iter != transfersInProgress.end()) {
