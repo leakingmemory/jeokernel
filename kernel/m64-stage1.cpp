@@ -52,6 +52,7 @@
 #include "usb/usbhub.h"
 #include "usb/usbstorage.h"
 #include "scsi/scsidevice.h"
+#include "scsi/scsida.h"
 #include <acpi/acpi_8042.h>
 
 //#define THREADING_TESTS // Master switch
@@ -858,6 +859,7 @@ done_with_mem_extension:
         get_drivers().AddDriver(new usbhub_driver());
         get_drivers().AddDriver(new usbstorage_driver());
         get_drivers().AddDriver(new scsidevice_driver());
+        get_drivers().AddDriver(new scsida_driver());
 
         AcpiBoot acpi_boot{multiboot2};
 
