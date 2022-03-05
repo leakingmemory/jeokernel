@@ -27,7 +27,8 @@ enum usb_speed {
 
 enum class usb_endpoint_type {
     CONTROL,
-    INTERRUPT
+    INTERRUPT,
+    BULK
 };
 
 #endif //JEOKERNEL_USB_TYPES_H

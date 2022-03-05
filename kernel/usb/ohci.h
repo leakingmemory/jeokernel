@@ -37,6 +37,7 @@
 
 #define OHCI_CMD_HCR 1 // Host Controller Reset
 #define OHCI_CMD_CLF 2 // Control List Filled
+#define OHCI_CMD_BLF 4 // Bulk List Filled
 #define OHCI_CMD_OCR 8 // Ownership Change Request
 
 #define OHCI_INT_SCHEDULING_OVERRUN             0x01
@@ -360,6 +361,8 @@ private:
     std::vector<ohci_endpoint_cleanup> destroyEds;
     ohci_endpoint controlEndpointEnd;
     ohci_endpoint *controlHead;
+    ohci_endpoint bulkEndpointEnd;
+    ohci_endpoint *bulkHead;
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<OHCI_SHORT_TRANSFER_BUFSIZE>>> shortBufPool;
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<OHCI_TRANSFER_BUFSIZE>>> bufPool;
     StructPool<StructPoolAllocator<Phys32Page,ohci_transfer_descriptor>> xPool;
@@ -369,7 +372,10 @@ private:
 public:
     ohci(Bus &bus, PciDeviceInformation &deviceInformation) :
         usb_hcd("ohci", bus), pciDeviceInformation(deviceInformation),
-        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(), controlEndpointEnd(*this, usb_endpoint_type::CONTROL), controlHead(&controlEndpointEnd), shortBufPool(), bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
+        mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(),
+        controlEndpointEnd(*this, usb_endpoint_type::CONTROL), controlHead(&controlEndpointEnd),
+        bulkEndpointEnd(*this, usb_endpoint_type::BULK), bulkHead(&bulkEndpointEnd), shortBufPool(),
+        bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
     void init() override;
     void dumpregs() override;
 

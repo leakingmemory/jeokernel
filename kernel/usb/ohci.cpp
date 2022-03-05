@@ -168,7 +168,7 @@ void ohci::init() {
 
         ohciRegisters->HcControlHeadED = controlHead->Phys();
 
-        ohciRegisters->HcBulkHeadED = hcca.Addr(&(hcca.BulkED()));
+        ohciRegisters->HcBulkHeadED = bulkHead->Phys();
 
         {
             uint32_t ctrl = ohciRegisters->HcControl;
@@ -467,7 +467,13 @@ std::shared_ptr<usb_endpoint> ohci::CreateInterruptEndpoint(const std::vector<ui
 std::shared_ptr<usb_endpoint>
 ohci::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
                          uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
-    return {};
+    if (speed == LOW || speed == FULL) {
+        auto endpoint = new ohci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, dir, speed,
+                                          usb_endpoint_type::BULK);
+        return std::shared_ptr<usb_endpoint>(endpoint);
+    } else {
+        return {};
+    }
 }
 
 std::shared_ptr<usb_buffer> ohci::Alloc(size_t size) {
@@ -644,6 +650,12 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
     critical_section cli{};
     std::lock_guard lock{ohci.ohcilock};
 
+    if (endpointType == usb_endpoint_type::BULK) {
+        ed->NextED = ohci.ohciRegisters->HcBulkHeadED;
+        ohci.ohciRegisters->HcBulkHeadED = edPtr->Phys();
+        next = ohci.bulkHead;
+        ohci.bulkHead = this;
+    }
     if (endpointType == usb_endpoint_type::CONTROL) {
         ed->NextED = ohci.ohciRegisters->HcControlHeadED;
         ohci.ohciRegisters->HcControlHeadED = edPtr->Phys();
@@ -685,6 +697,15 @@ ohci_endpoint::~ohci_endpoint() {
             endpoint = int_ed_chain->head;
         }
         if (endpoint == this) {
+            if (endpointType == usb_endpoint_type::BULK) {
+                if (endpoint->next != nullptr) {
+                    this->ohciRef.ohciRegisters->HcBulkCurrentED = endpoint->next->edPtr->Phys();
+                    this->ohciRef.bulkHead = endpoint->next;
+                } else {
+                    this->ohciRef.ohciRegisters->HcBulkCurrentED = 0;
+                    this->ohciRef.bulkHead = nullptr;
+                }
+            }
             if (endpointType == usb_endpoint_type::CONTROL) {
                 if (endpoint->next != nullptr) {
                     this->ohciRef.ohciRegisters->HcControlHeadED = endpoint->next->edPtr->Phys();
@@ -711,7 +732,7 @@ ohci_endpoint::~ohci_endpoint() {
                 }
                 endpoint = endpoint->next;
             }
-        if (endpointType == usb_endpoint_type::CONTROL) {
+        if (endpointType == usb_endpoint_type::CONTROL || endpointType == usb_endpoint_type::BULK) {
             this->ohciRef.ohciRegisters->HcControl &= ~OHCI_CTRL_CLE;
             this->ohciRef.ohciRegisters->HcInterruptStatus = OHCI_INT_SCHEDULING_START_OF_FRAME;
             this->ohciRef.ohciRegisters->HcInterruptEnable = OHCI_INT_SCHEDULING_START_OF_FRAME;
@@ -834,7 +855,11 @@ ohci_endpoint::CreateTransferWithLock(std::shared_ptr<usb_buffer> buffer, uint32
     ohciRef.transfersInProgress.push_back(tail);
     tail = newtd;
     edPtr->Pointer()->TailP = newtd->PhysAddr();
-    ohciRef.ohciRegisters->HcCommandStatus = OHCI_CMD_CLF;
+    if (endpointType == usb_endpoint_type::CONTROL) {
+        ohciRef.ohciRegisters->HcCommandStatus = OHCI_CMD_CLF;
+    } else if (endpointType == usb_endpoint_type::BULK) {
+        ohciRef.ohciRegisters->HcCommandStatus = OHCI_CMD_BLF;
+    }
     std::shared_ptr<usb_transfer> ref{filled};
     return ref;
 }
