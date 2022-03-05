@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <endian.h>
 
+#define SCSI_CONTROL_NACA   4
+
 struct Inquiry {
     uint8_t OpCode;
     bool EVPD : 8;
@@ -16,7 +18,7 @@ struct Inquiry {
     uint8_t Control;
 
     Inquiry(uint16_t AllocationLength, bool naca) : OpCode(0x12), EVPD(false), PageCode(0),
-    AllocationLength(AllocationLength), Control(naca ? 4 : 0) {
+    AllocationLength(AllocationLength), Control(naca ? SCSI_CONTROL_NACA : 0) {
     }
 } __attribute__((__packed__));
 

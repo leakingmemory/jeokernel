@@ -169,6 +169,8 @@ void usbstorage_command_impl::DataStage() {
 
 void usbstorage_command_impl::StatusStage() {
     InTransfer(&status, sizeof(status), [this] () {
+        std::function<void ()> done = this->done;
+        device.ExecuteQueueItem();
         done();
     });
 }
@@ -402,6 +404,7 @@ void usbstorage::ExecuteQueueItem() {
     {
         auto iterator = commandQueue.begin();
         if (iterator == commandQueue.end()) {
+            currentCommand = {};
             return;
         }
         currentCommand = *iterator;
