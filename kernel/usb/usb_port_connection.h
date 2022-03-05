@@ -156,6 +156,9 @@ public:
     usb_speed Speed() {
         return speed;
     }
+    size_t TransferBufferSize() {
+        return hub.TransferBufferSize();
+    }
     uint8_t SlotId() {
         return enumeratedDevice->SlotId();
     }

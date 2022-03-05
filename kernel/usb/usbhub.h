@@ -42,6 +42,7 @@ public:
     void dumpregs() override;
     int GetNumberOfPorts() override;
     usb_speed HubSpeed() override;
+    size_t TransferBufferSize() override;
     uint8_t HubSlotId() override;
     hw_spinlock &HcdSpinlock() override;
     uint32_t GetPortStatus(int port) override;

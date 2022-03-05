@@ -120,6 +120,10 @@ usb_speed usbhub::HubSpeed() {
     return usbInterfaceInformation.port.Speed();
 }
 
+size_t usbhub::TransferBufferSize() {
+    return usbInterfaceInformation.port.TransferBufferSize();
+}
+
 uint8_t usbhub::HubSlotId() {
     return usbInterfaceInformation.port.SlotId();
 }

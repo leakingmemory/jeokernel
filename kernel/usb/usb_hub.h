@@ -41,6 +41,7 @@ public:
     virtual void dumpregs() = 0;
     virtual int GetNumberOfPorts() = 0;
     virtual usb_speed HubSpeed() = 0;
+    virtual size_t TransferBufferSize() = 0;
     virtual uint8_t HubSlotId() {
         return 0;
     }
