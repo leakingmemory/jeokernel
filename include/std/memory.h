@@ -61,12 +61,23 @@ namespace std {
             }
         }
         unique_ptr &operator = (unique_ptr &&mv) noexcept {
-            if (ptr != nullptr) {
+            if (ptr != nullptr && ptr != mv.ptr) {
                 Deleter deleter{};
                 deleter(ptr);
             }
             ptr = mv.ptr;
-            mv.ptr = nullptr;
+            if (this != &mv) {
+                mv.ptr = nullptr;
+            }
+            return *this;
+        }
+
+        unique_ptr &operator = (T *setptr) {
+            if (ptr != nullptr && ptr != setptr) {
+                Deleter deleter{};
+                deleter(ptr);
+            }
+            ptr = setptr;
             return *this;
         }
 
