@@ -873,6 +873,21 @@ ohci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
 }
 
 std::shared_ptr<usb_transfer>
+ohci_endpoint::CreateTransferWithLock(bool commitTransaction, const void *data, uint32_t size,
+                                      usb_transfer_direction direction, std::function<void()> doneCall,
+                                      bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer{};
+    if (size > 0) {
+        buffer = Alloc(size);
+        memcpy(buffer->Pointer(), data, size);
+    }
+    std::function<void (ohci_transfer &)> applyFunc = [doneCall] (ohci_transfer &transfer) {
+        transfer.SetDoneCall(doneCall);
+    };
+    return CreateTransferWithLock(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
 ohci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb_transfer_direction direction, std::function<void()> doneCall,
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};

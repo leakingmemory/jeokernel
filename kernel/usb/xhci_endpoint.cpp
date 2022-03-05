@@ -115,7 +115,7 @@ class xhci_setup_packet_buffer : public usb_buffer {
 private:
     uint8_t buf[8];
 public:
-    xhci_setup_packet_buffer(void *data) : buf() {
+    xhci_setup_packet_buffer(const void *data) : buf() {
         memcpy(&(buf[0]), data, 8);
     }
     void *Pointer() override {
@@ -129,7 +129,19 @@ public:
     }
 };
 
-std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitTransaction, void *data, uint32_t size,
+std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitTransaction, const void *data, uint32_t size,
+                                                                    usb_transfer_direction direction,
+                                                                    std::function<void ()> doneCall,
+                                                                    bool bufferRounding, uint16_t delayInterrupt,
+                                                                    int8_t dataToggle) {
+    auto transfer = CreateTransferWithLock(commitTransaction, data, size, direction, bufferRounding, delayInterrupt, dataToggle);
+    if (transfer) {
+        transfer->SetDoneCall(doneCall);
+    }
+    return transfer;
+}
+
+std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitTransaction, const void *data, uint32_t size,
                                                                     usb_transfer_direction direction,
                                                                     bool bufferRounding, uint16_t delayInterrupt,
                                                                     int8_t dataToggle) {
