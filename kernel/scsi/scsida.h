@@ -6,15 +6,26 @@
 #define JEOKERNEL_SCSIDA_H
 
 #include <devices/drivers.h>
+#include <optional>
 #include "scsidev.h"
 #include "scsi_block.h"
+
+enum scsida_power_state {
+    UNKNOWN,
+    ACTIVE,
+    IDLE,
+    STANDBY,
+    LOW_POWER
+};
 
 class scsida : public Device {
 private:
     std::shared_ptr<ScsiDevDeviceInformation> devInfo;
     ReadCapacityResult capacity;
+    scsida_power_state latestPowerState;
 public:
-    scsida(Bus *bus, std::shared_ptr<ScsiDevDeviceInformation> devInfo) : Device("scsida", bus), devInfo(devInfo) {
+    scsida(Bus *bus, std::shared_ptr<ScsiDevDeviceInformation> devInfo) : Device("scsida", bus), devInfo(devInfo),
+    latestPowerState(UNKNOWN) {
     }
     ~scsida();
     void init() override;
@@ -27,19 +38,25 @@ public:
         return capacity.BlockSize;
     }
 
-    std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength);
-    template <class Cmd> std::shared_ptr<ScsiDevCommand> ExecuteCommand(const Cmd &cmd, std::size_t dataTransferLength) {
-        return ExecuteCommand(&cmd, sizeof(Cmd), dataTransferLength);
+    std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength);
+    template <class Cmd> std::shared_ptr<ScsiDevCommand> ExecuteCommand(const Cmd &cmd, std::size_t dataTransferLength, const scsivariabledata &varlength) {
+        return ExecuteCommand(&cmd, sizeof(Cmd), dataTransferLength, varlength);
     }
-    template <class Cmd, class Result> std::shared_ptr<Result> ExecuteCommand(const Cmd &cmd) {
-        auto command = ExecuteCommand(cmd, sizeof(Result));
+    template <class Cmd, class Result> std::shared_ptr<Result> ExecuteCommand(const Cmd &cmd, const scsivariabledata &varlength) {
+        auto command = ExecuteCommand(cmd, sizeof(Result), varlength);
         if (command->IsSuccessful()) {
             std::shared_ptr<Result> result = std::make_shared<Result>();
             memcpy(&(*result), command->Buffer(), sizeof(Result));
             return result;
         }
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Command failed: " << command->NonSuccessfulStatusString() << "\n";
+        get_klogger() << str.str().c_str();
         return {};
     }
+    void ReportSense(const RequestSense_FixedData &sense);
+    std::shared_ptr<RequestSense_FixedData> RequestSense_Fixed();
+    std::optional<bool> IsSpinning();
 };
 
 class scsida_driver : public Driver {

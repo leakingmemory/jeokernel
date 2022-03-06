@@ -36,7 +36,7 @@ public:
     uint8_t GetLun() const override;
     std::shared_ptr<InquiryResult> GetInquiryResult() override;
     void SetDevice(Device *device) override;
-    std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const std::function<void ()> &done) override;
+    std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength, const std::function<void ()> &done) override;
 };
 
 std::shared_ptr<ScsiDevDeviceInformation> scsidevice_scsi_dev::Clone() {
@@ -60,8 +60,8 @@ void scsidevice_scsi_dev::SetDevice(Device *device) {
 }
 
 std::shared_ptr<ScsiDevCommand> scsidevice_scsi_dev::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength,
-                                         const std::function<void()> &done) {
-    return device.devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, done);
+                                         const scsivariabledata &varlength, const std::function<void()> &done) {
+    return device.devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, varlength, done);
 }
 
 scsidevice::~scsidevice() {

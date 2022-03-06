@@ -8,6 +8,8 @@
 #include <devices/drivers.h>
 #include <vector>
 #include "usbifacedev.h"
+#include "../scsi/scsierror.h"
+#include "../scsi/scsivariabledata.h"
 
 class usbstorage_command_impl;
 
@@ -16,15 +18,22 @@ class usbstorage_command {
 private:
     uint8_t cmd[16];
     std::function<void ()> done;
+    std::unique_ptr<scsivariabledata> varlength;
     uint32_t dataTransferLength;
     uint8_t lun;
     uint8_t cmdLength;
-    bool inbound : 16;
+    bool inbound : 8;
+    bool hasStatus : 8;
+    ScsiCmdNonSuccessfulStatus nonSuccessfulStatus;
+    const char *nonSuccessfulStatusString;
 public:
-    usbstorage_command(uint32_t dataTransferLength, uint8_t lun, const void *cmd, uint8_t cmdLength, bool inbound,
+    usbstorage_command(uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd, uint8_t cmdLength, bool inbound,
                        const std::function<void ()> &done)
-    : cmd(), dataTransferLength(dataTransferLength), lun(lun), cmdLength(cmdLength), inbound(inbound), done(done) {
+    : cmd(), done(done), varlength(), dataTransferLength(dataTransferLength), lun(lun), cmdLength(cmdLength),
+    inbound(inbound), hasStatus(false), nonSuccessfulStatus(ScsiCmdNonSuccessfulStatus::UNSPECIFIED),
+    nonSuccessfulStatusString("UNSPECIFIED") {
         memcpy((void *) &(this->cmd[0]), cmd, cmdLength);
+        this->varlength = varlength.clone();
     }
     usbstorage_command(const usbstorage_command &) = delete;
     usbstorage_command(usbstorage_command &&) = delete;
@@ -33,9 +42,18 @@ public:
     virtual ~usbstorage_command() {}
 
     virtual const void *Buffer() const = 0;
-    virtual bool IsSuccessful() const = 0;
+    virtual bool IsSuccessful() = 0;
     std::size_t DataTransferLength() const {
         return dataTransferLength;
+    }
+    bool HasStatus() const {
+        return hasStatus;
+    }
+    ScsiCmdNonSuccessfulStatus NonSuccessfulStatus() const {
+        return nonSuccessfulStatus;
+    }
+    const char *NonSucessfulStatusString() const {
+        return nonSuccessfulStatusString;
     }
 };
 
@@ -64,10 +82,10 @@ public:
     void init() override;
     void stop() override;
     void SetDevice(Device *device);
-    std::shared_ptr<usbstorage_command> QueueCommand(uint32_t dataTransferLength, uint8_t lun, const void *cmd, uint8_t cmdLength, const std::function<void ()> &done);
+    std::shared_ptr<usbstorage_command> QueueCommand(uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd, uint8_t cmdLength, const std::function<void ()> &done);
     template <class T> std::shared_ptr<usbstorage_command> QueueCommand(uint32_t dataTransferLength, uint8_t lun, const T &cmd, const std::function<void ()> &done) {
         static_assert(sizeof(T) <= 16);
-        return QueueCommand(dataTransferLength, lun, (const void *) &cmd, sizeof(T), done);
+        return QueueCommand(dataTransferLength, scsivariabledata_fixed(), lun, (const void *) &cmd, sizeof(T), done);
     }
 private:
     bool MassStorageReset();

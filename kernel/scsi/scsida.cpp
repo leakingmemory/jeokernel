@@ -7,6 +7,7 @@
 #include "scsidev.h"
 #include "scsi_primary.h"
 #include "concurrency/raw_semaphore.h"
+#include "thread"
 
 class CallbackLatch {
 private:
@@ -33,7 +34,7 @@ void scsida::init() {
         std::unique_ptr<ReadCapacityResult> capacityResult{};
         if (inquiryResult->Protect) {
             ReadCapacity16 cmd{sizeof(ReadCapacity16_Data)};
-            auto data = ExecuteCommand<ReadCapacity16,ReadCapacity16_Data>(cmd);
+            auto data = ExecuteCommand<ReadCapacity16,ReadCapacity16_Data>(cmd, scsivariabledata_fixed());
             if (data) {
                 if (data->IsValid()) {
                     capacityResult = new ReadCapacityResult(data->GetResult());
@@ -49,7 +50,7 @@ void scsida::init() {
             }
         } else {
             ReadCapacity10 cmd{};
-            auto data = ExecuteCommand<ReadCapacity10,ReadCapacity10_Data>(cmd);
+            auto data = ExecuteCommand<ReadCapacity10,ReadCapacity10_Data>(cmd, scsivariabledata_fixed());
             if (data) {
                 if (data->IsValid()) {
                     capacityResult = new ReadCapacityResult(data->GetResult());
@@ -101,16 +102,142 @@ void scsida::init() {
             return;
         }
     }
+
+    {
+        auto spinInfo = IsSpinning();
+        if (spinInfo) {
+            bool isSpinning = *spinInfo;
+            if (isSpinning) {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": is active/spinning\n";
+                get_klogger() << str.str().c_str();
+            } else {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": needs spin up from ";
+                switch (latestPowerState) {
+                    case IDLE:
+                        str << "idle";
+                        break;
+                    case STANDBY:
+                        str << "standby";
+                        break;
+                    case LOW_POWER:
+                        str << "low power state";
+                        break;
+                    default:
+                        str << "invalid";
+                }
+                str << "\n";
+                get_klogger() << str.str().c_str();
+            }
+        }
+    }
 }
 
 std::shared_ptr<ScsiDevCommand>
-scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength) {
+scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength) {
     CallbackLatch latch{};
-    auto command = devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, [latch] () mutable {
+    auto command = devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, varlength, [latch] () mutable {
         latch.open();
     });
     latch.wait();
     return command;
+}
+
+void scsida::ReportSense(const RequestSense_FixedData &sense) {
+    auto senseKey = sense.SenseKey();
+    std::stringstream str{};
+    str << DeviceType() << DeviceId() << "Sense " << SenseKeyStr(senseKey) << " code " << std::hex << sense.AdditionalSenseCode << " q " << sense.AdditionalSenseCodeQualifier << "\n";
+    get_klogger() << str.str().c_str();
+}
+
+std::shared_ptr<RequestSense_FixedData> scsida::RequestSense_Fixed() {
+    RequestSense requestSense{};
+    std::shared_ptr<RequestSense_FixedData> shptr = ExecuteCommand<RequestSense,RequestSense_FixedData>(
+            requestSense, RequestSense_FixedData_VariableLength()
+    );
+    return shptr;
+}
+
+std::optional<bool> scsida::IsSpinning() {
+    int errc{5};
+    auto reqsens = RequestSense_Fixed();
+    while (true) {
+        if (!reqsens) {
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": Request sense failed\n";
+            get_klogger() << str.str().c_str();
+            latestPowerState = UNKNOWN;
+            return {};
+        }
+        auto senseKey = reqsens->SenseKey();
+        if (senseKey == SENSE_KEY_NO_SENSE) {
+            bool powerTransitioning{false};
+            if (reqsens->AdditionalSenseCode == NO_SENSE_POWER_CONDITION) {
+                switch (reqsens->AdditionalSenseCodeQualifier) {
+                    case SENSE_Q_POWER_STATE_CHANGE_TO_ACTIVE:
+                    case SENSE_Q_POWER_STATE_CHANGE_TO_DEVCONTROL:
+                    case SENSE_Q_POWER_STATE_CHANGE_TO_IDLE:
+                    case SENSE_Q_POWER_STATE_CHANGE_TO_SLEEP:
+                    case SENSE_Q_POWER_STATE_CHANGE_TO_STANDBY:
+                        powerTransitioning = true;
+                        break;
+                }
+            }
+            if (!powerTransitioning) {
+                break;
+            }
+
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << "Sense: Power state transition in progress\n";
+            get_klogger() << str.str().c_str();
+
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(500ms);
+
+            reqsens = RequestSense_Fixed();
+            continue;
+        }
+        ReportSense(*reqsens);
+        if (--errc == 0) {
+            latestPowerState = UNKNOWN;
+            return {};
+        }
+
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(500ms);
+
+        reqsens = RequestSense_Fixed();
+    }
+
+    if (reqsens->AdditionalSenseCode == NO_SENSE_POWER_CONDITION) {
+        switch (reqsens->AdditionalSenseCodeQualifier) {
+            case SENSE_Q_POWER_LOW_POWER:
+                latestPowerState = LOW_POWER;
+                return false;
+            case SENSE_Q_POWER_IDLE_BY_COMMAND:
+            case SENSE_Q_POWER_IDLE_BY_TIMER:
+            case SENSE_Q_POWER_IDLE_B_BY_COMMAND:
+            case SENSE_Q_POWER_IDLE_B_BY_TIMER:
+            case SENSE_Q_POWER_IDLE_C_BY_COMMAND:
+            case SENSE_Q_POWER_IDLE_C_BY_TIMER:
+                latestPowerState = IDLE;
+                return false;
+            case SENSE_Q_POWER_STANDBY_BY_COMMAND:
+            case SENSE_Q_POWER_STANDBY_BY_TIMER:
+            case SENSE_Q_POWER_STANDBY_Y_BY_COMMAND:
+            case SENSE_Q_POWER_STANDBY_Y_BY_TIMER:
+                latestPowerState = STANDBY;
+                return false;
+            default:
+                ReportSense(*reqsens);
+                latestPowerState = UNKNOWN;
+                return {};
+        }
+    }
+
+    latestPowerState = ACTIVE;
+    return true;
 }
 
 Device *scsida_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
