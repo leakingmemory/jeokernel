@@ -38,6 +38,7 @@ public:
         return capacity.BlockSize;
     }
 
+    void ReportFailed(std::shared_ptr<ScsiDevCommand> command);
     std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength);
     template <class Cmd> std::shared_ptr<ScsiDevCommand> ExecuteCommand(const Cmd &cmd, std::size_t dataTransferLength, const scsivariabledata &varlength) {
         return ExecuteCommand(&cmd, sizeof(Cmd), dataTransferLength, varlength);
@@ -49,15 +50,7 @@ public:
             memcpy(&(*result), command->Buffer(), sizeof(Result));
             return result;
         }
-        std::stringstream str{};
-        str << DeviceType() << DeviceId() << ": Command failed: " << command->NonSuccessfulStatusString() << "\n";
-        get_klogger() << str.str().c_str();
-        if (command->NonSuccessfulStatus() == ScsiCmdNonSuccessfulStatus::COMMAND_FAILED) {
-            auto sense = RequestSense_Fixed();
-            if (sense) {
-                ReportSense(*sense);
-            }
-        }
+        ReportFailed(command);
         return {};
     }
     template <class Cmd> bool ExecuteCommand(const Cmd &cmd) {
@@ -65,21 +58,14 @@ public:
         if (command->IsSuccessful()) {
             return true;
         }
-        std::stringstream str{};
-        str << DeviceType() << DeviceId() << ": Command failed: " << command->NonSuccessfulStatusString() << "\n";
-        get_klogger() << str.str().c_str();
-        if (command->NonSuccessfulStatus() == ScsiCmdNonSuccessfulStatus::COMMAND_FAILED) {
-            auto sense = RequestSense_Fixed();
-            if (sense) {
-                ReportSense(*sense);
-            }
-        }
+        ReportFailed(command);
         return false;
     }
     void ReportSense(const RequestSense_FixedData &sense);
     std::shared_ptr<RequestSense_FixedData> RequestSense_Fixed();
     std::optional<bool> IsSpinning();
     bool SetPower(UnitPowerCondition powerCondition, bool immediateResponse = true);
+    bool CmdRead6(uint32_t LBA, uint16_t blocks);
 };
 
 class scsida_driver : public Driver {

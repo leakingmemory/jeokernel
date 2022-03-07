@@ -165,6 +165,16 @@ constexpr const char *SenseKeyStr(uint8_t senseCode) {
 enum class SenseError {
     NO_SENSE,
     INVALID_OPCODE,
+    ATTEMPT_TO_ACCESS_GAP_ZONE,
+    ATTEMPT_TO_READ_INVALID_DATA,
+    INVALID_ADDRESS_FOR_WRITE,
+    INVALID_ELEMENT_ADDRESS,
+    INVALID_WRITE_CROSSING_LAYER_JUMP,
+    LBA_OUT_OF_RANGE,
+    MISALIGNED_WRITE_COMMAND,
+    READ_BOUNDARY_VIOLATION,
+    UNALIGNED_WRITE_COMMAND,
+    WRITE_BOUNDARY_VIOLATION,
     OTHER
 };
 
@@ -174,6 +184,26 @@ constexpr const char *SenseErrorString(SenseError error) {
             return "NO_SENSE";
         case SenseError::INVALID_OPCODE:
             return "INVALID_OPCODE";
+        case SenseError::ATTEMPT_TO_ACCESS_GAP_ZONE:
+            return "ATTEMPT_TO_ACCESS_GAP_ZONE";
+        case SenseError::ATTEMPT_TO_READ_INVALID_DATA:
+            return "ATTEMPT_TO_READ_INVALID_DATA";
+        case SenseError::INVALID_ADDRESS_FOR_WRITE:
+            return "INVALID_ADDRESS_FOR_WRITE";
+        case SenseError::INVALID_ELEMENT_ADDRESS:
+            return "INVALID_ELEMENT_ADDRESS";
+        case SenseError::INVALID_WRITE_CROSSING_LAYER_JUMP:
+            return "INVALID_WRITE_CROSSING_LAYER_JUMP";
+        case SenseError::LBA_OUT_OF_RANGE:
+            return "LBA_OUT_OF_RANGE";
+        case SenseError::MISALIGNED_WRITE_COMMAND:
+            return "MISALIGNED_WRITE_COMMAND";
+        case SenseError::READ_BOUNDARY_VIOLATION:
+            return "READ_BOUNDARY_VIOLATION";
+        case SenseError::UNALIGNED_WRITE_COMMAND:
+            return "UNALIGNED_WRITE_COMMAND";
+        case SenseError::WRITE_BOUNDARY_VIOLATION:
+            return "WRITE_BOUNDARY_VIOLATION";
         case SenseError::OTHER:
         default:
             return "OTHER";
@@ -209,6 +239,31 @@ struct RequestSense_FixedData {
                         switch (AdditionalSenseCodeQualifier) {
                             case 0:
                                 return SenseError::INVALID_OPCODE;
+                        }
+                    }
+                    case 0x21:
+                    {
+                        switch (AdditionalSenseCodeQualifier) {
+                            case 0x09:
+                                return SenseError::ATTEMPT_TO_ACCESS_GAP_ZONE;
+                            case 0x06:
+                                return SenseError::ATTEMPT_TO_READ_INVALID_DATA;
+                            case 0x02:
+                                return SenseError::INVALID_ADDRESS_FOR_WRITE;
+                            case 0x01:
+                                return SenseError::INVALID_ELEMENT_ADDRESS;
+                            case 0x03:
+                                return SenseError::INVALID_WRITE_CROSSING_LAYER_JUMP;
+                            case 0x00:
+                                return SenseError::LBA_OUT_OF_RANGE;
+                            case 0x08:
+                                return SenseError::MISALIGNED_WRITE_COMMAND;
+                            case 0x07:
+                                return SenseError::READ_BOUNDARY_VIOLATION;
+                            case 0x04:
+                                return SenseError::UNALIGNED_WRITE_COMMAND;
+                            case 0x05:
+                                return SenseError::WRITE_BOUNDARY_VIOLATION;
                         }
                     }
                     break;
@@ -292,6 +347,30 @@ struct StartStopUnit {
             default:
                 return 0;
         }
+    }
+} __attribute__((__packed__));
+
+struct Read6 {
+    uint8_t OpCode;
+    uint8_t LBA_high_5bits;
+    big_endian<uint16_t> LBA_low;
+    uint8_t TransferLengthBlocks0is256;
+    uint8_t Control;
+
+    Read6(uint32_t LBA, uint16_t TransferLengthBlocks, bool naca = false) : OpCode(0x08),
+    LBA_high_5bits((uint8_t) ((LBA >> 16) & 0x01F)), LBA_low((uint16_t) (LBA & 0x0FFFF)),
+    TransferLengthBlocks0is256(TransferLengthBlocks != 256 ? ((uint8_t) (TransferLengthBlocks & 0x0FF)) : 0),
+    Control(naca ? SCSI_CONTROL_NACA : 0) {}
+
+    uint32_t LBA() {
+        uint32_t LBA_n{(uint32_t) (LBA_high_5bits & 0x1F)};
+        LBA_n = LBA_n << 16;
+        LBA_n |= LBA_low;
+        return LBA_n;
+    }
+    uint16_t TransferLengthBlocks() {
+        uint16_t blocks{(uint16_t) TransferLengthBlocks0is256};
+        return blocks != 0 ? blocks : 256;
     }
 } __attribute__((__packed__));
 

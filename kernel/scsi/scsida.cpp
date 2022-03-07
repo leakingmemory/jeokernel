@@ -136,6 +136,18 @@ void scsida::init() {
     }
 }
 
+void scsida::ReportFailed(std::shared_ptr<ScsiDevCommand> command) {
+    std::stringstream str{};
+    str << DeviceType() << DeviceId() << ": Command failed: " << command->NonSuccessfulStatusString() << "\n";
+    get_klogger() << str.str().c_str();
+    if (command->NonSuccessfulStatus() == ScsiCmdNonSuccessfulStatus::COMMAND_FAILED) {
+        auto sense = RequestSense_Fixed();
+        if (sense) {
+            ReportSense(*sense);
+        }
+    }
+}
+
 std::shared_ptr<ScsiDevCommand>
 scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength) {
     CallbackLatch latch{};
@@ -258,6 +270,24 @@ bool scsida::SetPower(UnitPowerCondition powerCondition, bool immediateResponse)
         return false;
     }
     return true;
+}
+
+bool scsida::CmdRead6(uint32_t LBA, uint16_t blocks) {
+    Read6 read6{LBA, blocks};
+    if (read6.LBA() != LBA || read6.TransferLengthBlocks() != blocks) {
+        return false;
+    }
+    std::size_t size{blocks};
+    size *= BlockSize();
+    auto command = ExecuteCommand(read6, size, scsivariabledata_fixed());
+    if (command) {
+        if (command->IsSuccessful()) {
+            return true;
+        } else {
+            ReportFailed(command);
+        }
+    }
+    return false;
 }
 
 Device *scsida_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
