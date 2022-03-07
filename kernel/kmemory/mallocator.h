@@ -56,7 +56,9 @@ struct SmallUnitMemoryAllocTable {
         if (size > max_allocation_size()) {
             return nullptr;
         }
-        {
+        if (size < sizeof(small_alloc_unit)) {
+            size = sizeof(small_alloc_unit);
+        } else {
             uint32_t overshoot = size % sizeof(small_alloc_unit);
             if (overshoot != 0) {
                 size += sizeof(small_alloc_unit) - overshoot;
