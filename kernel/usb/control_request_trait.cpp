@@ -10,12 +10,12 @@
 #include "usb_port_connection.h"
 
 static void timeout_wait(const usb_transfer &transfer) {
-    int timeout = 25;
+    int timeout = 100;
     while (!transfer.IsDone()) {
         if (--timeout == 0)
             break;
         using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(40ms);
+        std::this_thread::sleep_for(100ms);
     }
 }
 
