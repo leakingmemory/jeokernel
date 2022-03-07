@@ -52,11 +52,34 @@ public:
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Command failed: " << command->NonSuccessfulStatusString() << "\n";
         get_klogger() << str.str().c_str();
+        if (command->NonSuccessfulStatus() == ScsiCmdNonSuccessfulStatus::COMMAND_FAILED) {
+            auto sense = RequestSense_Fixed();
+            if (sense) {
+                ReportSense(*sense);
+            }
+        }
         return {};
+    }
+    template <class Cmd> bool ExecuteCommand(const Cmd &cmd) {
+        auto command = ExecuteCommand(cmd, 0, scsivariabledata_fixed());
+        if (command->IsSuccessful()) {
+            return true;
+        }
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Command failed: " << command->NonSuccessfulStatusString() << "\n";
+        get_klogger() << str.str().c_str();
+        if (command->NonSuccessfulStatus() == ScsiCmdNonSuccessfulStatus::COMMAND_FAILED) {
+            auto sense = RequestSense_Fixed();
+            if (sense) {
+                ReportSense(*sense);
+            }
+        }
+        return false;
     }
     void ReportSense(const RequestSense_FixedData &sense);
     std::shared_ptr<RequestSense_FixedData> RequestSense_Fixed();
     std::optional<bool> IsSpinning();
+    bool SetPower(UnitPowerCondition powerCondition, bool immediateResponse = true);
 };
 
 class scsida_driver : public Driver {

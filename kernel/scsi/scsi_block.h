@@ -162,6 +162,23 @@ constexpr const char *SenseKeyStr(uint8_t senseCode) {
 #define SENSE_Q_POWER_STANDBY_Y_BY_COMMAND          0x0A
 #define SENSE_Q_POWER_STANDBY_Y_BY_TIMER            0x09
 
+enum class SenseError {
+    NO_SENSE,
+    INVALID_OPCODE,
+    OTHER
+};
+
+constexpr const char *SenseErrorString(SenseError error) {
+    switch (error) {
+        case SenseError::NO_SENSE:
+            return "NO_SENSE";
+        case SenseError::INVALID_OPCODE:
+            return "INVALID_OPCODE";
+        case SenseError::OTHER:
+        default:
+            return "OTHER";
+    }
+}
 
 struct RequestSense_FixedData {
     uint8_t ResponseCode;
@@ -178,6 +195,28 @@ struct RequestSense_FixedData {
 
     uint8_t SenseKey() const {
         return FlagsAndSenseKey & 0xF;
+    }
+    SenseError SenseError() const {
+        auto senseKey = SenseKey();
+        switch (senseKey) {
+            case SENSE_KEY_NO_SENSE:
+                return SenseError::NO_SENSE;
+            case SENSE_KEY_ILLEGAL_REQUEST:
+            {
+                switch (AdditionalSenseCode) {
+                    case 0x20:
+                    {
+                        switch (AdditionalSenseCodeQualifier) {
+                            case 0:
+                                return SenseError::INVALID_OPCODE;
+                        }
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+        return SenseError::OTHER;
     }
 } __attribute__((__packed__));
 
@@ -200,5 +239,60 @@ public:
         }
     }
 };
+
+enum class UnitPowerCondition {
+    LOAD,
+    EJECT,
+    STOP,
+    ACTIVE,
+    IDLE,
+    STANDBY,
+    LU_CONTROL,
+    FORCE_IDLE_0,
+    FORCE_STANDBY_0
+};
+
+struct StartStopUnit {
+    uint8_t OpCode;
+    bool Immediate : 8;
+    uint16_t Zero;
+    uint8_t PowerCondition;
+    uint8_t Control;
+
+    StartStopUnit(bool immediate, UnitPowerCondition unitPowerCondition, bool naca = false) : OpCode(0x1B),
+    Immediate(immediate), Zero(0), PowerCondition(EncodePowerCondition(unitPowerCondition)),
+    Control(naca ? SCSI_CONTROL_NACA : 0) {}
+
+    static constexpr uint8_t EncodePowerCondition(UnitPowerCondition unitPowerCondition) {
+        switch (unitPowerCondition) {
+            case UnitPowerCondition::LOAD:
+                return 3;
+            case UnitPowerCondition::EJECT:
+                return 2;
+            case UnitPowerCondition::STOP:
+                return 0;
+            case UnitPowerCondition::ACTIVE:
+                return 1;
+            default:
+                return PowerConditionValue(unitPowerCondition) << 4;
+        }
+    }
+    static constexpr uint8_t PowerConditionValue(UnitPowerCondition unitPowerCondition) {
+        switch (unitPowerCondition) {
+            case UnitPowerCondition::IDLE:
+                return 2;
+            case UnitPowerCondition::STANDBY:
+                return 3;
+            case UnitPowerCondition::LU_CONTROL:
+                return 7;
+            case UnitPowerCondition::FORCE_IDLE_0:
+                return 0xA;
+            case UnitPowerCondition::FORCE_STANDBY_0:
+                return 0xB;
+            default:
+                return 0;
+        }
+    }
+} __attribute__((__packed__));
 
 #endif //JEOKERNEL_SCSI_BLOCK_H

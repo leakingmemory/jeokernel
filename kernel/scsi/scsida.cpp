@@ -103,17 +103,18 @@ void scsida::init() {
         }
     }
 
+    SetPower(UnitPowerCondition::ACTIVE);
     {
         auto spinInfo = IsSpinning();
         if (spinInfo) {
             bool isSpinning = *spinInfo;
             if (isSpinning) {
                 std::stringstream str{};
-                str << DeviceType() << DeviceId() << ": is active/spinning\n";
+                str << DeviceType() << DeviceId() << ": is active/powered\n";
                 get_klogger() << str.str().c_str();
             } else {
                 std::stringstream str{};
-                str << DeviceType() << DeviceId() << ": needs spin up from ";
+                str << DeviceType() << DeviceId() << ": did not activate: ";
                 switch (latestPowerState) {
                     case IDLE:
                         str << "idle";
@@ -129,6 +130,7 @@ void scsida::init() {
                 }
                 str << "\n";
                 get_klogger() << str.str().c_str();
+                return;
             }
         }
     }
@@ -145,9 +147,16 @@ scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataT
 }
 
 void scsida::ReportSense(const RequestSense_FixedData &sense) {
+    auto senseError = sense.SenseError();
+    if (senseError != SenseError::OTHER) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Sense error " << SenseErrorString(senseError) << "\n";
+        get_klogger() << str.str().c_str();
+        return;
+    }
     auto senseKey = sense.SenseKey();
     std::stringstream str{};
-    str << DeviceType() << DeviceId() << "Sense " << SenseKeyStr(senseKey) << " code " << std::hex << sense.AdditionalSenseCode << " q " << sense.AdditionalSenseCodeQualifier << "\n";
+    str << DeviceType() << DeviceId() << ": Sense " << SenseKeyStr(senseKey) << " code " << std::hex << sense.AdditionalSenseCode << " q " << sense.AdditionalSenseCodeQualifier << "\n";
     get_klogger() << str.str().c_str();
 }
 
@@ -237,6 +246,17 @@ std::optional<bool> scsida::IsSpinning() {
     }
 
     latestPowerState = ACTIVE;
+    return true;
+}
+
+bool scsida::SetPower(UnitPowerCondition powerCondition, bool immediateResponse) {
+    StartStopUnit setPower{immediateResponse, powerCondition};
+    if (!ExecuteCommand(setPower)) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": Set power failed\n";
+        get_klogger() << str.str().c_str();
+        return false;
+    }
     return true;
 }
 
