@@ -8,6 +8,8 @@
 enum class ScsiCmdNonSuccessfulStatus {
     UNSPECIFIED,
     SIGNATURE_CHECK,
+    COMMAND_FAILED,
+    PHASE_ERROR,
     OTHER_ERROR
 };
 

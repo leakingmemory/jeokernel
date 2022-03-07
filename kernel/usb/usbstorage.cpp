@@ -366,6 +366,16 @@ bool usbstorage_command_impl::IsSuccessful() {
         return false;
     }
     if (!status.IsSuccessful()) {
+        if (status.IsCommandFailed()) {
+            nonSuccessfulStatus = ScsiCmdNonSuccessfulStatus::COMMAND_FAILED;
+            nonSuccessfulStatusString = "COMMMAND_FAILED";
+            return false;
+        }
+        if (status.IsPhaseError()) {
+            nonSuccessfulStatus = ScsiCmdNonSuccessfulStatus::PHASE_ERROR;
+            nonSuccessfulStatusString = "PHASE_ERROR";
+            return false;
+        }
         nonSuccessfulStatus = ScsiCmdNonSuccessfulStatus::OTHER_ERROR;
         nonSuccessfulStatusString = "OTHER_ERROR";
         return false;
