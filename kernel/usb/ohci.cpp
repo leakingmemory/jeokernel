@@ -481,7 +481,7 @@ std::shared_ptr<usb_buffer> ohci::Alloc(size_t size) {
         std::shared_ptr<usb_buffer> buffer{new ohci_buffer<OHCI_SHORT_TRANSFER_BUFSIZE>(shortBufPool.Alloc())};
         return buffer;
     } else if (size <= OHCI_TRANSFER_BUFSIZE) {
-        std::shared_ptr<usb_buffer> buffer{new ohci_buffer<OHCI_SHORT_TRANSFER_BUFSIZE>(shortBufPool.Alloc())};
+        std::shared_ptr<usb_buffer> buffer{new ohci_buffer<OHCI_TRANSFER_BUFSIZE>(bufPool.Alloc())};
         return buffer;
     } else {
         return {};
