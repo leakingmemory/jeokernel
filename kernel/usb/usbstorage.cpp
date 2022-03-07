@@ -73,7 +73,9 @@ public:
                             uint8_t cmdLength, const std::function<void ()> &done)
     : usbstorage_command(dataTransferLength, varlength, lun, cmd, cmdLength, true, done), device(device), buffer(nullptr),
       flags(USBSTORAGE_FLAG_IN) {
-        buffer = malloc(dataTransferLength);
+        if (dataTransferLength != 0) {
+            buffer = malloc(dataTransferLength);
+        }
     }
     ~usbstorage_command_impl() {
         if (buffer != nullptr) {
