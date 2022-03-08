@@ -7,15 +7,16 @@
 #include <cstdint>
 #include <pagetable.h>
 #include <pagealloc.h>
+#include <concurrency/raw_spinlock.h>
 
-static hw_spinlock *ap_start_lock = nullptr;
+static raw_spinlock *ap_start_lock = nullptr;
 
-hw_spinlock *get_ap_start_lock() {
+raw_spinlock *get_ap_start_lock() {
     return ap_start_lock;
 }
 
 const uint32_t *install_ap_bootstrap() {
-    ap_start_lock = new hw_spinlock();
+    ap_start_lock = new raw_spinlock();
     vmem vm{4096};
     vm.page(0).rwmap(0x8000, true);
     uint8_t *bootstrap_location = (uint8_t *) vm.pointer();

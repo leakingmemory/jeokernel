@@ -96,7 +96,6 @@ void usbhub::init() {
 
 void usbhub::stop() {
     {
-        critical_section cli{};
         std::lock_guard lock{usbInterfaceInformation.port.Hub().HcdSpinlock()};
         if (poll_transfer) {
             poll_transfer->SetDoneCall([] () {});

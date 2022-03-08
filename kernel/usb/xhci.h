@@ -488,7 +488,6 @@ public:
         done = true;
     }
     bool IsDone() {
-        critical_section cli{};
         std::lock_guard lock{spinlock};
         return done;
     }
@@ -936,7 +935,6 @@ public:
         dumpregs();
     }
     std::shared_ptr<xhci_command> EnableSlot(uint8_t SlotType) {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         auto addr_trb = NextCommand();
         uint64_t addr = std::get<0>(addr_trb);
@@ -952,7 +950,6 @@ public:
         return ptr;
     }
     std::shared_ptr<xhci_command> DisableSlot(uint8_t SlotId) {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         auto addr_trb = NextCommand();
         uint64_t addr = std::get<0>(addr_trb);
@@ -968,7 +965,6 @@ public:
         return ptr;
     }
     std::shared_ptr<xhci_command> SetAddress(uint64_t inputContextAddr, uint8_t SlotId) {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         auto addr_trb = NextCommand();
         uint64_t addr = std::get<0>(addr_trb);
@@ -985,7 +981,6 @@ public:
         return ptr;
     }
     std::shared_ptr<xhci_command> ConfigureEndpoint(uint64_t inputContextAddr, uint8_t SlotId) {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         auto addr_trb = NextCommand();
         uint64_t addr = std::get<0>(addr_trb);
@@ -1002,7 +997,6 @@ public:
         return ptr;
     }
     std::shared_ptr<xhci_command> EvaluateContext(uint64_t inputContextAddr, uint8_t SlotId) {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         auto addr_trb = NextCommand();
         uint64_t addr = std::get<0>(addr_trb);
@@ -1019,7 +1013,6 @@ public:
         return ptr;
     }
     std::shared_ptr<xhci_command> ResetEndpoint(uint8_t slot, uint8_t endpoint_id) {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         auto addr_trb = NextCommand();
         uint64_t addr = std::get<0>(addr_trb);
@@ -1036,7 +1029,6 @@ public:
         return ptr;
     }
     std::shared_ptr<xhci_command> SetDequeuePtr(uint8_t slot, uint8_t endpoint_id, uint8_t sct, uint16_t streamId, uint64_t dequeue) {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         auto addr_trb = NextCommand();
         uint64_t addr = std::get<0>(addr_trb);
@@ -1056,7 +1048,6 @@ public:
         return ptr;
     }
     std::shared_ptr<xhci_command> StopEndpoint(uint8_t slot, uint8_t endpoint_id) {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         auto addr_trb = NextCommand();
         uint64_t addr = std::get<0>(addr_trb);

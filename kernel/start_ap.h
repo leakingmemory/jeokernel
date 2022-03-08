@@ -6,14 +6,14 @@
 #define JEOKERNEL_START_AP_H
 
 #include <cstdint>
-#include <concurrency/hw_spinlock.h>
+#include <concurrency/raw_spinlock.h>
 
 extern "C" {
 void ap_trampoline();
 void ap_trampoline_end();
 };
 
-hw_spinlock *get_ap_start_lock();
+raw_spinlock *get_ap_start_lock();
 /**
  *
  * @return Pointer to AP start counter

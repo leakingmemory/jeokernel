@@ -54,7 +54,6 @@ public:
     buffer(), inspos(0), outpos(0), cmd_length(0), cmd() {}
     ~ps2kbd() {
         {
-            critical_section cli{};
             std::lock_guard lock(spinlock);
             stop = true;
             sema.release();

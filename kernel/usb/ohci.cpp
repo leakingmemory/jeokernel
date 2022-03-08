@@ -353,7 +353,6 @@ uint32_t ohci::GetPortStatus(int port) {
 }
 
 void ohci::SwitchPortOff(int port) {
-    critical_section cli{};
     std::lock_guard lock{ohcilock};
     if (PortPowerIndividuallyControlled(port)) {
         ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
@@ -361,7 +360,6 @@ void ohci::SwitchPortOff(int port) {
 }
 
 void ohci::SwitchPortOn(int port) {
-    critical_section cli{};
     std::lock_guard lock{ohcilock};
     if (PortPowerIndividuallyControlled(port)) {
         ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PPS;
@@ -369,7 +367,6 @@ void ohci::SwitchPortOn(int port) {
 }
 
 void ohci::ClearStatusChange(int port, uint32_t statuses) {
-    critical_section cli{};
     std::lock_guard lock{ohcilock};
     uint32_t usb{0};
     if ((statuses & USB_PORT_STATUS_CSC) != 0) {
@@ -425,19 +422,16 @@ void ohci::dumpregs() {
 }
 
 void ohci::EnablePort(int port) {
-    critical_section cli{};
     std::lock_guard lock{ohcilock};
     ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PES;
 }
 
 void ohci::DisablePort(int port) {
-    critical_section cli{};
     std::lock_guard lock{ohcilock};
     ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_CCS;
 }
 
 void ohci::ResetPort(int port) {
-    critical_section cli{};
     std::lock_guard lock{ohcilock};
     ohciRegisters->PortStatus[port] = OHCI_PORT_STATUS_PRS;
 }
@@ -655,7 +649,6 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
     ed->HeadP = head->PhysAddr();
     ed->TailP = tail->PhysAddr();
 
-    critical_section cli{};
     std::lock_guard lock{ohci.ohcilock};
 
     if (endpointType == usb_endpoint_type::BULK) {
@@ -694,7 +687,6 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
 
 ohci_endpoint::~ohci_endpoint() {
     {
-        critical_section cli{};
         std::lock_guard lock{ohciRef.ohcilock};
         SetSkip();
         ohci_endpoint *endpoint{nullptr};
@@ -750,7 +742,6 @@ ohci_endpoint::~ohci_endpoint() {
     get_klogger() << "Transfers:\n";
 #endif
     {
-        critical_section cli{};
         std::lock_guard lock{ohciRef.ohcilock};
         std::shared_ptr<ohci_transfer> transfer = head;
         while (transfer->next) {
@@ -792,7 +783,6 @@ ohci_endpoint::CreateTransfer(std::shared_ptr<usb_buffer> buffer, uint32_t size,
                               uint16_t delayInterrupt, int8_t dataToggle, std::function<void (ohci_transfer &transfer)> &applyFunc) {
     std::shared_ptr<usb_transfer> transfer{};
     {
-        critical_section cli{};
         std::lock_guard lock{ohciRef.ohcilock};
         transfer = CreateTransferWithLock(buffer, size, direction, bufferRounding, delayInterrupt, dataToggle,
                                           applyFunc);

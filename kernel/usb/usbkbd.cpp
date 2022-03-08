@@ -170,7 +170,6 @@ void usbkbd::init() {
 void usbkbd::stop() {
     stop_threads = true;
     {
-        critical_section cli{};
         std::lock_guard lock{devInfo.port.Hub().HcdSpinlock()};
         if (poll_transfer) {
             poll_transfer->SetDoneCall([]() {});
@@ -214,7 +213,6 @@ void usbkbd::interrupt() {
 
 usbkbd::~usbkbd() {
     if (poll_transfer) {
-        critical_section cli{};
         std::lock_guard lock{devInfo.port.Hub().HcdSpinlock()};
         poll_transfer->SetDoneCall([] () {});
     }

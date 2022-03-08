@@ -84,7 +84,6 @@ void ps2kbd::extractor() {
         std::stringstream msg{};
 #endif
         {
-            critical_section cli{};
             std::lock_guard lock{spinlock};
             if (stop) {
                 return;

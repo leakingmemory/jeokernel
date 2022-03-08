@@ -599,7 +599,6 @@ usbstorage::QueueCommand(uint32_t dataTransferLength, const scsivariabledata &va
     std::shared_ptr<usbstorage_command_impl> cmd_pt{new usbstorage_command_impl(*this, dataTransferLength, varlength, lun, cmd, cmdLength, done)};
 
     {
-        critical_section cli{};
         std::lock_guard lock{devInfo.port.Hub().HcdSpinlock()};
         commandQueue.push_back(cmd_pt);
         if (!currentCommand) {

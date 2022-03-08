@@ -61,7 +61,6 @@ public:
         return 4096 / sizeof(type);
     }
     bool IsFree(size_t i) {
-        critical_section cli{};
         std::lock_guard lock{spinlock};
         size_t index = i >> 5;
         uint32_t bit = (uint32_t) (i & 31);
@@ -69,7 +68,6 @@ public:
         return (map[index] & bit) == 0;
     }
     void Free(PhysPtr phys) {
-        critical_section cli{};
         std::lock_guard lock{spinlock};
         PhysPtr offset = phys - page.PhysAddr();
         PhysPtr i = offset / sizeof(type);
@@ -122,7 +120,6 @@ private:
     hw_spinlock spinlock;
 public:
     std::shared_ptr<StructPoolPointer<type, PhysPtr>> Alloc() {
-        critical_section cli{};
         std::lock_guard lock{spinlock};
         for (Allocator *allocator : allocators) {
             std::optional<PhysPtr> phys = allocator->Alloc();

@@ -689,7 +689,6 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, const std::vector<uint8_t> &portRout
         }
     }
     if (head) {
-        critical_section cli{};
         std::lock_guard lock{ehciRef.ehcilock};
         qh->Pointer()->qh.HorizLink = head->Pointer()->qh.HorizLink;
         qh->Pointer()->qh.DeviceAddress = functionAddr;
@@ -746,7 +745,6 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, const std::vector<uint8_t> &portRout
 
 ehci_endpoint::~ehci_endpoint() {
     if (head) {
-        critical_section cli{};
         std::lock_guard lock{ehciRef.ehcilock};
         {
             auto iterator = ehciRef.watchList.begin();
@@ -858,7 +856,6 @@ std::shared_ptr<usb_transfer>
 ehci_endpoint::CreateTransferWithoutLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
                                          usb_transfer_direction direction, int8_t dataToggle,
                                          std::function<void (ehci_transfer &transfer)> &applyFunc) {
-    critical_section cli{};
     std::lock_guard lock{ehciRef.HcdSpinlock()};
 
     return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);

@@ -12,7 +12,6 @@
 #define _get_pml4t()  (*((pagetable *) 0x1000))
 
 uint64_t vpagealloc(uint64_t size) {
-    critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
 
     if ((size & 4095) != 0) {
@@ -85,7 +84,6 @@ void pmemcounts() {
     uint64_t scan = 0;
     uint64_t free_pages = 0;
     {
-        critical_section cli{};
         std::lock_guard lock{get_pagetables_lock()};
 
         pagetable &pml4t = _get_pml4t();
@@ -123,7 +121,6 @@ uint64_t ppagealloc(uint64_t size) {
     uint64_t free_pages = 0;
     {
 #endif
-    critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
 
     if ((size & 4095) != 0) {
@@ -199,7 +196,6 @@ uint64_t ppagealloc(uint64_t size) {
     return 0;
 }
 uint32_t ppagealloc32(uint32_t size) {
-    critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
 
     if ((size & 4095) != 0) {
@@ -263,7 +259,6 @@ uint32_t ppagealloc32(uint32_t size) {
 }
 
 uint64_t vpagefree(uint64_t addr) {
-    critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
 
     pagetable &pml4t = _get_pml4t();
@@ -304,7 +299,6 @@ uint64_t vpagefree(uint64_t addr) {
 }
 
 uint64_t vpagesize(uint64_t addr) {
-    critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
 
     const pagetable &pml4t = _get_pml4t();
@@ -343,7 +337,6 @@ uint64_t vpagesize(uint64_t addr) {
 
 
 uint64_t pv_fix_pagealloc(uint64_t size) {
-    critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
 
     if ((size & 4095) != 0) {
@@ -473,7 +466,6 @@ void free_stack(uint64_t vaddr) {
     uint64_t phys_addr = 0;
     vaddr = vaddr >> 12;
     {
-        critical_section cli{};
         std::lock_guard lock{get_pagetables_lock()};
 
         while (true) {
@@ -538,7 +530,6 @@ void reload_pagetables() {
 }
 
 void ppagefree(uint64_t addr, uint64_t size) {
-    critical_section cli{};
     std::lock_guard lock{get_pagetables_lock()};
 
     pagetable &pml4t = _get_pml4t();

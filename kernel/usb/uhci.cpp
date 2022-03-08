@@ -405,7 +405,6 @@ uhci_endpoint::uhci_endpoint(uhci &uhciRef, uint32_t maxPacketSize, uint8_t func
                              : uhciRef(uhciRef), speed(speed), endpointType(endpointType), pollingRateMs(pollingRateMs),
                              maxPacketSize(maxPacketSize), functionAddr(functionAddr), endpointNum(endpointNum),
                              head(), qh(), pending(), active() {
-    critical_section cli{};
     std::lock_guard lock{uhciRef.HcdSpinlock()};
     if (endpointType == usb_endpoint_type::CONTROL) {
         head = uhciRef.qh;
@@ -505,7 +504,6 @@ std::shared_ptr<usb_transfer>
 uhci_endpoint::CreateTransferWithoutLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
                                          usb_transfer_direction direction,
                                          int8_t dataToggle, std::function<void(uhci_transfer &)> &applyFunc) {
-    critical_section cli{};
     std::lock_guard lock{uhciRef.HcdSpinlock()};
 
     return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
@@ -574,7 +572,6 @@ uhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
 
 uhci_endpoint::~uhci_endpoint() {
     if (endpointType == usb_endpoint_type::CONTROL || endpointType == usb_endpoint_type::INTERRUPT) {
-        critical_section cli{};
         std::lock_guard lock{uhciRef.HcdSpinlock()};
         {
             auto iter = uhciRef.watchList.begin();

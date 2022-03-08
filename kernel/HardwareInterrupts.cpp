@@ -8,7 +8,6 @@
 #include "HardwareInterrupts.h"
 
 uint64_t HardwareInterrupts::add_handler(uint8_t intn, std::function<void(Interrupt &)> func) {
-    critical_section cli{};
     std::lock_guard lock{_lock};
 
     uint64_t serial = this->serial++;
@@ -18,7 +17,6 @@ uint64_t HardwareInterrupts::add_handler(uint8_t intn, std::function<void(Interr
 }
 
 void HardwareInterrupts::remove_handler(uint64_t id) {
-    critical_section cli{};
     std::lock_guard lock{_lock};
 
     for (int i = 0; i < HW_INT_N; i++) {
@@ -34,7 +32,6 @@ void HardwareInterrupts::remove_handler(uint64_t id) {
 }
 
 uint64_t HardwareInterrupts::add_finalizer(uint8_t intn, std::function<void(Interrupt &)> func) {
-    critical_section cli{};
     std::lock_guard lock{_lock};
 
     uint64_t serial = this->serial++;
@@ -44,7 +41,6 @@ uint64_t HardwareInterrupts::add_finalizer(uint8_t intn, std::function<void(Inte
 }
 
 void HardwareInterrupts::remove_finalizer(uint64_t id) {
-    critical_section cli{};
     std::lock_guard lock{_lock};
 
     for (int i = 0; i < HW_INT_N; i++) {

@@ -63,7 +63,6 @@ bool usb_hcd::EnabledPort(int port) {
 }
 
 int usb_hcd::AllocateFuncAddr() {
-    critical_section cli{};
     std::lock_guard lock{HcdSpinlock()};
     for (int i = 0; i < 4; i++) {
         if (func_addr_map[i] != 0) {
@@ -81,7 +80,6 @@ int usb_hcd::AllocateFuncAddr() {
 }
 
 void usb_hcd::ReleaseFuncAddr(int addr) {
-    critical_section cli{};
     std::lock_guard lock{HcdSpinlock()};
     uint32_t bit = 1;
     bit = bit << (addr & 31);

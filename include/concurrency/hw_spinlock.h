@@ -6,12 +6,14 @@
 #define JEOKERNEL_HW_SPINLOCK_H
 
 #include <cstdint>
+#include "critical_section.h"
 
 class hw_spinlock {
 private:
     uint32_t _before_cacheline[16];
     uint32_t cacheline[16];
-    uint32_t _after_cacheline[16];
+    critical_section_host cli;
+    uint32_t _after_cacheline[16 - (sizeof(critical_section_host) / 4)];
 public:
     hw_spinlock();
 

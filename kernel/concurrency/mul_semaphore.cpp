@@ -53,7 +53,6 @@ void mul_semaphore::acquire(uint64_t timeout_millis) {
     get_klogger() << "mul_semaphore acquire\n";
 #endif
     {
-        critical_section cli{};
         std::lock_guard lock{spinlock};
         if (release_count > 0) {
             --release_count;
@@ -65,7 +64,6 @@ void mul_semaphore::acquire(uint64_t timeout_millis) {
     {
         bool released{false};
         {
-            critical_section cli{};
             std::lock_guard lock{spinlock};
             if (release_count == 0) {
                 waiting.push_back(slot);
@@ -81,7 +79,6 @@ void mul_semaphore::acquire(uint64_t timeout_millis) {
     }
     slot->acquire();
     {
-        critical_section cli{};
         std::lock_guard lock{spinlock};
         auto iterator = waiting.begin();
         while (iterator != waiting.end()) {

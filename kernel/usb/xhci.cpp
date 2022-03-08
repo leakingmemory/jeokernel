@@ -347,7 +347,6 @@ void xhci::init() {
                 while (true) {
                     event_sema.acquire();
                     {
-                        critical_section cli{};
                         std::lock_guard lock{xhcilock};
                         if (stop) {
                             break;
@@ -641,7 +640,6 @@ void xhci::HcEvent() {
 
 xhci::~xhci() {
     {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
         stop = true;
     }
@@ -656,7 +654,6 @@ xhci::~xhci() {
 void xhci::PrimaryEventRing() {
     uint32_t index{0};
     uint8_t cycle{0};
-    critical_section cli{};
     std::lock_guard lock{xhcilock};
     cycle = primaryEventCycle;
     index = primaryEventIndex;
@@ -691,7 +688,6 @@ void xhci::PrimaryEventRingAsync() {
     std::vector<xhci_trb> events{};
 
     {
-        critical_section cli{};
         std::lock_guard lock{xhcilock};
 
         for (xhci_trb trb : this->events) {
@@ -742,7 +738,6 @@ void xhci::CommandCompletion(const xhci_trb &event) {
     uint8_t code = event.CommandCompletion.CompletionCode;
     uint8_t slotId = event.EnableSlot.SlotId;
 
-    critical_section cli{};
     std::lock_guard lock{xhcilock};
     for (auto &cmd : commands) {
         if (cmd->phys == phys) {
@@ -765,7 +760,6 @@ void xhci::CommandCompletion(const xhci_trb &event) {
 }
 
 void xhci::TransferEvent(const xhci_trb &event) {
-    critical_section cli{};
     std::lock_guard lock{xhcilock};
     auto *slotContext = resources->DCBAA()->contexts[event.TransferEvent.SlotId];
     if (slotContext != nullptr) {
@@ -813,7 +807,6 @@ xhci_port_enumerated_device::~xhci_port_enumerated_device() {
 }
 
 void xhci_port_enumerated_device::Stop() {
-    critical_section cli{};
     std::lock_guard lock{xhciRef.xhcilock};
     xhciRef.resources->DCBAA()->contexts[slot]->Stop();
 }
@@ -992,7 +985,6 @@ xhci_port_enumerated_device::CreateInterruptEndpoint(const std::vector<uint8_t> 
     xhci_endpoint *xhciEndpoint = new xhci_endpoint(xhciRef, endpointRing, inputctx_container, slot, endpointNum, dir, usb_endpoint_type::INTERRUPT, 0);
     std::shared_ptr<usb_endpoint> uendpoint{xhciEndpoint};
     {
-        critical_section cli{};
         std::lock_guard lock{xhciRef.xhcilock};
         xhciRef.resources->DCBAA()->contexts[slot]->SetEndpoint(endpointIndex, xhciEndpoint);
     }

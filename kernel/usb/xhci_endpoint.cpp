@@ -30,7 +30,6 @@ uint64_t xhci_endpoint_ring_container_endpoint0::RingPhysAddr() {
 
 xhci_endpoint::~xhci_endpoint() {
     {
-        critical_section cli{};
         std::lock_guard lock{xhciRef.xhcilock};
         xhciRef.resources->DCBAA()->contexts[slot]->UnsetEndpoint(endpoint, this);
     }
@@ -76,7 +75,6 @@ bool xhci_endpoint::Addressing64bit() {
 std::shared_ptr<usb_transfer>
 xhci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction,
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
-    critical_section cli{};
     std::lock_guard lock{xhciRef.xhcilock};
     auto transfer = CreateTransferWithLock(commitTransaction, data, size, direction, bufferRounding, delayInterrupt, dataToggle);
     return transfer;
@@ -94,7 +92,6 @@ std::shared_ptr<usb_transfer>
 xhci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction,
                               std::function<void()> doneCall, bool bufferRounding, uint16_t delayInterrupt,
                               int8_t dataToggle) {
-    critical_section cli{};
     std::lock_guard lock{xhciRef.xhcilock};
     auto transfer = CreateTransferWithLock(commitTransaction, size, direction, doneCall, bufferRounding, delayInterrupt, dataToggle);
     return transfer;

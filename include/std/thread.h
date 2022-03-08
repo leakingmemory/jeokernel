@@ -27,7 +27,6 @@ namespace std {
             thread_start_context &operator =(const thread_start_context &) = delete;
             thread_start_context &operator =(thread_start_context &&) = delete;
             virtual ~thread_start_context() {
-                critical_section cli{};
                 std::lock_guard lock(_lock);
                 if (!done) {
                     wild_panic("Destroying before done is UB");
@@ -52,7 +51,6 @@ namespace std {
 
                 bool detached = false;
                 {
-                    critical_section cli{};
                     std::lock_guard lock(this->_lock);
                     this->done = true;
                     detached = this->detached;
@@ -62,14 +60,12 @@ namespace std {
                 }
             }
             bool is_done() override {
-                critical_section cli{};
                 std::lock_guard lock(this->_lock);
                 return done;
             }
             void detach() override {
                 bool done = false;
                 {
-                    critical_section cli{};
                     std::lock_guard lock(this->_lock);
                     done = this->done;
                     this->detached = true;

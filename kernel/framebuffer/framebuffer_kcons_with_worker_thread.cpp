@@ -97,7 +97,6 @@ framebuffer_kcons_with_worker_thread::framebuffer_kcons_with_worker_thread(std::
 
 framebuffer_kcons_with_worker_thread::~framebuffer_kcons_with_worker_thread() {
     {
-        critical_section cli{};
         std::lock_guard lock{spinlock};
         terminate = true;
     }
@@ -118,7 +117,6 @@ void framebuffer_kcons_with_worker_thread::WorkerThread() {
         unsigned int num{0};
         framebuffer_kcons_cmd *cmds[EXTRACT_MAX];
         {
-            critical_section cli{};
             std::lock_guard lock{spinlock};
             if (terminate) {
                 break;
@@ -172,7 +170,6 @@ void framebuffer_kcons_with_worker_thread::WorkerThread() {
 bool framebuffer_kcons_with_worker_thread::InsertCommand(framebuffer_kcons_cmd *cmd) {
     bool success{false};
     {
-        critical_section cli{};
         std::lock_guard lock{spinlock};
         unsigned int next = command_ring_insert + 1;
         if (next == RING_SIZE) {
@@ -208,7 +205,6 @@ framebuffer_kcons_with_worker_thread &framebuffer_kcons_with_worker_thread::oper
 void framebuffer_kcons_with_worker_thread::Blink() {
     while (true) {
         {
-            critical_section cli{};
             std::lock_guard lock{spinlock};
             if (terminate) {
                 break;
