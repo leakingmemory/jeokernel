@@ -962,6 +962,7 @@ void ohci_transfer::SetDone() {
                 transfer = transfer->next;
             }
         }
+        this->next = {};
     }
 }
 
