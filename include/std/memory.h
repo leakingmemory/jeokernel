@@ -210,6 +210,9 @@ namespace std {
 
         template <class P,class PDeleter> shared_ptr &operator = (shared_ptr<P,PDeleter> &&mv) {
             static_assert(is_assignable<T*,P*>::value);
+            if (((void *) this) == ((void *) &mv)) {
+                return *this;
+            }
             if (container != nullptr) {
                 if (container->release() == 0) {
                     delete container;
@@ -236,6 +239,9 @@ namespace std {
         }
 
         shared_ptr &operator = (shared_ptr &&mv) {
+            if (this == &mv) {
+                return *this;
+            }
             if (container != nullptr) {
                 if (container->release() == 0) {
                     delete container;
