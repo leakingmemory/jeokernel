@@ -8,6 +8,12 @@
 #include <concurrency/critical_section.h>
 #include <mutex>
 #include <sstream>
+#include <stats/statistics_root.h>
+
+static long long int total_ppages = 0;
+static long long int total_vpages = 0;
+static long long int allocated_ppages = 0;
+static long long int allocated_vpages = 0;
 
 #define _get_pml4t()  (*((pagetable *) 0x1000))
 
@@ -59,6 +65,7 @@ uint64_t vpagealloc(uint64_t size) {
                                             }
                                             pe->present = 0;
                                         }
+                                        allocated_vpages += size;
                                         return starting_addr;
                                     }
                                 } else {
@@ -156,6 +163,7 @@ uint64_t ppagealloc(uint64_t size) {
                                                 pageentr *pe = get_pageentr64(pml4t, addr);
                                                 pe->os_phys_avail = 0; // GRAB
                                             }
+                                            allocated_ppages += size;
                                             return starting_addr;
                                         }
                                     } else {
@@ -168,6 +176,7 @@ uint64_t ppagealloc(uint64_t size) {
                                         starting_addr = starting_addr << 12;
                                         if (size == 1) {
                                             pt[l].os_phys_avail = 0; // GRAB
+                                            ++allocated_ppages;
                                             return starting_addr;
                                         } else {
                                             count = 1;
@@ -224,6 +233,7 @@ uint32_t ppagealloc32(uint32_t size) {
                                             pageentr *pe = get_pageentr64(pml4t, addr);
                                             pe->os_phys_avail = 0; // GRAB
                                         }
+                                        allocated_ppages += size;
                                         return starting_addr;
                                     }
                                 } else {
@@ -235,6 +245,7 @@ uint32_t ppagealloc32(uint32_t size) {
                                     starting_addr = starting_addr << 12;
                                     if (size == 1) {
                                         pt[l].os_phys_avail = 0; // GRAB
+                                        ++allocated_ppages;
                                         return starting_addr;
                                     } else {
                                         count = 1;
@@ -295,6 +306,7 @@ uint64_t vpagefree(uint64_t addr) {
         ++addr;
         ++size;
     }
+    allocated_vpages -= size;
     return size << 12;
 }
 
@@ -377,6 +389,8 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
                                                 pe->user_access = 0;
                                             }
                                             reload_pagetables();
+                                            allocated_ppages += size;
+                                            allocated_vpages += size;
                                             return starting_addr;
                                         }
                                     } else {
@@ -398,6 +412,8 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
                                             pe.execution_disabled = 1;
                                             pe.accessed = 0;
                                             pe.user_access = 0;
+                                            ++allocated_ppages;
+                                            ++allocated_vpages;
                                             return starting_addr;
                                         } else {
                                             count = 1;
@@ -510,6 +526,8 @@ void free_stack(uint64_t vaddr) {
             pe.os_virt_avail = 1;
             pe.os_virt_start = 0;
 
+            --allocated_vpages;
+
             if (first_page) {
                 break;
             }
@@ -556,6 +574,7 @@ void ppagefree(uint64_t addr, uint64_t size) {
         pe.os_zero = 1;
         ++addr;
         --size;
+        --allocated_ppages;
     }
 }
 
@@ -593,4 +612,72 @@ void pagefree(void *vaddr) {
     uint64_t size = vpagefree(vai);
     ppagefree(phys, size);
     reload_pagetables();
+}
+
+class pvpage_stats : public statistics_object {
+public:
+    void Accept(statistics_visitor &visitor) override {
+        long long int total_p, total_v, allocated_p, allocated_v;
+        {
+            std::lock_guard lock{get_pagetables_lock()};
+            total_p = total_ppages;
+            total_v = total_vpages;
+            allocated_p = allocated_ppages;
+            allocated_v = allocated_vpages;
+        }
+        visitor.Visit("total_ppages", total_p);
+        visitor.Visit("kernel_vpages", total_v);
+        visitor.Visit("allocated_p", allocated_p);
+        visitor.Visit("allocated_v", allocated_v);
+    }
+};
+
+class pvpages_stats_factory : public statistics_object_factory {
+public:
+    std::shared_ptr<statistics_object> GetObject() override {
+        return std::make_shared<pvpage_stats>();
+    }
+};
+
+void setup_pvpage_stats() {
+    {
+        long long int visited_nonavail_phys = 0;
+        std::lock_guard lock{get_pagetables_lock()};
+        total_ppages = 0;
+        total_vpages = 0;
+        allocated_ppages = 0;
+        allocated_vpages = 0;
+        pagetable &pml4t = _get_pml4t();
+        for (int i = 0; i < 512; i++) {
+            if (pml4t[i].present) {
+                auto &pdpt = pml4t[i].get_subtable();
+                for (int j = 0; j < 512; j++) {
+                    if (pdpt[j].present) {
+                        auto &pdt = pdpt[j].get_subtable();
+                        for (int k = 0; k < 512; k++) {
+                            if (pdt[k].present) {
+                                auto &pt = pdt[k].get_subtable();
+                                for (int l = 0; l < 512; l++) {
+                                    ++total_vpages;
+                                    if (pt[l].os_phys_avail != 0) {
+                                        allocated_ppages += visited_nonavail_phys;
+                                        visited_nonavail_phys = 0;
+                                        if (total_vpages > total_ppages) {
+                                            total_ppages = total_vpages;
+                                        }
+                                    } else {
+                                        ++visited_nonavail_phys;
+                                    }
+                                    if (pt[l].os_virt_avail == 0) {
+                                        ++allocated_vpages;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    GetStatisticsRoot().Add("pagealloc", std::make_shared<pvpages_stats_factory>());
 }

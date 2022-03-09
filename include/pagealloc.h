@@ -31,4 +31,6 @@ void reload_pagetables();
 void *pagealloc(uint64_t size);
 void pagefree(void *vaddr);
 
+void setup_pvpage_stats();
+
 #endif //JEOKERNEL_PAGEALLOC_H
