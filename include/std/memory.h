@@ -292,7 +292,14 @@ namespace std {
             return container != nullptr && container->isset();
         }
 
-        bool operator == (T *ptr) {
+        bool operator == (const shared_ptr<T> &other) const {
+            if (other) {
+                T *other_ptr = &(*other);
+                return *this == other_ptr;
+            }
+            return false;
+        }
+        bool operator == (T *ptr) const {
             if (container != nullptr) {
                 T *obj = (T *) container->Ptr();
                 return obj == ptr;
