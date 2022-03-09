@@ -17,7 +17,7 @@ ChainedAllocator *CreateChainedAllocator() {
 
 ChainedAllocator::~ChainedAllocator() noexcept {
     if (next != nullptr) {
-        next->~ChainedAllocator();
+        next->~MemoryAllocator();
     }
     allocator->~MemoryAllocator();
 }
@@ -25,11 +25,8 @@ ChainedAllocator::~ChainedAllocator() noexcept {
 void * ChainedAllocator::sm_allocate(uint32_t sz) {
     void *ptr = allocator->sm_allocate(sz);
     if (ptr == nullptr) {
-        {
-            std::lock_guard lock(chain_lock);
-            if (next == nullptr) {
-                next = CreateChainedAllocator();
-            }
+        if (next == nullptr) {
+            return ptr;
         }
         ptr = next->sm_allocate(sz);
     }
@@ -50,13 +47,8 @@ bool ChainedAllocator::sm_owned(void *ptr) {
     if (allocator->sm_owned(ptr)) {
         return true;
     }
-    ChainedAllocator *n = nullptr;
-    {
-        std::lock_guard lock{chain_lock};
-        n = next;
-    }
-    if (n != nullptr) {
-        return n->sm_owned(ptr);
+    if (next != nullptr) {
+        return next->sm_owned(ptr);
     } else {
         return false;
     }
@@ -66,13 +58,8 @@ uint32_t ChainedAllocator::sm_sizeof(void *ptr) {
     if (allocator->sm_owned(ptr)) {
         return allocator->sm_sizeof(ptr);
     }
-    ChainedAllocator *n = nullptr;
-    {
-        std::lock_guard lock{chain_lock};
-        n = next;
-    }
-    if (n != nullptr) {
-        return n->sm_sizeof(ptr);
+    if (next != nullptr) {
+        return next->sm_sizeof(ptr);
     } else {
         wild_panic("Sizeof ptr not ours");
     }

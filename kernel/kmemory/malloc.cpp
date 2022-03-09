@@ -6,7 +6,7 @@
 #include <core/malloc.h>
 #include <klogger.h>
 #include "mallocator.h"
-#include "ChainedAllocator.h"
+#include "ChainedAllocatorRoot.h"
 #include <kernelconfig.h>
 #include <string>
 #include <concurrency/critical_section.h>
@@ -135,7 +135,7 @@ void setup_simplest_malloc_impl() {
     wild_malloc_struct.free = wild_free;
     wild_malloc_struct.sizeof_alloc = wild_sizeof_alloc;
     impl = &wild_malloc_struct;
-    memoryAllocator = CreateChainedAllocator();
+    memoryAllocator = CreateChainedAllocatorRoot();
 }
 
 void destroy_simplest_malloc_impl() {

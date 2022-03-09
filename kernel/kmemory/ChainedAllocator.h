@@ -7,13 +7,15 @@
 
 #include "mallocator.h"
 
+class ChainedAllocatorRoot;
+
 class ChainedAllocator : public MemoryAllocator {
+    friend ChainedAllocatorRoot;
 private:
-    ChainedAllocator *next;
+    MemoryAllocator *next;
     MemoryAllocator *allocator;
-    hw_spinlock chain_lock;
 public:
-    ChainedAllocator(MemoryAllocator *allocator) : MemoryAllocator(), allocator(allocator), next(nullptr), chain_lock() {
+    ChainedAllocator(MemoryAllocator *allocator) : MemoryAllocator(), allocator(allocator), next(nullptr) {
     }
     virtual ~ChainedAllocator();
     void *sm_allocate(uint32_t sz) override;
