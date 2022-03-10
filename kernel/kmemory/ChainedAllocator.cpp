@@ -64,3 +64,19 @@ uint32_t ChainedAllocator::sm_sizeof(void *ptr) {
         wild_panic("Sizeof ptr not ours");
     }
 }
+
+uint64_t ChainedAllocator::sm_total_size() {
+    uint64_t total = allocator->sm_total_size();
+    if (next != nullptr) {
+        total += next->sm_total_size();
+    }
+    return total;
+}
+
+uint64_t ChainedAllocator::sm_allocated_size() {
+    uint64_t total = allocator->sm_allocated_size();
+    if (next != nullptr) {
+        total += next->sm_allocated_size();
+    }
+    return total;
+}

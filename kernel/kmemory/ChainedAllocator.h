@@ -22,6 +22,9 @@ public:
     uint32_t sm_free(void *ptr) override;
     uint32_t sm_sizeof(void *ptr) override;
     bool sm_owned(void *ptr) override;
+
+    uint64_t sm_total_size() override;
+    uint64_t sm_allocated_size() override;
 };
 
 ChainedAllocator *CreateChainedAllocator();

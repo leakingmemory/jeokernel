@@ -12,6 +12,7 @@
 #include <concurrency/critical_section.h>
 #include <mutex>
 #include <new>
+#include <stats/statistics_root.h>
 
 #define MAX_NONPAGED_SIZE 8192
 
@@ -56,6 +57,14 @@ extern "C" {
             }
             return vpagesize(vaddr);
         }
+    }
+
+    uint64_t wild_malloc_total() {
+        return memoryAllocator->sm_total_size();
+    }
+
+    uint64_t wild_malloc_allocated() {
+        return memoryAllocator->sm_allocated_size();
     }
 
     static MallocImpl wild_malloc_struct{};
@@ -138,6 +147,28 @@ void setup_simplest_malloc_impl() {
     wild_malloc_struct.sizeof_alloc = wild_sizeof_alloc;
     impl = &wild_malloc_struct;
     memoryAllocator = CreateChainedAllocatorRoot();
+}
+
+class wild_malloc_statistics : public statistics_object {
+    void Accept(statistics_visitor &visitor) override;
+};
+
+void wild_malloc_statistics::Accept(statistics_visitor &visitor) {
+    visitor.Visit("current_max", (long long int) wild_malloc_total());
+    visitor.Visit("allocated", (long long int) wild_malloc_allocated());
+}
+
+class wild_malloc_statistics_factory : public statistics_object_factory {
+public:
+    std::shared_ptr<statistics_object> GetObject() override;
+};
+
+std::shared_ptr<statistics_object> wild_malloc_statistics_factory::GetObject() {
+    return std::make_shared<wild_malloc_statistics>();
+}
+
+void setup_simplest_malloc_stats() {
+    GetStatisticsRoot().Add("malloc", std::make_shared<wild_malloc_statistics_factory>());
 }
 
 void destroy_simplest_malloc_impl() {

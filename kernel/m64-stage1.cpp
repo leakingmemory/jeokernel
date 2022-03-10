@@ -345,6 +345,7 @@ done_with_mem_extension:
         }
 
         setup_pvpage_stats();
+        setup_simplest_malloc_stats();
 
         std::shared_ptr<framebuffer_kconsole> kcons{};
         framebuffer_kconsole_spinlocked *fb_kcons_locked{nullptr};

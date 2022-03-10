@@ -48,6 +48,14 @@ bool ChainedAllocatorRoot::sm_owned(void *ptr) {
     return get_head()->sm_owned(ptr);
 }
 
+uint64_t ChainedAllocatorRoot::sm_total_size() {
+    return get_head()->sm_total_size();
+}
+
+uint64_t ChainedAllocatorRoot::sm_allocated_size() {
+    return get_head()->sm_allocated_size();
+}
+
 ChainedAllocatorRoot *CreateChainedAllocatorRoot() {
     BasicMemoryAllocator *memoryAllocator = CreateBasicMemoryAllocator();
     ChainedAllocatorRoot *allocatorRoot =

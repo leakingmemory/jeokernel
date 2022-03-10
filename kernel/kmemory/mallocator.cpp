@@ -121,6 +121,14 @@ BasicMemoryAllocator::~BasicMemoryAllocator() {
     impl->~BasicMemoryAllocatorImpl();
 }
 
+uint64_t BasicMemoryAllocator::sm_total_size() {
+    return impl->memoryArea.alloctable.max_allocation_size();
+}
+
+uint64_t BasicMemoryAllocator::sm_allocated_size() {
+    return consumed;
+}
+
 BasicMemoryAllocator *CreateBasicMemoryAllocator() {
     void *memoryAllocatorP = (BasicMemoryAllocatorImpl *) vpagealloc(0x41000);
     {

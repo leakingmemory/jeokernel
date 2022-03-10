@@ -20,6 +20,7 @@ extern "C" {
 };
 
 void setup_simplest_malloc_impl();
+void setup_simplest_malloc_stats();
 void destroy_simplest_malloc_impl();
 
 #endif

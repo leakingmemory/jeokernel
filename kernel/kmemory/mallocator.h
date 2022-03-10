@@ -157,6 +157,9 @@ public:
     virtual uint32_t sm_free(void *ptr) = 0;
     virtual uint32_t sm_sizeof(void *ptr) = 0;
     virtual bool sm_owned(void *ptr) = 0;
+
+    virtual uint64_t sm_total_size() = 0;
+    virtual uint64_t sm_allocated_size() = 0;
 };
 
 /*
@@ -193,6 +196,9 @@ public:
     bool sm_owned(void *ptr) override;
     explicit BasicMemoryAllocator(BasicMemoryAllocatorImpl *impl);
     ~BasicMemoryAllocator() override;
+
+    uint64_t sm_total_size() override;
+    uint64_t sm_allocated_size() override;
 };
 
 BasicMemoryAllocator *CreateBasicMemoryAllocator();
