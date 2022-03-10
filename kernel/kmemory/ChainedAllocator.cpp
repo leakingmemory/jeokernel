@@ -33,13 +33,13 @@ void * ChainedAllocator::sm_allocate(uint32_t sz) {
     return ptr;
 }
 
-void ChainedAllocator::sm_free(void *ptr) {
+uint32_t ChainedAllocator::sm_free(void *ptr) {
     if (allocator->sm_owned(ptr)) {
-        allocator->sm_free(ptr);
+        return allocator->sm_free(ptr);
     } else if (next != nullptr) {
-        next->sm_free(ptr);
+        return next->sm_free(ptr);
     } else {
-        wild_panic("Free ptr not ours");
+        return 0;
     }
 }
 

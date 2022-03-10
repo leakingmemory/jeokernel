@@ -33,8 +33,8 @@ void *BasicMemoryAllocatorImpl::sm_allocate(uint32_t size) {
     return ptr;
 }
 
-void BasicMemoryAllocatorImpl::sm_free(void *ptr) {
-    memoryArea.alloctable.sm_free(ptr);
+uint32_t BasicMemoryAllocatorImpl::sm_free(void *ptr) {
+    return memoryArea.alloctable.sm_free(ptr);
 }
 uint32_t BasicMemoryAllocatorImpl::sm_sizeof(void *ptr) {
     return memoryArea.alloctable.sm_sizeof(ptr);
@@ -60,19 +60,49 @@ bool BasicMemoryAllocatorImpl::sm_owned(void *ptr) {
     return memoryArea.alloctable.sm_owned(ptr);
 }
 
+void BasicMemoryAllocator::Consume(uint32_t size) {
+    consumed += size;
+}
+
+void BasicMemoryAllocator::Release(uint32_t size) {
+    consumed -= size;
+}
+
 void *BasicMemoryAllocator::sm_allocate(uint32_t size) {
-    critical_section cli{};
-    std::lock_guard lock(_lock);
-    return impl->sm_allocate(size);
+    if (size < sizeof(small_alloc_unit)) {
+        size = sizeof(small_alloc_unit);
+    } else {
+        uint32_t overshoot = size % sizeof(small_alloc_unit);
+        if (overshoot != 0) {
+            size += sizeof(small_alloc_unit) - overshoot;
+        }
+    }
+    {
+        critical_section cli{};
+        std::lock_guard lock(_lock);
+        if ((consumed + size) > impl->memoryArea.alloctable.max_allocation_size()) {
+            return nullptr;
+        }
+        void *ptr = impl->sm_allocate(size);
+        if (ptr != nullptr) {
+            Consume(size);
+        }
+        return ptr;
+    }
 }
 
-void BasicMemoryAllocator::sm_free(void *ptr) {
-    critical_section cli{};
-    std::lock_guard lock(_lock);
-    return impl->sm_free(ptr);
+uint32_t BasicMemoryAllocator::sm_free(void *ptr) {
+    uint32_t size;
+    {
+        critical_section cli{};
+        std::lock_guard lock(_lock);
+        size = impl->sm_free(ptr);
+        Release(size);
+    }
+    return size;
 }
 
-BasicMemoryAllocator::BasicMemoryAllocator(BasicMemoryAllocatorImpl *impl) : impl(impl), _lock() {
+BasicMemoryAllocator::BasicMemoryAllocator(BasicMemoryAllocatorImpl *impl) : impl(impl), _lock(), consumed(0) {
 }
 
 uint32_t BasicMemoryAllocator::sm_sizeof(void *ptr) {
@@ -121,6 +151,17 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
     }
     reload_pagetables();
     BasicMemoryAllocatorImpl *impl = new (memoryAllocatorP) BasicMemoryAllocatorImpl();
-    BasicMemoryAllocator *allocator = (BasicMemoryAllocator *) impl->sm_allocate(sizeof(*allocator));
-    return new ((void *) allocator) BasicMemoryAllocator(impl);
+    auto size = sizeof(BasicMemoryAllocator);
+    if (size < sizeof(small_alloc_unit)) {
+        size = sizeof(small_alloc_unit);
+    } else {
+        uint32_t overshoot = size % sizeof(small_alloc_unit);
+        if (overshoot != 0) {
+            size += sizeof(small_alloc_unit) - overshoot;
+        }
+    }
+    BasicMemoryAllocator *allocator = (BasicMemoryAllocator *) impl->sm_allocate(size);
+    BasicMemoryAllocator *basicMemoryAllocator = new ((void *) allocator) BasicMemoryAllocator(impl);
+    basicMemoryAllocator->Consume(size);
+    return basicMemoryAllocator;
 }

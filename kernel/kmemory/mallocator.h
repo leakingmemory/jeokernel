@@ -102,24 +102,25 @@ struct SmallUnitMemoryAllocTable {
             return false;
         }
     }
-    void sm_free(void *ptr) {
+    uint32_t sm_free(void *ptr) {
         uint64_t vector = ((uint64_t) ptr) - ((uint64_t) begin_ptr());
         if (vector % sizeof(small_alloc_unit)) {
-            while (1) {
-                asm("hlt");
-            }
+            return 0;
         }
         vector = vector / sizeof(small_alloc_unit);
         set_allocation(vector, 0);
         ++vector;
+        uint32_t size = sizeof(small_alloc_unit);
         while (vector < (4 * 4096)) {
             uint8_t bits = get_bits(vector);
             if (bits == 0 || bits == 3) {
-                return;
+                return size;
             }
             set_allocation(vector, 0);
             ++vector;
+            size += sizeof(small_alloc_unit);
         }
+        return size;
     }
 
     uint32_t sm_sizeof(void *ptr) {
@@ -153,7 +154,7 @@ public:
     virtual ~MemoryAllocator() {
     }
     virtual void *sm_allocate(uint32_t size) = 0;
-    virtual void sm_free(void *ptr) = 0;
+    virtual uint32_t sm_free(void *ptr) = 0;
     virtual uint32_t sm_sizeof(void *ptr) = 0;
     virtual bool sm_owned(void *ptr) = 0;
 };
@@ -166,7 +167,7 @@ struct BasicMemoryAllocatorImpl {
     /* Do not add data fields */
 
     void *sm_allocate(uint32_t size);
-    void sm_free(void *ptr);
+    uint32_t sm_free(void *ptr);
     uint32_t sm_sizeof(void *ptr);
     bool sm_owned(void *ptr);
 
@@ -182,9 +183,12 @@ class BasicMemoryAllocator : public MemoryAllocator {
 public:
     hw_spinlock _lock;
     BasicMemoryAllocatorImpl *impl;
+    uint32_t consumed;
 
+    void Consume(uint32_t size);
+    void Release(uint32_t size);
     void *sm_allocate(uint32_t size) override;
-    void sm_free(void *ptr) override;
+    uint32_t sm_free(void *ptr) override;
     uint32_t sm_sizeof(void *ptr) override;
     bool sm_owned(void *ptr) override;
     explicit BasicMemoryAllocator(BasicMemoryAllocatorImpl *impl);

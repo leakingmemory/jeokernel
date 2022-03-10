@@ -35,11 +35,13 @@ extern "C" {
     }
     void wild_free(void *ptr) {
         if (memoryAllocator->sm_owned(ptr)) {
-            return memoryAllocator->sm_free(ptr);
+            if (memoryAllocator->sm_free(ptr) == 0) {
+                get_klogger() << "Free: Invalid ptr or not ours to free\n";
+            }
         } else {
             uint64_t vaddr = (uint64_t) ptr;
             if ((vaddr & 0xFFF) != 0) {
-                wild_panic("Invalid pagealloc ptr or not ours to free");
+                get_klogger() << "Free: Invalid pagealloc ptr or not ours to free\n";
             }
             pagefree(ptr);
         }

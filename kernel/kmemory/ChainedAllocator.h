@@ -19,7 +19,7 @@ public:
     }
     virtual ~ChainedAllocator();
     void *sm_allocate(uint32_t sz) override;
-    void sm_free(void *ptr) override;
+    uint32_t sm_free(void *ptr) override;
     uint32_t sm_sizeof(void *ptr) override;
     bool sm_owned(void *ptr) override;
 };

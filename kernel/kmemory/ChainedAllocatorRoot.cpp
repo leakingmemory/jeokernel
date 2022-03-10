@@ -36,7 +36,7 @@ void *ChainedAllocatorRoot::sm_allocate(uint32_t sz) {
     return ptr;
 }
 
-void ChainedAllocatorRoot::sm_free(void *ptr) {
+uint32_t ChainedAllocatorRoot::sm_free(void *ptr) {
     return get_head()->sm_free(ptr);
 }
 
