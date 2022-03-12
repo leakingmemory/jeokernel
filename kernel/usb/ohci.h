@@ -345,6 +345,17 @@ public:
     bool ClearStall() override;
 };
 
+struct ohci_statistics : public statistics_object {
+    std::shared_ptr<statistics_object> edPoolStats;
+    uint32_t destroyEdsCount;
+    std::shared_ptr<statistics_object> shortPoolStats;
+    std::shared_ptr<statistics_object> bufPoolStats;
+    std::shared_ptr<statistics_object> xPoolStats;
+    uint32_t transfersInProgressCount;
+
+    void Accept(statistics_visitor &visitor) override;
+};
+
 class ohci : public usb_hcd {
     friend ohci_endpoint;
     friend ohci_endpoint_cleanup;
@@ -417,6 +428,8 @@ public:
     void DisablePort(int port) override;
     void ResetPort(int port) override;
     usb_speed PortSpeed(int port) override;
+
+    std::shared_ptr<statistics_object> GetStatisticsObject() override;
 };
 
 class ohci_driver : public Driver {

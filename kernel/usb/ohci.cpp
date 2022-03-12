@@ -9,6 +9,7 @@
 #include <thread>
 #include <delay.h>
 #include <core/nanotime.h>
+#include <stats/statistics_visitor.h>
 #include <kernelconfig.h>
 #include "ohci.h"
 
@@ -39,6 +40,15 @@ Device *ohci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
 }
 
 //#define OHCI_START_VIA_RESUME
+
+void ohci_statistics::Accept(statistics_visitor &visitor) {
+    visitor.Visit("endpointPool", *edPoolStats);
+    visitor.Visit("destroyEndpointQueue", (long long int) destroyEdsCount);
+    visitor.Visit("shortBufferPool", *shortPoolStats);
+    visitor.Visit("bufferPool", *bufPoolStats);
+    visitor.Visit("transferPool", *xPoolStats);
+    visitor.Visit("transferInProgressCount", (long long int) transfersInProgressCount);
+}
 
 void ohci::init() {
     uint64_t addr{0};
@@ -545,6 +555,18 @@ std::shared_ptr<usb_transfer> ohci::ExtractDoneQueueItem(uint32_t physaddr) {
         ++iter;
     }
     return {};
+}
+
+std::shared_ptr<statistics_object> ohci::GetStatisticsObject() {
+    std::lock_guard lock{ohcilock};
+    std::shared_ptr<ohci_statistics> stats{new ohci_statistics};
+    stats->edPoolStats = edPool.GetStatistics();
+    stats->destroyEdsCount = destroyEds.size();
+    stats->shortPoolStats = shortBufPool.GetStatistics();
+    stats->bufPoolStats = bufPool.GetStatistics();
+    stats->xPoolStats = xPool.GetStatistics();
+    stats->transfersInProgressCount = transfersInProgress.size();
+    return stats;
 }
 
 OhciHcca::OhciHcca() : page(sizeof(*hcca)), hcca((typeof(hcca)) page.Pointer()), hcca_ed_ptrs(), cycle(0) {

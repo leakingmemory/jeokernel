@@ -12,6 +12,7 @@
 #include <mutex>
 #include <concurrency/hw_spinlock.h>
 #include <concurrency/critical_section.h>
+#include <stats/statistics_object.h>
 
 template <typename Struct, typename PhysPtr> class StructPoolPointer {
 private:
@@ -111,6 +112,12 @@ public:
     }
 };
 
+struct StructPoolStats : public statistics_object {
+    uint32_t numAllocators;
+
+    void Accept(statistics_visitor &visitor) override;
+};
+
 template <typename Allocator> class StructPool {
 public:
     typedef typename Allocator::type type;
@@ -133,6 +140,12 @@ public:
         allocators.push_back(allocator);
         auto *p = new StructPoolPointerImpl<Allocator, type, PhysPtr>(*allocator, allocator->PointerTo(*phys), *phys);
         return std::shared_ptr<StructPoolPointer<type, PhysPtr>>(p);
+    }
+
+    std::shared_ptr<statistics_object> GetStatistics() {
+        std::shared_ptr<StructPoolStats> stats{new StructPoolStats};
+        stats->numAllocators = allocators.size();
+        return stats;
     }
 };
 
