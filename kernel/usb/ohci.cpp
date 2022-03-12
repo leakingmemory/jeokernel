@@ -974,17 +974,18 @@ void ohci_transfer::SetDone() {
     if (!waitCancelled) {
         if (endpoint.head == this) {
             endpoint.head = this->next;
+            this->next = {};
         } else {
             std::shared_ptr<ohci_transfer> transfer = endpoint.head;
             while (transfer->next) {
                 if (transfer->next == this) {
                     transfer->next = this->next;
+                    this->next = {};
                     return;
                 }
                 transfer = transfer->next;
             }
         }
-        this->next = {};
     }
 }
 
@@ -1029,7 +1030,7 @@ ohci_transfer::~ohci_transfer() {
     auto *TD = transferPtr->Pointer();
     {
         std::stringstream str{};
-        str << std::hex << "Destroying transfer c=" << TD->TdControl
+        str << std::hex << "Destroying transfer "<< transferPtr->Phys() <<" c=" << TD->TdControl
             << " buf=" << TD->CurrentBufferPointer << "/" << TD->BufferEnd
             << " next=" << TD->NextTD << "\n";
         get_klogger() << str.str().c_str();

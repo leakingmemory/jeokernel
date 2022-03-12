@@ -76,6 +76,7 @@ public:
         uint32_t bit = (uint32_t) (i & 31);
         bit = ~(1 << bit);
         map[index] = map[index] & bit;
+        --allocated;
     }
     std::optional<PhysPtr> Alloc() {
         if (allocated >= ItemsPerPage()) {

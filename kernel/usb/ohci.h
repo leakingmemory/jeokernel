@@ -285,7 +285,7 @@ private:
     bool waitCancelled, waitCancelledAndWaitedCycle;
 public:
     ohci_transfer(ohci &ohci, ohci_endpoint &endpoint);
-    ~ohci_transfer();
+    ~ohci_transfer() override;
     ohci_transfer_descriptor *TD() {
         return transferPtr->Pointer();
     }
