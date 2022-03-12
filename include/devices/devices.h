@@ -10,9 +10,17 @@
 #include <mutex>
 #ifndef UNIT_TESTING
 #include <klogger.h>
+#include <stats/statistics_root.h>
+
 #endif
 
 class Bus;
+
+class DefaultDeviceStatistics : public statistics_object {
+public:
+    void Accept(statistics_visitor &visitor) override {
+    }
+};
 
 class Device {
 private:
@@ -44,6 +52,9 @@ public:
     }
     Bus *GetBus() {
         return bus;
+    }
+    virtual std::shared_ptr<statistics_object> GetStatisticsObject() {
+        return std::make_shared<DefaultDeviceStatistics>();
     }
 };
 
@@ -118,7 +129,7 @@ struct DeviceGroup {
     }
 };
 
-class Devices {
+class Devices : public statistics_object {
 private:
     std::mutex mtx;
     std::vector<DeviceGroup> deviceGroups;
@@ -126,6 +137,7 @@ public:
     Devices();
     void add(Device &device);
     void remove(Device &device);
+    void Accept(statistics_visitor &visitor) override;
 };
 
 struct PciDeviceInformation;
