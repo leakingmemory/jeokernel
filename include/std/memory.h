@@ -131,6 +131,12 @@ namespace std {
                 return xref;
             }
 
+            uint32_t refcount() {
+                uint32_t xref;
+                asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ref), "=rm"(xref)::"%rax");
+                return xref;
+            }
+
             void *Ptr() {
                 return ptr;
             }
