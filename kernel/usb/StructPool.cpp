@@ -7,4 +7,5 @@
 
 void StructPoolStats::Accept(statistics_visitor &visitor) {
     visitor.Visit("allocators", numAllocators);
+    visitor.Visit("allocated", allocated);
 }

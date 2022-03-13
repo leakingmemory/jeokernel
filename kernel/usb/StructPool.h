@@ -111,10 +111,14 @@ public:
         ptr8 += offset;
         return (Struct *) (void *) ptr8;
     }
+    uint32_t Allocated() {
+        return allocated;
+    }
 };
 
 struct StructPoolStats : public statistics_object {
     uint32_t numAllocators;
+    uint32_t allocated;
 
     void Accept(statistics_visitor &visitor) override;
 };
@@ -144,8 +148,13 @@ public:
     }
 
     std::shared_ptr<statistics_object> GetStatistics() {
+        std::lock_guard lock{spinlock};
         std::shared_ptr<StructPoolStats> stats{new StructPoolStats};
         stats->numAllocators = allocators.size();
+        stats->allocated = 0;
+        for (auto *allocator : allocators) {
+            stats->allocated += allocator->Allocated();
+        }
         return stats;
     }
 };
