@@ -16,7 +16,7 @@ private:
     void iodelay();
     void ch2_data(uint16_t data);
     void ch2_reset(uint16_t microseconds);
-    bool volatile ch2_pit_high();
+    bool ch2_pit_high();
 public:
     PITTimerCalib();
     ~PITTimerCalib();

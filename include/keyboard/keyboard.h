@@ -65,6 +65,7 @@ public:
 
 class keycode_consumer {
 public:
+    virtual ~keycode_consumer() = default;
     virtual bool Consume(uint32_t keycode) = 0;
 };
 

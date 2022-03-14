@@ -5,6 +5,7 @@
 #include <string.h>
 
 char *strcat(char *str, const char *src) {
+    char *result = str;
     while (*str != '\0') {
         ++str;
     }
@@ -12,9 +13,11 @@ char *strcat(char *str, const char *src) {
         *(str++) = *(src++);
     }
     *str = '\0';
+    return result;
 }
 
 char *strncat(char *str, const char *src, size_t n) {
+    char *result = str;
     while (*str != '\0') {
         ++str;
     }
@@ -24,4 +27,5 @@ char *strncat(char *str, const char *src, size_t n) {
         ++i;
     }
     *str = '\0';
+    return result;
 }

@@ -144,7 +144,7 @@ ApStartup *GetApStartup() {
 void vmem_graph() {
     auto &pt = _get_pml4t()[0].get_subtable()[0].get_subtable()[0].get_subtable();
     for (int i = 0; i < 512; i++) {
-        char *addr = (char *) ((i << 1) + 0xb8000);
+        char *addr = (char *) (uint64_t) ((i << 1) + 0xb8000);
         if (pt[i].os_virt_avail) {
             if (pt[i].os_phys_avail) {
                 *addr = '+';

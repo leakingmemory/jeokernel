@@ -21,13 +21,10 @@ private:
 public:
     framebuffer_kcons_cmd_print_at(uint8_t col, uint8_t row, const char *str) : str(str), col(col), row(row) {
     }
-    ~framebuffer_kcons_cmd_print_at();
+    ~framebuffer_kcons_cmd_print_at() override = default;
     int GetEstimatedLinefeeds() override;
     void Execute(std::shared_ptr<framebuffer_kconsole> targetObject) override;
 };
-
-framebuffer_kcons_cmd_print_at::~framebuffer_kcons_cmd_print_at() noexcept {
-}
 
 int framebuffer_kcons_cmd_print_at::GetEstimatedLinefeeds() {
     return 0;
@@ -42,13 +39,10 @@ private:
 public:
     framebuffer_kcons_cmd_printstr(const char *str) : str(str) {
     }
-    ~framebuffer_kcons_cmd_printstr();
+    ~framebuffer_kcons_cmd_printstr() override = default;
     int GetEstimatedLinefeeds() override;
     void Execute(std::shared_ptr<framebuffer_kconsole> targetObject) override;
 };
-
-framebuffer_kcons_cmd_printstr::~framebuffer_kcons_cmd_printstr() noexcept {
-}
 
 int framebuffer_kcons_cmd_printstr::GetEstimatedLinefeeds() {
     int ln{0};
@@ -73,13 +67,10 @@ private:
 public:
     framebuffer_kcons_cmd_erase(int backtrack, int erase) : backtrack(backtrack), erase(erase) {
     }
-    ~framebuffer_kcons_cmd_erase() override;
+    ~framebuffer_kcons_cmd_erase() override = default;
     int GetEstimatedLinefeeds() override;
     void Execute(std::shared_ptr<framebuffer_kconsole> targetObject) override;
 };
-
-framebuffer_kcons_cmd_erase::~framebuffer_kcons_cmd_erase() noexcept {
-}
 
 int framebuffer_kcons_cmd_erase::GetEstimatedLinefeeds() {
     return 0;

@@ -55,6 +55,6 @@ void PITTimerCalib::delay(uint16_t microseconds) {
     }
 }
 
-bool volatile PITTimerCalib::ch2_pit_high() {
+bool PITTimerCalib::ch2_pit_high() {
     return (inportb(0x61) & 0x20) != 0;
 }

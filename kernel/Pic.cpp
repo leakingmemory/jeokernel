@@ -6,7 +6,7 @@
 #include <cpuio.h>
 #include <klogger.h>
 
-static volatile uint64_t tsc() {
+static uint64_t tsc() {
     uint32_t low;
     uint32_t high;
     asm("rdtsc; mov %%eax, %0; mov %%edx, %1" : "=r"(low), "=r"(high) :: "%rax", "%rdx");

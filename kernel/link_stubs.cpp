@@ -15,6 +15,7 @@ extern "C" {
 
     sighandler_t signal(int signal, sighandler_t handler) {
         wild_panic("using signal(..) in kernel");
+        return nullptr;
     }
 
     int stat(const char *pathname, struct stat *statbuf) {

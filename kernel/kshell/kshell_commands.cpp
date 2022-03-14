@@ -16,7 +16,7 @@ public:
     const std::string &Command() const override {
         return command;
     }
-    void Exec(const std::vector<std::string> &cmd) {
+    void Exec(const std::vector<std::string> &cmd) override {
         auto iterator = cmd.cbegin();
         if (iterator == cmd.cend()) {
             get_klogger() << "\n";
@@ -45,7 +45,7 @@ public:
     const std::string &Command() const override {
         return command;
     }
-    void Exec(const std::vector<std::string> &cmd) {
+    void Exec(const std::vector<std::string> &cmd) override {
         get_acpica_interface().reboot();
     }
 };
@@ -58,7 +58,7 @@ public:
     const std::string &Command() const override {
         return command;
     }
-    void Exec(const std::vector<std::string> &cmd) {
+    void Exec(const std::vector<std::string> &cmd) override {
         get_acpica_interface().poweroff();
     }
 };

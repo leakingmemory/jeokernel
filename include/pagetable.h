@@ -7,6 +7,10 @@
 
 #include <stdint.h>
 
+#ifndef UNIT_TESTING
+#include <std/compilerwarnings.h>
+#endif
+
 struct GDT {
     uint16_t limit_low : 16;
     uint32_t base_low : 24;
@@ -87,7 +91,15 @@ template <int n> struct GDT_table {
     uint64_t pointer() {
         set_size();
         set_ptr();
+
+#ifndef UNIT_TESTING
+COMPILER_WARNINGS_PUSH()
+GNU_AND_CLANG_IGNORE_WARNING(-Waddress-of-packed-member)
+#endif
         return (uint64_t) &size;
+#ifndef UNIT_TESTING
+COMPILER_WARNINGS_POP()
+#endif
     }
 } __attribute__((__packed__));
 
