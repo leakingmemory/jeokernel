@@ -15,7 +15,7 @@ ChainedAllocator *CreateChainedAllocator() {
     return chainedAllocator;
 }
 
-ChainedAllocator::~ChainedAllocator() noexcept {
+ChainedAllocator::~ChainedAllocator() {
     if (next != nullptr) {
         next->~MemoryAllocator();
     }
@@ -62,6 +62,7 @@ uint32_t ChainedAllocator::sm_sizeof(void *ptr) {
         return next->sm_sizeof(ptr);
     } else {
         wild_panic("Sizeof ptr not ours");
+        return 0;
     }
 }
 

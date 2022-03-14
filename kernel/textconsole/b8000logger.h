@@ -15,7 +15,7 @@ private:
 public:
     b8000 cons;
     b8000logger();
-    ~b8000logger();
+    ~b8000logger() override = default;
     void print_at(uint8_t col, uint8_t row, const char *str) override;
     void erase(int backtrack, int erase) override;
     b8000logger & operator << (const char *str) override;

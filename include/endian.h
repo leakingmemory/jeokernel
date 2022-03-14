@@ -48,7 +48,7 @@ template <typename T> constexpr T reverse_byte_order(T input) {
 }
 
 static_assert(reverse_byte_order('A') == 'A');
-static_assert(reverse_byte_order<uint16_t>('AB') == 'BA');
+static_assert(reverse_byte_order<uint16_t>(0x1234) == 0x3412);
 static_assert(reverse_byte_order<uint32_t>('ABCD') == 'DCBA');
 static_assert(reverse_byte_order<uint64_t>(0x1234567887654321) == 0x2143658778563412);
 

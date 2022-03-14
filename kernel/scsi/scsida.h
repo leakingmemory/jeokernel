@@ -27,7 +27,7 @@ public:
     scsida(Bus *bus, std::shared_ptr<ScsiDevDeviceInformation> devInfo) : Device("scsida", bus), devInfo(devInfo),
     latestPowerState(UNKNOWN) {
     }
-    ~scsida();
+    ~scsida() override = default;
     void init() override;
     void stop() override;
 

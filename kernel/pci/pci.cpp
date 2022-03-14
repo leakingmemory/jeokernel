@@ -293,6 +293,7 @@ const IRQLink *pci::GetLink(const std::string &name) {
             return &(std::get<1>(tuple));
         }
     }
+    return nullptr;
 }
 
 const PciIRQRouting *pci::GetRouting(const PciDeviceInformation &deviceInformation, uint8_t pin_03) {

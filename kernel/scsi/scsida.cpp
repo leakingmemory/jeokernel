@@ -22,9 +22,6 @@ public:
     }
 };
 
-scsida::~scsida() noexcept {
-}
-
 void scsida::stop() {
 }
 

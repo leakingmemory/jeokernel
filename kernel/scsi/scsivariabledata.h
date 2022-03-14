@@ -32,7 +32,7 @@ public:
     std::unique_ptr<scsivariabledata> clone() const override {
         return std::unique_ptr<scsivariabledata>(new scsivariabledata_fixed());
     }
-    std::size_t Remaining(const void *ptr, std::size_t initialRead) const {
+    std::size_t Remaining(const void *ptr, std::size_t initialRead) const override {
         return 0;
     }
 };

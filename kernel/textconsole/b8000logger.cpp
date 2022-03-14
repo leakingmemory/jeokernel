@@ -9,9 +9,6 @@
 b8000logger::b8000logger() : KLogger(), cons() {
 }
 
-b8000logger::~b8000logger() noexcept {
-}
-
 b8000logger & b8000logger::operator << (const char *str) {
     std::lock_guard lock(_lock);
     cons << str;

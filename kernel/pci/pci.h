@@ -92,8 +92,8 @@ struct PciDeviceInformation : public DeviceInformation {
     PciDeviceInformation(const PciDeviceInformation &cp) : PciDeviceInformation() {
         this->operator =(cp);
     }
-    PciDeviceInformation(PciDeviceInformation &&) = default;
-    PciDeviceInformation & operator = (PciDeviceInformation &&) = default;
+    PciDeviceInformation(PciDeviceInformation &&) = delete;
+    PciDeviceInformation & operator = (PciDeviceInformation &&) = delete;
     PciDeviceInformation & operator = (const PciDeviceInformation &cp) = default;
 
     virtual PciDeviceInformation *GetPciInformation() override;
