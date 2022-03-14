@@ -496,6 +496,8 @@ static uint32_t usb_kbrate(uint32_t value) {
             return mantissa * 1000;
         case 3:
             return mantissa * 1000000;
+        default:
+            return mantissa;
     }
 }
 
@@ -1031,9 +1033,6 @@ std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate(
         }
     }
     return {};
-}
-
-xhci_port_enumeration_addressing::~xhci_port_enumeration_addressing() noexcept {
 }
 
 xhci_slot_data *xhci_port_enumeration_addressing::enable_slot() {

@@ -33,13 +33,13 @@ private:
     std::vector<usb_hub *> children;
 public:
     usb_hcd(std::string hcdType, Bus &parentBus) : usb_hub(hcdType, parentBus), hub_sema(), func_addr_map{1, 0, 0, 0}, children_mtx(), new_children(), children() {}
-    virtual ~usb_hcd() {
+    ~usb_hcd() override {
         wild_panic("usb_hcd: delete not implemented");
     }
-    virtual int GetNumberOfPorts() = 0;
-    virtual usb_speed HubSpeed() override = 0;
-    virtual size_t TransferBufferSize() = 0;
-    virtual hw_spinlock &HcdSpinlock() override = 0;
+    int GetNumberOfPorts() override = 0;
+    usb_speed HubSpeed() override = 0;
+    size_t TransferBufferSize() override = 0;
+    hw_spinlock &HcdSpinlock() override = 0;
 private:
     [[noreturn]] void BusInit();
 public:

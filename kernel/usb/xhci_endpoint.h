@@ -16,6 +16,7 @@ class xhci_port_enumeration_addressing;
 
 class xhci_endpoint_ring_container {
 public:
+    virtual ~xhci_endpoint_ring_container() = default;
     virtual xhci_trb *Trb(int index) = 0;
     virtual int LengthIncludingLink() = 0;
     virtual uint64_t RingPhysAddr() = 0;
@@ -25,7 +26,7 @@ class xhci_endpoint_ring_container_endpoint0 : public xhci_endpoint_ring_contain
 private:
     std::shared_ptr<xhci_device> device;
 public:
-    xhci_endpoint_ring_container_endpoint0(std::shared_ptr<xhci_device> device) : device(device) { }
+    explicit xhci_endpoint_ring_container_endpoint0(std::shared_ptr<xhci_device> device) : device(device) { }
     xhci_trb *Trb(int index) override;
     int LengthIncludingLink() override;
     uint64_t RingPhysAddr() override;
@@ -39,7 +40,7 @@ private:
     xhci_endpoint_data *data;
 public:
     xhci_endpoint_ring_container_endpoints();
-    ~xhci_endpoint_ring_container_endpoints();
+    ~xhci_endpoint_ring_container_endpoints() override;
     xhci_trb *Trb(int index) override;
     int LengthIncludingLink() override;
     uint64_t RingPhysAddr() override;

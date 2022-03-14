@@ -292,9 +292,7 @@ public:
     uint32_t PhysAddr() {
         return transferPtr->Phys();
     }
-    std::shared_ptr<usb_buffer> Buffer() {
-        return buffer;
-    }
+    std::shared_ptr<usb_buffer> Buffer() override;
     bool IsDone() override;
     void SetDone() override;
     usb_transfer_status GetStatus() override;

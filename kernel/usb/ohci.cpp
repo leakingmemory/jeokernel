@@ -833,6 +833,8 @@ ohci_endpoint::CreateTransferWithLock(std::shared_ptr<usb_buffer> buffer, uint32
         case usb_transfer_direction::OUT:
             ctrl |= 1 << 19;
             break;
+        case usb_transfer_direction::SETUP:
+            break;
     }
     if (bufferRounding) {
         ctrl |= 1 << 18;
@@ -978,6 +980,10 @@ ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer
     str << std::hex << "Transfer descriptor at " << transferPtr->Phys() << "\n";
     get_klogger() << str.str().c_str();
 #endif
+}
+
+std::shared_ptr<usb_buffer> ohci_transfer::Buffer() {
+    return buffer;
 }
 
 bool ohci_transfer::IsDone() {

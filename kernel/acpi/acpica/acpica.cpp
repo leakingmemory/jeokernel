@@ -42,7 +42,7 @@ bool acpica_lib::set_ioapic_mode() {
     ACPI_BUFFER return_value;
     return_value.Pointer = NULL;
     return_value.Length = ACPI_ALLOCATE_BUFFER;
-    ACPI_STATUS picstatus = AcpiEvaluateObject(NULL, "\\_PIC", &args, &return_value);
+    ACPI_STATUS picstatus = AcpiEvaluateObject(NULL, (ACPI_STRING) "\\_PIC", &args, &return_value);
     if (picstatus == AE_OK || picstatus == AE_NOT_FOUND) {
         get_klogger() << "ACPI set to IOAPIC mode\n";
         if (return_value.Pointer != NULL) {
@@ -218,7 +218,7 @@ bool acpica_lib::find_resources(void *handle, std::function<void (ACPI_RESOURCE 
         wfunc(resource);
         return AE_OK;
     };
-    ACPI_STATUS Status = AcpiWalkResources((ACPI_HANDLE) handle, METHOD_NAME__CRS, (ACPI_WALK_RESOURCE_CALLBACK) &wf_res_walk, (void *) &func);
+    ACPI_STATUS Status = AcpiWalkResources((ACPI_HANDLE) handle, (ACPI_STRING) METHOD_NAME__CRS, (ACPI_WALK_RESOURCE_CALLBACK) &wf_res_walk, (void *) &func);
     return Status == AE_OK;
 }
 
@@ -409,7 +409,7 @@ std::optional<IRQLink> acpica_lib::get_extended_irq(void *handle) {
 
 std::shared_ptr<acpi_madt_info> acpica_lib::get_madt() {
     ACPI_TABLE_HEADER *madt;
-    auto Status = AcpiGetTable("APIC", 1, &madt);
+    auto Status = AcpiGetTable((ACPI_STRING) "APIC", 1, &madt);
     if (Status != AE_OK) {
         return {};
     }

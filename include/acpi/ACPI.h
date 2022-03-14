@@ -121,7 +121,7 @@ private:
     std::unique_ptr<vmem> vm_sdt;
 public:
     const Table *sdt;
-    explicit acpi_table(uint64_t physaddr) : desc(desc), vm_sdt(new vmem(8192)), sdt(nullptr) {
+    explicit acpi_table(uint64_t physaddr) : desc(nullptr), vm_sdt(new vmem(8192)), sdt(nullptr) {
         init(physaddr);
     }
     explicit acpi_table(const Desc *desc) : desc(desc), vm_sdt(new vmem(8192)), sdt(nullptr) {

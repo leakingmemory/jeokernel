@@ -567,7 +567,7 @@ void usbstorage::SetDevice(Device *device) {
     this->device = device;
 }
 
-usbstorage::~usbstorage() noexcept {
+usbstorage::~usbstorage() {
     if (device != nullptr) {
         device->stop();
         delete device;

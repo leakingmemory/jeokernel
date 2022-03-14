@@ -802,8 +802,8 @@ private:
     uint8_t slot;
     uint8_t addr;
 public:
-    xhci_port_enumeration_addressing(xhci &xhciRef, uint8_t rootHubPort) : xhciRef(xhciRef), rootHubPort(rootHubPort) {}
-    virtual ~xhci_port_enumeration_addressing() override;
+    xhci_port_enumeration_addressing(xhci &xhciRef, uint8_t rootHubPort) : xhciRef(xhciRef), rootHubPort(rootHubPort), slot(0), addr(0) {}
+    ~xhci_port_enumeration_addressing() override = default;
     std::shared_ptr<xhci_device> DeviceData() {
         return deviceData;
     }
@@ -816,7 +816,7 @@ public:
     xhci_slot_data *enable_slot();
     xhci_input_context *set_address(xhci_slot_data &slotData, usb_speed speed, uint32_t routeString=0, uint8_t hubSlot = 0, usb_speed hubSpeed = HIGH, uint8_t hubPort = 0);
     std::shared_ptr<usb_endpoint> configure_baseline(usb_minimum_device_descriptor &minDevDesc, xhci_input_context &inputctx);
-    virtual std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override = 0;
+    std::shared_ptr<usb_hw_enumerated_device> set_address(uint8_t addr) override = 0;
     uint8_t get_address() override;
     void disable_slot();
 };
