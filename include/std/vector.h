@@ -329,7 +329,8 @@ namespace std {
             c._data[index].~vector_container_element<T>();
             c._size--;
             for (uint64_t del = index; del < c._size; del++) {
-                c._data[del] = c._data[del + 1];
+                new (&(c._data[del])) vector_container_element<T>(std::move(c._data[del + 1]));
+                c._data[del + 1].~vector_container_element<T>();
             }
             auto iterator = begin();
             iterator += index;
