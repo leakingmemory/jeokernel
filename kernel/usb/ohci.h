@@ -295,6 +295,7 @@ public:
     std::shared_ptr<usb_buffer> Buffer() {
         return buffer;
     }
+    bool IsDone() override;
     void SetDone() override;
     usb_transfer_status GetStatus() override;
 };

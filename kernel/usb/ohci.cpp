@@ -980,6 +980,11 @@ ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer
 #endif
 }
 
+bool ohci_transfer::IsDone() {
+    std::lock_guard lock{endpoint.ohciRef.ohcilock};
+    return usb_transfer::IsDone();
+}
+
 void ohci_transfer::SetDone() {
     usb_transfer::SetDone();
     if (!waitCancelled) {

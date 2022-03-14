@@ -9,7 +9,7 @@
 #include "usb_transfer.h"
 #include "usb_port_connection.h"
 
-static void timeout_wait(const usb_transfer &transfer) {
+static void timeout_wait(usb_transfer &transfer) {
     int timeout = 100;
     while (!transfer.IsDone()) {
         if (--timeout == 0)
