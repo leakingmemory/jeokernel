@@ -7,6 +7,7 @@
 
 #include <std/ratio.h>
 #include <std/utility.h>
+#include <std/compilerwarnings.h>
 
 namespace std {
     namespace chrono {
@@ -58,6 +59,9 @@ namespace std {
 }
 
 namespace std::literals::chrono_literals {
+    COMPILER_WARNINGS_PUSH()
+    GNU_AND_CLANG_IGNORE_WARNING(-Wuser-defined-literals)
+
     constexpr std::chrono::hours operator "" h(uint64_t hrs) {
         return std::chrono::hours(hrs);
     }
@@ -76,6 +80,8 @@ namespace std::literals::chrono_literals {
     constexpr std::chrono::nanoseconds operator "" ns(uint64_t ns) {
         return std::chrono::nanoseconds(ns);
     }
+
+    COMPILER_WARNINGS_POP()
 }
 
 namespace std::chrono {
