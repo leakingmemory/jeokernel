@@ -871,6 +871,17 @@ ehci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size,
 }
 
 std::shared_ptr<usb_transfer>
+ehci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction,
+                              std::function<void()> doneCall, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::shared_ptr<usb_buffer> buffer = ehciRef.Alloc(size);
+    memcpy(buffer->Pointer(), data, size);
+    std::function<void (ehci_transfer &)> applyFunc = [doneCall] (ehci_transfer &transfer) {
+        transfer.SetDoneCall(doneCall);
+    };
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+}
+
+std::shared_ptr<usb_transfer>
 ehci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction,
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     std::shared_ptr<usb_buffer> buffer{};

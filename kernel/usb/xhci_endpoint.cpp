@@ -81,6 +81,14 @@ xhci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size,
 }
 
 std::shared_ptr<usb_transfer>
+xhci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size, usb_transfer_direction direction,
+                              std::function<void()> doneCall, bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
+    std::lock_guard lock{xhciRef.xhcilock};
+    auto transfer = CreateTransferWithLock(commitTransaction, data, size, direction, doneCall, bufferRounding, delayInterrupt, dataToggle);
+    return transfer;
+}
+
+std::shared_ptr<usb_transfer>
 xhci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfer_direction direction,
                               bool bufferRounding, uint16_t delayInterrupt, int8_t dataToggle) {
     return CreateTransfer(commitTransaction, size, direction,
