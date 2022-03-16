@@ -11,11 +11,9 @@
 
 #endif
 
-typedef uint8_t small_alloc_unit[16];
-
 #define ALLOCATED_MASK 0x55
 
-struct SmallUnitMemoryAllocTable {
+template <typename small_alloc_unit> struct SmallUnitMemoryAllocTable {
     uint8_t bits[4096];
 
     small_alloc_unit *begin_ptr() {
@@ -128,24 +126,26 @@ struct SmallUnitMemoryAllocTable {
         if (vector % sizeof(small_alloc_unit)) {
             return 0;
         }
-        uint32_t size;
+        uint32_t size = sizeof(small_alloc_unit);
         vector = vector / sizeof(small_alloc_unit);
         ++vector;
         while (vector < (4 * 4096)) {
             uint8_t bits = get_bits(vector);
             if (bits == 0 || bits == 3) {
-                return size * sizeof(small_alloc_unit);
+                return size;
             }
             ++vector;
+            size += sizeof(small_alloc_unit);
         }
-        return size * sizeof(small_alloc_unit);
+        return size;
     }
 } __attribute__((__packed__));
 
-static_assert(sizeof(SmallUnitMemoryAllocTable) == 4096);
+static_assert(sizeof(SmallUnitMemoryAllocTable<uint8_t[16]>) == 4096);
 
 struct SmallUnitMemoryArea {
-    SmallUnitMemoryAllocTable alloctable;
+    typedef uint8_t allocation_unit[16];
+    SmallUnitMemoryAllocTable<uint8_t[16]> alloctable;
     //small_alloc_unit units[4096 * 4];
 };
 
@@ -166,6 +166,7 @@ public:
  * Allocate virtual memory space for it and physical the first two pages
  */
 struct BasicMemoryAllocatorImpl {
+    typedef SmallUnitMemoryArea::allocation_unit allocation_unit;
     SmallUnitMemoryArea memoryArea; /* 4K / 1 page */
     /* Do not add data fields */
 
@@ -184,6 +185,8 @@ static_assert(sizeof(BasicMemoryAllocatorImpl) == 4096);
 
 class BasicMemoryAllocator : public MemoryAllocator {
 public:
+    typedef BasicMemoryAllocatorImpl AllocImpl;
+    typedef AllocImpl::allocation_unit allocation_unit;
     hw_spinlock _lock;
     BasicMemoryAllocatorImpl *impl;
     uint32_t consumed;

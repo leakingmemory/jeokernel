@@ -69,12 +69,12 @@ void BasicMemoryAllocator::Release(uint32_t size) {
 }
 
 void *BasicMemoryAllocator::sm_allocate(uint32_t size) {
-    if (size < sizeof(small_alloc_unit)) {
-        size = sizeof(small_alloc_unit);
+    if (size < sizeof(allocation_unit)) {
+        size = sizeof(allocation_unit);
     } else {
-        uint32_t overshoot = size % sizeof(small_alloc_unit);
+        uint32_t overshoot = size % sizeof(allocation_unit);
         if (overshoot != 0) {
-            size += sizeof(small_alloc_unit) - overshoot;
+            size += sizeof(allocation_unit) - overshoot;
         }
     }
     {
@@ -130,7 +130,12 @@ uint64_t BasicMemoryAllocator::sm_allocated_size() {
 }
 
 BasicMemoryAllocator *CreateBasicMemoryAllocator() {
-    void *memoryAllocatorP = (BasicMemoryAllocatorImpl *) vpagealloc(0x41000);
+    typedef BasicMemoryAllocatorImpl AllocImpl;
+    typedef BasicMemoryAllocator Alloc;
+
+    static_assert(sizeof(AllocImpl::allocation_unit) == sizeof(Alloc::allocation_unit));
+
+    void *memoryAllocatorP = (AllocImpl *) vpagealloc(0x41000);
     {
         {
             std::optional<pageentr> pe = get_pageentr((uint64_t) memoryAllocatorP);
@@ -158,18 +163,18 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
         }
     }
     reload_pagetables();
-    BasicMemoryAllocatorImpl *impl = new (memoryAllocatorP) BasicMemoryAllocatorImpl();
-    auto size = sizeof(BasicMemoryAllocator);
-    if (size < sizeof(small_alloc_unit)) {
-        size = sizeof(small_alloc_unit);
+    AllocImpl *impl = new (memoryAllocatorP) AllocImpl();
+    auto size = sizeof(Alloc);
+    if (size < sizeof(AllocImpl::allocation_unit)) {
+        size = sizeof(AllocImpl::allocation_unit);
     } else {
-        uint32_t overshoot = size % sizeof(small_alloc_unit);
+        uint32_t overshoot = size % sizeof(AllocImpl::allocation_unit);
         if (overshoot != 0) {
-            size += sizeof(small_alloc_unit) - overshoot;
+            size += sizeof(AllocImpl::allocation_unit) - overshoot;
         }
     }
-    BasicMemoryAllocator *allocator = (BasicMemoryAllocator *) impl->sm_allocate(size);
-    BasicMemoryAllocator *basicMemoryAllocator = new ((void *) allocator) BasicMemoryAllocator(impl);
+    Alloc *allocator = (Alloc *) impl->sm_allocate(size);
+    Alloc *basicMemoryAllocator = new ((void *) allocator) Alloc(impl);
     basicMemoryAllocator->Consume(size);
     return basicMemoryAllocator;
 }
