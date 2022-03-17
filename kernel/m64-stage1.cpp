@@ -54,6 +54,8 @@
 #include "scsi/scsidevice.h"
 #include "scsi/scsida.h"
 #include <acpi/acpi_8042.h>
+#include <physpagemap.h>
+#include <stage1.h>
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -142,16 +144,17 @@ ApStartup *GetApStartup() {
 #define _get_pml4t()  (*((pagetable *) 0x1000))
 
 void vmem_graph() {
+    auto *phys = get_physpagemap();
     auto &pt = _get_pml4t()[0].get_subtable()[0].get_subtable()[0].get_subtable();
     for (int i = 0; i < 512; i++) {
         char *addr = (char *) (uint64_t) ((i << 1) + 0xb8000);
         if (pt[i].os_virt_avail) {
-            if (pt[i].os_phys_avail) {
+            if (!phys->claimed(i)) {
                 *addr = '+';
             } else {
                 *addr = 'V';
             }
-        } else if (pt[i].os_phys_avail) {
+        } else if (!phys->claimed(i)) {
             *addr = 'P';
         } else {
             *addr = '-';
@@ -171,14 +174,19 @@ pagetable *allocate_pageentr() {
 
 extern "C" {
 
-    void start_m64(const MultibootInfoHeader *multibootInfoHeaderPtr, uint64_t stackptr) {
+    void start_m64(Stage1Data *stage1Data, uint64_t stackptr) {
+        const MultibootInfoHeader *multibootInfoHeaderPtr = (const MultibootInfoHeader *) (void *) (uint64_t) stage1Data->multibootAddr;
+        uint64_t physmapaddr = stage1Data->physpageMapAddr;
+
         multiboot_info = multibootInfoHeaderPtr;
         bootstrap_stackptr = stackptr; // For reuse with AP startup
         /*
          * Let's try to alloc a stack
          */
+        init_simple_physpagemap(physmapaddr);
         initialize_pagetable_control();
         setup_simplest_malloc_impl();
+        extend_to_advanced_physpagemap(physmapaddr);
 
         stage1_stack = new normal_stack;
         uint64_t stack = stage1_stack->get_addr();
@@ -203,8 +211,11 @@ extern "C" {
                     asm("hlt");
                 }
             }
-            uint64_t phys_mem_watermark = 0x2800000;
-            uint64_t end_phys_addr = 0x2800000;
+            auto *phys = get_physpagemap();
+            uint64_t release_lim = phys->max();
+            release_lim = release_lim << 12;
+            uint64_t phys_mem_watermark = phys->max() << 12;
+            uint64_t end_phys_addr = phys->max() << 12;
             {
                 uint64_t phys_mem_added = 0;
                 const auto *part = multiboot2.first_part();
@@ -244,7 +255,17 @@ extern "C" {
                                             if (pe == nullptr) {
                                                 break;
                                             }
-                                            pe->os_phys_avail = 1;
+                                            if (phys->max() <= (addr >> 12)) {
+                                                auto i = phys->max();
+                                                phys->set_max((addr >> 12) + 1);
+                                                while (i < phys->max()) {
+                                                    phys->claim(i);
+                                                    ++i;
+                                                }
+                                            }
+                                            if (addr >= release_lim && (addr >> 12) < phys->max()) {
+                                                phys->release(addr >> 12);
+                                            }
                                             last = addr + 0x1000;
                                             if (last > phys_mem_watermark_next) {
                                                 phys_mem_watermark_next = last;
@@ -263,7 +284,17 @@ extern "C" {
                                         if (pe == nullptr) {
                                             break;
                                         }
-                                        pe->os_phys_avail = 0;
+                                        if (phys->max() <= (addr >> 12)) {
+                                            auto i = phys->max();
+                                            phys->set_max((addr >> 12) + 1);
+                                            while (i < phys->max()) {
+                                                phys->claim(i);
+                                                ++i;
+                                            }
+                                        }
+                                        if ((addr >> 12) < phys->max()) {
+                                            phys->claim(addr >> 12);
+                                        }
                                         phys_mem_added += 0x1000;
                                     }
                                     reserved_mem.push_back(std::make_tuple<uint64_t,uint64_t>(entr.base_addr,entr.length));
@@ -358,6 +389,7 @@ done_with_mem_extension:
                     kcons = std::shared_ptr<framebuffer_kconsole>(new framebuffer_kconsole(fb_cons));
                     fb_kcons_locked = new framebuffer_kconsole_spinlocked(kcons);
                     set_klogger(fb_kcons_locked);
+                    get_klogger() << "Framebuffer at addr " << part->get_type8().framebuffer_addr << "\n";
                 }
                 if (part->hasNext(multiboot2)) {
                     part = part->next();

@@ -9,6 +9,9 @@
 #include <mutex>
 #include <sstream>
 #include <stats/statistics_root.h>
+#include <physpagemap.h>
+
+#define DEBUG_PALLOC_FAILURE
 
 static long long int total_ppages = 0;
 static long long int total_vpages = 0;
@@ -93,29 +96,12 @@ void pmemcounts() {
     {
         std::lock_guard lock{get_pagetables_lock()};
 
-        pagetable &pml4t = _get_pml4t();
-        uint64_t count = 0;
-        for (int i = 0; i < 512; i++) {
-            if (pml4t[i].present) {
-                auto &pdpt = pml4t[i].get_subtable();
-                for (int j = 0; j < 512; j++) {
-                    if (pdpt[j].present) {
-                        auto &pdt = pdpt[j].get_subtable();
-                        for (int k = 0; k < 512; k++) {
-                            if (pdt[k].present) {
-                                auto &pt = pdt[k].get_subtable();
-                                for (int l = 0; l < 512; l++) {
-                                    ++scan;
-                                    /* the page acquire check */
-                                    if (pt[l].os_phys_avail) {
-                                        ++free_pages;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        auto *phys = get_physpagemap();
+        for (uint32_t i = 0; i < phys->max(); i++) {
+            if (phys->claimed(i)) {
+                ++free_pages;
             }
+            ++scan;
         }
     }
     get_klogger() << "Ppages " << scan << " pages scanned, " << free_pages << " free encountered\n";
@@ -137,61 +123,28 @@ uint64_t ppagealloc(uint64_t size) {
     pagetable &pml4t = _get_pml4t();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
-    for (int i = 0; i < 512; i++) {
-        if (pml4t[i].present) {
-            auto &pdpt = pml4t[i].get_subtable();
-            for (int j = 0; j < 512; j++) {
-                if (pdpt[j].present) {
-                    auto &pdt = pdpt[j].get_subtable();
-                    for (int k = 0; k < 512; k++) {
-                        if (pdt[k].present) {
-                            auto &pt = pdt[k].get_subtable();
-                            for (int l = 0; l < 512; l++) {
-#ifdef DEBUG_PALLOC_FAILURE
-                                ++scan;
-#endif
-                                /* the page acquire check */
-                                if (pt[l].os_phys_avail) {
-#ifdef DEBUG_PALLOC_FAILURE
-                                    ++free_pages;
-#endif
-                                    if (starting_addr != 0) {
-                                        count++;
-                                        if (count == size) {
-                                            uint64_t ending_addr = starting_addr + (count * 4096);
-                                            for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
-                                                pageentr *pe = get_pageentr64(pml4t, addr);
-                                                pe->os_phys_avail = 0; // GRAB
-                                            }
-                                            allocated_ppages += size;
-                                            return starting_addr;
-                                        }
-                                    } else {
-                                        starting_addr = i << 9;
-                                        starting_addr |= j;
-                                        starting_addr = starting_addr << 9;
-                                        starting_addr |= k;
-                                        starting_addr = starting_addr << 9;
-                                        starting_addr |= l;
-                                        starting_addr = starting_addr << 12;
-                                        if (size == 1) {
-                                            pt[l].os_phys_avail = 0; // GRAB
-                                            ++allocated_ppages;
-                                            return starting_addr;
-                                        } else {
-                                            count = 1;
-                                        }
-                                    }
-                                } else {
-                                    starting_addr = 0;
-                                }
-                            }
-                        } else {
-                            starting_addr = 0;
-                        }
+    auto *phys = get_physpagemap();
+    for (uint32_t page = 512; page < phys->max(); page++) {
+        if (!phys->claimed(page)) {
+            if (starting_addr != 0) {
+                count++;
+                if (count == size) {
+                    uint64_t ending_addr = starting_addr + (count * 4096);
+                    for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
+                        phys->claim(addr >> 12); // GRAB
                     }
+                    allocated_ppages += size;
+                    return starting_addr;
+                }
+            } else {
+                starting_addr = page;
+                starting_addr = starting_addr << 12;
+                if (size == 1) {
+                    phys->claim(starting_addr >> 12); // GRAB
+                    ++allocated_ppages;
+                    return starting_addr;
                 } else {
-                    starting_addr = 0;
+                    count = 1;
                 }
             }
         } else {
@@ -214,57 +167,38 @@ uint32_t ppagealloc32(uint32_t size) {
     pagetable &pml4t = _get_pml4t();
     uint32_t starting_addr = 0;
     uint32_t count = 0;
-    if (pml4t[0].present) {
-        auto &pdpt = pml4t[0].get_subtable();
-        for (int j = 0; j < 4; j++) {
-            if (pdpt[j].present) {
-                auto &pdt = pdpt[j].get_subtable();
-                for (int k = 0; k < 512; k++) {
-                    if (pdt[k].present) {
-                        auto &pt = pdt[k].get_subtable();
-                        for (int l = 0; l < 512; l++) {
-                            /* the page acquire check */
-                            if (pt[l].os_phys_avail) {
-                                if (starting_addr != 0) {
-                                    count++;
-                                    if (count == size) {
-                                        uint32_t ending_addr = starting_addr + (count * 4096);
-                                        for (uint32_t addr = starting_addr; addr < ending_addr; addr += 4096) {
-                                            pageentr *pe = get_pageentr64(pml4t, addr);
-                                            pe->os_phys_avail = 0; // GRAB
-                                        }
-                                        allocated_ppages += size;
-                                        return starting_addr;
-                                    }
-                                } else {
-                                    starting_addr = j;
-                                    starting_addr = starting_addr << 9;
-                                    starting_addr |= k;
-                                    starting_addr = starting_addr << 9;
-                                    starting_addr |= l;
-                                    starting_addr = starting_addr << 12;
-                                    if (size == 1) {
-                                        pt[l].os_phys_avail = 0; // GRAB
-                                        ++allocated_ppages;
-                                        return starting_addr;
-                                    } else {
-                                        count = 1;
-                                    }
-                                }
-                            } else {
-                                starting_addr = 0;
-                            }
-                        }
-                    } else {
-                        starting_addr = 0;
+
+    auto *phys = get_physpagemap();
+    uint32_t max = (0xFFFFFFFF >> 12) + 1;
+    if (max > phys->max()) {
+        max = phys->max();
+    }
+    for (uint32_t page = 256; page < max; page++) {
+        if (!phys->claimed(page)) {
+            if (starting_addr != 0) {
+                count++;
+                if (count == size) {
+                    uint64_t ending_addr = starting_addr + (count * 4096);
+                    for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
+                        phys->claim(addr >> 12); // GRAB
                     }
+                    allocated_ppages += size;
+                    return starting_addr;
                 }
             } else {
-                starting_addr = 0;
+                starting_addr = page;
+                starting_addr = starting_addr << 12;
+                if (size == 1) {
+                    phys->claim(starting_addr >> 12); // GRAB
+                    ++allocated_ppages;
+                    return starting_addr;
+                } else {
+                    count = 1;
+                }
             }
+        } else {
+            starting_addr = 0;
         }
-    } else {
-        starting_addr = 0;
     }
     return 0;
 }
@@ -358,18 +292,27 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
     pagetable &pml4t = _get_pml4t();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
+    auto *phys = get_physpagemap();
     for (int i = 0; i < 512; i++) {
         if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
             for (int j = 0; j < 512; j++) {
                 if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
-                    for (int k = 0; k < 512; k++) {
+                    for (int k = i == 0 && j == 0 ? 1 : 0; k < 512; k++) {
                         if (pdt[k].present) {
                             auto &pt = pdt[k].get_subtable();
                             for (int l = 0; l < 512; l++) {
                                 /* the page acquire check */
-                                if (pt[l].os_phys_avail == 1 && pt[l].os_virt_avail == 1) {
+                                uint64_t p_addr = i;
+                                p_addr = p_addr << 9;
+                                p_addr += j;
+                                p_addr = p_addr << 9;
+                                p_addr += k;
+                                p_addr = p_addr << 9;
+                                p_addr += l;
+                                if (p_addr < phys->max() && !phys->claimed(p_addr) && pt[l].os_virt_avail == 1) {
+                                    p_addr = p_addr << 12;
                                     if (starting_addr != 0) {
                                         count++;
                                         if (count == size) {
@@ -377,7 +320,7 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
                                             for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
                                                 pageentr *pe = get_pageentr64(pml4t, addr);
                                                 pe->os_virt_avail = 0; // GRAB
-                                                pe->os_phys_avail = 0; // GRAB
+                                                phys->claim(addr >> 12); // GRAB
                                                 if (addr == starting_addr) {
                                                     pe->os_virt_start = 1;
                                                 }
@@ -394,17 +337,11 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
                                             return starting_addr;
                                         }
                                     } else {
-                                        starting_addr = i << 9;
-                                        starting_addr |= j;
-                                        starting_addr = starting_addr << 9;
-                                        starting_addr |= k;
-                                        starting_addr = starting_addr << 9;
-                                        starting_addr |= l;
-                                        starting_addr = starting_addr << 12;
+                                        starting_addr = p_addr;
                                         if (size == 1) {
                                             pageentr &pe = pt[l];
                                             pe.os_virt_avail = 0; // GRAB
-                                            pe.os_phys_avail = 0; // GRAB
+                                            phys->claim(starting_addr >> 12); // GRAB
                                             pe.os_virt_start = 1; // starting point
                                             pe.page_ppn = starting_addr >> 12;
                                             pe.present = 1;
@@ -557,6 +494,7 @@ void ppagefree(uint64_t addr, uint64_t size) {
     }
     size = size >> 12;
     uint64_t first = addr;
+    auto *phys = get_physpagemap();
     while (size > 0) {
         uint64_t paddr = addr;
         int l = (int) (paddr & 511);
@@ -567,10 +505,10 @@ void ppagefree(uint64_t addr, uint64_t size) {
         paddr = paddr >> 9;
         int i = (int) (paddr & 511);
         pageentr &pe = pml4t[i].get_subtable()[j].get_subtable()[k].get_subtable()[l];
-        if (pe.os_phys_avail) {
+        if (!phys->claimed(addr) || addr >= phys->max()) {
             wild_panic("PFree pointed at available page");
         }
-        pe.os_phys_avail = 1;
+        phys->release(addr);
         pe.os_zero = 1;
         ++addr;
         --size;
@@ -647,6 +585,7 @@ void setup_pvpage_stats() {
         total_vpages = 0;
         allocated_ppages = 0;
         allocated_vpages = 0;
+        auto *phys = get_physpagemap();
         pagetable &pml4t = _get_pml4t();
         for (int i = 0; i < 512; i++) {
             if (pml4t[i].present) {
@@ -659,7 +598,14 @@ void setup_pvpage_stats() {
                                 auto &pt = pdt[k].get_subtable();
                                 for (int l = 0; l < 512; l++) {
                                     ++total_vpages;
-                                    if (pt[l].os_phys_avail != 0) {
+                                    uint64_t paddr = i;
+                                    paddr = paddr << 9;
+                                    paddr += j;
+                                    paddr = paddr << 9;
+                                    paddr += k;
+                                    paddr = paddr << 9;
+                                    paddr += l;
+                                    if (paddr < phys->max() && !phys->claimed(paddr)) {
                                         allocated_ppages += visited_nonavail_phys;
                                         visited_nonavail_phys = 0;
                                         if (total_vpages > total_ppages) {

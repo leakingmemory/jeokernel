@@ -4,6 +4,7 @@
 
 #include <framebuffer/framebuffer.h>
 #include <thread>
+#include <physpagemap.h>
 
 framebuffer::framebuffer(const MultibootFramebuffer &info) : vm(nullptr), frames(nullptr), pitch(info.framebuffer_pitch), width(info.framebuffer_width), height(info.framebuffer_height), bpp(info.framebuffer_bpp) {
     uint64_t physaddr{info.framebuffer_addr};
@@ -15,10 +16,11 @@ framebuffer::framebuffer(const MultibootFramebuffer &info) : vm(nullptr), frames
         {
             uint64_t addr{physaddr};
             uint32_t page{0};
+            auto *phys = get_physpagemap();
             while (addr < end) {
-                update_pageentr(addr, [](pageentr &pe) -> void {
-                    pe.os_phys_avail = 0;
-                });
+                if ((addr >> 12) < phys->max()) {
+                    phys->claim(addr >> 12);
+                }
                 vm->page(page).rwmap(addr, true, false);
                 page++;
                 addr += 0x1000;

@@ -2,10 +2,13 @@
 #include "plainvga32.h"
 #include <strs.h>
 #include <pagetable_impl.h>
+#include <physpagemap.h>
 #include <multiboot_impl.h>
 #include <elf_impl.h>
 #include <string.h>
 #include <loaderconfig.h>
+#include <new>
+#include <stage1.h>
 
 //#define DEBUG_ELF_ATTRIBUTES
 //#define DEBUG_ELF_ATTRIBUTES_BRAKE_VAL 100000000
@@ -27,17 +30,17 @@ void wrmsr(uint32_t addr, uint32_t msr) {
     asm("mov %0, %%ecx; mov %1, %%eax; wrmsr; " :: "r"(addr), "r"(msr) : "%eax", "%ecx");
 }
 
-void vmem_dump() {
+void vmem_dump(PhyspageMap *map) {
     pageentr *pt = (pageentr *) 0x4000;
     for (int i = 0; i < 512; i++) {
         char *addr = (char *) ((i << 1) + 0xb8000);
         if (pt[i].os_virt_avail) {
-            if (pt[i].os_phys_avail) {
+            if (!map->claimed(i)) {
                 *addr = '+';
             } else {
                 *addr = 'V';
             }
-        } else if (pt[i].os_phys_avail) {
+        } else if (!map->claimed(i)) {
             *addr = 'P';
         } else {
             *addr = '-';
@@ -48,10 +51,14 @@ void vmem_dump() {
 void boot_stage1(void *multiboot_header_addr) {
     {
         MultibootInfoHeader &header = *((MultibootInfoHeader *) multiboot_header_addr);
-        void *new_multiboot_header_addr = (void *) 0x1b000;
+        void *new_multiboot_header_addr = (void *) 0x1c000;
         memmove(new_multiboot_header_addr, multiboot_header_addr, header.total_size);
         multiboot_header_addr = new_multiboot_header_addr;
     }
+    uint32_t physpagemap_addr = 0x1b000;
+    PhyspageMap *physpageMap;
+    physpageMap = new ((void *) physpagemap_addr) PhyspageMap();
+
     MultibootInfoHeader &header = *((MultibootInfoHeader *) multiboot_header_addr);
     plainvga32 vga;
     vga.display(0, 0, "| JEO Kernel 1.0 - Stage 1 boot");
@@ -269,58 +276,40 @@ void boot_stage1(void *multiboot_header_addr) {
      */
     for (uint16_t i = 0; i < 512; i++) {
         if (i >= 256) {
-            pt[i].os_phys_avail = 1;
             pt[i].os_virt_avail = 1;
+        } else {
+            physpageMap->claim(i);
         }
-        pt2[i].os_phys_avail = 1;
         pt2[i].os_virt_avail = 1;
-        pt3[i].os_phys_avail = 1;
         pt3[i].os_virt_avail = 1;
-        pt4[i].os_phys_avail = 1;
         pt4[i].os_virt_avail = 1;
-        pt5[i].os_phys_avail = 1;
         pt5[i].os_virt_avail = 1;
-        pt6[i].os_phys_avail = 1;
         pt6[i].os_virt_avail = 1;
-        pt7[i].os_phys_avail = 1;
         pt7[i].os_virt_avail = 1;
-        pt8[i].os_phys_avail = 1;
         pt8[i].os_virt_avail = 1;
-        pt9[i].os_phys_avail = 1;
         pt9[i].os_virt_avail = 1;
-        pt10[i].os_phys_avail = 1;
         pt10[i].os_virt_avail = 1;
-        pt11[i].os_phys_avail = 1;
         pt11[i].os_virt_avail = 1;
-        pt12[i].os_phys_avail = 1;
         pt12[i].os_virt_avail = 1;
-        pt13[i].os_phys_avail = 1;
         pt13[i].os_virt_avail = 1;
-        pt14[i].os_phys_avail = 1;
         pt14[i].os_virt_avail = 1;
-        pt15[i].os_phys_avail = 1;
         pt15[i].os_virt_avail = 1;
-        pt16[i].os_phys_avail = 1;
         pt16[i].os_virt_avail = 1;
-        pt17[i].os_phys_avail = 1;
         pt17[i].os_virt_avail = 1;
-        pt18[i].os_phys_avail = 1;
         pt18[i].os_virt_avail = 1;
-        pt19[i].os_phys_avail = 1;
         pt19[i].os_virt_avail = 1;
-        pt20[i].os_phys_avail = 1;
         pt20[i].os_virt_avail = 1;
     }
     vga.display(0, 0, "/");
 
     // Our stack is at pt6[511]
     for (uint16_t i = 502; i < 512; i++) {
-        pt6[i].os_phys_avail = 0;
         pt6[i].os_virt_avail = 0;
         pt6[i].writeable = 1;
         pt6[i].present = 1;
         pt6[i].execution_disabled = 1;
         pt6[i].page_ppn = 0xa00 + i;
+        physpageMap->claim(0xa00 + i);
     }
     pt6[502].os_virt_start = 1;
     pt6[502].present = 0; // Crash barrier
@@ -339,7 +328,7 @@ void boot_stage1(void *multiboot_header_addr) {
             phaddr &= ~4095;
             while (phaddr < end) {
                 auto *pe = get_pageentr64(pml4t, phaddr);
-                pe->os_phys_avail = 0;
+                physpageMap->claim(phaddr >> 12);
                 phaddr += 4096;
                 vga.display(0, 0, "#");
             }
@@ -412,8 +401,7 @@ void boot_stage1(void *multiboot_header_addr) {
          */
         for (uint32_t addr = (uint32_t) kernel_elf_start; addr < ((uint32_t) kernel_elf_end); addr += 4096) {
             uint32_t paddr = addr & ~4095;
-            pageentr *pe = get_pageentr64(pml4t, paddr);
-            pe->os_phys_avail = 0;
+            physpageMap->claim(paddr >> 12);
         }
 
         ELF kernel{(void *) kernel_elf_start, (void *) kernel_elf_end};
@@ -491,8 +479,8 @@ void boot_stage1(void *multiboot_header_addr) {
                         }
                         while (vaddr < vaddr_end) {
                             pageentr *phys_pe = get_pageentr64(pml4t, phaddr);
-                            phys_pe->os_phys_avail = 0;
                             uint32_t page_ppn = phaddr / 4096;
+                            physpageMap->claim(page_ppn);
                             pageentr *pe = get_pageentr64(pml4t, vaddr);
 
                             /*
@@ -513,9 +501,9 @@ void boot_stage1(void *multiboot_header_addr) {
                         while (vaddr < vaddr_end) {
                             for (uint32_t phdataaddr = 0x200000; phdataaddr < 0xb00000; phdataaddr += 0x1000) {
                                 pageentr *phys_pe = get_pageentr64(pml4t, phdataaddr);
-                                if (phys_pe->os_phys_avail) {
-                                    phys_pe->os_phys_avail = 0;
-                                    uint32_t page_ppn = phdataaddr / 4096;
+                                uint32_t page_ppn = phdataaddr >> 12;
+                                if (!physpageMap->claimed(page_ppn)) {
+                                    physpageMap->claim(page_ppn);
                                     pageentr *pe = get_pageentr64(pml4t, vaddr);
                                     pe->os_virt_avail = 0;
                                     pe->os_virt_start = 1;
@@ -619,7 +607,7 @@ good_data_page_alloc:
             for (int i = 256; i < 511; i++) {
                 int j = 0;
                 while (j < stack_pages && (i+j) < 512) {
-                    if (!pt6[i+j].os_virt_avail || !pt6[i+j].os_phys_avail) {
+                    if (!pt6[i+j].os_virt_avail || physpageMap->claimed(0xa00 + i + j)) {
                         break;
                     }
                     j++;
@@ -633,10 +621,10 @@ good_data_page_alloc:
                     pt6[i].present = 0;
                     pt6[i].accessed = 0;
                     for (int j = 1; j < stack_pages; j++) {
-                        pt6[i+j].os_phys_avail = 0;
                         pt6[i+j].os_virt_avail = 0;
                         pt6[i+j].os_virt_start = 0;
                         pt6[i+j].page_ppn = 0xa00 + i + j;
+                        physpageMap->claim(0xa00 + i + j);
                         pt6[i+j].writeable = 1;
                         pt6[i+j].present = 1;
                         pt6[i+j].accessed = 0;
@@ -743,9 +731,14 @@ stack_allocated:
 
             }
 
+            Stage1Data stage1Data = {
+                    .multibootAddr = (uint32_t) multiboot_header_addr,
+                    .physpageMapAddr = physpagemap_addr
+            };
+            uint32_t stage1DataPtr = (uint32_t) &stage1Data;
 
             //asm("mov $0x10,%%ax; mov %%ax, %%ds; mov %%ax, %%es; mov %%ax, %%fs; mov %%ax, %%ss; " ::: "%ax");
-            asm("mov %0,%%eax; mov %1, %%ebx; mov %2, %%esi; jmp jumpto64" :: "r"(entrypoint_addr), "r"(multiboot_header_addr), "r"(stack_ptr));
+            asm("mov %0,%%eax; mov %1, %%ebx; mov %2, %%esi; jmp jumpto64" :: "r"(entrypoint_addr), "r"(stage1DataPtr), "r"(stack_ptr));
         } else {
             vga.display(4, 0, "error: ");
             vga.display(4, 7, kernel.get_error());
