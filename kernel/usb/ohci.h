@@ -282,6 +282,7 @@ private:
     std::shared_ptr<usb_buffer> buffer;
     std::shared_ptr<ohci_transfer> next;
     ohci_endpoint &endpoint;
+    usb_endpoint_type endpointType;
     bool waitCancelled, waitCancelledAndWaitedCycle;
 public:
     ohci_transfer(ohci &ohci, ohci_endpoint &endpoint);
@@ -352,6 +353,7 @@ struct ohci_statistics : public statistics_object {
     std::shared_ptr<statistics_object> bufPoolStats;
     std::shared_ptr<statistics_object> xPoolStats;
     uint32_t transfersInProgressCount;
+    uint32_t controlTransfersInProgress;
 
     void Accept(statistics_visitor &visitor) override;
 };
@@ -378,6 +380,7 @@ private:
     StructPool<StructPoolAllocator<Phys32Page,usb_byte_buffer<OHCI_TRANSFER_BUFSIZE>>> bufPool;
     StructPool<StructPoolAllocator<Phys32Page,ohci_transfer_descriptor>> xPool;
     std::vector<std::shared_ptr<usb_transfer>> transfersInProgress;
+    uint32_t controlTransfersInProgress;
     bool StartOfFrameReceived;
     hw_spinlock ohcilock;
 public:
@@ -386,7 +389,8 @@ public:
         mapped_registers_vm(), ohciRegisters(nullptr), hcca(), bvalue(0), edPool(), destroyEds(),
         controlEndpointEnd(*this, usb_endpoint_type::CONTROL), controlHead(&controlEndpointEnd),
         bulkEndpointEnd(*this, usb_endpoint_type::BULK), bulkHead(&bulkEndpointEnd), shortBufPool(),
-        bufPool(), xPool(), transfersInProgress(), StartOfFrameReceived(false), ohcilock() {}
+        bufPool(), xPool(), transfersInProgress(), controlTransfersInProgress(0), StartOfFrameReceived(false),
+        ohcilock() {}
     void init() override;
     void dumpregs() override;
 

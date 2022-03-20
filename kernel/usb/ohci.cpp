@@ -26,6 +26,9 @@
 #define OHCI_PORT_STATUS_OCIC   0x080000 // Port Over Current Indicator Change
 #define OHCI_PORT_STATUS_PRSC   0x100000 // Port Reset Status Change
 
+#define OHCI_CONTROL_TRANSFER_QUEUE_PRIORITY_LIMIT 0x4
+//#define OHCI_CONTROL_TRANSFER_QUEUE_PRIORITY_DEBUG
+
 
 Device *ohci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
     if (
@@ -48,6 +51,7 @@ void ohci_statistics::Accept(statistics_visitor &visitor) {
     visitor.Visit("bufferPool", *bufPoolStats);
     visitor.Visit("transferPool", *xPoolStats);
     visitor.Visit("transferInProgressCount", (long long int) transfersInProgressCount);
+    visitor.Visit("controlTransfersInProgressCount", (long long int) controlTransfersInProgress);
 }
 
 void ohci::init() {
@@ -519,6 +523,17 @@ void ohci::ProcessDoneQueue() {
             ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*item));
             prevHead = doneHead;
             doneHead = ohciTransfer.TD()->NextTD;
+            if (ohciTransfer.endpointType == usb_endpoint_type::CONTROL) {
+                controlTransfersInProgress--;
+                if (controlTransfersInProgress < OHCI_CONTROL_TRANSFER_QUEUE_PRIORITY_LIMIT) {
+#ifdef OHCI_CONTROL_TRANSFER_QUEUE_PRIORITY_DEBUG
+                    get_klogger() << "Re-enabled bulk list\n";
+#endif
+                    if ((ohciRegisters->HcControl & OHCI_CTRL_BLE) == 0) {
+                        ohciRegisters->HcControl |= OHCI_CTRL_BLE;
+                    }
+                }
+            }
         }
         auto iterator = doneItems.end();
         while (iterator != doneItems.begin()) {
@@ -532,6 +547,17 @@ void ohci::ProcessDoneQueue() {
         ohci_transfer &ohciTransfer = *((ohci_transfer *) &(*item));
         if (ohciTransfer.waitCancelled) {
             if (ohciTransfer.waitCancelledAndWaitedCycle) {
+                if (ohciTransfer.endpointType == usb_endpoint_type::CONTROL) {
+                    controlTransfersInProgress--;
+                    if (controlTransfersInProgress < OHCI_CONTROL_TRANSFER_QUEUE_PRIORITY_LIMIT) {
+#ifdef OHCI_CONTROL_TRANSFER_QUEUE_PRIORITY_DEBUG
+                        get_klogger() << "Re-enabled bulk list\n";
+#endif
+                        if ((ohciRegisters->HcControl & OHCI_CTRL_BLE) == 0) {
+                            ohciRegisters->HcControl |= OHCI_CTRL_BLE;
+                        }
+                    }
+                }
                 transfersInProgress.erase(iter);
             } else {
                 ohciTransfer.waitCancelledAndWaitedCycle = true;
@@ -566,6 +592,7 @@ std::shared_ptr<statistics_object> ohci::GetStatisticsObject() {
     stats->bufPoolStats = bufPool.GetStatistics();
     stats->xPoolStats = xPool.GetStatistics();
     stats->transfersInProgressCount = transfersInProgress.size();
+    stats->controlTransfersInProgress = controlTransfersInProgress;
     return stats;
 }
 
@@ -650,9 +677,11 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
                              int pollingRateMs) :
                              ohciRef(ohci),
                              edPtr(ohci.edPool.Alloc()),
-                             head(new ohci_transfer(ohci, *this)), tail(head),
+                             head(), tail(),
                              endpointType(endpointType),
                              next(nullptr), int_ed_chain(nullptr) {
+    head = std::make_shared<ohci_transfer>(ohci, *this);
+    tail = head;
     ohci_endpoint_descriptor *ed = edPtr->Pointer();
     {
         uint32_t control = ((maxPacketSize & 0x7FF) << 16)
@@ -879,6 +908,13 @@ ohci_endpoint::CreateTransferWithLock(std::shared_ptr<usb_buffer> buffer, uint32
     edPtr->Pointer()->TailP = newtd->PhysAddr();
     if (endpointType == usb_endpoint_type::CONTROL) {
         ohciRef.ohciRegisters->HcCommandStatus = OHCI_CMD_CLF;
+        ohciRef.controlTransfersInProgress++;
+        if (ohciRef.controlTransfersInProgress >= OHCI_CONTROL_TRANSFER_QUEUE_PRIORITY_LIMIT && (ohciRef.ohciRegisters->HcControl & OHCI_CTRL_BLE) != 0) {
+            ohciRef.ohciRegisters->HcControl &= ~OHCI_CTRL_BLE;
+#ifdef OHCI_CONTROL_TRANSFER_QUEUE_PRIORITY_DEBUG
+            get_klogger() << "Disabled bulk list\n";
+#endif
+        }
     } else if (endpointType == usb_endpoint_type::BULK) {
         ohciRef.ohciRegisters->HcCommandStatus = OHCI_CMD_BLF;
     }
@@ -974,7 +1010,7 @@ bool ohci_endpoint::ClearStall() {
     return false;
 }
 
-ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer(), transferPtr(ohci.xPool.Alloc()), buffer(), next(), endpoint(endpoint), waitCancelled(false), waitCancelledAndWaitedCycle(false) {
+ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer(), transferPtr(ohci.xPool.Alloc()), buffer(), next(), endpoint(endpoint), endpointType(endpoint.endpointType), waitCancelled(false), waitCancelledAndWaitedCycle(false) {
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
     std::stringstream str{};
     str << std::hex << "Transfer descriptor at " << transferPtr->Phys() << "\n";
