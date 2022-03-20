@@ -1,0 +1,19 @@
+//
+// Created by sigsegv on 2/12/22.
+//
+
+#include <blockdevs/offset_blockdev.h>
+
+std::size_t offset_blockdev::GetBlocksize() const {
+    return upstream->GetBlocksize();
+}
+
+std::shared_ptr<blockdev_block> offset_blockdev::ReadBlock(size_t blocknum, size_t blocks) const {
+    if (blocknum >= size) {
+        return {};
+    }
+    if ((blocknum + blocks) >= size) {
+        blocks = size - blocknum;
+    }
+    return upstream->ReadBlock(blocknum + offset, blocks);
+}
