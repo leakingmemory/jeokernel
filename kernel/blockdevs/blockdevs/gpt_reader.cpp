@@ -5,6 +5,7 @@
 #include <blockdevs/gpt_reader.h>
 #include <hashfunc/crc32.h>
 #include <cstring>
+#include <strings.h>
 
 struct GptGuid {
     uint16_t guid[8];

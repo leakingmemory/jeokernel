@@ -9,6 +9,7 @@
 #include <blockdevs/parttable_entry.h>
 #include <memory>
 #include <vector>
+#include <string>
 
 class raw_parttable {
 public:
