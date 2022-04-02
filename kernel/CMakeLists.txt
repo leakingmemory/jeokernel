@@ -25,6 +25,7 @@ add_subdirectory(kshell)
 add_subdirectory(scsi)
 add_subdirectory(blockdevs/blockdevs)
 add_subdirectory(blockdevs/hashfunc)
+add_subdirectory(blockdevsystem)
 
 add_library(bootstrap bootstrap.S)
 
@@ -52,3 +53,4 @@ target_link_libraries(kernel PRIVATE kshell)
 target_link_libraries(kernel PRIVATE scsi)
 target_link_libraries(kernel PRIVATE blockdevs)
 target_link_libraries(kernel PRIVATE hashfunc)
+target_link_libraries(kernel PRIVATE blockdevsystem)

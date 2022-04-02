@@ -7,6 +7,8 @@
 
 #include <devices/drivers.h>
 #include <optional>
+#include <core/blockdevsystem.h>
+#include <thread>
 #include "scsidev.h"
 #include "scsi_block.h"
 
@@ -21,15 +23,19 @@ enum scsida_power_state {
 class scsida : public Device {
 private:
     std::shared_ptr<ScsiDevDeviceInformation> devInfo;
+    std::shared_ptr<blockdev_interface> blockdevInterface;
+    std::unique_ptr<std::thread> iothr;
     ReadCapacityResult capacity;
     scsida_power_state latestPowerState;
 public:
     scsida(Bus *bus, std::shared_ptr<ScsiDevDeviceInformation> devInfo) : Device("scsida", bus), devInfo(devInfo),
-    latestPowerState(UNKNOWN) {
+    blockdevInterface(), iothr(), latestPowerState(UNKNOWN) {
     }
-    ~scsida() override = default;
+    ~scsida() override;
     void init() override;
     void stop() override;
+
+    void iothread();
 
     uint64_t NumBlocks() {
         return capacity.LBA + 1;
@@ -65,7 +71,7 @@ public:
     std::shared_ptr<RequestSense_FixedData> RequestSense_Fixed();
     std::optional<bool> IsSpinning();
     bool SetPower(UnitPowerCondition powerCondition, bool immediateResponse = true);
-    bool CmdRead6(uint32_t LBA, uint16_t blocks);
+    std::shared_ptr<ScsiDevCommand> CmdRead6(uint32_t LBA, uint16_t blocks);
 };
 
 class scsida_driver : public Driver {

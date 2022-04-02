@@ -3,11 +3,12 @@
 //
 
 #include <sstream>
+#include <blockdevs/blockdev_block.h>
 #include "scsida.h"
 #include "scsidev.h"
 #include "scsi_primary.h"
-#include "concurrency/raw_semaphore.h"
-#include "thread"
+#include <concurrency/raw_semaphore.h>
+#include <thread>
 
 class CallbackLatch {
 private:
@@ -22,7 +23,21 @@ public:
     }
 };
 
+scsida::~scsida() {
+    if (blockdevInterface) {
+        blockdevInterface->Stop();
+    }
+    get_blockdevsystem().Remove(&(*blockdevInterface));
+    if (iothr) {
+        iothr->join();
+        iothr = {};
+    }
+}
+
 void scsida::stop() {
+    if (blockdevInterface) {
+        blockdevInterface->Stop();
+    }
 }
 
 void scsida::init() {
@@ -98,6 +113,21 @@ void scsida::init() {
         } else {
             return;
         }
+
+        auto &blockdevsys = get_blockdevsystem();
+        blockdevInterface = blockdevsys.CreateInterface();
+        blockdevInterface->SetBlocksize(BlockSize());
+
+        iothr = std::make_unique<std::thread>([this] () {
+            {
+                std::stringstream str{};
+                str << "[" << DeviceType() << DeviceId() << "]";
+                std::this_thread::set_name(str.str());
+            }
+            iothread();
+        });
+
+        blockdevsys.Add(&(*blockdevInterface));
     }
 
     SetPower(UnitPowerCondition::ACTIVE);
@@ -129,6 +159,37 @@ void scsida::init() {
                 get_klogger() << str.str().c_str();
                 return;
             }
+        }
+    }
+}
+
+class scsida_result : public blockdev_block {
+private:
+    std::shared_ptr<ScsiDevCommand> command;
+public:
+    scsida_result(std::shared_ptr<ScsiDevCommand> command) : command(command) {}
+    void *Pointer() const override;
+    std::size_t Size() const override;
+};
+
+void *scsida_result::Pointer() const {
+    return (void *) command->Buffer();
+}
+
+std::size_t scsida_result::Size() const {
+    return command->Size();
+}
+
+void scsida::iothread() {
+    while (true) {
+        auto cmd = blockdevInterface->NextCommand();
+        if (!cmd) {
+            break;
+        }
+        auto result = CmdRead6(cmd->Blocknum(), cmd->Blocks());
+        if (result) {
+            std::shared_ptr<blockdev_block> wrap = std::make_shared<scsida_result>(result);
+            cmd->Accept(wrap);
         }
     }
 }
@@ -269,22 +330,22 @@ bool scsida::SetPower(UnitPowerCondition powerCondition, bool immediateResponse)
     return true;
 }
 
-bool scsida::CmdRead6(uint32_t LBA, uint16_t blocks) {
+std::shared_ptr<ScsiDevCommand> scsida::CmdRead6(uint32_t LBA, uint16_t blocks) {
     Read6 read6{LBA, blocks};
     if (read6.LBA() != LBA || read6.TransferLengthBlocks() != blocks) {
-        return false;
+        return {};
     }
     std::size_t size{blocks};
     size *= BlockSize();
     auto command = ExecuteCommand(read6, size, scsivariabledata_fixed());
     if (command) {
         if (command->IsSuccessful()) {
-            return true;
+            return command;
         } else {
             ReportFailed(command);
         }
     }
-    return false;
+    return {};
 }
 
 Device *scsida_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
