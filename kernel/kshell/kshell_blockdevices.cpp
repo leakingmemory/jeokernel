@@ -13,8 +13,9 @@ void kshell_blockdevices::Exec(const std::vector<std::string> &cmd) {
     std::stringstream str{};
     for (const auto &name : names) {
         auto blockdev = system.GetBlockdevice(name);
+        auto blocks = blockdev->GetNumBlocks();
         auto blocksize = blockdev->GetBlocksize();
-        str << name << ": blocksize " << blocksize << "\n";
+        str << name << ": " << blocks << " with blocksize " << blocksize << "\n";
     }
     get_klogger() << str.str().c_str();
 }

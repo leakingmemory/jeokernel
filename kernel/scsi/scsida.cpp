@@ -114,9 +114,42 @@ void scsida::init() {
             return;
         }
 
+        SetPower(UnitPowerCondition::ACTIVE);
+        {
+            auto spinInfo = IsSpinning();
+            if (spinInfo) {
+                bool isSpinning = *spinInfo;
+                if (isSpinning) {
+                    std::stringstream str{};
+                    str << DeviceType() << DeviceId() << ": is active/powered\n";
+                    get_klogger() << str.str().c_str();
+                } else {
+                    std::stringstream str{};
+                    str << DeviceType() << DeviceId() << ": did not activate: ";
+                    switch (latestPowerState) {
+                        case IDLE:
+                            str << "idle";
+                            break;
+                        case STANDBY:
+                            str << "standby";
+                            break;
+                        case LOW_POWER:
+                            str << "low power state";
+                            break;
+                        default:
+                            str << "invalid";
+                    }
+                    str << "\n";
+                    get_klogger() << str.str().c_str();
+                    return;
+                }
+            }
+        }
+
         auto &blockdevsys = get_blockdevsystem();
         blockdevInterface = blockdevsys.CreateInterface();
         blockdevInterface->SetBlocksize(BlockSize());
+        blockdevInterface->SetNumBlocks(NumBlocks());
 
         iothr = std::make_unique<std::thread>([this] () {
             {
@@ -131,38 +164,6 @@ void scsida::init() {
             std::stringstream name{};
             name << DeviceType() << DeviceId();
             blockdevsys.Add(name.str(), &(*blockdevInterface));
-        }
-    }
-
-    SetPower(UnitPowerCondition::ACTIVE);
-    {
-        auto spinInfo = IsSpinning();
-        if (spinInfo) {
-            bool isSpinning = *spinInfo;
-            if (isSpinning) {
-                std::stringstream str{};
-                str << DeviceType() << DeviceId() << ": is active/powered\n";
-                get_klogger() << str.str().c_str();
-            } else {
-                std::stringstream str{};
-                str << DeviceType() << DeviceId() << ": did not activate: ";
-                switch (latestPowerState) {
-                    case IDLE:
-                        str << "idle";
-                        break;
-                    case STANDBY:
-                        str << "standby";
-                        break;
-                    case LOW_POWER:
-                        str << "low power state";
-                        break;
-                    default:
-                        str << "invalid";
-                }
-                str << "\n";
-                get_klogger() << str.str().c_str();
-                return;
-            }
         }
     }
 }

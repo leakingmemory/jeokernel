@@ -44,6 +44,7 @@ public:
     blockdev_interface *GetBlockdevInterface() const override;
     void DetachBlockdevInterface() override;
     virtual std::size_t GetBlocksize() const;
+    virtual std::size_t GetNumBlocks() const;
     virtual std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const;
 };
 
@@ -133,6 +134,10 @@ void hw_blockdev::DetachBlockdevInterface() {
 
 std::size_t hw_blockdev::GetBlocksize() const {
     return bdev->GetBlocksize();
+}
+
+std::size_t hw_blockdev::GetNumBlocks() const {
+    return bdev->GetNumBlocks();
 }
 
 std::shared_ptr<blockdev_block> hw_blockdev::ReadBlock(size_t blocknum, size_t blocks) const {

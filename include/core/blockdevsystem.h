@@ -36,11 +36,14 @@ private:
     std::vector<std::shared_ptr<blockdev_command>> queue;
     raw_semaphore semaphore;
     size_t blocksize;
+    size_t numBlocks;
     bool stop;
 public:
     blockdev_interface(hw_spinlock &_lock) : _lock(_lock), queue(), semaphore(-1), blocksize(0), stop(false) {}
     void SetBlocksize(std::size_t size);
     size_t GetBlocksize();
+    void SetNumBlocks(std::size_t numBlocks);
+    size_t GetNumBlocks();
     std::shared_ptr<blockdev_command> NextCommand();
     void Stop();
     void Submit(std::shared_ptr<blockdev_command> command);

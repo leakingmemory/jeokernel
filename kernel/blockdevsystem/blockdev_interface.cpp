@@ -18,6 +18,14 @@ size_t blockdev_interface::GetBlocksize() {
     return blocksize;
 }
 
+void blockdev_interface::SetNumBlocks(std::size_t numBlocks) {
+    this->numBlocks = numBlocks;
+}
+
+size_t blockdev_interface::GetNumBlocks() {
+    return numBlocks;
+}
+
 std::shared_ptr<blockdev_command> blockdev_interface::NextCommand() {
     semaphore.acquire();
     std::lock_guard lock{_lock};
