@@ -8,6 +8,10 @@ std::size_t offset_blockdev::GetBlocksize() const {
     return upstream->GetBlocksize();
 }
 
+std::size_t offset_blockdev::GetNumBlocks() const {
+    return size;
+}
+
 std::shared_ptr<blockdev_block> offset_blockdev::ReadBlock(size_t blocknum, size_t blocks) const {
     if (blocknum >= size) {
         return {};
