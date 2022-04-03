@@ -110,8 +110,13 @@ void uhci::init() {
         }
     }
 
+    bulk = qhtdPool.Alloc();
+    bulk->Pointer()->qh.head = UHCI_POINTER_TERMINATE;
+    bulk->Pointer()->qh.element = UHCI_POINTER_TERMINATE;
+    bulk->Pointer()->qh.NextEndpoint = nullptr;
+
     qh = qhtdPool.Alloc();
-    qh->Pointer()->qh.head = UHCI_POINTER_TERMINATE;
+    qh->Pointer()->qh.head = bulk->Phys() | UHCI_POINTER_QH;
     qh->Pointer()->qh.element = UHCI_POINTER_TERMINATE;
     qh->Pointer()->qh.NextEndpoint = nullptr;
 
@@ -281,7 +286,14 @@ uhci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t h
 std::shared_ptr<usb_endpoint>
 uhci::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
                          uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
-    return {};
+    if (speed == LOW || speed == FULL) {
+        std::shared_ptr<uhci_endpoint> endpoint{
+                new uhci_endpoint(*this, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::BULK)};
+        std::shared_ptr<usb_endpoint> usbEndpoint{endpoint};
+        return usbEndpoint;
+    } else {
+        return {};
+    }
 }
 
 std::shared_ptr<usb_buffer> uhci::Alloc(size_t size) {
@@ -406,6 +418,9 @@ uhci_endpoint::uhci_endpoint(uhci &uhciRef, uint32_t maxPacketSize, uint8_t func
                              maxPacketSize(maxPacketSize), functionAddr(functionAddr), endpointNum(endpointNum),
                              head(), qh(), pending(), active() {
     std::lock_guard lock{uhciRef.HcdSpinlock()};
+    if (endpointType == usb_endpoint_type::BULK) {
+        head = uhciRef.bulk;
+    }
     if (endpointType == usb_endpoint_type::CONTROL) {
         head = uhciRef.qh;
     }
@@ -582,7 +597,7 @@ uhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
 }
 
 uhci_endpoint::~uhci_endpoint() {
-    if (endpointType == usb_endpoint_type::CONTROL || endpointType == usb_endpoint_type::INTERRUPT) {
+    if (endpointType == usb_endpoint_type::BULK || endpointType == usb_endpoint_type::CONTROL || endpointType == usb_endpoint_type::INTERRUPT) {
         std::lock_guard lock{uhciRef.HcdSpinlock()};
         {
             auto iter = uhciRef.watchList.begin();
