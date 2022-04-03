@@ -8,9 +8,11 @@
 #include <concurrency/hw_spinlock.h>
 #include <mutex>
 #include "blockdev_async_command.h"
+#include <blockdevs/offset_blockdev.h>
 #include <sstream>
 #include <klogger.h>
 #include <blockdevs/parttable_readers.h>
+#include <tuple>
 
 static parttable_readers *parttableReaders = nullptr;
 static blockdevsystem *blockdevSystem = nullptr;
@@ -45,16 +47,74 @@ public:
     virtual std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const;
 };
 
+class blockdevsystem_impl;
+
+class blockdev_with_partitions {
+    friend blockdevsystem_impl;
+private:
+    std::shared_ptr<blockdev> bdev;
+    std::vector<blockdev_with_partitions *> subs;
+public:
+    blockdev_with_partitions(std::shared_ptr<blockdev> bdev);
+    void FindSubs(const std::string &parent_name, blockdevsystem_impl &);
+    void RemoveSubs(blockdevsystem_impl &);
+};
+
 class blockdevsystem_impl : public blockdevsystem {
+    friend blockdev_with_partitions;
 private:
     hw_spinlock _lock;
     std::vector<std::shared_ptr<blockdev_container>> blockdevs;
+    std::vector<std::tuple<std::string,std::shared_ptr<blockdev_with_partitions>>> availBlockdevs;
 public:
     blockdevsystem_impl();
     std::shared_ptr<blockdev_interface> CreateInterface() override;
-    void Add(blockdev_interface *bdev) override;
+    void Add(const std::string &name, blockdev_interface *bdev) override;
     void Remove(blockdev_interface *bdev) override;
+private:
+    void RemoveSub(blockdev_with_partitions *subbdev);
 };
+
+blockdev_with_partitions::blockdev_with_partitions(std::shared_ptr<blockdev> bdev)
+    : bdev(bdev), subs() {
+}
+
+void blockdev_with_partitions::FindSubs(const std::string &parent_name, blockdevsystem_impl &system) {
+    auto parttable = parttableReaders->ReadParttable(bdev);
+    std::stringstream str{};
+    str << parttable->GetTableType() << " with blocksize " << parttable->GetBlockSize()
+        << " and signature " << std::hex << parttable->GetSignature() << "\n" << std::dec;
+    int index = 0;
+    for (auto part : parttable->GetEntries()) {
+        std::shared_ptr<blockdev> partdev = std::make_shared<offset_blockdev>(bdev, part->GetOffset(), part->GetSize());
+        std::shared_ptr<blockdev_with_partitions> partwp = std::make_shared<blockdev_with_partitions>(partdev);
+        std::stringstream name{};
+        name << parent_name << "p" << ++index;
+        str << name.str() << ": offset " << part->GetOffset() << " size " << part->GetSize() << " type " << std::hex << part->GetType() << std::dec << "\n";
+        {
+            std::lock_guard lock{system._lock};
+            subs.push_back(&(*partwp));
+            std::tuple<std::string,std::shared_ptr<blockdev_with_partitions>> t
+                = std::make_tuple<std::string,std::shared_ptr<blockdev_with_partitions>>(name.str(), partwp);
+            system.availBlockdevs.push_back(t);
+        }
+    }
+    get_klogger() << str.str().c_str();
+}
+
+void blockdev_with_partitions::RemoveSubs(blockdevsystem_impl &system) {
+    std::vector<blockdev_with_partitions *> subs{};
+    {
+        std::lock_guard lock{system._lock};
+        for (auto *sub: this->subs) {
+            subs.push_back(sub);
+        }
+        this->subs.clear();
+    }
+    for (auto *sub : subs) {
+        system.RemoveSub(sub);
+    }
+}
 
 hw_blockdev::hw_blockdev(hw_spinlock &_lock, blockdev_interface *bdev) : _lock(_lock), bdev(bdev) {}
 
@@ -87,36 +147,74 @@ std::shared_ptr<blockdev_interface> blockdevsystem_impl::CreateInterface() {
     return std::make_shared<blockdev_interface>(_lock);
 }
 
-void blockdevsystem_impl::Add(blockdev_interface *bdev) {
-    std::shared_ptr<hw_blockdev> hwbdev{};
-
+void blockdevsystem_impl::Add(const std::string &name, blockdev_interface *bdev) {
+    std::shared_ptr<blockdev_with_partitions> partitions{};
     {
         std::lock_guard lock{_lock};
-        hwbdev = std::make_shared<hw_blockdev>(_lock, bdev);
+        std::shared_ptr<hw_blockdev> hwbdev = std::make_shared<hw_blockdev>(_lock, bdev);
         blockdevs.push_back(hwbdev);
+        std::shared_ptr<blockdev_with_partitions> bdevwpart = std::make_shared<blockdev_with_partitions>(hwbdev);
+        std::tuple<std::string,std::shared_ptr<blockdev_with_partitions>> t
+         = std::make_tuple<std::string,std::shared_ptr<blockdev_with_partitions>>(name, bdevwpart);
+        availBlockdevs.push_back(t);
+        partitions = std::get<1>(t);
     }
-
-    auto parttable = parttableReaders->ReadParttable(hwbdev);
-    std::stringstream str{};
-    str << parttable->GetTableType() << " with blocksize " << parttable->GetBlockSize()
-        << " and signature " << std::hex << parttable->GetSignature() << "\n" << std::dec;
-    for (auto part : parttable->GetEntries()) {
-        str << " : offset " << part->GetOffset() << " size " << part->GetSize() << " type " << std::hex << part->GetType() << std::dec << "\n";
-    }
-    get_klogger() << str.str().c_str();
+    partitions->FindSubs(name, *this);
 }
 
 void blockdevsystem_impl::Remove(blockdev_interface *bdev) {
-    std::lock_guard lock{_lock};
-    auto iter = blockdevs.begin();
-    while (iter != blockdevs.end()) {
-        if (((*iter)->GetBlockdevInterface()) == bdev) {
-            (*iter)->DetachBlockdevInterface();
-            blockdevs.erase(iter);
+    std::shared_ptr<blockdev_with_partitions> sub{};
+    {
+        blockdev *bdevptr = nullptr;
+        std::lock_guard lock{_lock};
+        {
+            auto iter = blockdevs.begin();
+            while (iter != blockdevs.end()) {
+                if (((*iter)->GetBlockdevInterface()) == bdev) {
+                    (*iter)->DetachBlockdevInterface();
+                    bdevptr = &(**iter);
+                    blockdevs.erase(iter);
+                    break;
+                }
+                ++iter;
+            }
+        }
+        auto iter = availBlockdevs.begin();
+        while (iter != availBlockdevs.end()) {
+            blockdev_with_partitions *ptr = &(*(std::get<1>(*iter)));
+            if (&(*(ptr->bdev)) == bdevptr) {
+                break;
+            }
+            ++iter;
+        }
+        if (iter == availBlockdevs.end()) {
             return;
         }
-        ++iter;
+        sub = std::get<1>(*iter);
+        availBlockdevs.erase(iter);
     }
+    sub->RemoveSubs(*this);
+}
+
+void blockdevsystem_impl::RemoveSub(blockdev_with_partitions *subbdev) {
+    std::shared_ptr<blockdev_with_partitions> sub{};
+    {
+        std::lock_guard lock{_lock};
+        auto iter = availBlockdevs.begin();
+        while (iter != availBlockdevs.end()) {
+            blockdev_with_partitions *ptr = &(*(std::get<1>(*iter)));
+            if (ptr == subbdev) {
+                break;
+            }
+            ++iter;
+        }
+        if (iter == availBlockdevs.end()) {
+            return;
+        }
+        sub = std::get<1>(*iter);
+        availBlockdevs.erase(iter);
+    }
+    sub->RemoveSubs(*this);
 }
 
 blockdevsystem &get_blockdevsystem() {

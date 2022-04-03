@@ -127,7 +127,11 @@ void scsida::init() {
             iothread();
         });
 
-        blockdevsys.Add(&(*blockdevInterface));
+        {
+            std::stringstream name{};
+            name << DeviceType() << DeviceId();
+            blockdevsys.Add(name.str(), &(*blockdevInterface));
+        }
     }
 
     SetPower(UnitPowerCondition::ACTIVE);

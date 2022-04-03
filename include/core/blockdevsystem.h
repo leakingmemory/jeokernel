@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <string>
 #include <concurrency/raw_semaphore.h>
 #include <concurrency/hw_spinlock.h>
 
@@ -48,7 +49,7 @@ class blockdevsystem {
 public:
     blockdevsystem();
     virtual std::shared_ptr<blockdev_interface> CreateInterface() = 0;
-    virtual void Add(blockdev_interface *dev) = 0;
+    virtual void Add(const std::string &name, blockdev_interface *dev) = 0;
     virtual void Remove(blockdev_interface *dev) = 0;
 };
 
