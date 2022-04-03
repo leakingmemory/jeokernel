@@ -6,6 +6,7 @@
 #include <sstream>
 #include "kshell_ps.h"
 #include "kshell_stats.h"
+#include "kshell_blockdevices.h"
 #include <acpi/acpica_interface.h>
 
 class kshell_echo : public kshell_command {
@@ -69,4 +70,5 @@ kshell_commands::kshell_commands(kshell &shell) {
     shell.AddCommand(std::make_shared<kshell_poweroff>());
     shell.AddCommand(std::make_shared<kshell_ps>());
     shell.AddCommand(std::make_shared<kshell_stats>());
+    shell.AddCommand(std::make_shared<kshell_blockdevices>());
 }

@@ -73,6 +73,9 @@ public:
     void Remove(blockdev_interface *bdev) override;
 private:
     void RemoveSub(blockdev_with_partitions *subbdev);
+public:
+    std::vector<std::string> GetBlockdevices() override;
+    std::shared_ptr<blockdev> GetBlockdevice(const std::string &name) override;
 };
 
 blockdev_with_partitions::blockdev_with_partitions(std::shared_ptr<blockdev> bdev)
@@ -215,6 +218,25 @@ void blockdevsystem_impl::RemoveSub(blockdev_with_partitions *subbdev) {
         availBlockdevs.erase(iter);
     }
     sub->RemoveSubs(*this);
+}
+
+std::vector<std::string> blockdevsystem_impl::GetBlockdevices() {
+    std::vector<std::string> names{};
+    std::lock_guard lock{_lock};
+    for (const auto &t : availBlockdevs) {
+        names.push_back(std::get<0>(t));
+    }
+    return names;
+}
+
+std::shared_ptr<blockdev> blockdevsystem_impl::GetBlockdevice(const std::string &name) {
+    std::lock_guard lock{_lock};
+    for (auto &t : availBlockdevs) {
+        if (std::get<0>(t) == name) {
+            return std::get<1>(t)->bdev;
+        }
+    }
+    return {};
 }
 
 blockdevsystem &get_blockdevsystem() {

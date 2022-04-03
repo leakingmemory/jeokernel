@@ -12,6 +12,7 @@
 #include <concurrency/raw_semaphore.h>
 #include <concurrency/hw_spinlock.h>
 
+class blockdev;
 class blockdev_block;
 
 class blockdev_command {
@@ -51,6 +52,8 @@ public:
     virtual std::shared_ptr<blockdev_interface> CreateInterface() = 0;
     virtual void Add(const std::string &name, blockdev_interface *dev) = 0;
     virtual void Remove(blockdev_interface *dev) = 0;
+    virtual std::vector<std::string> GetBlockdevices() = 0;
+    virtual std::shared_ptr<blockdev> GetBlockdevice(const std::string &name) = 0;
 };
 
 blockdevsystem &get_blockdevsystem();
