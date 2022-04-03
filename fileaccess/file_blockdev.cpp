@@ -58,6 +58,10 @@ std::size_t file_blockdev::GetBlocksize() const {
     return blocksize;
 }
 
+std::size_t file_blockdev::GetNumBlocks() const {
+    return blocks;
+}
+
 std::shared_ptr<blockdev_block> file_blockdev::ReadBlock(size_t blocknum, size_t blocks) const {
     if ((blocknum + blocks) >= this->blocks) {
         if (blocknum >= blocks) {
