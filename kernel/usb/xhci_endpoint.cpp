@@ -9,6 +9,7 @@
 #include "strings.h"
 
 //#define XHCI_ENDPOINT_DUMP_TRB
+//#define DEBUG_TRANSFER_EVENTS
 
 struct xhci_endpoint_data {
     xhci_trb_ring<256> transferRing;
@@ -313,11 +314,31 @@ void xhci_endpoint::TransferEvent(uint64_t trbaddr, uint32_t transferLength, uin
         get_klogger() << str.str().c_str();
         return;
     }
+    uint64_t barrieroffset{barrier != nullptr ? (((uint64_t) barrier) - ((uint64_t) ringContainer->Trb(0))) : 0};
+    uint64_t barrierindex{barrieroffset / sizeof(xhci_trb)};
     uint64_t trboffset{trbaddr - ringContainer->RingPhysAddr()};
     uint64_t trbindex{trboffset / sizeof(xhci_trb)};
     if (trbindex < (ringContainer->LengthIncludingLink() - 1)) {
+        if (barrierindex != trbindex) {
+            do {
+                std::shared_ptr<xhci_transfer> transfer = transferRing[barrierindex];
+                if (transfer) {
+#ifdef DEBUG_TRANSFER_EVENTS
+                    std::stringstream str{};
+                    str << "XHCI rep backwards completion code " << completionCode << " chain item " << barrierindex << "\n";
+                    get_klogger() << str.str().c_str();
+#endif
+                    transfer->SetStatus(completionCode);
+                }
+
+                ++barrierindex;
+                if (barrierindex >= (ringContainer->LengthIncludingLink() - 1)) {
+                    barrierindex = 0;
+                }
+            } while (barrierindex != trbindex);
+            barrier = ringContainer->Trb(trbindex);
+        }
         std::shared_ptr<xhci_transfer> transfer = transferRing[trbindex];
-        barrier = ringContainer->Trb(trbindex);
         if (transfer) {
             transfer->SetStatus(completionCode);
         } else {
