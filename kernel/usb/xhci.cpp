@@ -83,6 +83,7 @@ Device *xhci_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
 
 #define DEBUG_XHCI_INIT_OWNER
 //#define DEBUG_XHCI_DUMP_ENDPOINT
+//#define DEBUG_XHCI_COMMAND_COMPLETION
 
 void xhci::init() {
     uint64_t addr{0};
@@ -752,6 +753,14 @@ void xhci::CommandCompletion(const xhci_trb &event) {
     uint64_t phys = event.CommandCompletion.CommandPtr & 0xFFFFFFFFFFFFFFF0;
     uint8_t code = event.CommandCompletion.CompletionCode;
     uint8_t slotId = event.EnableSlot.SlotId;
+
+#ifdef DEBUG_XHCI_COMMAND_COMPLETION
+    {
+        std::stringstream str{};
+        str << "Command completion " << std::hex << phys << " code " << std::dec << code << " slot " << slotId << "\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
 
     std::lock_guard lock{xhcilock};
     for (auto &cmd : commands) {
