@@ -442,6 +442,19 @@ void xhci::EnablePort(int port) {
 }
 
 void xhci::DisablePort(int port) {
+    uint32_t wcr = XHCI_PORT_SC_RESET;
+    opregs->portRegisters[port].portStatusControl = (opregs->portRegisters[port].portStatusControl & ~wcr) | XHCI_PORT_SC_ENABLED;
+    int timeout = 100;
+    while (--timeout > 0) {
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(20ms);
+        uint32_t status{GetPortStatus(port)};
+        if ((status & USB_PORT_STATUS_PES) == 0) {
+            get_klogger() << "XHCI disable port success\n";
+            return;
+        }
+    }
+    get_klogger() << "XHCI disable port failed\n";
 }
 
 void xhci::ResetPort(int port) {
