@@ -85,6 +85,9 @@ blockdev_with_partitions::blockdev_with_partitions(std::shared_ptr<blockdev> bde
 
 void blockdev_with_partitions::FindSubs(const std::string &parent_name, blockdevsystem_impl &system) {
     auto parttable = parttableReaders->ReadParttable(bdev);
+    if (!parttable) {
+        return;
+    }
     std::stringstream str{};
     str << parttable->GetTableType() << " with blocksize " << parttable->GetBlockSize()
         << " and signature " << std::hex << parttable->GetSignature() << "\n" << std::dec;
