@@ -1175,6 +1175,10 @@ std::shared_ptr<usb_endpoint> xhci_port_enumeration_addressing::configure_baseli
     std::shared_ptr<xhci_endpoint_ring_container> ringContainer{new xhci_endpoint_ring_container_endpoint0(deviceData)};
     std::shared_ptr<xhci_endpoint> endpoint0{new xhci_endpoint(xhciRef, ringContainer, {}, slot, 0, usb_endpoint_direction::BOTH, usb_endpoint_type::CONTROL, 0)};
     {
+        std::lock_guard lock{xhciRef.xhcilock};
+        xhciRef.resources->DCBAA()->contexts[slot]->SetEndpoint(0, &(*endpoint0));
+    }
+    {
         usb_get_descriptor get_descr0{DESCRIPTOR_TYPE_DEVICE, 0, 8};
         std::shared_ptr<usb_buffer> descr0_buf = ControlRequest(*endpoint0, get_descr0);
         if (descr0_buf) {

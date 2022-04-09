@@ -349,7 +349,6 @@ xhci_endpoint::xhci_endpoint(xhci &xhciRef, std::shared_ptr<xhci_endpoint_ring_c
     for (int i = 0; i < length; i++) {
         new (&(transferRing[i])) std::shared_ptr<xhci_transfer>();
     }
-    xhciRef.resources->DCBAA()->contexts[slot]->SetEndpoint(endpoint, this);
 }
 
 bool xhci_endpoint::WaitForEndpointState(uint8_t state) {
