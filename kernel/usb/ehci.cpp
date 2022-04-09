@@ -264,7 +264,35 @@ void ehci::init() {
     }
 
     qh = qhtdPool.Alloc();
-    qh->Pointer()->qh.HorizLink = qh->Phys() | EHCI_POINTER_QH;
+
+    bulk = qhtdPool.Alloc();
+    bulk->Pointer()->qh.HorizLink = qh->Phys() | EHCI_POINTER_QH;
+    bulk->Pointer()->qh.DeviceAddress = 0;
+    bulk->Pointer()->qh.InactivateOnNext = false;
+    bulk->Pointer()->qh.EndpointNumber = 0;
+    bulk->Pointer()->qh.EndpointSpeed = EHCI_QH_ENDPOINT_SPEED_HIGH;
+    bulk->Pointer()->qh.DataToggleControl = 1;
+    bulk->Pointer()->qh.HeadOfReclamationList = false;
+    bulk->Pointer()->qh.MaxPacketLength = 0;
+    bulk->Pointer()->qh.ControlEndpointFlag = false;
+    bulk->Pointer()->qh.NakCountReload = 0;
+    bulk->Pointer()->qh.InterruptScheduleMask = 0;
+    bulk->Pointer()->qh.SplitCompletionMask = 0;
+    bulk->Pointer()->qh.HubAddress = 0;
+    bulk->Pointer()->qh.PortNumber = 0;
+    bulk->Pointer()->qh.HighBandwidthPipeMultiplier = 1;
+    bulk->Pointer()->qh.CurrentQTd = EHCI_POINTER_TERMINATE;
+    bulk->Pointer()->qh.NextQTd = EHCI_POINTER_TERMINATE;
+    bulk->Pointer()->qh.AlternateQTd = EHCI_POINTER_TERMINATE;
+    bulk->Pointer()->qh.Overlay[0] = 0;
+    bulk->Pointer()->qh.Overlay[1] = 0;
+    bulk->Pointer()->qh.Overlay[2] = 0;
+    bulk->Pointer()->qh.Overlay[3] = 0;
+    bulk->Pointer()->qh.Overlay[4] = 0;
+    bulk->Pointer()->qh.Overlay[5] = 0;
+    bulk->Pointer()->qh.NextEndpoint = nullptr;
+
+    qh->Pointer()->qh.HorizLink = bulk->Phys() | EHCI_POINTER_QH;
     qh->Pointer()->qh.DeviceAddress = 0;
     qh->Pointer()->qh.InactivateOnNext = false;
     qh->Pointer()->qh.EndpointNumber = 0;
@@ -570,7 +598,10 @@ ehci::CreateInterruptEndpoint(const std::vector<uint8_t> &portRouting, uint8_t h
 std::shared_ptr<usb_endpoint>
 ehci::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress, uint32_t maxPacketSize,
                          uint8_t functionAddr, uint8_t endpointNum, usb_endpoint_direction dir, usb_speed speed) {
-    return {};
+    std::shared_ptr<ehci_endpoint> endpoint{
+            new ehci_endpoint(*this, portRouting, hubAddress, maxPacketSize, functionAddr, endpointNum, speed, usb_endpoint_type::BULK)};
+    std::shared_ptr<usb_endpoint> usbEndpoint{endpoint};
+    return usbEndpoint;
 }
 
 std::shared_ptr<usb_buffer> ehci::Alloc(size_t size) {
@@ -672,6 +703,9 @@ ehci_endpoint::ehci_endpoint(ehci &ehciRef, const std::vector<uint8_t> &portRout
                              ehciRef(ehciRef), head(), qh(ehciRef.qhtdPool.Alloc()), endpointType(endpointType) {
     if (endpointType == usb_endpoint_type::CONTROL) {
         head = ehciRef.qh;
+    }
+    if (endpointType == usb_endpoint_type::BULK) {
+        head = ehciRef.bulk;
     }
     if (endpointType == usb_endpoint_type::INTERRUPT) {
         if (pollingRateMs < 2) {

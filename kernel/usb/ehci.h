@@ -237,6 +237,7 @@ private:
     Phys32Page FramesPhys;
     uint32_t *Frames;
     StructPool<StructPoolAllocator<Phys32Page,ehci_qh_or_qtd>> qhtdPool;
+    std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> bulk;
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> qh;
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> intqhroots[0x20];
     std::shared_ptr<StructPoolPointer<ehci_qh_or_qtd,uint32_t>> intqhs[0x1F];
