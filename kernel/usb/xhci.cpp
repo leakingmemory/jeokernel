@@ -1022,7 +1022,81 @@ std::shared_ptr<usb_endpoint>
 xhci_port_enumerated_device::CreateBulkEndpoint(const std::vector<uint8_t> &portRouting, uint8_t hubAddress,
                                                 uint32_t maxPacketSize, uint8_t endpointNum,
                                                 usb_endpoint_direction dir) {
-    return {};
+    uint32_t maxBurst{0};
+    switch (speed) {
+        case LOW:
+        case FULL:
+        case HIGH:
+            maxBurst = 0;
+            break;
+        default:
+            break;
+    }
+    auto *inputctx = &(inputctx_container->InputContext()->context[0]);
+    uint8_t endpointIndex = ((endpointNum << 1) + (dir == usb_endpoint_direction::IN ? 1 : 0));
+    auto *slotContext = inputctx_container->InputContext()->GetSlotContext(xhciRef.contextSize64);
+    if (slotContext->contextEntries <= endpointIndex) {
+        inputctx->addContextFlags = 1;
+        inputctx->dropContextFlags = 0;
+        slotContext->maxExitLatency = 0;
+        slotContext->contextEntries = endpointIndex + 1;
+    }
+    inputctx->addContextFlags = (1 << endpointIndex) | 1;
+    --endpointIndex;
+    inputctx->dropContextFlags = 0;
+    std::shared_ptr<xhci_endpoint_ring_container> endpointRing{new xhci_endpoint_ring_container_endpoints};
+    auto *endpoint = inputctx_container->InputContext()->EndpointContext(endpointIndex, xhciRef.contextSize64);
+    endpoint->endpointState = 0;
+    endpoint->reserved1 = 0;
+    endpoint->mult = 0;
+    endpoint->maxPrimaryStreams = 0;
+    endpoint->linearStreamArray = false;
+    endpoint->interval = 0;
+    endpoint->maxESITPayloadHigh = 0;
+    endpoint->errorCount = 3;
+    endpoint->endpointType = dir == usb_endpoint_direction::IN ? 6 : 2;
+    endpoint->reserved2 = 0;
+    endpoint->hostInitiateDisable = false;
+    endpoint->maxBurstSize = maxBurst;
+    endpoint->maxPacketSize = maxPacketSize;
+    endpoint->trDequePointer = endpointRing->RingPhysAddr() | XHCI_TRB_CYCLE;
+    endpoint->averageTrbLength = maxPacketSize;
+    endpoint->maxESITPayloadLow = 0;
+    {
+        auto evalContextCommand = xhciRef.ConfigureEndpoint(inputctx_container->InputContextPhys(), slot);
+        if (!evalContextCommand) {
+            return {};
+        }
+        bool done{false};
+        int timeout = 100;
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(20ms);
+        while (--timeout > 0) {
+            if (evalContextCommand->IsDone()) {
+                done = true;
+                break;
+            }
+            std::this_thread::sleep_for(40ms);
+        }
+        if (!done) {
+            return {};
+        }
+    }
+#ifdef DEBUG_XHCI_DUMP_ENDPOINT
+    {
+        std::stringstream str{};
+        str << "After creation endpoint state " << std::hex << xhciRef.resources->DCBAA()->contexts[slot]->GetEndpointState(endpointIndex, xhciRef.contextSize64)
+            << "\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
+    xhci_endpoint *xhciEndpoint = new xhci_endpoint(xhciRef, endpointRing, inputctx_container, slot, endpointNum, dir, usb_endpoint_type::BULK, 0);
+    std::shared_ptr<usb_endpoint> uendpoint{xhciEndpoint};
+    {
+        std::lock_guard lock{xhciRef.xhcilock};
+        xhciRef.resources->DCBAA()->contexts[slot]->SetEndpoint(endpointIndex, xhciEndpoint);
+    }
+    return uendpoint;
 }
 
 std::shared_ptr<usb_hw_enumeration_addressing> xhci_port_enumeration::enumerate() {
