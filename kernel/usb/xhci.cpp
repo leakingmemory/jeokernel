@@ -800,14 +800,15 @@ xhci_port_enumerated_device::~xhci_port_enumerated_device() {
     }
     {
         bool done{false};
-        int timeout = 5;
+        int timeout = 100;
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(20ms);
         while (--timeout > 0) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
             if (disableSlotCommand->IsDone()) {
                 done = true;
                 break;
             }
+            std::this_thread::sleep_for(40ms);
         }
         if (!done) {
             std::stringstream str{};
@@ -864,14 +865,15 @@ bool xhci_port_enumerated_device::SetHub(uint8_t numberOfPorts, bool multiTT, ui
             return false;
         }
         bool done{false};
-        int timeout = 5;
+        int timeout = 50;
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(20ms);
         while (--timeout > 0) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
             if (configCmd->IsDone()) {
                 done = true;
                 break;
             }
+            std::this_thread::sleep_for(40ms);
         }
         if (!done) {
             std::stringstream str{};
@@ -976,14 +978,15 @@ xhci_port_enumerated_device::CreateInterruptEndpoint(const std::vector<uint8_t> 
             return {};
         }
         bool done{false};
-        int timeout = 5;
+        int timeout = 50;
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(20ms);
         while (--timeout > 0) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
             if (evalContextCommand->IsDone()) {
                 done = true;
                 break;
             }
+            std::this_thread::sleep_for(40ms);
         }
         if (!done) {
             return {};
@@ -1057,14 +1060,15 @@ xhci_slot_data *xhci_port_enumeration_addressing::enable_slot() {
         return nullptr;
     }
     bool done{false};
-    int timeout = 5;
+    int timeout = 100;
+    using namespace std::literals::chrono_literals;
+    std::this_thread::sleep_for(20ms);
     while (--timeout > 0) {
-        using namespace std::literals::chrono_literals;
-        std::this_thread::sleep_for(10ms);
         if (enableSlotCommand->IsDone()) {
             done = true;
             break;
         }
+        std::this_thread::sleep_for(40ms);
     }
     if (!done) {
         std::stringstream str{};
@@ -1142,14 +1146,15 @@ xhci_input_context *xhci_port_enumeration_addressing::set_address(xhci_slot_data
                 return nullptr;
             }
             bool done{false};
-            int timeout = 5;
+            int timeout = 100;
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(20ms);
             while (--timeout > 0) {
-                using namespace std::literals::chrono_literals;
-                std::this_thread::sleep_for(10ms);
                 if (setAddressCommand->IsDone()) {
                     done = true;
                     break;
                 }
+                std::this_thread::sleep_for(40ms);
             }
             if (!done) {
                 std::stringstream str{};
@@ -1218,14 +1223,15 @@ std::shared_ptr<usb_endpoint> xhci_port_enumeration_addressing::configure_baseli
                 return {};
             }
             bool done{false};
-            int timeout = 5;
+            int timeout = 100;
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(20ms);
             while (--timeout > 0) {
-                using namespace std::literals::chrono_literals;
-                std::this_thread::sleep_for(10ms);
                 if (evalContextCommand->IsDone()) {
                     done = true;
                     break;
                 }
+                std::this_thread::sleep_for(40ms);
             }
             if (!done) {
                 std::stringstream str{};
@@ -1253,14 +1259,15 @@ void xhci_port_enumeration_addressing::disable_slot() {
     }
     {
         bool done{false};
-        int timeout = 5;
+        int timeout = 200;
+        using namespace std::literals::chrono_literals;
+        std::this_thread::sleep_for(20ms);
         while (--timeout > 0) {
-            using namespace std::literals::chrono_literals;
-            std::this_thread::sleep_for(10ms);
             if (disableSlotCommand->IsDone()) {
                 done = true;
                 break;
             }
+            std::this_thread::sleep_for(40ms);
         }
         if (!done) {
             std::stringstream str{};
