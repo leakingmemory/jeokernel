@@ -648,8 +648,8 @@ std::shared_ptr<usb_hw_enumeration_addressing> xhci::EnumerateHubPort(const std:
 void xhci::HcEvent() {
     uint32_t iman{runtimeregs->interrupters[0].interrupterManagement};
     if ((iman & XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_PENDING) != 0) {
-        runtimeregs->interrupters[0].interrupterManagement = iman;
         PrimaryEventRing();
+        runtimeregs->interrupters[0].interrupterManagement = iman;
     }
 }
 
