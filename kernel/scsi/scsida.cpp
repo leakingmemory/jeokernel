@@ -7,21 +7,9 @@
 #include "scsida.h"
 #include "scsidev.h"
 #include "scsi_primary.h"
-#include <concurrency/raw_semaphore.h>
+#include <concurrency/mul_semaphore.h>
 #include <thread>
-
-class CallbackLatch {
-private:
-    std::shared_ptr<raw_semaphore> sema;
-public:
-    CallbackLatch() : sema(new raw_semaphore(-1)) {}
-    void open() {
-        sema->release();
-    }
-    void wait() {
-        sema->acquire();
-    }
-};
+#include "CallbackLatch.h"
 
 scsida::~scsida() {
     if (blockdevInterface) {
@@ -213,11 +201,16 @@ void scsida::ReportFailed(std::shared_ptr<ScsiDevCommand> command) {
 
 std::shared_ptr<ScsiDevCommand>
 scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength) {
-    CallbackLatch latch{};
+    std::shared_ptr<CallbackLatch> latch = std::make_shared<CallbackLatch>();
     auto command = devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, varlength, [latch] () mutable {
-        latch.open();
+        latch->open();
     });
-    latch.wait();
+    if (!latch->wait(10000)) {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": transfer error: timeout\n";
+        get_klogger() << str.str().c_str();
+        return {};
+    }
     return command;
 }
 

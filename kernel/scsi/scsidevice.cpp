@@ -6,22 +6,10 @@
 #include "scsidevice.h"
 #include "scsidev.h"
 #include "scsi_primary.h"
-#include "concurrency/hw_spinlock.h"
-#include "concurrency/critical_section.h"
-#include "concurrency/raw_semaphore.h"
-
-class CallbackLatch {
-private:
-    std::shared_ptr<raw_semaphore> sema;
-public:
-    CallbackLatch() : sema(new raw_semaphore(-1)) {}
-    void open() {
-        sema->release();
-    }
-    void wait() {
-        sema->acquire();
-    }
-};
+#include <concurrency/hw_spinlock.h>
+#include <concurrency/critical_section.h>
+#include <concurrency/raw_semaphore.h>
+#include "CallbackLatch.h"
 
 class scsidevice_scsi_dev : public ScsiDevDeviceInformation {
 private:
@@ -100,12 +88,17 @@ void scsidevice::init() {
 }
 
 std::shared_ptr<InquiryResult> scsidevice::DoInquiry() {
-    CallbackLatch latch{};
+    std::shared_ptr<CallbackLatch> latch = std::make_shared<CallbackLatch>();
     Inquiry inquiry{sizeof(Inquiry_Data), false};
     auto command = devInfo->ExecuteCommand(inquiry, sizeof(Inquiry_Data), [latch] () mutable {
-        latch.open();
+        latch->open();
     });
-    latch.wait();
+    if (!latch->wait(10000)) {
+        std::stringstream  str{};
+        str << DeviceType() << DeviceId() << ": inquiry error: timeout\n";
+        get_klogger() << str.str().c_str();
+        return {};
+    }
     std::shared_ptr<InquiryResult> result{};
     if (command->IsSuccessful()) {
         result = new InquiryResult();
