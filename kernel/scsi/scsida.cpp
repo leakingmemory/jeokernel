@@ -187,6 +187,55 @@ void scsida::iothread() {
     }
 }
 
+bool scsida::activate() {
+    SetPower(UnitPowerCondition::ACTIVE);
+    {
+        auto spinInfo = IsSpinning();
+        if (spinInfo) {
+            bool isSpinning = *spinInfo;
+            if (isSpinning) {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": is active/powered\n";
+                get_klogger() << str.str().c_str();
+                return true;
+            } else {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": did not activate: ";
+                switch (latestPowerState) {
+                    case IDLE:
+                        str << "idle";
+                        break;
+                    case STANDBY:
+                        str << "standby";
+                        break;
+                    case LOW_POWER:
+                        str << "low power state";
+                        break;
+                    default:
+                        str << "invalid";
+                }
+                str << "\n";
+                get_klogger() << str.str().c_str();
+                return false;
+            }
+        }
+    }
+    return false;
+}
+
+bool scsida::reset() {
+    if (devInfo->ResetDevice()) {
+        if (!activate()) {
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": not responding properly after reset\n";
+            get_klogger() << str.str().c_str();
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
 void scsida::ReportFailed(std::shared_ptr<ScsiDevCommand> command) {
     std::stringstream str{};
     str << DeviceType() << DeviceId() << ": Command failed: " << command->NonSuccessfulStatusString() << "\n";

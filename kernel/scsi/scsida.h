@@ -35,6 +35,9 @@ public:
     void init() override;
     void stop() override;
 
+    bool activate();
+    bool reset();
+
     void iothread();
 
     uint64_t NumBlocks() {
