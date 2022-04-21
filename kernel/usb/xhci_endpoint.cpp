@@ -319,7 +319,7 @@ void xhci_endpoint::TransferEvent(uint64_t trbaddr, uint32_t transferLength, uin
     uint64_t trboffset{trbaddr - ringContainer->RingPhysAddr()};
     uint64_t trbindex{trboffset / sizeof(xhci_trb)};
     if (trbindex < (ringContainer->LengthIncludingLink() - 1)) {
-        if (barrierindex != trbindex) {
+        if (barrier != nullptr && barrierindex != trbindex) {
             do {
                 std::shared_ptr<xhci_transfer> transfer = transferRing[barrierindex];
                 if (transfer) {
@@ -563,6 +563,8 @@ bool xhci_endpoint::CancelAllTransfers() {
         get_klogger() << "XHCI cancel transfers: failed to stop endpoint\n";
         return false;
     }
+
+    barrier = nullptr;
 
     uint8_t endpointIndex = endpoint << ((uint8_t)1);
     if (dir != usb_endpoint_direction::OUT) {
