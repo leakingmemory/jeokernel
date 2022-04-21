@@ -558,6 +558,46 @@ bool xhci_endpoint::ClearStall() {
     return true;
 }
 
+bool xhci_endpoint::CancelAllTransfers() {
+    if (!StopEndpoint() && WaitForEndpointState(3)) {
+        get_klogger() << "XHCI cancel transfers: failed to stop endpoint\n";
+        return false;
+    }
+
+    uint8_t endpointIndex = endpoint << ((uint8_t)1);
+    if (dir != usb_endpoint_direction::OUT) {
+        ++endpointIndex;
+    }
+
+    auto *endpointContext = xhciRef.resources->DCBAA()->contexts[slot]->EndpointContext(endpointIndex - 1, xhciRef.contextSize64);
+
+    uint64_t trbaddr{endpointContext->trDequePointer & 0xFFFFFFFFFFFFFFF0};
+    uint64_t nextCycle{endpointContext->trDequePointer & 1};
+
+    uint64_t trboffset{trbaddr - ringContainer->RingPhysAddr()};
+    uint64_t nextIndex{trboffset / sizeof(xhci_trb)};
+
+    while (true) {
+        auto *trb = ringContainer->Trb(nextIndex);
+        if (((trb->Data.DataPtr & XHCI_TRB_CYCLE) != 0 ? 1 : 0) != nextCycle) {
+            trboffset = nextIndex * sizeof(xhci_trb);
+            trbaddr = ringContainer->RingPhysAddr() + trboffset;
+
+            if (!SetDequeuePtr(trbaddr | (nextCycle != 0 ? XHCI_TRB_CYCLE : 0)) && WaitForEndpointState(1)) {
+                get_klogger() << "XHCI cancel transfers: failed to set dequeue ptr\n";
+                return false;
+            }
+            return true;
+        }
+        ++nextIndex;
+        if (nextIndex == (ringContainer->LengthIncludingLink() - 1)) {
+            nextIndex = 0;
+            nextCycle = nextCycle != 0 ? 0 : 1;
+        }
+    }
+    return false;
+}
+
 xhci_endpoint_ring_container_endpoints::xhci_endpoint_ring_container_endpoints() : page(sizeof(*data)), data(new (page.Pointer()) xhci_endpoint_data(page.PhysAddr())) {
 }
 

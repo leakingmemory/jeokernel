@@ -1028,3 +1028,7 @@ void ehci_endpoint::IntWithLock() {
 bool ehci_endpoint::ClearStall() {
     return false;
 }
+
+bool ehci_endpoint::CancelAllTransfers() {
+    return false;
+}

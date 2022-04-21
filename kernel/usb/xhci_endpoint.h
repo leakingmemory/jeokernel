@@ -81,6 +81,7 @@ public:
     bool SetDequeuePtr(uint64_t ptr);
     bool ReconfigureEndpoint(uint64_t ptr);
     bool ClearStall() override;
+    bool CancelAllTransfers() override;
 private:
     std::shared_ptr<usb_transfer> CreateTransferWithLock(bool commitTransaction, const void *data, uint32_t size, usb_transfer_direction direction, bool bufferRounding = false, uint16_t delayInterrupt = TRANSFER_NO_INTERRUPT, int8_t dataToggle = 0);
     std::tuple<uint32_t,uint64_t,xhci_trb *> NextTransfer();

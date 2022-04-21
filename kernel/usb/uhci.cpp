@@ -669,6 +669,10 @@ bool uhci_endpoint::ClearStall() {
     return false;
 }
 
+bool uhci_endpoint::CancelAllTransfers() {
+    return false;
+}
+
 uhci_transfer::uhci_transfer(uhci &uhciRef) : td(uhciRef.qhtdPool.Alloc()), buffer(), next() {
 }
 

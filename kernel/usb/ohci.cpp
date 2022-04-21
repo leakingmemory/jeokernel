@@ -1010,6 +1010,10 @@ bool ohci_endpoint::ClearStall() {
     return false;
 }
 
+bool ohci_endpoint::CancelAllTransfers() {
+    return false;
+}
+
 ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer(), transferPtr(ohci.xPool.Alloc()), buffer(), next(), endpoint(endpoint), endpointType(endpoint.endpointType), waitCancelled(false), waitCancelledAndWaitedCycle(false) {
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
     std::stringstream str{};
