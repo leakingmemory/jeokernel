@@ -87,6 +87,7 @@ public:
         static_assert(sizeof(T) <= 16);
         return QueueCommand(dataTransferLength, scsivariabledata_fixed(), lun, (const void *) &cmd, sizeof(T), done);
     }
+    bool ResetDevice();
 private:
     bool MassStorageReset();
     int GetMaxLun();

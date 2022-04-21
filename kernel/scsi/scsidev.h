@@ -36,6 +36,7 @@ public:
     template <class Cmd> std::shared_ptr<ScsiDevCommand> ExecuteCommand(const Cmd &cmd, std::size_t dataTransferLength, const std::function<void ()> &done) {
         return ExecuteCommand((const void *) &cmd, sizeof(cmd), dataTransferLength, scsivariabledata_fixed(), done);
     }
+    virtual bool ResetDevice() = 0;
 };
 
 #endif //JEOKERNEL_SCSIDEV_H

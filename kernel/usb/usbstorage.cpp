@@ -396,6 +396,7 @@ public:
     std::shared_ptr<InquiryResult> GetInquiryResult() override;
     void SetDevice(Device *device) override;
     std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength, const std::function<void ()> &done) override;
+    bool ResetDevice() override;
 };
 
 std::shared_ptr<ScsiDevDeviceInformation> usbstorage_scsi_dev::Clone() {
@@ -456,6 +457,10 @@ std::shared_ptr<ScsiDevCommand> usbstorage_scsi_dev::ExecuteCommand(const void *
             std::make_shared<usbstorage_scsi_devcmd>(device.QueueCommand(dataTransferLength, varlength, lun, cmd, cmdLength, done));
     std::shared_ptr<ScsiDevCommand> scsiDevCommand{subcmd};
     return scsiDevCommand;
+}
+
+bool usbstorage_scsi_dev::ResetDevice() {
+    return device.ResetDevice();
 }
 
 Device *usbstorage_driver::probe(Bus &bus, DeviceInformation &deviceInformation) {
@@ -607,6 +612,45 @@ usbstorage::QueueCommand(uint32_t dataTransferLength, const scsivariabledata &va
     }
     std::shared_ptr<usbstorage_command> cmdsh{cmd_pt};
     return cmdsh;
+}
+
+bool usbstorage::ResetDevice() {
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": resetting\n";
+        get_klogger() << str.str().c_str();
+    }
+    if (MassStorageReset()) {
+        {
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": mass storage reset 1 successful\n";
+            get_klogger() << str.str().c_str();
+        }
+        {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(1s);
+        }
+        if (bulkOutEndpoint->CancelAllTransfers() && bulkInEndpoint->CancelAllTransfers()) {
+            {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": cancelled current transfers\n";
+                get_klogger() << str.str().c_str();
+            }
+            auto massReset = MassStorageReset();
+            {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": mass storage reset "
+                    << (massReset ? "successful\n" : "failed\n");
+                get_klogger() << str.str().c_str();
+            }
+            return massReset;
+        }
+    } else {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": mass storage reset failed\n";
+        get_klogger() << str.str().c_str();
+    }
+    return false;
 }
 
 void usbstorage::ExecuteQueueItem() {
