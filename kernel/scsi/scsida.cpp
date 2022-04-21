@@ -251,16 +251,30 @@ void scsida::ReportFailed(std::shared_ptr<ScsiDevCommand> command) {
 std::shared_ptr<ScsiDevCommand>
 scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength) {
     std::shared_ptr<CallbackLatch> latch = std::make_shared<CallbackLatch>();
-    auto command = devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, varlength, [latch] () mutable {
-        latch->open();
-    });
-    if (!latch->wait(10000)) {
-        std::stringstream str{};
-        str << DeviceType() << DeviceId() << ": transfer error: timeout\n";
-        get_klogger() << str.str().c_str();
-        return {};
+    int retry = 5;
+    while (true) {
+        auto command = devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, varlength, [latch]() mutable {
+            latch->open();
+        });
+        if (!latch->wait(10000)) {
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": transfer error: timeout\n";
+            get_klogger() << str.str().c_str();
+            if (!reset()) {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": transfer error: reset failed\n";
+                get_klogger() << str.str().c_str();
+                return {};
+            }
+            if (--retry > 0) {
+                continue;
+            }
+            return {};
+        }
+        if (command->IsSuccessful() || --retry == 0) {
+            return command;
+        }
     }
-    return command;
 }
 
 void scsida::ReportSense(const RequestSense_FixedData &sense) {
