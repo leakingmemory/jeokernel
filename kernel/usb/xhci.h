@@ -874,6 +874,7 @@ private:
     hw_spinlock xhcilock;
     raw_semaphore event_sema;
     std::thread *event_thread;
+    std::thread *watchdog_thread;
     std::vector<std::shared_ptr<xhci_command>> commands;
     std::vector<xhci_trb> events;
     xhci_trb *commandBarrier;
@@ -890,11 +891,13 @@ private:
     bool stop : 1;
     bool controller64bit : 1;
     bool contextSize64 : 1;
+    bool irqWatchdog : 1;
 public:
     xhci(Bus &bus, PciDeviceInformation &deviceInformation) : usb_hcd("xhci", bus), pciDeviceInformation(deviceInformation),
-    supported_protocol_list(), xhcilock(), event_sema(-1), event_thread(nullptr), commands(), events(), commandBarrier(nullptr),
-    commandIndex(0), primaryEventIndex(0), u2Exit(0), numInterrupters(0), eventRingSegmentTableMax(0), u1Exit(0), numSlots(0),
-    numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false), controller64bit(false), contextSize64(false) {}
+    supported_protocol_list(), xhcilock(), event_sema(-1), event_thread(nullptr), watchdog_thread(nullptr), commands(),
+    events(), commandBarrier(nullptr), commandIndex(0), primaryEventIndex(0), u2Exit(0), numInterrupters(0),
+    eventRingSegmentTableMax(0), u1Exit(0), numSlots(0), numPorts(0), commandCycle(0), primaryEventCycle(1), stop(false),
+    controller64bit(false), contextSize64(false), irqWatchdog(false) {}
     ~xhci();
     void init() override;
     uint32_t Pagesize();
@@ -903,6 +906,9 @@ public:
     usb_speed HubSpeed() override {
         return SUPERPLUS;
     }
+private:
+    void Watchdog();
+public:
     uint32_t GetPortStatus(int port) override;
     void SwitchPortOff(int port) override;
     void SwitchPortOn(int port) override;

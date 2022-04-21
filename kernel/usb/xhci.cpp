@@ -344,7 +344,11 @@ void xhci::init() {
 
     event_thread = new std::thread(
             [this] () {
-                std::this_thread::set_name("[xhcievent]");
+                {
+                    std::stringstream str{};
+                    str << "[" << DeviceType() << DeviceId() << "-event]";
+                    std::this_thread::set_name(str.str());
+                }
                 while (true) {
                     event_sema.acquire();
                     {
@@ -355,6 +359,17 @@ void xhci::init() {
                     }
                     PrimaryEventRingAsync();
                 }
+            }
+    );
+
+    watchdog_thread = new std::thread(
+            [this] () {
+                {
+                    std::stringstream str{};
+                    str << "[" << DeviceType() << DeviceId() << "-watchdog]";
+                    std::this_thread::set_name(str.str());
+                }
+                Watchdog();
             }
     );
 
@@ -393,6 +408,66 @@ void xhci::dumpregs() {
     << " im0=" << runtimeregs->interrupters[0].interrupterModeration
     << " evd=" << runtimeregs->interrupters[0].eventRingDequeuePointer << "\n";
     get_klogger() << str.str().c_str();
+}
+
+void xhci::Watchdog() {
+    bool controllerRunning{false};
+    while (true) {
+        {
+            using namespace std::literals::chrono_literals;
+            std::this_thread::sleep_for(1s);
+        }
+        bool checkIrq{false};
+        {
+            std::lock_guard lock{xhcilock};
+            if (stop) {
+                return;
+            }
+            if (irqWatchdog) {
+                checkIrq = true;
+            } else {
+                irqWatchdog = true;
+            }
+        }
+        if ((opregs->usbStatus & XHCI_STATUS_HALTED) == 0) {
+            if (!controllerRunning) {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": controller running\n";
+                get_klogger() << str.str().c_str();
+            }
+            controllerRunning = true;
+        } else {
+            if (controllerRunning) {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": controller halted\n";
+                get_klogger() << str.str().c_str();
+            }
+            controllerRunning = false;
+        }
+
+        if (checkIrq) {
+            if (runtimeregs->interrupters[0].eventRingDequeuePointer & XHCI_INTERRUPTER_DEQ_HANDLER_BUSY) {
+                {
+                    std::stringstream str{};
+                    str << DeviceType() << DeviceId() << ": irq silence recovery for primary event ring\n";
+                    get_klogger() << str.str().c_str();
+                }
+
+                {
+                    uint32_t iman{runtimeregs->interrupters[0].interrupterManagement};
+                    if ((iman & XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_PENDING) != 0) {
+                        runtimeregs->interrupters[0].interrupterManagement = iman;
+
+                        std::stringstream str{};
+                        str << DeviceType() << DeviceId() << ": irq silence recovery: cleared irq pending\n";
+                        get_klogger() << str.str().c_str();
+                    }
+                }
+
+                PrimaryEventRing();
+            }
+        }
+    }
 }
 
 int xhci::GetNumberOfPorts() {
@@ -647,10 +722,14 @@ std::shared_ptr<usb_hw_enumeration_addressing> xhci::EnumerateHubPort(const std:
 }
 
 void xhci::HcEvent() {
+    {
+        std::lock_guard lock{xhcilock};
+        irqWatchdog = false;
+    }
     uint32_t iman{runtimeregs->interrupters[0].interrupterManagement};
     if ((iman & XHCI_INTERRUPT_MANAGEMENT_INTERRUPT_PENDING) != 0) {
-        PrimaryEventRing();
         runtimeregs->interrupters[0].interrupterManagement = iman;
+        PrimaryEventRing();
     }
 }
 
@@ -665,9 +744,17 @@ xhci::~xhci() {
         delete event_thread;
         event_thread = nullptr;
     }
+    if (watchdog_thread != nullptr) {
+        watchdog_thread->join();
+        delete watchdog_thread;
+        watchdog_thread = nullptr;
+    }
 }
 
 void xhci::PrimaryEventRing() {
+    if (0 == (runtimeregs->interrupters[0].eventRingDequeuePointer & XHCI_INTERRUPTER_DEQ_HANDLER_BUSY)) {
+        return;
+    }
     uint32_t index{0};
     uint8_t cycle{0};
     std::lock_guard lock{xhcilock};
