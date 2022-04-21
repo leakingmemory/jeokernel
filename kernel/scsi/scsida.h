@@ -54,20 +54,24 @@ public:
     }
     template <class Cmd, class Result> std::shared_ptr<Result> ExecuteCommand(const Cmd &cmd, const scsivariabledata &varlength) {
         auto command = ExecuteCommand(cmd, sizeof(Result), varlength);
-        if (command->IsSuccessful()) {
-            std::shared_ptr<Result> result = std::make_shared<Result>();
-            memcpy(&(*result), command->Buffer(), sizeof(Result));
-            return result;
+        if (command) {
+            if (command->IsSuccessful()) {
+                std::shared_ptr<Result> result = std::make_shared<Result>();
+                memcpy(&(*result), command->Buffer(), sizeof(Result));
+                return result;
+            }
+            ReportFailed(command);
         }
-        ReportFailed(command);
         return {};
     }
     template <class Cmd> bool ExecuteCommand(const Cmd &cmd) {
         auto command = ExecuteCommand(cmd, 0, scsivariabledata_fixed());
-        if (command->IsSuccessful()) {
-            return true;
+        if (command) {
+            if (command->IsSuccessful()) {
+                return true;
+            }
+            ReportFailed(command);
         }
-        ReportFailed(command);
         return false;
     }
     void ReportSense(const RequestSense_FixedData &sense);
