@@ -45,19 +45,19 @@ public:
     }
 };
 
-raw_semaphore::raw_semaphore(int32_t count) : _before_cacheline(), cacheline(), _after_cacheline() {
+raw_semaphore::raw_semaphore(int32_t count) : data() {
     for (int i = 0; i < 16; i++) {
-        cacheline[i] = i;
-        _before_cacheline[i] = i - 1;
-        _after_cacheline[i] = cacheline[i] ^ _before_cacheline[i];
+        data.cacheline[i] = i;
+        data._before_cacheline[i] = i - 1;
+        data._after_cacheline[i] = data.cacheline[i] ^ data._before_cacheline[i];
     }
-    cacheline[0] = 0;
-    cacheline[1] = (uint32_t) count;
+    data.cacheline[0] = 0;
+    data.cacheline[1] = (uint32_t) count;
 }
 
 uint32_t raw_semaphore::create_ticket() noexcept {
     uint32_t ticket;
-    asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(cacheline[0]), "=rm"(ticket) :: "%rax");
+    asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(data.cacheline[0]), "=rm"(ticket) :: "%rax");
     return ticket;
 }
 
@@ -72,26 +72,26 @@ bool raw_semaphore::try_acquire_ticket(uint32_t ticket) noexcept {
         "inc %%rax;"
         "unsuccessful_hw_try_lock:"
         "mov %%rax, %1"
-    : "+m"(cacheline[0]), "=rm"(t64) :: "%rax", "%rcx"
+    : "+m"(data.cacheline[0]), "=rm"(t64) :: "%rax", "%rcx"
     );
     return ((uint32_t) t64) == ticket;
 }
 
 uint32_t raw_semaphore::release_ticket() noexcept {
     uint32_t ticket;
-    asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(cacheline[1]), "=rm"(ticket) :: "%rax");
+    asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(data.cacheline[1]), "=rm"(ticket) :: "%rax");
     return ticket + 1;
 }
 
 uint32_t raw_semaphore::current_ticket() noexcept {
     uint32_t ticket;
-    asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(cacheline[0]), "=rm"(ticket) :: "%rax");
+    asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(data.cacheline[0]), "=rm"(ticket) :: "%rax");
     return ticket;
 }
 
 uint32_t raw_semaphore::current_limit() noexcept {
     uint32_t ticket;
-    asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(cacheline[1]), "=rm"(ticket) :: "%rax");
+    asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(data.cacheline[1]), "=rm"(ticket) :: "%rax");
     return ticket;
 }
 

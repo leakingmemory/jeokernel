@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 int isalnum(int c);
 int isalpha(int c);
 int isdigit(int c);
@@ -19,5 +22,8 @@ int isspace(int c);
 int toupper(int c);
 int tolower(int c);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif //JEOKERNEL_CTYPE_H

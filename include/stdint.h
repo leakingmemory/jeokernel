@@ -28,9 +28,17 @@ static_assert(sizeof(uint64_t) == 8);
 #ifdef IA32
 typedef uint32_t size_t;
 typedef int32_t ssize_t;
+typedef int32_t ptrdiff_t;
+typedef int32_t intptr_t;
+typedef uint32_t uintptr_t;
 #else
 typedef unsigned long int size_t;
 typedef signed long int ssize_t;
+typedef int64_t ptrdiff_t;
+typedef int64_t intptr_t;
+typedef uint64_t uintptr_t;
 #endif
+
+#define offsetof __builtin_offsetof
 
 #endif //JEOKERNEL_STDINT_H

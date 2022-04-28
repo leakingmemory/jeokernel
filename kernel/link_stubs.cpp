@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <thread>
 #include <signal.h>
+#include <dlfcn.h>
 
 extern "C" {
     uint32_t errno = 0;
@@ -28,5 +29,9 @@ extern "C" {
         } else {
             return 0;
         }
+    }
+
+    int dladdr(const void *addr, Dl_info *info) {
+        return -1;
     }
 }

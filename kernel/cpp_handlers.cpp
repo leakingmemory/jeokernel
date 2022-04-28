@@ -21,9 +21,7 @@ extern "C" {
     }
 
     void abort() {
-        while (1) {
-            asm("hlt");
-        }
+        asm("ud2");
     }
 
     int fwrite() {

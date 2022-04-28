@@ -84,6 +84,15 @@ extern "C" {
         return ptr;
     }
 
+    void *calloc(size_t nmemb, size_t size) {
+        uint32_t totsize = nmemb * size;
+        size_t check = totsize / nmemb;
+        if (check != size) {
+            return nullptr;
+        }
+        return malloc(totsize);
+    }
+
     uint32_t malloc_sizeof(void *ptr);
 
 #ifdef DELAY_FREE_MEM

@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-unsigned long strtoul(const char *nptr, char **endptr, int base) {
+template <typename type> type strtoint(const char *nptr, char **endptr, int base) {
     const char *nothing = nptr;
     while (isspace(*nptr)) {
         ++nptr;
@@ -35,7 +35,7 @@ unsigned long strtoul(const char *nptr, char **endptr, int base) {
     if (base == 0) {
         base = 10;
     }
-    unsigned long num = 0;
+    type num = 0;
     if (base <= 10) {
         while (1) {
             char c = *nptr;
@@ -90,5 +90,15 @@ unsigned long strtoul(const char *nptr, char **endptr, int base) {
             num = num * base;
             num += digit;
         }
+    }
+}
+
+extern "C" {
+    unsigned long int strtoul(const char *nptr, char **endptr, int base) {
+        return strtoint<unsigned long int>(nptr, endptr, base);
+    }
+
+    long int strtol(const char *nptr, char **endptr, int base) {
+        return strtoint<long int>(nptr, endptr, base);
     }
 }

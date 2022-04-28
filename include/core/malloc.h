@@ -12,6 +12,7 @@ extern "C" {
 #endif
 
     void *malloc(uint32_t size);
+    void *calloc(size_t nmemb, size_t size);
     void free(void *);
 
     void *realloc(void *ptr, uint32_t size);

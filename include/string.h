@@ -27,6 +27,7 @@ extern "C" {
     char *strrchr(char *str, int c);
     int strncmp(const char *str1, const char *str2, size_t n);
     char *strstr(const char *haystack, const char *needle);
+    char *strdup(const char *str);
 
 #define strerror(errno) ("error (strerror not implemented)")
 

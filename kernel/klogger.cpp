@@ -14,10 +14,12 @@ KLogger &get_klogger() {
     return *klogger;
 }
 
+extern "C" {
 void wild_panic(const char *str) {
     auto &log = get_klogger();
     log << "Panic in the wild: " << str << "\n";
     while (1) {
         asm("hlt;");
     }
+}
 }

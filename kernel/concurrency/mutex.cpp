@@ -57,19 +57,19 @@ public:
 };
 
 namespace std {
-    mutex::mutex() : cacheline() {
+    mutex::mutex() : data() {
         for (int i = 0; i < 16; i++) {
-            cacheline[i] = i;
-            _before_cacheline[i] = i - 1;
-            _after_cacheline[i] = cacheline[i] ^ _before_cacheline[i];
+            data.cacheline[i] = i;
+            data._before_cacheline[i] = i - 1;
+            data._after_cacheline[i] = data.cacheline[i] ^ data._before_cacheline[i];
         }
-        cacheline[0] = 0;
-        cacheline[1] = 0;
+        data.cacheline[0] = 0;
+        data.cacheline[1] = 0;
     }
 
     uint32_t mutex::create_ticket() noexcept {
         uint32_t ticket;
-        asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(cacheline[0]), "=rm"(ticket) :: "%rax");
+        asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(data.cacheline[0]), "=rm"(ticket) :: "%rax");
         return ticket;
     }
 
@@ -84,25 +84,25 @@ namespace std {
             "inc %%rax;"
             "unsuccessful_hw_try_lock:"
             "mov %%rax, %1"
-        : "+m"(cacheline[0]), "=rm"(t64) :: "%rax", "%rcx"
+        : "+m"(data.cacheline[0]), "=rm"(t64) :: "%rax", "%rcx"
         );
         return ((uint32_t) t64) == ticket;
     }
 
     uint32_t mutex::release_ticket() noexcept {
         uint32_t ticket;
-        asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(cacheline[1]), "=rm"(ticket) :: "%rax");
+        asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(data.cacheline[1]), "=rm"(ticket) :: "%rax");
         return ticket + 1;
     }
 
     uint32_t mutex::current_ticket() noexcept {
         uint32_t ticket;
-        asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(cacheline[1]), "=rm"(ticket) :: "%rax");
+        asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(data.cacheline[1]), "=rm"(ticket) :: "%rax");
         return ticket;
     }
 
     bool mutex::try_lock() noexcept {
-        return try_acquire_ticket(cacheline[1]);
+        return try_acquire_ticket(data.cacheline[1]);
     }
 
     void mutex::lock() {

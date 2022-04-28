@@ -31,5 +31,6 @@ set_target_properties(cxxrt-static cxxrt-shared PROPERTIES
                       OUTPUT_NAME "cxxrt"
                      )
 
-
+### JEOKERNEL
+target_include_directories(cxxrt-static PRIVATE ../../../include)
 

@@ -60,6 +60,9 @@ fprintf (
 
 int vprintf(const char *format, va_list args);
 int printf(const char *format, ...);
+int fprintf(FILE *stream, const char *format, ...);
+int asprintf(char **strp, const char *fmt, ...);
+int snprintf(char *strp, uintptr_t n, const char *fmt, ...);
 
 #define fopen(...) ((FILE *) (void *) 0)
 #define freopen(...) ((FILE *) (void *) 0)

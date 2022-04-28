@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
 class KLogger {
 public:
     virtual ~KLogger() {}
@@ -53,6 +54,12 @@ public:
 
 void set_klogger(KLogger *klogger);
 KLogger &get_klogger();
+
+extern "C" {
+#endif
 void wild_panic(const char *str);
+#ifdef __cplusplus
+}
+#endif
 
 #endif //JEOKERNEL_KLOGGER_H
