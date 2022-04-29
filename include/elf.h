@@ -102,6 +102,42 @@
 #define SHT_SYMTAB_SHNDX    0x12
 #define SHT_NUM             0x13
 
+struct ELF32_section_entry {
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint32_t sh_flags;
+    uint32_t sh_addr;
+    uint32_t sh_offset;
+    uint32_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint32_t sh_addralign;
+    uint32_t sh_entsize;
+} __attribute__((__packed__));
+
+struct ELF64_section_entry {
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint64_t sh_flags;
+    uint64_t sh_addr;
+    uint64_t sh_offset;
+    uint64_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint64_t sh_addralign;
+    uint64_t sh_entsize;
+} __attribute__((__packed__));
+
+#ifdef __cplusplus
+typedef ELF64_section_entry Elf64_Shdr;
+typedef ELF32_section_entry Elf32_Shdr;
+#else
+typedef struct ELF64_section_entry Elf64_Shdr;
+typedef struct ELF32_section_entry Elf32_Shdr;
+#endif
+
+#ifdef __cplusplus
+
 struct ELF_header {
     uint32_t e_magic;
     uint8_t e_class;
@@ -126,18 +162,6 @@ struct ELF64_program_entry {
     uint64_t p_align;
 };
 
-struct ELF64_section_entry {
-    uint32_t sh_name;
-    uint32_t sh_type;
-    uint64_t sh_flags;
-    uint64_t sh_addr;
-    uint64_t sh_offset;
-    uint64_t sh_size;
-    uint32_t sh_link;
-    uint32_t sh_info;
-    uint64_t sh_addralign;
-    uint64_t sh_entsize;
-} __attribute__((__packed__));
 static_assert(sizeof(ELF64_section_entry) == 0x40);
 
 struct ELF64_symbol_entry {
@@ -255,5 +279,6 @@ public:
         return *elf64_header;
     }
 };
+#endif
 
 #endif //JEOKERNEL_ELF_H

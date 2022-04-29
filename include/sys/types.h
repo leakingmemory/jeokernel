@@ -7,4 +7,6 @@
 
 #include <stdint.h>
 
+typedef uint32_t pid_t;
+
 #endif //JEOKERNEL_TYPES_H
