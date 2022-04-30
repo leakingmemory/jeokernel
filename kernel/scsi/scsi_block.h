@@ -226,7 +226,7 @@ struct RequestSense_FixedData {
     uint8_t SenseKey() const {
         return FlagsAndSenseKey & 0xF;
     }
-    SenseError SenseError() const {
+    SenseError Error() const {
         auto senseKey = SenseKey();
         switch (senseKey) {
             case SENSE_KEY_NO_SENSE:

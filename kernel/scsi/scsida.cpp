@@ -278,7 +278,7 @@ scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataT
 }
 
 void scsida::ReportSense(const RequestSense_FixedData &sense) {
-    auto senseError = sense.SenseError();
+    auto senseError = sense.Error();
     if (senseError != SenseError::OTHER) {
         std::stringstream str{};
         str << DeviceType() << DeviceId() << ": Sense error " << SenseErrorString(senseError) << "\n";
