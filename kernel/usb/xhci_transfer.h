@@ -14,10 +14,10 @@ private:
     uint64_t physAddr;
     usb_transfer_status status;
 public:
-    xhci_transfer(std::shared_ptr<usb_buffer> buffer, uint64_t physAddr) : buffer(buffer), physAddr(physAddr), status(usb_transfer_status::NOT_ACCESSED) { }
+    xhci_transfer(std::shared_ptr<usb_buffer> buffer, uint64_t physAddr, std::size_t size) : usb_transfer(size), buffer(buffer), physAddr(physAddr), status(usb_transfer_status::NOT_ACCESSED) { }
     std::shared_ptr<usb_buffer> Buffer() override;
     usb_transfer_status GetStatus() override;
-    void SetStatus(uint8_t status);
+    void SetStatus(uint8_t status, std::size_t length);
 };
 
 

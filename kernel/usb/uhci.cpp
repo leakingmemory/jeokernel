@@ -452,7 +452,7 @@ std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitT
                                                                     usb_transfer_direction direction,
                                                                     int8_t dataToggle,
                                                                     std::function<void(uhci_transfer &)> &applyFunc) {
-    std::shared_ptr<uhci_transfer> transfer = std::make_shared<uhci_transfer>(uhciRef);
+    std::shared_ptr<uhci_transfer> transfer = std::make_shared<uhci_transfer>(uhciRef, size);
     transfer->buffer = buffer;
     auto &td = transfer->TD();
     td.next = UHCI_POINTER_TERMINATE;
@@ -673,7 +673,7 @@ bool uhci_endpoint::CancelAllTransfers() {
     return false;
 }
 
-uhci_transfer::uhci_transfer(uhci &uhciRef) : td(uhciRef.qhtdPool.Alloc()), buffer(), next() {
+uhci_transfer::uhci_transfer(uhci &uhciRef, std::size_t size) : usb_transfer(size), td(uhciRef.qhtdPool.Alloc()), buffer(), next() {
 }
 
 usb_transfer_status uhci_transfer::GetStatus() {

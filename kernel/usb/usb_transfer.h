@@ -31,9 +31,10 @@ class usb_buffer;
 class usb_transfer {
 private:
     std::function<void ()> doneCall;
+    std::size_t length;
     bool done;
 public:
-    usb_transfer() : doneCall([] () {}), done(false) {}
+    usb_transfer(std::size_t length) : doneCall([] () {}), length(length), done(false) {}
     virtual ~usb_transfer() {}
 
     usb_transfer(const usb_transfer &) = delete;
@@ -51,6 +52,12 @@ public:
     }
     void SetDoneCall(std::function<void ()> doneCall) {
         this->doneCall = doneCall;
+    }
+    std::size_t Length() {
+        return length;
+    }
+    void Length(std::size_t length) {
+        this->length = length;
     }
 };
 

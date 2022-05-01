@@ -677,7 +677,7 @@ void ehci::asyncAdvance() {
     delayedDestruction.clear();
 }
 
-ehci_transfer::ehci_transfer(ehci &ehciRef) : td(ehciRef.qhtdPool.Alloc()), buffer(), next() {
+ehci_transfer::ehci_transfer(ehci &ehciRef, std::size_t size) : usb_transfer(size), td(ehciRef.qhtdPool.Alloc()), buffer(), next() {
 }
 
 usb_transfer_status ehci_transfer::GetStatus() {
@@ -830,7 +830,7 @@ ehci_endpoint::CreateTransferWithLock(bool commitTransaction, std::shared_ptr<us
     if (size > 4096) {
         return {};
     }
-    std::shared_ptr<ehci_transfer> transfer = std::make_shared<ehci_transfer>(ehciRef);
+    std::shared_ptr<ehci_transfer> transfer = std::make_shared<ehci_transfer>(ehciRef, size);
     transfer->buffer = buffer;
     auto &td = transfer->qTD();
     td.next_qtd = EHCI_POINTER_TERMINATE;

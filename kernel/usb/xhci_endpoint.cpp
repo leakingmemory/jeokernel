@@ -189,7 +189,7 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
         CommitCommand(trb);
         std::shared_ptr<usb_transfer> transfer{};
         {
-            std::shared_ptr<xhci_transfer> xhciTransfer{new xhci_transfer(setup_buffer, phaddr)};
+            std::shared_ptr<xhci_transfer> xhciTransfer{new xhci_transfer(setup_buffer, phaddr, 8)};
             transferRing[index] = xhciTransfer;
             transfer = xhciTransfer;
         }
@@ -239,7 +239,7 @@ std::shared_ptr<usb_transfer> xhci_endpoint::CreateTransferWithLock(bool commitT
     CommitCommand(trb);
     std::shared_ptr<usb_transfer> transfer{};
     {
-        std::shared_ptr<xhci_transfer> xhciTransfer{new xhci_transfer(buffer, phaddr)};
+        std::shared_ptr<xhci_transfer> xhciTransfer{new xhci_transfer(buffer, phaddr, size)};
         transferRing[index] = xhciTransfer;
         transfer = xhciTransfer;
     }
@@ -322,13 +322,13 @@ void xhci_endpoint::TransferEvent(uint64_t trbaddr, uint32_t transferLength, uin
         if (barrier != nullptr && barrierindex != trbindex) {
             do {
                 std::shared_ptr<xhci_transfer> transfer = transferRing[barrierindex];
-                if (transfer) {
+                if (transfer && !transfer->IsDone()) {
 #ifdef DEBUG_TRANSFER_EVENTS
                     std::stringstream str{};
                     str << "XHCI rep backwards completion code " << completionCode << " chain item " << barrierindex << "\n";
                     get_klogger() << str.str().c_str();
 #endif
-                    transfer->SetStatus(completionCode);
+                    transfer->SetStatus(completionCode, 0);
                 }
 
                 ++barrierindex;
@@ -340,7 +340,7 @@ void xhci_endpoint::TransferEvent(uint64_t trbaddr, uint32_t transferLength, uin
         }
         std::shared_ptr<xhci_transfer> transfer = transferRing[trbindex];
         if (transfer) {
-            transfer->SetStatus(completionCode);
+            transfer->SetStatus(completionCode, transferLength);
         } else {
             std::stringstream str{};
             str << "XHCI endpoint transfer event trb=" << std::hex << trbaddr << " index " << std::dec << trbindex

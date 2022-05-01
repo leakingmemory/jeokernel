@@ -49,10 +49,10 @@ usb_transfer_status xhci_transfer::GetStatus() {
 #define XHCI_ERROR_INVALID_STREAM_ID            34
 #define XHCI_ERROR_SECONDARY_BANDWIDTH          35
 #define XHCI_ERROR_SPLIT_TRANSACTION            36
-void xhci_transfer::SetStatus(uint8_t status) {
+void xhci_transfer::SetStatus(uint8_t status, std::size_t length) {
     if (status != XHCI_ERROR_SUCCESS) {
         std::stringstream str{};
-        str << "XHCI transfer error code " << status << "\n";
+        str << "XHCI transfer "<<std::hex<< this->physAddr << "/" << ((uint64_t) this)<<std::dec<< " error code " << status << "\n";
         get_klogger() << str.str().c_str();
     }
     switch (status) {
@@ -90,6 +90,19 @@ void xhci_transfer::SetStatus(uint8_t status) {
             this->status = usb_transfer_status::STALL;
             break;
         case XHCI_ERROR_SHORT_PACKET:
+            {
+                auto expectedLength = Length();
+                if (length > 0 && length <= expectedLength) {
+                    std::stringstream str{};
+                    str << "Short packet, expected " << expectedLength << ", remaining " << length << ", actually ";
+                    expectedLength -= length;
+                    str << expectedLength << "\n";
+                    get_klogger() << str.str().c_str();
+                    Length(expectedLength);
+                    this->status = usb_transfer_status::NO_ERROR;
+                    break;
+                }
+            }
         case XHCI_ERROR_RING_UNDERRUN:
             this->status = usb_transfer_status::DATA_UNDERRUN;
             break;

@@ -76,7 +76,7 @@ private:
     std::shared_ptr<usb_buffer> buffer;
     std::shared_ptr<uhci_transfer> next;
 public:
-    explicit uhci_transfer(uhci &uhciRef);
+    explicit uhci_transfer(uhci &uhciRef, std::size_t size);
     std::shared_ptr<usb_buffer> Buffer() override {
         return buffer;
     }

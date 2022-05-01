@@ -680,7 +680,7 @@ ohci_endpoint::ohci_endpoint(ohci &ohci, uint32_t maxPacketSize, uint8_t functio
                              head(), tail(),
                              endpointType(endpointType),
                              next(nullptr), int_ed_chain(nullptr) {
-    head = std::make_shared<ohci_transfer>(ohci, *this);
+    head = std::make_shared<ohci_transfer>(ohci, *this, 0);
     tail = head;
     ohci_endpoint_descriptor *ed = edPtr->Pointer();
     {
@@ -868,7 +868,7 @@ ohci_endpoint::CreateTransferWithLock(std::shared_ptr<usb_buffer> buffer, uint32
     if (bufferRounding) {
         ctrl |= 1 << 18;
     }
-    auto newtd = std::make_shared<ohci_transfer>(ohciRef, *this);
+    auto newtd = std::make_shared<ohci_transfer>(ohciRef, *this, 0);
 
     {
         auto *TD = newtd->TD();
@@ -886,6 +886,7 @@ ohci_endpoint::CreateTransferWithLock(std::shared_ptr<usb_buffer> buffer, uint32
             size = buffer->Size();
         }
         TD->BufferEnd = TD->CurrentBufferPointer + size - 1;
+        tail->Length(size);
     } else {
         TD->CurrentBufferPointer = 0;
         TD->BufferEnd = 0;
@@ -1014,7 +1015,7 @@ bool ohci_endpoint::CancelAllTransfers() {
     return false;
 }
 
-ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint) : usb_transfer(), transferPtr(ohci.xPool.Alloc()), buffer(), next(), endpoint(endpoint), endpointType(endpoint.endpointType), waitCancelled(false), waitCancelledAndWaitedCycle(false) {
+ohci_transfer::ohci_transfer(ohci &ohci, ohci_endpoint &endpoint, std::size_t length) : usb_transfer(length), transferPtr(ohci.xPool.Alloc()), buffer(), next(), endpoint(endpoint), endpointType(endpoint.endpointType), waitCancelled(false), waitCancelledAndWaitedCycle(false) {
 #ifdef OHCI_DEBUGPRINTS_ENDPOINTS
     std::stringstream str{};
     str << std::hex << "Transfer descriptor at " << transferPtr->Phys() << "\n";
