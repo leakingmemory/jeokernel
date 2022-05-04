@@ -188,9 +188,12 @@ void scsida::iothread() {
 }
 
 bool scsida::activate() {
-    SetPower(UnitPowerCondition::ACTIVE);
+    auto spinInfo = IsSpinning();
+    if (!spinInfo || !(*spinInfo)) {
+        SetPower(UnitPowerCondition::ACTIVE);
+        spinInfo = IsSpinning();
+    }
     {
-        auto spinInfo = IsSpinning();
         if (spinInfo) {
             bool isSpinning = *spinInfo;
             if (isSpinning) {

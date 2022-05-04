@@ -23,7 +23,15 @@ public:
         return initialRead != 0;
     }
     virtual std::unique_ptr<scsivariabledata> clone() const = 0;
-    virtual std::size_t Remaining(const void *ptr, std::size_t initialRead) const = 0;
+    virtual std::size_t TotalSize(const void *ptr, std::size_t initialRead, std::size_t maxLength) const = 0;
+    std::size_t Remaining(const void *ptr, std::size_t initialRead, std::size_t maxLength) const {
+        auto totalRead = TotalSize(ptr, initialRead, maxLength);
+        if (totalRead > initialRead) {
+            return totalRead - initialRead;
+        } else {
+            return 0;
+        }
+    }
 };
 
 class scsivariabledata_fixed : public scsivariabledata {
@@ -32,8 +40,8 @@ public:
     std::unique_ptr<scsivariabledata> clone() const override {
         return std::unique_ptr<scsivariabledata>(new scsivariabledata_fixed());
     }
-    std::size_t Remaining(const void *ptr, std::size_t initialRead) const override {
-        return 0;
+    std::size_t TotalSize(const void *ptr, std::size_t initialRead, std::size_t maxLength) const override {
+        return maxLength;
     }
 };
 

@@ -10,6 +10,9 @@
 #include "../scsi/scsidev.h"
 
 //#define USBSTORAGE_COMMAND_DEBUG
+//#define USBSTORAGE_DEBUG_TRANSFERS
+//#define USBSTORAGE_EXPECT_SHORT_READ
+//#define USBSTORAGE_DEBUG_SHORT_READ
 
 #define IFACE_PROTO_BULK_ONLY 0x50
 
@@ -84,10 +87,11 @@ public:
         }
     }
     void Transfer(const void *data, std::size_t size, const std::function<void ()> &done);
-    void InTransfer(void *data, std::size_t size, const std::function<void ()> &done);
+    void InTransfer(void *data, std::size_t size, const std::function<void (usb_transfer_status, std::size_t)> &done);
     void Start();
     void DataStage();
     void LookForStatusStage(std::size_t remaining);
+    void ClearStallAndThenStatusStage();
     void StatusStage();
 
     const void *Buffer() const override;
@@ -95,6 +99,13 @@ public:
 };
 
 void usbstorage_command_impl::Transfer(const void *data, std::size_t size, const std::function<void ()> &doneCallback) {
+#ifdef USBSTORAGE_DEBUG_TRANSFERS
+    {
+        std::stringstream str{};
+        str << "OUT " << size << "\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
     std::size_t chunkSize{device.devInfo.port.TransferBufferSize()};
     chunkSize -= chunkSize % device.bulkOutDesc.wMaxPacketSize;
     const uint8_t *ptr = (const uint8_t *) data;
@@ -127,20 +138,29 @@ void usbstorage_command_impl::Transfer(const void *data, std::size_t size, const
     }
 }
 
-void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std::function<void ()> &doneCallback) {
+void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std::function<void (usb_transfer_status, std::size_t)> &doneCallback) {
+#ifdef USBSTORAGE_DEBUG_TRANSFERS
+    {
+        std::stringstream str{};
+        str << "IN " << size << "\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
     std::size_t chunkSize{device.devInfo.port.TransferBufferSize()};
     chunkSize -= chunkSize % device.bulkInDesc.wMaxPacketSize;
     uint8_t *ptr = (uint8_t *) data;
+    auto totalSize = size;
     while (size > 0) {
         std::size_t s = size;
         if (s > chunkSize) {
             s = chunkSize;
         }
+        std::size_t baseSize = (totalSize - size);
         size -= s;
         std::shared_ptr<std::shared_ptr<usb_transfer>> transferIndirect =
                 std::make_shared<std::shared_ptr<usb_transfer>>();
-        std::shared_ptr<std::function<void ()>> done{new std::function<void ()>(doneCallback)};
-        *transferIndirect = device.bulkInEndpoint->CreateTransferWithLock(size == 0, s, usb_transfer_direction::IN, [ptr, s, size, transferIndirect, done] () {
+        std::shared_ptr<std::function<void (usb_transfer_status, std::size_t)>> done{new std::function<void (usb_transfer_status, std::size_t)>(doneCallback)};
+        *transferIndirect = device.bulkInEndpoint->CreateTransferWithLock(size == 0, s, usb_transfer_direction::IN, [ptr, s, size, transferIndirect, done, baseSize] () {
             auto transfer = *transferIndirect;
             std::shared_ptr<usb_buffer> buffer{};
             if (transfer) {
@@ -155,7 +175,7 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
             }
             // TODO - error in part transfer should fail the whole, and probably reset dev
             if (size == 0) {
-                (*done)();
+                (*done)(transfer->GetStatus(), baseSize + transfer->Length());
             }
         }, false, 0, device.bulkInToggle);
         ptr += s;
@@ -190,10 +210,42 @@ void usbstorage_command_impl::DataStage() {
                 }
             }
             if (initialTransfer == dataTransferLength) {
-                InTransfer(buffer, dataTransferLength, []() {});
+                InTransfer(buffer, dataTransferLength, [this] (usb_transfer_status transferStatus, std::size_t size) {
+                    if (size < dataTransferLength) {
+                        auto remaining = dataTransferLength - size;
+#ifdef USBSTORAGE_DEBUG_SHORT_READ
+                        {
+                            std::stringstream str{};
+                            str << "Short read " << size << "<" << dataTransferLength << ", will try remaining " << remaining << " while looking for status stage\n";
+                            get_klogger() << str.str().c_str();
+                        }
+#endif
+                        auto totalSize = varlength->TotalSize(buffer, size, dataTransferLength);
+#ifdef USBSTORAGE_DEBUG_SHORT_READ
+                        {
+                            std::stringstream str{};
+                            str << "Initial read of " << size << " and turns out to be of total size " << totalSize << "\n";
+                            get_klogger() << str.str().c_str();
+                        }
+#endif
+#ifdef USBSTORAGE_EXPECT_SHORT_READ
+                        remaining = totalSize - size;
+                        if (totalSize > size) {
+#else
+                        if (remaining > 0) {
+#endif
+                            LookForStatusStage(remaining);
+                        } else {
+                            StatusStage();
+                        }
+                    } else {
+                        StatusStage();
+                    }
+                });
+                return;
             } else {
-                InTransfer(buffer, initialTransfer, [this, initialTransfer, packetSize] () {
-                    std::size_t remaining = varlength->Remaining(buffer, initialTransfer);
+                InTransfer(buffer, initialTransfer, [this, initialTransfer, packetSize] (usb_transfer_status transferStatus, std::size_t size) {
+                    std::size_t remaining = varlength->Remaining(buffer, size, dataTransferLength);
                     std::size_t remainingExpected = dataTransferLength - initialTransfer;
                     if (remaining > 0) {
                         std::size_t total{initialTransfer + remaining};
@@ -232,8 +284,16 @@ void usbstorage_command_impl::DataStage() {
                             }
 #endif
                         }
-                        InTransfer(((uint8_t *) buffer) + initialTransfer, remaining, []() {});
+                        InTransfer(((uint8_t *) buffer) + initialTransfer, remaining, [](usb_transfer_status transferStatus, std::size_t size) {});
                     }
+                    auto totalSize = varlength->TotalSize(buffer, size, dataTransferLength);
+#ifdef USBSTORAGE_DEBUG_SHORT_READ
+                    {
+                        std::stringstream str{};
+                        str << "Initial read of " << size << " and turns out to be of total size " << totalSize << "\n";
+                        get_klogger() << str.str().c_str();
+                    }
+#endif
                     if (remaining < remainingExpected) {
                         auto fuzzyStage = remainingExpected - remaining;
 #ifdef USBSTORAGE_COMMAND_DEBUG
@@ -294,7 +354,11 @@ void usbstorage_command_impl::LookForStatusStage(std::size_t remaining) {
         if (transfer > packetSize) {
             transfer = packetSize;
         }
-        InTransfer(buffer->ptr, transfer, [this, packetSize, transfer, buffer, remaining] () {
+        InTransfer(buffer->ptr, transfer, [this, packetSize, transfer, buffer, remaining] (usb_transfer_status transferStatus, std::size_t sizeRead) {
+            if (transferStatus == usb_transfer_status::STALL) {
+                ClearStallAndThenStatusStage();
+                return;
+            }
             auto size = transfer;
             if (size > sizeof(status)) {
                 size = sizeof(status);
@@ -311,7 +375,7 @@ void usbstorage_command_impl::LookForStatusStage(std::size_t remaining) {
 #endif
 
                 if (sizeof(status) < packetSize) {
-                    InTransfer(((uint8_t *) (buffer->ptr)) + packetSize, sizeof(status) - packetSize, [this, buffer] () {
+                    InTransfer(((uint8_t *) (buffer->ptr)) + packetSize, sizeof(status) - packetSize, [this, buffer] (usb_transfer_status transferStatus, std::size_t sizeRead) {
                         memcpy(&status, buffer->ptr, sizeof(status));
 
                         std::function<void ()> done = this->done;
@@ -347,11 +411,73 @@ void usbstorage_command_impl::LookForStatusStage(std::size_t remaining) {
     }
 }
 
+void usbstorage_command_impl::ClearStallAndThenStatusStage() {
+    device.QueueTask([this] () {
+        {
+            std::stringstream str{};
+            str << device.DeviceType() << device.DeviceId() << ": Clearing IN endpoint stall\n";
+            get_klogger() << str.str().c_str();
+        }
+        if (!device.bulkInEndpoint->ClearStall()) {
+            std::stringstream str{};
+            str << device.DeviceType() << device.DeviceId() << ": Clear stall failed\n";
+            get_klogger() << str.str().c_str();
+        }
+        if (device.devInfo.port.ControlRequest(*(device.devInfo.port.Endpoint0()), usb_clear_feature(usb_feature::ENDPOINT_HALT, usb_control_endpoint_direction::IN, device.bulkInDesc.Address()))) {
+            std::stringstream str{};
+            str << device.DeviceType() << device.DeviceId() << ": Cleared device stall condition\n";
+            get_klogger() << str.str().c_str();
+            device.bulkInToggle = 0;
+        } else {
+            std::stringstream str{};
+            str << device.DeviceType() << device.DeviceId() << ": Clear device stall failed\n";
+            get_klogger() << str.str().c_str();
+        }
+        {
+            std::lock_guard lock{device.devInfo.port.Hub().HcdSpinlock()};
+            StatusStage();
+        }
+    });
+}
+
 void usbstorage_command_impl::StatusStage() {
-    InTransfer(&status, sizeof(status), [this] () {
-        std::function<void ()> done = this->done;
-        device.ExecuteQueueItem();
-        done();
+    InTransfer(&status, sizeof(status), [this] (usb_transfer_status transferStatus, std::size_t sizeRead) {
+        if (transferStatus == usb_transfer_status::STALL) {
+            device.QueueTask([this] () {
+                {
+                    std::stringstream str{};
+                    str << device.DeviceType() << device.DeviceId() << ": Clearing IN endpoint status-stall\n";
+                    get_klogger() << str.str().c_str();
+                }
+                if (!device.bulkInEndpoint->ClearStall()) {
+                    std::stringstream str{};
+                    str << device.DeviceType() << device.DeviceId() << ": Clear status-stall failed\n";
+                    get_klogger() << str.str().c_str();
+                }
+                if (device.devInfo.port.ControlRequest(*(device.devInfo.port.Endpoint0()), usb_clear_feature(usb_feature::ENDPOINT_HALT, usb_control_endpoint_direction::IN, device.bulkInDesc.Address()))) {
+                    std::stringstream str{};
+                    str << device.DeviceType() << device.DeviceId() << ": Cleared device stall condition\n";
+                    get_klogger() << str.str().c_str();
+                    device.bulkInToggle = 0;
+                } else {
+                    std::stringstream str{};
+                    str << device.DeviceType() << device.DeviceId() << ": Clear device stall failed\n";
+                    get_klogger() << str.str().c_str();
+                }
+                {
+                    std::lock_guard lock{device.devInfo.port.Hub().HcdSpinlock()};
+                    InTransfer(&status, sizeof(status), [this] (usb_transfer_status transferStatus, std::size_t sizeRead) {
+                        std::function<void()> done = this->done;
+                        device.ExecuteQueueItem();
+                        done();
+                    });
+                }
+            });
+        } else {
+            std::function<void()> done = this->done;
+            device.ExecuteQueueItem();
+            done();
+        }
     });
 }
 
@@ -548,6 +674,17 @@ void usbstorage::init() {
         return;
     }
 
+    if (taskRunner == nullptr) {
+        taskRunner = new std::thread([this] () {
+            {
+                std::stringstream str{};
+                str << "[" << DeviceType() << DeviceId() << "]";
+                std::this_thread::set_name(str.str());
+            }
+            RunTasks();
+        });
+    }
+
     std::stringstream str{};
     str << DeviceType() << DeviceId() << ": subclass=" << subclass << " luns=" << (((int) maxLun) + 1) << "\n";
     get_klogger() << str.str().c_str();
@@ -561,6 +698,16 @@ void usbstorage::init() {
 }
 
 void usbstorage::stop() {
+    if (taskRunner != nullptr) {
+        {
+            std::lock_guard lock{taskQueueLock};
+            stopThreads = true;
+            taskAvailable.release();
+        }
+        taskRunner->join();
+        delete taskRunner;
+        taskRunner = nullptr;
+    }
     if (device != nullptr) {
         device->stop();
         delete device;
@@ -573,6 +720,16 @@ void usbstorage::SetDevice(Device *device) {
 }
 
 usbstorage::~usbstorage() {
+    if (taskRunner != nullptr) {
+        {
+            std::lock_guard lock{taskQueueLock};
+            stopThreads = true;
+            taskAvailable.release();
+        }
+        taskRunner->join();
+        delete taskRunner;
+        taskRunner = nullptr;
+    }
     if (device != nullptr) {
         device->stop();
         delete device;
@@ -653,6 +810,12 @@ bool usbstorage::ResetDevice() {
     return false;
 }
 
+void usbstorage::QueueTask(const std::function<void()> &task) {
+    std::lock_guard lock{taskQueueLock};
+    taskQueue.push_back(task);
+    taskAvailable.release();
+}
+
 void usbstorage::ExecuteQueueItem() {
     {
         auto iterator = commandQueue.begin();
@@ -664,4 +827,24 @@ void usbstorage::ExecuteQueueItem() {
         commandQueue.erase(iterator);
     }
     currentCommand->Start();
+}
+
+void usbstorage::RunTasks() {
+    while (true) {
+        taskAvailable.acquire();
+        std::vector<std::function<void ()>> run{};
+        {
+            std::lock_guard lock{taskQueueLock};
+            if (stopThreads) {
+                return;
+            }
+            for (const auto &task: taskQueue) {
+                run.push_back(task);
+            }
+            taskQueue.clear();
+        }
+        for (auto &task : run) {
+            task();
+        }
+    }
 }

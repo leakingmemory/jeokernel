@@ -10,6 +10,7 @@
 #include "usbifacedev.h"
 #include "../scsi/scsierror.h"
 #include "../scsi/scsivariabledata.h"
+#include <concurrency/raw_semaphore.h>
 
 class usbstorage_command_impl;
 
@@ -67,16 +68,22 @@ private:
     std::shared_ptr<usb_endpoint> bulkOutEndpoint;
     std::vector<std::shared_ptr<usbstorage_command_impl>> commandQueue;
     std::shared_ptr<usbstorage_command_impl> currentCommand;
+    std::vector<std::function<void ()>> taskQueue;
+    std::thread *taskRunner;
+    hw_spinlock taskQueueLock;
+    raw_semaphore taskAvailable;
     Device *device;
     uint32_t commandTag;
     uint8_t subclass;
     uint8_t maxLun;
     uint8_t bulkOutToggle;
     uint8_t bulkInToggle;
+    bool stopThreads;
 public:
     usbstorage(Bus *bus, UsbIfacedevInformation &devInfo, uint8_t subclass) : Bus("usbstorage", bus), devInfo(devInfo),
-    bulkInDesc(), bulkOutDesc(), bulkInEndpoint(), bulkOutEndpoint(), commandQueue(), currentCommand(), device(nullptr),
-    commandTag(0), subclass(subclass), maxLun(0), bulkOutToggle(0), bulkInToggle(0) {
+    bulkInDesc(), bulkOutDesc(), bulkInEndpoint(), bulkOutEndpoint(), commandQueue(), currentCommand(), taskQueue(),
+    taskRunner(nullptr), taskQueueLock(), taskAvailable(-1), device(nullptr), commandTag(0), subclass(subclass),
+    maxLun(0), bulkOutToggle(0), bulkInToggle(0), stopThreads(false) {
     }
     ~usbstorage();
     void init() override;
@@ -88,10 +95,12 @@ public:
         return QueueCommand(dataTransferLength, scsivariabledata_fixed(), lun, (const void *) &cmd, sizeof(T), done);
     }
     bool ResetDevice();
+    void QueueTask(const std::function<void ()> &task);
 private:
     bool MassStorageReset();
     int GetMaxLun();
     void ExecuteQueueItem();
+    void RunTasks();
 };
 
 class usbstorage_driver : public Driver {

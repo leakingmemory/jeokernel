@@ -283,15 +283,11 @@ public:
     std::unique_ptr<scsivariabledata> clone() const override {
         return std::unique_ptr<scsivariabledata>(new RequestSense_FixedData_VariableLength());
     }
-    std::size_t Remaining(const void *ptr, std::size_t initialRead) const override {
+    std::size_t TotalSize(const void *ptr, std::size_t initialRead, std::size_t maxLength) const override {
         RequestSense_FixedData data{};
         memcpy(&data, ptr, 8);
         std::size_t totalRead{(std::size_t) (data.AdditionalSenseLength + 8)};
-        if (totalRead > initialRead) {
-            return totalRead - initialRead;
-        } else {
-            return 0;
-        }
+        return totalRead;
     }
 };
 
