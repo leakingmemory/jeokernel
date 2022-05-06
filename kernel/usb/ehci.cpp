@@ -986,7 +986,8 @@ void ehci_endpoint::IntWithLock() {
         done.push_back(active);
         active = active->next;
     }
-    if ((status & EHCI_QTD_STATUS_HALTED) != 0 && endpointType == usb_endpoint_type::CONTROL) {
+    if ((status & EHCI_QTD_STATUS_HALTED) != 0 &&
+        (endpointType == usb_endpoint_type::CONTROL || endpointType == usb_endpoint_type::BULK)) {
         {
             std::stringstream str{};
             str << "qTD with error status " << status << "\n";
@@ -1021,6 +1022,13 @@ void ehci_endpoint::IntWithLock() {
         }
     }
     for (auto &transfer : done) {
+        if ((transfer->qTD().status & EHCI_QTD_STATUS_HALTED) == 0) {
+            auto total_bytes = transfer->qTD().total_bytes;
+            auto length = transfer->Length();
+            if (total_bytes <= length) {
+                transfer->Length(length - total_bytes);
+            }
+        }
         transfer->SetDone();
     }
 }
