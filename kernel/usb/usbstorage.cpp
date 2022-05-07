@@ -142,7 +142,7 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
 #ifdef USBSTORAGE_DEBUG_TRANSFERS
     {
         std::stringstream str{};
-        str << "IN " << size << "\n";
+        str << "IN " << size << " DT=" << ((device.bulkInToggle & 1) != 0 ? "1" : "0") << "\n";
         get_klogger() << str.str().c_str();
     }
 #endif
@@ -160,11 +160,24 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
         std::shared_ptr<std::shared_ptr<usb_transfer>> transferIndirect =
                 std::make_shared<std::shared_ptr<usb_transfer>>();
         std::shared_ptr<std::function<void (usb_transfer_status, std::size_t)>> done{new std::function<void (usb_transfer_status, std::size_t)>(doneCallback)};
-        *transferIndirect = device.bulkInEndpoint->CreateTransferWithLock(size == 0, s, usb_transfer_direction::IN, [ptr, s, size, transferIndirect, done, baseSize] () {
+        uint8_t packets = s / device.bulkInDesc.wMaxPacketSize;
+        if ((s % device.bulkInDesc.wMaxPacketSize) != 0) {
+            ++packets;
+        }
+        *transferIndirect = device.bulkInEndpoint->CreateTransferWithLock(size == 0, s, usb_transfer_direction::IN, [this, ptr, s, size, transferIndirect, done, baseSize, packets] () {
             auto transfer = *transferIndirect;
             std::shared_ptr<usb_buffer> buffer{};
             if (transfer) {
                 buffer = transfer->Buffer();
+                auto actualTransferSize = transfer->Length();
+                auto actualPackets = actualTransferSize / device.bulkInDesc.wMaxPacketSize;
+                if ((actualTransferSize % device.bulkInDesc.wMaxPacketSize) != 0) {
+                    actualPackets++;
+                }
+                auto diffPackets = packets - actualPackets;
+                if (diffPackets != 0) {
+                    device.bulkInToggle -= diffPackets;
+                }
             }
             if (buffer && transfer->GetStatus() == usb_transfer_status::NO_ERROR) {
                 memcpy((void *) ptr, buffer->Pointer(), s);
@@ -177,12 +190,8 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
             if (size == 0) {
                 (*done)(transfer->GetStatus(), baseSize + transfer->Length());
             }
-        }, false, 0, device.bulkInToggle);
+        }, false, 0, device.bulkInToggle & 1);
         ptr += s;
-        uint8_t packets = s / device.bulkInDesc.wMaxPacketSize;
-        if ((s % device.bulkInDesc.wMaxPacketSize) != 0) {
-            ++packets;
-        }
         device.bulkInToggle += packets;
     }
 }
