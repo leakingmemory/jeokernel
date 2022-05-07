@@ -1053,7 +1053,34 @@ void ehci_endpoint::IntWithLock() {
 }
 
 bool ehci_endpoint::ClearStall() {
-    return false;
+    {
+        std::lock_guard lock{ehciRef.ehcilock};
+        auto &qhv = qh->Pointer()->qh;
+        if ((qhv.Status & EHCI_QTD_STATUS_HALTED) != 0) {
+            qhv.CurrentQTd = EHCI_POINTER_TERMINATE;
+            qhv.NextQTd = EHCI_POINTER_TERMINATE;
+            qhv.AlternateQTd = EHCI_POINTER_TERMINATE;
+            qhv.Overlay[0] = 0;
+            qhv.Overlay[1] = 0;
+            qhv.Overlay[2] = 0;
+            qhv.Overlay[3] = 0;
+            qhv.Overlay[4] = 0;
+            qhv.Overlay[5] = 0;
+            auto iter = ehciRef.watchList.begin();
+            while (iter != ehciRef.watchList.end()) {
+                ehci_endpoint *endpoint = *iter;
+                if (endpoint == this) {
+                    ehciRef.watchList.erase(iter);
+                } else {
+                    ++iter;
+                }
+            }
+            active = {};
+            pending = {};
+            qhv.Status = qhv.Status & ~(EHCI_QTD_STATUS_ACTIVE | EHCI_QTD_STATUS_HALTED);
+        }
+    }
+    return true;
 }
 
 bool ehci_endpoint::CancelAllTransfers() {
