@@ -834,6 +834,7 @@ ehci_endpoint::CreateTransferWithLock(bool commitTransaction, std::shared_ptr<us
     transfer->buffer = buffer;
     auto &td = transfer->qTD();
     td.next_qtd = EHCI_POINTER_TERMINATE;
+    td.alternate_qtd = EHCI_POINTER_TERMINATE;
     td.data_toggle = (dataToggle & 1) != 0;
     td.total_bytes = size;
     td.interrup_on_cmp = commitTransaction;
@@ -979,7 +980,19 @@ void ehci_endpoint::IntWithLock() {
     uint8_t status{0};
     while (active) {
         auto a_phys = active->td->Phys();
-        if (a_phys == (qhv.NextQTd & 0xFFFFFFE0) || (a_phys == (qhv.CurrentQTd & 0xFFFFFFE0) && (qhv.Status & EHCI_QTD_STATUS_ACTIVE) != 0)) {
+        bool isNext = a_phys == (qhv.NextQTd & 0xFFFFFFE0);
+        if (isNext) {
+            status = 0;
+            break;
+        }
+        bool isCurrent = a_phys == (qhv.CurrentQTd & 0xFFFFFFE0);
+        if (isCurrent) {
+            status = qhv.Status;
+            bool currentIsActive = (status & EHCI_QTD_STATUS_ACTIVE) != 0;
+            if (!currentIsActive) {
+                done.push_back(active);
+                active = active->next;
+            }
             break;
         }
         status = active->td->Pointer()->qtd.status;
@@ -993,6 +1006,12 @@ void ehci_endpoint::IntWithLock() {
             str << "qTD with error status " << status << "\n";
             get_klogger() << str.str().c_str();
         }
+        while (active) {
+            active->qTD().status = status;
+            done.push_back(active);
+            active = active->next;
+        }
+        active = pending;
         while (active) {
             active->qTD().status = status;
             done.push_back(active);
