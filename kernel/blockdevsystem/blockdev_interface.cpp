@@ -6,6 +6,7 @@
 #include <mutex>
 
 void blockdev_interface::Stop() {
+    std::lock_guard lock{_lock};
     stop = true;
     semaphore.release();
 }

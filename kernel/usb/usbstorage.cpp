@@ -13,6 +13,7 @@
 //#define USBSTORAGE_DEBUG_TRANSFERS
 //#define USBSTORAGE_EXPECT_SHORT_READ
 //#define USBSTORAGE_DEBUG_SHORT_READ
+//#define USBSTORAGE_REMOVAL_DEBUG
 
 #define IFACE_PROTO_BULK_ONLY 0x50
 
@@ -611,6 +612,7 @@ Device *usbstorage_driver::probe(Bus &bus, DeviceInformation &deviceInformation)
             }
             if (ifaceDev != nullptr && ifaceDev->iface.bInterfaceClass == 8 && ifaceDev->iface.bInterfaceProtocol == IFACE_PROTO_BULK_ONLY) {
                 auto *dev = new usbstorage(&bus, *ifaceDev, ifaceDev->iface.bInterfaceSubClass);
+                ifaceDev->ifacedev.SetDevice(*dev);
                 return dev;
             }
         }
@@ -707,6 +709,13 @@ void usbstorage::init() {
 }
 
 void usbstorage::stop() {
+#ifdef USBSTORAGE_REMOVAL_DEBUG
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": stopping\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
     if (taskRunner != nullptr) {
         {
             std::lock_guard lock{taskQueueLock};
@@ -718,10 +727,17 @@ void usbstorage::stop() {
         taskRunner = nullptr;
     }
     if (device != nullptr) {
-        device->stop();
+        devices().remove(*device);
         delete device;
         device = nullptr;
     }
+#ifdef USBSTORAGE_REMOVAL_DEBUG
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": stopped\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
 }
 
 void usbstorage::SetDevice(Device *device) {
@@ -729,6 +745,13 @@ void usbstorage::SetDevice(Device *device) {
 }
 
 usbstorage::~usbstorage() {
+#ifdef USBSTORAGE_REMOVAL_DEBUG
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": removing\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
     if (taskRunner != nullptr) {
         {
             std::lock_guard lock{taskQueueLock};
@@ -740,9 +763,14 @@ usbstorage::~usbstorage() {
         taskRunner = nullptr;
     }
     if (device != nullptr) {
-        device->stop();
+        devices().remove(*device);
         delete device;
         device = nullptr;
+    }
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": removed\n";
+        get_klogger() << str.str().c_str();
     }
 }
 

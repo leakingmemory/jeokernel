@@ -11,21 +11,56 @@
 #include <thread>
 #include "CallbackLatch.h"
 
+//#define SCSIDA_DEBUG_REMOVAL
+
 scsida::~scsida() {
+#ifdef SCSIDA_DEBUG_REMOVAL
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": removing\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
     if (blockdevInterface) {
         blockdevInterface->Stop();
+        get_blockdevsystem().Remove(&(*blockdevInterface));
+        blockdevInterface = {};
     }
-    get_blockdevsystem().Remove(&(*blockdevInterface));
     if (iothr) {
         iothr->join();
         iothr = {};
     }
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": removed\n";
+        get_klogger() << str.str().c_str();
+    }
 }
 
 void scsida::stop() {
+#ifdef SCSIDA_DEBUG_REMOVAL
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": stopping\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
     if (blockdevInterface) {
         blockdevInterface->Stop();
+        get_blockdevsystem().Remove(&(*blockdevInterface));
+        if (iothr) {
+            iothr->join();
+            iothr = {};
+        }
+        blockdevInterface = {};
     }
+#ifdef SCSIDA_DEBUG_REMOVAL
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": stopped\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
 }
 
 void scsida::init() {

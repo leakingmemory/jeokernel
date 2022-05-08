@@ -11,6 +11,8 @@
 #include <concurrency/raw_semaphore.h>
 #include "CallbackLatch.h"
 
+//#define SCSIDEVICE_DEBUG_REMOVAL
+
 class scsidevice_scsi_dev : public ScsiDevDeviceInformation {
 private:
     scsidevice &device;
@@ -58,19 +60,45 @@ bool scsidevice_scsi_dev::ResetDevice() {
 }
 
 scsidevice::~scsidevice() {
+#ifdef SCSIDEVICE_DEBUG_REMOVAL
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": removing\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
     if (device != nullptr) {
-        device->stop();
+        devices().remove(*device);
         delete device;
         device = nullptr;
+    }
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": removed\n";
+        get_klogger() << str.str().c_str();
     }
 }
 
 void scsidevice::stop() {
+#ifdef SCSIDEVICE_DEBUG_REMOVAL
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": stopping\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
     if (device != nullptr) {
-        device->stop();
+        devices().remove(*device);
         delete device;
         device = nullptr;
     }
+#ifdef SCSIDEVICE_DEBUG_REMOVAL
+    {
+        std::stringstream str{};
+        str << DeviceType() << DeviceId() << ": stopped\n";
+        get_klogger() << str.str().c_str();
+    }
+#endif
 }
 
 void scsidevice::init() {

@@ -30,6 +30,7 @@ public:
     { }
     ~usbifacedev() override;
     void init() override;
+    void stop() override;
     void SetDevice(Device &dev) {
         device = &dev;
     }

@@ -26,6 +26,14 @@ void usbifacedev::init() {
     }
 }
 
+void usbifacedev::stop() {
+    if (device != nullptr) {
+        devices().remove(*device);
+        delete device;
+        device = nullptr;
+    }
+}
+
 usbifacedev::~usbifacedev() {
     if (device != nullptr) {
         devices().remove(*device);
