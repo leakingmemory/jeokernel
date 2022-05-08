@@ -118,6 +118,7 @@ public:
     std::shared_ptr<usb_buffer> Alloc(size_t size);
     bool ClearStall() override;
     bool CancelAllTransfers() override;
+    void ActiveIsStalled(std::vector<std::shared_ptr<uhci_transfer>> &done, uint8_t status);
     void IntWithLock();
 };
 

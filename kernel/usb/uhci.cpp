@@ -637,11 +637,36 @@ uhci_endpoint::~uhci_endpoint() {
     }
 }
 
+void uhci_endpoint::ActiveIsStalled(std::vector<std::shared_ptr<uhci_transfer>> &done, uint8_t status) {
+    for (auto &transfer : done) {
+        uint32_t act_length = transfer->TD().ActLen;
+        transfer->Length(act_length + 1);
+    }
+    done.push_back(active);
+    active = active->next;
+    do {
+        while (active) {
+            active->TD().Status &= ~0xFF;
+            active->TD().Status |= status;
+            done.push_back(active);
+            active = active->next;
+        }
+        active = pending;
+    } while (active);
+    for (auto &transfer : done) {
+        transfer->SetDone();
+    }
+}
+
 void uhci_endpoint::IntWithLock() {
     auto &qhv = qh->Pointer()->qh;
     std::vector<std::shared_ptr<uhci_transfer>> done{};
     while (active) {
         if (active->td->Phys() == (qhv.element & 0xFFFFFFF0)) {
+            if ((active->TD().Status & UHCI_TD_STATUS_STALL) != 0) {
+                ActiveIsStalled(done, (uint8_t) (active->TD().Status & 0xFF));
+                return;
+            }
             break;
         }
         done.push_back(active);
