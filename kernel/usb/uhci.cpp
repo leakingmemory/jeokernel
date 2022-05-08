@@ -450,6 +450,7 @@ uhci_endpoint::uhci_endpoint(uhci &uhciRef, uint32_t maxPacketSize, uint8_t func
 
 std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
                                                                     usb_transfer_direction direction,
+                                                                    bool bufferRounding,
                                                                     int8_t dataToggle,
                                                                     std::function<void(uhci_transfer &)> &applyFunc) {
     std::shared_ptr<uhci_transfer> transfer = std::make_shared<uhci_transfer>(uhciRef, size);
@@ -460,6 +461,9 @@ std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitT
     td.Status = UHCI_TD_STATUS_ACTIVE;
     if (speed == LOW) {
         td.Status |= UHCI_TD_STATUS_LOW_SPEED;
+    }
+    if (bufferRounding) {
+        td.Status |= UHCI_TD_STATUS_SHORT_PACKET_DET;
     }
     if (commitTransaction) {
         td.Status |= UHCI_TD_STATUS_INTERRUPT_ON_CMP;
@@ -517,11 +521,11 @@ std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitT
 
 std::shared_ptr<usb_transfer>
 uhci_endpoint::CreateTransferWithoutLock(bool commitTransaction, std::shared_ptr<usb_buffer> buffer, uint32_t size,
-                                         usb_transfer_direction direction,
+                                         usb_transfer_direction direction, bool bufferRounding,
                                          int8_t dataToggle, std::function<void(uhci_transfer &)> &applyFunc) {
     std::lock_guard lock{uhciRef.HcdSpinlock()};
 
-    return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+    return CreateTransferWithLock(commitTransaction, buffer, size, direction, bufferRounding, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_transfer>
@@ -530,7 +534,7 @@ uhci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size,
     std::shared_ptr<usb_buffer> buffer = Alloc(size);
     memcpy(buffer->Pointer(), data, size);
     std::function<void (uhci_transfer &)> applyFunc = [] (uhci_transfer &) {};
-    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, bufferRounding, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_transfer>
@@ -541,7 +545,7 @@ uhci_endpoint::CreateTransfer(bool commitTransaction, void *data, uint32_t size,
     std::function<void (uhci_transfer &)> applyFunc = [doneCall] (uhci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
     };
-    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, bufferRounding, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_transfer>
@@ -552,7 +556,7 @@ uhci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
         buffer = Alloc(size);
     }
     std::function<void (uhci_transfer &)> applyFunc = [] (uhci_transfer &) {};
-    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, bufferRounding, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_transfer>
@@ -565,7 +569,7 @@ uhci_endpoint::CreateTransfer(bool commitTransaction, uint32_t size, usb_transfe
     std::function<void (uhci_transfer &)> applyFunc = [doneCall] (uhci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
     };
-    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+    return CreateTransferWithoutLock(commitTransaction, buffer, size, direction, bufferRounding, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_transfer>
@@ -580,7 +584,7 @@ uhci_endpoint::CreateTransferWithLock(bool commitTransaction, const void *data, 
     std::function<void (uhci_transfer &)> applyFunc = [doneCall] (uhci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
     };
-    return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+    return CreateTransferWithLock(commitTransaction, buffer, size, direction, bufferRounding, dataToggle, applyFunc);
 }
 
 std::shared_ptr<usb_transfer>
@@ -593,7 +597,7 @@ uhci_endpoint::CreateTransferWithLock(bool commitTransaction, uint32_t size, usb
     std::function<void (uhci_transfer &)> applyFunc = [doneCall] (uhci_transfer &transfer) {
         transfer.SetDoneCall(doneCall);
     };
-    return CreateTransferWithLock(commitTransaction, buffer, size, direction, dataToggle, applyFunc);
+    return CreateTransferWithLock(commitTransaction, buffer, size, direction, bufferRounding, dataToggle, applyFunc);
 }
 
 uhci_endpoint::~uhci_endpoint() {
@@ -661,6 +665,8 @@ void uhci_endpoint::IntWithLock() {
         }
     }
     for (auto &transfer : done) {
+        uint32_t act_length = transfer->TD().ActLen;
+        transfer->Length(act_length + 1);
         transfer->SetDone();
     }
 }
