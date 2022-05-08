@@ -190,7 +190,7 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
             if (size == 0) {
                 (*done)(transfer->GetStatus(), baseSize + transfer->Length());
             }
-        }, false, 0, device.bulkInToggle & 1);
+        }, true, 0, device.bulkInToggle & 1);
         ptr += s;
         device.bulkInToggle += packets;
     }
