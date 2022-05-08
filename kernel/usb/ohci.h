@@ -58,6 +58,9 @@
 #define OHCI_INTERVAL_FSMPS_MASK 0x7FFF0000
 #define OHCI_INTERVAL_FI_MASK    0x00003FFF
 
+#define OHCI_ENDPOINT_HEAD_HALTED           1
+#define OHCI_ENDPOINT_HEAD_DATA_TOGGLE_BIT  2
+
 struct ohci_endpoint_descriptor {
     uint32_t HcControl;
     uint32_t TailP;

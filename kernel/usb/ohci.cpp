@@ -1008,6 +1008,12 @@ void ohci_endpoint::SetSkip(bool skip) {
 }
 
 bool ohci_endpoint::ClearStall() {
+    auto *ed = edPtr->Pointer();
+    if ((ed->HeadP & OHCI_ENDPOINT_HEAD_HALTED) != 0) {
+        head = tail;
+        ed->HeadP = ed->TailP & 0xFFFFFFF0;
+        return true;
+    }
     return false;
 }
 
