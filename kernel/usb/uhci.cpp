@@ -462,7 +462,7 @@ std::shared_ptr<usb_transfer> uhci_endpoint::CreateTransferWithLock(bool commitT
     if (speed == LOW) {
         td.Status |= UHCI_TD_STATUS_LOW_SPEED;
     }
-    if (bufferRounding) {
+    if (!bufferRounding) {
         td.Status |= UHCI_TD_STATUS_SHORT_PACKET_DET;
     }
     if (commitTransaction) {
@@ -663,7 +663,12 @@ void uhci_endpoint::IntWithLock() {
     std::vector<std::shared_ptr<uhci_transfer>> done{};
     while (active) {
         if (active->td->Phys() == (qhv.element & 0xFFFFFFF0)) {
-            if ((active->TD().Status & UHCI_TD_STATUS_STALL) != 0) {
+            if ((active->TD().Status & UHCI_TD_STATUS_STALL) != 0 ||
+                    (
+                            (active->TD().Status & (UHCI_TD_STATUS_SHORT_PACKET_DET | UHCI_TD_STATUS_ACTIVE)) == UHCI_TD_STATUS_SHORT_PACKET_DET &&
+                            active->TD().ActLen != active->TD().MaxLen
+                    )
+                ) {
                 ActiveIsStalled(done, (uint8_t) (active->TD().Status & 0xFF));
                 return;
             }
@@ -733,6 +738,9 @@ usb_transfer_status uhci_transfer::GetStatus() {
     }
     if ((td.Status & UHCI_TD_STATUS_BITSTUFF_ERR) != 0) {
         return usb_transfer_status::BIT_STUFFING;
+    }
+    if ((td.Status & UHCI_TD_STATUS_SHORT_PACKET_DET) != 0 && td.ActLen != td.MaxLen) {
+        return usb_transfer_status::BUFFER_UNDERRUN;
     }
     return usb_transfer_status::NO_ERROR;
 }
