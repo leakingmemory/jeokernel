@@ -697,7 +697,11 @@ void uhci_endpoint::IntWithLock() {
 }
 
 bool uhci_endpoint::ClearStall() {
-    return false;
+    auto &qhv = qh->Pointer()->qh;
+    qhv.element = UHCI_POINTER_TERMINATE;
+    active = {};
+    pending = {};
+    return true;
 }
 
 bool uhci_endpoint::CancelAllTransfers() {
