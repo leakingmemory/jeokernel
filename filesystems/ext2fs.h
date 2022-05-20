@@ -12,15 +12,24 @@ class blockdev;
 
 struct ext2super;
 
+class ext2fs_provider;
+
 class ext2fs : public blockdev_filesystem {
+    friend ext2fs_provider;
 private:
     std::unique_ptr<ext2super> superblock;
+    uint32_t BlockSize;
 public:
     ext2fs(std::shared_ptr<blockdev> bdev);
     bool HasSuperblock();
     int VersionMajor();
     int VersionMinor();
     uint16_t FsSignature();
+private:
+    uint64_t FsBlockToPhysBlock(uint64_t fs_block);
+    uint64_t FsBlockOffsetOnPhys(uint64_t fs_block);
+    uint64_t FsBlocksToPhysBlocks(uint64_t fs_block, uint64_t fs_len);
+    bool ReadBlockGroups();
 };
 
 class ext2fs_provider : public filesystem_provider {

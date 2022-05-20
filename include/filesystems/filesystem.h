@@ -14,7 +14,7 @@ class filesystem {
 };
 
 class blockdev_filesystem : public filesystem {
-private:
+protected:
     std::shared_ptr<blockdev> bdev;
 public:
     blockdev_filesystem(std::shared_ptr<blockdev> bdev) : bdev(bdev) {

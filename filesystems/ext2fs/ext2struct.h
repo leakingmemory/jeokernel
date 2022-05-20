@@ -7,6 +7,8 @@
 
 #include <filesystems/endian.h>
 
+#define EXT2_SIGNATURE 0xEF53
+
 struct ext2super {
     little_endian<uint32_t> total_inodes;
     little_endian<uint32_t> total_blocks;
@@ -33,6 +35,95 @@ struct ext2super {
     little_endian<uint32_t> major_version;
     little_endian<uint16_t> owner_uid;
     little_endian<uint16_t> owner_gid;
+};
+
+struct ext2blockgroup {
+    little_endian<uint32_t> block_bitmap;
+    little_endian<uint32_t> inode_bitmap;
+    little_endian<uint32_t> inode_table;
+    little_endian<uint16_t> free_blocks_count;
+    little_endian<uint16_t> free_inodes_count;
+    little_endian<uint16_t> used_dirs_count;
+    little_endian<uint16_t> pad;
+    little_endian<uint32_t> reserved[3];
+};
+
+class ext2blockgroups {
+private:
+    ext2blockgroup *groups;
+    std::size_t n;
+public:
+    ext2blockgroups(std::size_t n) : groups(nullptr), n(n) {
+        groups = (ext2blockgroup *) malloc(sizeof(*groups) * n);
+    }
+    ext2blockgroups(const ext2blockgroups &) = delete;
+    ext2blockgroups(ext2blockgroups &&) = delete;
+    ext2blockgroups &operator =(const ext2blockgroups &) = delete;
+    ext2blockgroups &operator =(ext2blockgroups &&) = delete;
+    ~ext2blockgroups() {
+        free(groups);
+        groups = nullptr;
+    }
+    std::size_t Size() {
+        return n;
+    }
+    ext2blockgroup &operator [] (std::size_t i) {
+        return groups[i];
+    }
+};
+
+class ext2bitmap_bit {
+private:
+    little_endian<uint32_t> &entry;
+    uint32_t bit;
+public:
+    ext2bitmap_bit(little_endian<uint32_t> &entry, uint32_t bit) : entry(entry), bit(bit) {
+    }
+    operator bool() {
+        uint32_t val = entry;
+        return (val & bit) != 0;
+    }
+    ext2bitmap_bit &operator =(bool value) {
+        if (value) {
+            uint32_t prev = entry;
+            entry = prev | bit;
+        } else {
+            uint32_t prev = entry;
+            entry = prev & ~bit;
+        }
+        return *this;
+    }
+};
+
+class ext2bitmap {
+private:
+    little_endian<uint32_t> *bitmap;
+    std::size_t n;
+public:
+    ext2bitmap(std::size_t n) : bitmap(nullptr), n(n) {
+        auto sz = n / sizeof(uint32_t);
+        if ((n % sizeof(uint32_t)) != 0) {
+            ++sz;
+        }
+        bitmap = (little_endian<uint32_t> *) malloc(sz * sizeof(uint32_t));
+    }
+    ext2bitmap(const ext2bitmap &) = delete;
+    ext2bitmap(ext2bitmap &&) = delete;
+    ext2bitmap &operator =(const ext2bitmap &) = delete;
+    ext2bitmap &operator =(ext2bitmap &&) = delete;
+    ~ext2bitmap() {
+        free(bitmap);
+        bitmap = nullptr;
+    }
+    ext2bitmap_bit operator[] (std::size_t i) {
+        auto bit = i & 31;
+        i = i >> 5;
+        ext2bitmap_bit ref{bitmap[i], (uint32_t) bit};
+        return ref;
+    }
+    void *Pointer() {
+        return bitmap;
+    }
 };
 
 #endif //FSBITS_EXT2STRUCT_H
