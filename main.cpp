@@ -12,6 +12,11 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         std::cerr << "Failed to open filesystem " << fsname << "\n";
         return 1;
     }
+    std::shared_ptr<directory> rootdir = fs->GetRootDirectory();
+    if (!rootdir) {
+        std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
+        return 1;
+    }
     return 0;
 }
 

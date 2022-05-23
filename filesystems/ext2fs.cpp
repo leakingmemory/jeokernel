@@ -8,7 +8,7 @@
 #include <iostream>
 #include "ext2fs/ext2struct.h"
 
-ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev) {
+ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), groups() {
     auto blocksize = bdev->GetBlocksize();
     {
         std::shared_ptr<blockdev_block> blocks;
@@ -91,9 +91,11 @@ bool ext2fs::ReadBlockGroups() {
     std::cout << "Block groups size " << blockGroupsSize << " phys blocks " << blockGroupsTotalBlocks << "\n";
     auto physBlockGroups = bdev->ReadBlock(onDiskBlockGRoups, blockGroupsTotalBlocks);
     if (physBlockGroups) {
+        groups.reserve(blockGroups);
         std::shared_ptr<ext2blockgroups> groups{new ext2blockgroups(blockGroups)};
         memcpy(&((*groups)[0]), ((uint8_t *) physBlockGroups->Pointer()) + onDiskBlockGroupsOffset, sizeof((*groups)[0]) * blockGroups);
         for (std::size_t i = 0; i < blockGroups; i++) {
+            auto &groupObject = this->groups.emplace_back();
             auto &group = (*groups)[i];
             std::cout << "Block group " << group.free_blocks_count << " free block, " << group.free_inodes_count
             << " free inodes, " << group.block_bitmap << "/" << group.inode_bitmap << " block/inode bitmaps, "
@@ -148,12 +150,109 @@ bool ext2fs::ReadBlockGroups() {
                 std::cerr << "Error reading block group inode bitmap\n";
                 return false;
             }
+            groupObject.InodeTableBlock = FsBlockToPhysBlock(group.inode_table);
+            groupObject.InodeTableOffset = FsBlockOffsetOnPhys(group.inode_table);
+            auto inodeTableSize = superblock->inodes_per_group * sizeof(ext2inode);
+            auto inodeTablePhysBlocks = (inodeTableSize + groupObject.InodeTableOffset) / bdev->GetBlocksize();
+            std::cout << "Inode table starts at " << groupObject.InodeTableBlock << " offset " << groupObject.InodeTableOffset
+            << " size of " << inodeTableSize << " and blocks " << inodeTablePhysBlocks << "\n";
+            groupObject.InodeTableBlocks.reserve(inodeTablePhysBlocks);
+            for (std::size_t i = 0; i < inodeTablePhysBlocks; i++) {
+                groupObject.InodeTableBlocks.emplace_back();
+            }
         }
         return true;
     } else {
         std::cerr << "Error reading block groups for ext2fs\n";
         return false;
     }
+}
+
+std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
+    --inode_num;
+    auto group_idx = inode_num / superblock->inodes_per_group;
+    auto inode_off = inode_num % superblock->inodes_per_group;
+    if (group_idx >= groups.size()) {
+        return {};
+    }
+    auto &group = groups[group_idx];
+    auto offset = inode_off * sizeof(ext2inode);
+    offset += group.InodeTableOffset;
+    auto end = offset + sizeof(ext2inode) - 1;
+    auto block_num = offset / bdev->GetBlocksize();
+    offset = offset % bdev->GetBlocksize();
+    auto block_end = end / bdev->GetBlocksize();
+    std::cout << "Inode " << (inode_num + 1) << " at " << block_num << " - " << block_end << " off "
+    << offset << "\n";
+    if (!group.InodeTableBlocks[block_num]) {
+        auto rd = bdev->ReadBlock(block_num + group.InodeTableBlock, 1);
+        if (rd && !group.InodeTableBlocks[block_num]) {
+            group.InodeTableBlocks[block_num] = std::make_shared<ext2fs_inode_table_block>(bdev->GetBlocksize());
+            memcpy(&(group.InodeTableBlocks[block_num]->data[0]), rd->Pointer(), bdev->GetBlocksize());
+        }
+    }
+    std::shared_ptr<ext2fs_inode> inode_obj{};
+    if (block_num == block_end) {
+        inode_obj = std::make_shared<ext2fs_inode>(group.InodeTableBlocks[block_num], offset, bdev->GetBlocksize());
+    } else if ((block_num + 1) == block_end) {
+        inode_obj = std::make_shared<ext2fs_inode>(group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, bdev->GetBlocksize());
+    } else {
+        return {};
+    }
+    ext2inode inode{};
+    inode_obj->Read(inode);
+    std::cout << "Inode " << inode_num << " " << std::oct << inode.mode << std::dec
+              << " sz " << inode.size << " blks " << inode.blocks << ":";
+    for (int i = 0; i < EXT2_NUM_DIRECT_BLOCK_PTRS; i++) {
+        if (inode.block[i]) {
+            std::cout << " " << inode.block[i];
+            inode_obj->blockRefs.push_back(inode.block[i]);
+        }
+    }
+    std::cout << "\n";
+    return inode_obj;
+}
+
+std::shared_ptr<ext2fs_inode> ext2fs::GetInode(std::size_t inode_num) {
+    for (auto &inode : inodes) {
+        if (std::get<0>(inode) == inode_num) {
+            return std::get<1>(inode);
+        }
+    }
+    auto loadedInode = LoadInode(inode_num);
+    if (loadedInode) {
+        for (auto &inode : inodes) {
+            if (std::get<0>(inode) == inode_num) {
+                return std::get<1>(inode);
+            }
+        }
+        std::tuple<uint32_t,std::shared_ptr<ext2fs_inode>> tuple = std::make_tuple((uint32_t) inode_num, loadedInode);
+        inodes.push_back(tuple);
+        return std::get<1>(tuple);
+    }
+    return {};
+}
+
+std::shared_ptr<directory> ext2fs::GetDirectory(std::size_t inode_num) {
+    auto inode_obj = GetInode(inode_num);
+    if (!inode_obj) {
+        std::cerr << "Failed to open inode " << inode_num << "\n";
+    }
+    return {};
+}
+
+std::shared_ptr<directory> ext2fs::GetRootDirectory() {
+    return GetDirectory(2);
+}
+
+void ext2fs_inode::Read(ext2inode &inode) {
+    auto sz1 = sizeof(inode);
+    if ((sz1 + offset) > blocksize) {
+        sz1 = blocksize - offset;
+        auto sz2 = sizeof(inode) - sz1;
+        memcpy(((uint8_t *) (void *) &inode) + sz1, blocks[1]->data, sz2);
+    }
+    memcpy(&inode, ((uint8_t *) blocks[0]->data) + offset, sz1);
 }
 
 ext2fs_provider::ext2fs_provider() {

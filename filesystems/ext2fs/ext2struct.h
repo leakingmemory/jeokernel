@@ -126,4 +126,34 @@ public:
     }
 };
 
+#define EXT2_NUM_DIRECT_BLOCK_PTRS  12
+#define EXT2_NUM_BLOCK_POINTERS     (EXT2_NUM_DIRECT_BLOCK_PTRS + 3)
+
+struct ext2inode {
+    little_endian<uint16_t> mode;
+    little_endian<uint16_t> uid;
+    little_endian<uint32_t> size;
+    little_endian<uint32_t> atime;
+    little_endian<uint32_t> ctime;
+    little_endian<uint32_t> mtime;
+    little_endian<uint32_t> dtime;
+    little_endian<uint16_t> gid;
+    little_endian<uint16_t> links_count;
+    little_endian<uint32_t> blocks;
+    little_endian<uint32_t> flags;
+    uint32_t reserved1; // Hurd?
+    little_endian<uint32_t> block[EXT2_NUM_BLOCK_POINTERS];
+    little_endian<uint32_t> generation;
+    little_endian<uint32_t> file_acl;
+    little_endian<uint32_t> dir_acl;
+    little_endian<uint32_t> fragment_address;
+    uint8_t fragment_number;
+    uint8_t fragment_size;
+    uint16_t pad1;
+    little_endian<uint16_t> uid_high;
+    little_endian<uint16_t> gid_high;
+    uint32_t extspace[1];
+};
+static_assert(sizeof(ext2inode) == 128);
+
 #endif //FSBITS_EXT2STRUCT_H
