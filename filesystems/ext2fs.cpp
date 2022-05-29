@@ -193,9 +193,9 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
     }
     std::shared_ptr<ext2fs_inode> inode_obj{};
     if (block_num == block_end) {
-        inode_obj = std::make_shared<ext2fs_inode>(group.InodeTableBlocks[block_num], offset, bdev->GetBlocksize());
+        inode_obj = std::make_shared<ext2fs_inode>(bdev, group.InodeTableBlocks[block_num], offset, BlockSize);
     } else if ((block_num + 1) == block_end) {
-        inode_obj = std::make_shared<ext2fs_inode>(group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, bdev->GetBlocksize());
+        inode_obj = std::make_shared<ext2fs_inode>(bdev, group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, BlockSize);
     } else {
         return {};
     }
@@ -208,6 +208,15 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
             std::cout << " " << inode.block[i];
             inode_obj->blockRefs.push_back(inode.block[i]);
         }
+    }
+    inode_obj->filesize = inode.size;
+    auto pages = inode_obj->filesize / FILEPAGE_PAGE_SIZE;
+    if ((inode_obj->filesize % FILEPAGE_PAGE_SIZE) != 0) {
+        ++pages;
+    }
+    inode_obj->blockCache.reserve(pages);
+    for (int i = 0; i < pages; i++) {
+        inode_obj->blockCache.push_back(0);
     }
     std::cout << "\n";
     return inode_obj;
@@ -238,6 +247,29 @@ std::shared_ptr<directory> ext2fs::GetDirectory(std::size_t inode_num) {
     if (!inode_obj) {
         std::cerr << "Failed to open inode " << inode_num << "\n";
     }
+    ext2fs_inode_reader reader{inode_obj};
+    {
+        ext2dirent baseDirent{};
+        do {
+            if (reader.read(&baseDirent, sizeof(baseDirent)) == sizeof(baseDirent) &&
+                baseDirent.rec_len > sizeof(baseDirent) &&
+                baseDirent.name_len > 0) {
+                auto addLength = baseDirent.rec_len - sizeof(baseDirent);
+                auto *dirent = new (malloc(baseDirent.rec_len)) ext2dirent();
+                memcpy(dirent, &baseDirent, sizeof(*dirent));
+                static_assert(sizeof(*dirent) == sizeof(baseDirent));
+                if (reader.read(((uint8_t *) dirent) + sizeof(baseDirent), addLength) == addLength) {
+                    std::cout << "Dir node " << dirent->inode << " type " << ((int) dirent->file_type) << " name " << dirent->Name() << "\n";
+                } else {
+                    baseDirent.inode = 0;
+                }
+                dirent->~ext2dirent();
+                free(dirent);
+            } else {
+                baseDirent.inode = 0;
+            }
+        } while (baseDirent.inode != 0);
+    }
     return {};
 }
 
@@ -246,6 +278,7 @@ std::shared_ptr<directory> ext2fs::GetRootDirectory() {
 }
 
 void ext2fs_inode::Read(ext2inode &inode) {
+    auto blocksize = bdev->GetBlocksize();
     auto sz1 = sizeof(inode);
     if ((sz1 + offset) > blocksize) {
         sz1 = blocksize - offset;
@@ -253,6 +286,158 @@ void ext2fs_inode::Read(ext2inode &inode) {
         memcpy(((uint8_t *) (void *) &inode) + sz1, blocks[1]->data, sz2);
     }
     memcpy(&inode, ((uint8_t *) blocks[0]->data) + offset, sz1);
+}
+
+class ext2file_block : public blockdev_block {
+    friend ext2fs_inode;
+private:
+    void *ptr;
+    std::size_t size;
+public:
+    ext2file_block(std::size_t size) : ptr(nullptr), size(size) {
+        ptr = malloc(size);
+    }
+    ext2file_block(const ext2file_block &) = delete;
+    ext2file_block(ext2file_block &&) = delete;
+    ext2file_block &operator =(const ext2file_block &) = delete;
+    ext2file_block &operator =(ext2file_block &&) = delete;
+    virtual ~ext2file_block();
+    void *Pointer() const override;
+    std::size_t Size() const override;
+};
+
+ext2file_block::~ext2file_block() {
+    if (ptr != nullptr) {
+        free(ptr);
+        ptr = nullptr;
+    }
+}
+
+void *ext2file_block::Pointer() const {
+    return ptr;
+}
+
+std::size_t ext2file_block::Size() const {
+    return size;
+}
+
+std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock, uint32_t startingOffset, uint32_t length) {
+    std::vector<std::shared_ptr<blockdev_block>> readBlocks{};
+    int hole = 0;
+    while (startingOffset >= blocksize) {
+        ++startingBlock;
+        startingOffset -= blocksize;
+    }
+    uint32_t numBlocks = startingOffset + length;
+    uint32_t lastBlockLength = numBlocks % blocksize;
+    numBlocks += blocksize - lastBlockLength;
+    numBlocks /= blocksize;
+    uint32_t firstReadLength = 0;
+    for (auto blockNo = startingBlock; blockNo < (startingBlock + numBlocks); ++blockNo) {
+        if (blockNo < blockRefs.size()) {
+            auto fsBlock = blockRefs[blockNo];
+            if (fsBlock != 0) {
+                uint64_t startingAddr = fsBlock;
+                startingAddr *= blocksize;
+                if (blockNo == startingBlock) {
+                    startingAddr += startingOffset;
+                }
+                uint64_t physBlock = startingAddr / bdev->GetBlocksize();
+                uint64_t endingOffset = fsBlock + 1;
+                if ((blockNo + 1) == (startingBlock + numBlocks)) {
+                    endingOffset = startingAddr + lastBlockLength;
+                } else {
+                    endingOffset *= blocksize;
+                }
+                uint32_t offset = startingAddr % bdev->GetBlocksize();
+                startingAddr = physBlock * bdev->GetBlocksize();
+                uint32_t physBlocks = (endingOffset - startingAddr) / bdev->GetBlocksize();
+                if (blockNo == startingBlock) {
+                    firstReadLength = endingOffset - startingAddr - offset;
+                }
+                if (((endingOffset - startingAddr) % bdev->GetBlocksize()) != 0) {
+                    ++physBlocks;
+                }
+                std::cout << "Read file block " << blockNo << ": phys " << physBlock << " num " << physBlocks << "\n";
+                auto rdBlock = bdev->ReadBlock(physBlock, physBlocks);
+                if (rdBlock && offset != 0) {
+                    memcpy(rdBlock->Pointer(), ((uint8_t *) rdBlock->Pointer()) + offset, blocksize);
+                }
+                if (!rdBlock) {
+                    std::cerr << "Read error file block " << blockNo << "\n";
+                }
+                readBlocks.push_back(rdBlock);
+            } else {
+                ++hole;
+            }
+        }
+    }
+    std::shared_ptr<blockdev_block> finalBlock{new ext2file_block(length)};
+    bzero(finalBlock->Pointer(), length);
+    int i = 0;
+    uint32_t offset = 0;
+    if (i < readBlocks.size()) {
+        auto cp = firstReadLength;
+        if (cp > length) {
+            cp = length;
+        }
+        if (readBlocks[i]) {
+            std::cout << "Assemble blocks 0 - " << cp << "\n";
+            memcpy(finalBlock->Pointer(), readBlocks[i]->Pointer(), cp);
+        }
+        offset = firstReadLength;
+        ++i;
+    }
+    if (readBlocks.size() > 1) {
+        while (i < (readBlocks.size() - 1)) {
+            if (readBlocks[i]) {
+                std::cout << "Assemble blocks " << offset << " - " << (offset + blocksize) << "\n";
+                memcpy(((uint8_t *) finalBlock->Pointer()) + offset, readBlocks[i]->Pointer(), blocksize);
+            }
+            offset += blocksize;
+            ++i;
+        }
+        if (i < readBlocks.size()) {
+            if (readBlocks[i]) {
+                std::cout << "Assemble blocks " << offset << " - " << (offset + lastBlockLength) << "\n";
+                memcpy(((uint8_t *) finalBlock->Pointer()) + offset, readBlocks[i]->Pointer(), lastBlockLength);
+            }
+        }
+    }
+    return finalBlock;
+}
+
+std::shared_ptr<filepage_pointer> ext2fs_inode::ReadBlock(std::size_t blki) {
+    if (blki < blockCache.size()) {
+        if (!blockCache[blki]) {
+            uint64_t startingAddr = blki;
+            startingAddr *= FILEPAGE_PAGE_SIZE;
+            uint64_t endingAddr = startingAddr + FILEPAGE_PAGE_SIZE;
+            uint64_t startingBlock = startingAddr / blocksize;
+            uint64_t endingBlock = endingAddr / blocksize;
+            {
+                uint64_t endingBlockAddr = endingBlock * blocksize;
+                if (endingBlockAddr < endingAddr) {
+                    ++endingBlock;
+                }
+            }
+            auto readingOffset = startingAddr % blocksize;
+            auto readBlocks = ReadBlocks(startingBlock, readingOffset, FILEPAGE_PAGE_SIZE);
+            if (readBlocks) {
+                std::shared_ptr<filepage> page{new filepage()};
+                memcpy(page->Pointer()->Pointer(), readBlocks->Pointer(), FILEPAGE_PAGE_SIZE);
+                if (!blockCache[blki]) {
+                    blockCache[blki] = page;
+                }
+                return blockCache[blki]->Pointer();
+            } else {
+                std::cerr << "Read error for inode block " << startingBlock << "\n";
+                return {};
+            }
+        }
+        return blockCache[blki]->Pointer();
+    }
+    return {};
 }
 
 ext2fs_provider::ext2fs_provider() {
@@ -272,5 +457,35 @@ std::shared_ptr<blockdev_filesystem> ext2fs_provider::open(std::shared_ptr<block
         return fs;
     } else {
         return {};
+    }
+}
+
+std::size_t ext2fs_inode_reader::read(void *ptr, std::size_t bytes) {
+    if (page) {
+        auto remaining = FILEPAGE_PAGE_SIZE - offset;
+        if (bytes <= remaining) {
+            memcpy(ptr, ((uint8_t *) page->Pointer()) + offset, bytes);
+            offset += bytes;
+            if (offset == FILEPAGE_PAGE_SIZE) {
+                page = {};
+                ++blki;
+                offset = 0;
+            }
+            return bytes;
+        } else {
+            memcpy(ptr, ((uint8_t *) page->Pointer()) + offset, remaining);
+            page = {};
+            ++blki;
+            offset = 0;
+            auto nextrd = read(((uint8_t *) ptr) + remaining, bytes - remaining);
+            return remaining + nextrd;
+        }
+    } else {
+        page = inode->ReadBlock(blki);
+        ++blki;
+        if (!page) {
+            return 0;
+        }
+        return read(ptr, bytes);
     }
 }

@@ -156,4 +156,23 @@ struct ext2inode {
 };
 static_assert(sizeof(ext2inode) == 128);
 
+struct ext2dirent {
+    little_endian<uint32_t> inode;
+    little_endian<uint16_t> rec_len;
+    uint8_t name_len;
+    uint8_t file_type;
+
+private:
+    const char *NamePtr() {
+        return ((const char *) this) + sizeof(*this);
+    }
+public:
+    std::string Name() {
+        std::string name{};
+        name.append(NamePtr(), name_len);
+        return name;
+    }
+} __attribute__((__packed__));
+static_assert(sizeof(ext2dirent) == 8);
+
 #endif //FSBITS_EXT2STRUCT_H

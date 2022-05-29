@@ -9,11 +9,13 @@
 #include <tuple>
 #include <filesystems/filesystem.h>
 #include <files/directory.h>
+#include <files/filepage.h>
 
 class blockdev;
 
 struct ext2super;
 
+class blockdev_block;
 class ext2fs_inode;
 
 class ext2fs;
@@ -85,20 +87,37 @@ public:
 class ext2fs_inode {
     friend ext2fs;
 private:
+    std::shared_ptr<blockdev> bdev;
     std::shared_ptr<ext2fs_inode_table_block> blocks[2];
     std::size_t offset;
     std::size_t blocksize;
     std::vector<uint32_t> blockRefs;
+    std::vector<std::shared_ptr<filepage>> blockCache;
+    uint64_t filesize;
 public:
-    ext2fs_inode(std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : blocks(), offset(offset), blocksize(blocksize), blockRefs() {
+    ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), blockCache() {
         blocks[0] = blk;
         blk->ref++;
     }
-    ext2fs_inode(std::shared_ptr<ext2fs_inode_table_block> blk1, std::shared_ptr<ext2fs_inode_table_block> blk2, std::size_t offset, std::size_t blocksize) : ext2fs_inode(blk1, offset, blocksize) {
+    ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk1, std::shared_ptr<ext2fs_inode_table_block> blk2, std::size_t offset, std::size_t blocksize) : ext2fs_inode(bdev, blk1, offset, blocksize) {
         blocks[1] = blk2;
         blk2->ref++;
     }
     void Read(ext2inode &inode);
+private:
+    std::shared_ptr<blockdev_block> ReadBlocks(uint32_t startingBlock, uint32_t startingOffset, uint32_t length);
+public:
+    std::shared_ptr<filepage_pointer> ReadBlock(std::size_t blki);
+};
+
+class ext2fs_inode_reader {
+private:
+    std::shared_ptr<ext2fs_inode> inode;
+    std::shared_ptr<filepage_pointer> page;
+    std::size_t offset, blki;
+public:
+    ext2fs_inode_reader(std::shared_ptr<ext2fs_inode> inode) : inode(inode), page(), offset(0), blki(0) {}
+    std::size_t read(void *ptr, std::size_t bytes);
 };
 
 class ext2fs_provider : public filesystem_provider {
