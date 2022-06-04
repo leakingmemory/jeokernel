@@ -210,6 +210,7 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
         }
     }
     inode_obj->filesize = inode.size;
+    inode_obj->mode = inode.mode;
     auto pages = inode_obj->filesize / FILEPAGE_PAGE_SIZE;
     if ((inode_obj->filesize % FILEPAGE_PAGE_SIZE) != 0) {
         ++pages;
@@ -242,12 +243,49 @@ std::shared_ptr<ext2fs_inode> ext2fs::GetInode(std::size_t inode_num) {
     return {};
 }
 
-std::shared_ptr<directory> ext2fs::GetDirectory(std::size_t inode_num) {
-    auto inode_obj = GetInode(inode_num);
-    if (!inode_obj) {
-        std::cerr << "Failed to open inode " << inode_num << "\n";
+class ext2fs_file : public fileitem {
+protected:
+    std::shared_ptr<filesystem> fs;
+    std::shared_ptr<ext2fs_inode> inode;
+public:
+    ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode);
+    uint32_t Mode() override;
+    std::size_t Size() override;
+};
+
+ext2fs_file::ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : fs(fs), inode(inode) {
+}
+
+uint32_t ext2fs_file::Mode() {
+    return inode->mode;
+}
+
+std::size_t ext2fs_file::Size() {
+    return inode->filesize;
+}
+
+class ext2fs_directory : public directory, public ext2fs_file {
+private:
+    std::vector<std::shared_ptr<directory_entry>> entries;
+    bool entriesRead;
+public:
+    ext2fs_directory(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : directory(), ext2fs_file(fs, inode), entries(), entriesRead(false) {}
+    std::vector<std::shared_ptr<directory_entry>> Entries() override;
+private:
+    ext2fs &Filesystem() {
+        filesystem *fs = &(*(this->fs));
+        return *((ext2fs *) fs);
     }
-    ext2fs_inode_reader reader{inode_obj};
+    uint32_t Mode() override;
+    std::size_t Size() override;
+};
+
+std::vector<std::shared_ptr<directory_entry>> ext2fs_directory::Entries() {
+    if (entriesRead) {
+        return entries;
+    }
+    std::vector<std::shared_ptr<directory_entry>> entries{};
+    ext2fs_inode_reader reader{inode};
     {
         ext2dirent baseDirent{};
         do {
@@ -259,7 +297,15 @@ std::shared_ptr<directory> ext2fs::GetDirectory(std::size_t inode_num) {
                 memcpy(dirent, &baseDirent, sizeof(*dirent));
                 static_assert(sizeof(*dirent) == sizeof(baseDirent));
                 if (reader.read(((uint8_t *) dirent) + sizeof(baseDirent), addLength) == addLength) {
-                    std::cout << "Dir node " << dirent->inode << " type " << ((int) dirent->file_type) << " name " << dirent->Name() << "\n";
+                    if (dirent->inode != 0) {
+                        std::string name{dirent->Name()};
+                        std::cout << "Dir node " << dirent->inode << " type " << ((int) dirent->file_type) << " name "
+                                  << name << "\n";
+                        if (dirent->file_type == 2) {
+                            std::shared_ptr<directory> dir{Filesystem().GetDirectory(fs, dirent->inode)};
+                            entries.emplace_back(new directory_entry(name, dir));
+                        }
+                    }
                 } else {
                     baseDirent.inode = 0;
                 }
@@ -270,11 +316,36 @@ std::shared_ptr<directory> ext2fs::GetDirectory(std::size_t inode_num) {
             }
         } while (baseDirent.inode != 0);
     }
-    return {};
+    if (!entriesRead) {
+        this->entries = entries;
+        entriesRead = true;
+    }
+    return this->entries;
 }
 
-std::shared_ptr<directory> ext2fs::GetRootDirectory() {
-    return GetDirectory(2);
+uint32_t ext2fs_directory::Mode() {
+    return ext2fs_file::Mode();
+}
+
+std::size_t ext2fs_directory::Size() {
+    return ext2fs_file::Size();
+}
+
+std::shared_ptr<directory> ext2fs::GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
+    if (!shared_this || this != ((ext2fs *) &(*shared_this))) {
+        std::cerr << "Wrong shared reference for filesystem when opening directory\n";
+        return {};
+    }
+    auto inode_obj = GetInode(inode_num);
+    if (!inode_obj) {
+        std::cerr << "Failed to open inode " << inode_num << "\n";
+        return {};
+    }
+    return std::make_shared<ext2fs_directory>(shared_this, inode_obj);
+}
+
+std::shared_ptr<directory> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {
+    return GetDirectory(shared_this, 2);
 }
 
 void ext2fs_inode::Read(ext2inode &inode) {

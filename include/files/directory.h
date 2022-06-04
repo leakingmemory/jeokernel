@@ -15,6 +15,7 @@ private:
     std::string name;
     std::shared_ptr<fileitem> item;
 public:
+    directory_entry(const std::string &name, std::shared_ptr<fileitem> item) : name(name), item(item) {}
     std::string Name() {
         return name;
     }
@@ -25,7 +26,9 @@ public:
 
 class directory : public fileitem {
 public:
-    std::vector<std::shared_ptr<directory_entry>> Entries();
+    virtual ~directory() = default;
+    uint32_t Mode() override = 0;
+    virtual std::vector<std::shared_ptr<directory_entry>> Entries() = 0;
 };
 
 #endif //FSBITS_DIRECTORY_H

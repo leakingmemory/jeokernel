@@ -13,7 +13,7 @@ class blockdev;
 
 class filesystem {
 public:
-    virtual std::shared_ptr<directory> GetRootDirectory() = 0;
+    virtual std::shared_ptr<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) = 0;
 };
 
 class blockdev_filesystem : public filesystem {
@@ -22,7 +22,7 @@ protected:
 public:
     blockdev_filesystem(std::shared_ptr<blockdev> bdev) : bdev(bdev) {
     }
-    std::shared_ptr<directory> GetRootDirectory() override = 0;
+    std::shared_ptr<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override = 0;
 };
 
 class filesystem_provider {

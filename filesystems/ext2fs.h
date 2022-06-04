@@ -79,13 +79,16 @@ private:
     std::shared_ptr<ext2fs_inode> LoadInode(std::size_t inode_num);
 public:
     std::shared_ptr<ext2fs_inode> GetInode(std::size_t inode_num);
-    std::shared_ptr<directory> GetDirectory(std::size_t inode_num);
+    std::shared_ptr<directory> GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
 public:
-    std::shared_ptr<directory> GetRootDirectory() override;
+    std::shared_ptr<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
 };
+
+class ext2fs_file;
 
 class ext2fs_inode {
     friend ext2fs;
+    friend ext2fs_file;
 private:
     std::shared_ptr<blockdev> bdev;
     std::shared_ptr<ext2fs_inode_table_block> blocks[2];
@@ -94,6 +97,7 @@ private:
     std::vector<uint32_t> blockRefs;
     std::vector<std::shared_ptr<filepage>> blockCache;
     uint64_t filesize;
+    uint16_t mode;
 public:
     ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), blockCache() {
         blocks[0] = blk;
