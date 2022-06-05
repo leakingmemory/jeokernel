@@ -8,7 +8,7 @@
 #include <iostream>
 #include "ext2fs/ext2struct.h"
 
-ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), groups() {
+ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(), superblock(), groups(), inodes(), BlockSize(0) {
     auto blocksize = bdev->GetBlocksize();
     {
         std::shared_ptr<blockdev_block> blocks;
@@ -169,6 +169,7 @@ bool ext2fs::ReadBlockGroups() {
 }
 
 std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
+    std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
     --inode_num;
     auto group_idx = inode_num / superblock->inodes_per_group;
     auto inode_off = inode_num % superblock->inodes_per_group;
@@ -185,10 +186,23 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
     std::cout << "Inode " << (inode_num + 1) << " at " << block_num << " - " << block_end << " off "
     << offset << "\n";
     if (!group.InodeTableBlocks[block_num]) {
-        auto rd = bdev->ReadBlock(block_num + group.InodeTableBlock, 1);
+        auto blocknum = block_num + group.InodeTableBlock;
+        lock = {};
+        auto rd = bdev->ReadBlock(blocknum, 1);
+        lock = std::make_unique<std::lock_guard<std::mutex>>(mtx);
         if (rd && !group.InodeTableBlocks[block_num]) {
             group.InodeTableBlocks[block_num] = std::make_shared<ext2fs_inode_table_block>(bdev->GetBlocksize());
             memcpy(&(group.InodeTableBlocks[block_num]->data[0]), rd->Pointer(), bdev->GetBlocksize());
+        }
+    }
+    if ((block_num + 1) == block_end && !group.InodeTableBlocks[block_end]) {
+        auto blocknum = block_end + group.InodeTableBlock;
+        lock = {};
+        auto rd = bdev->ReadBlock(blocknum, 1);
+        lock = std::make_unique<std::lock_guard<std::mutex>>(mtx);
+        if (rd && !group.InodeTableBlocks[block_end]) {
+            group.InodeTableBlocks[block_end] = std::make_shared<ext2fs_inode_table_block>(bdev->GetBlocksize());
+            memcpy(&(group.InodeTableBlocks[block_end]->data[0]), rd->Pointer(), bdev->GetBlocksize());
         }
     }
     std::shared_ptr<ext2fs_inode> inode_obj{};
@@ -224,13 +238,17 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
 }
 
 std::shared_ptr<ext2fs_inode> ext2fs::GetInode(std::size_t inode_num) {
-    for (auto &inode : inodes) {
-        if (std::get<0>(inode) == inode_num) {
-            return std::get<1>(inode);
+    {
+        std::lock_guard lock{mtx};
+        for (auto &inode: inodes) {
+            if (std::get<0>(inode) == inode_num) {
+                return std::get<1>(inode);
+            }
         }
     }
     auto loadedInode = LoadInode(inode_num);
     if (loadedInode) {
+        std::lock_guard lock{mtx};
         for (auto &inode : inodes) {
             if (std::get<0>(inode) == inode_num) {
                 return std::get<1>(inode);
@@ -495,6 +513,7 @@ std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock,
 }
 
 std::shared_ptr<filepage_pointer> ext2fs_inode::ReadBlock(std::size_t blki) {
+    std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
     if (blki < blockCache.size()) {
         if (!blockCache[blki]) {
             uint64_t startingAddr = blki;
@@ -509,10 +528,12 @@ std::shared_ptr<filepage_pointer> ext2fs_inode::ReadBlock(std::size_t blki) {
                 }
             }
             auto readingOffset = startingAddr % blocksize;
+            lock = {};
             auto readBlocks = ReadBlocks(startingBlock, readingOffset, FILEPAGE_PAGE_SIZE);
             if (readBlocks) {
                 std::shared_ptr<filepage> page{new filepage()};
                 memcpy(page->Pointer()->Pointer(), readBlocks->Pointer(), FILEPAGE_PAGE_SIZE);
+                std::lock_guard lock{mtx};
                 if (!blockCache[blki]) {
                     blockCache[blki] = page;
                 }

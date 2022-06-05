@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <tuple>
+#include <mutex>
 #include <filesystems/filesystem.h>
 #include <files/directory.h>
 #include <files/filepage.h>
@@ -60,6 +61,7 @@ class ext2fs_inode;
 class ext2fs : public blockdev_filesystem {
     friend ext2fs_provider;
 private:
+    std::mutex mtx;
     std::unique_ptr<ext2super> superblock;
     std::vector<ext2fs_group> groups;
     std::vector<std::tuple<uint32_t,std::shared_ptr<ext2fs_inode>>> inodes;
@@ -91,6 +93,7 @@ class ext2fs_inode {
     friend ext2fs;
     friend ext2fs_file;
 private:
+    std::mutex mtx;
     std::shared_ptr<blockdev> bdev;
     std::shared_ptr<ext2fs_inode_table_block> blocks[2];
     std::size_t offset;
@@ -100,7 +103,7 @@ private:
     uint64_t filesize;
     uint16_t mode;
 public:
-    ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), blockCache() {
+    ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : mtx(), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), blockCache() {
         blocks[0] = blk;
         blk->ref++;
     }
