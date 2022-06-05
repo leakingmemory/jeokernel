@@ -231,7 +231,7 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
     }
     inode_obj->blockCache.reserve(pages);
     for (int i = 0; i < pages; i++) {
-        inode_obj->blockCache.push_back(0);
+        inode_obj->blockCache.push_back({});
     }
     std::cout << "\n";
     return inode_obj;
