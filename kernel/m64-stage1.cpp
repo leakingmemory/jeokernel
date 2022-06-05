@@ -56,6 +56,7 @@
 #include <acpi/acpi_8042.h>
 #include <physpagemap.h>
 #include <stage1.h>
+#include <iostream>
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -693,6 +694,29 @@ done_with_mem_extension:
 
         kernel_elf = new KernelElf(multiboot2);
 
+        {
+            const auto *init_table_section = kernel_elf->elf().get_elf64_header().get_init_table();
+            if (init_table_section != nullptr) {
+                typedef void (*init_func)();
+
+                auto *init_table = (uintptr_t *) (void **) init_table_section->sh_addr;
+
+                get_klogger() << "Run global construct " << ((uintptr_t) init_table) << "\n";
+
+                auto size = init_table_section->sh_size;
+                auto num = size / sizeof(*init_table);
+                for (int i = 0; i < num; i++) {
+                    intptr_t faddr = (intptr_t) init_table[i];
+                    get_klogger() << "Construct " << ((uintptr_t) faddr) << "\n";
+                    if (faddr != 0 && faddr != -1) {
+                        auto func = (init_func) (void *) init_table[i];
+                        func();
+                    }
+                }
+            }
+        }
+        std::cout << "Kernel ELF constructors done\n";
+
 #if 0
         get_klogger() << "ELF Sections:\n";
         {
@@ -787,10 +811,8 @@ done_with_mem_extension:
             }
 
             {
-                std::stringstream stream{};
-                stream << std::dec << " " << lapic_100ms << " ticks per 100ms";
-                std::string info = stream.str();
-                get_klogger() << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC) << info.c_str()
+                std::cout << "timer: " << lapic.set_timer_int_mode(0x20, LAPIC_TIMER_PERIODIC)
+                        << std::dec << " " << lapic_100ms << " ticks per 100ms"
                               << "\n";
                 lapic.set_timer_count((uint32_t) (lapic_100ms / 10));
             }

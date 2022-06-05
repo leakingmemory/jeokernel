@@ -68,6 +68,19 @@
 #define EI_BPF 0xF7
 #define EI_WDC_65C816 0x101
 
+#define PHT_NULL    0
+#define PHT_LOAD    1
+#define PHT_DYNAMIC 2
+#define PHT_INTERP  3
+#define PHT_NOTE    4
+#define PHT_SHLIB   5
+#define PHT_PHDR    6
+#define PHT_TLS     7
+#define PHT_LOOS    0x60000000
+#define PHT_HIOS    0x6FFFFFFF
+#define PHT_LOPROC  0x70000000
+#define PHT_HIPROC  0x7FFFFFFF
+
 #define SHF_WRITE               0x1
 #define SHF_ALLOC               0x2
 #define SHF_EXECINSTR           0x4
@@ -231,6 +244,16 @@ struct ELF64_header {
         for (uint16_t i = 0; i < e_shnum; i++) {
             const ELF64_section_entry &se = get_section_entry(i);
             if (se.sh_type == SHT_SYMTAB) {
+                return &se;
+            }
+        }
+        return nullptr;
+    }
+
+    const ELF64_section_entry *get_init_table() const {
+        for (uint16_t i = 0; i < e_shnum; i++) {
+            const ELF64_section_entry &se = get_section_entry(i);
+            if (se.sh_type == SHT_INIT_ARRAY) {
                 return &se;
             }
         }
