@@ -455,7 +455,7 @@ void boot_stage1(void *multiboot_header_addr) {
                 vga.display(ln, 40, hex);
                 ln++;
 
-                if (ph.p_memsz > 0) {
+                if (ph.p_memsz > 0 && ph.p_type == PHT_LOAD) {
                     uint32_t phaddr = kernel_elf_start + ph.p_offset;
                     {
                         uint32_t overrun = phdata & 4095;
@@ -465,18 +465,19 @@ void boot_stage1(void *multiboot_header_addr) {
                     }
                     uint32_t vaddr = ph.p_vaddr;
                     uint32_t vaddr_end = vaddr + ph.p_memsz;
-                    if (ph.p_filesz == ph.p_memsz) {
-                        if ((phaddr & 4095) != 0 || (vaddr & 4095) != 0) {
-                            uint32_t alignment_error = phaddr & 4095;
-                            if (alignment_error != (vaddr & 4095)) {
-                                vga.display(ln, 0, "error: kernel exec not page aligned");
-                                while (1) {
-                                    asm("hlt;");
-                                }
+                    uint32_t alignment_error{0};
+                    if ((phaddr & 4095) != 0 || (vaddr & 4095) != 0) {
+                        alignment_error = phaddr & 4095;
+                        if (alignment_error != (vaddr & 4095)) {
+                            vga.display(ln, 0, "error: kernel exec not page aligned");
+                            while (1) {
+                                asm("hlt;");
                             }
-                            phaddr -= alignment_error;
-                            vaddr -= alignment_error;
                         }
+                        phaddr -= alignment_error;
+                        vaddr -= alignment_error;
+                    }
+                    if (ph.p_filesz == ph.p_memsz) {
                         while (vaddr < vaddr_end) {
                             pageentr *phys_pe = get_pageentr64(pml4t, phaddr);
                             uint32_t page_ppn = phaddr / 4096;
