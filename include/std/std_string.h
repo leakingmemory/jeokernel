@@ -375,6 +375,10 @@ namespace std {
             return at(size() - 1);
         }
 
+        [[nodiscard]] constexpr bool empty() const noexcept {
+            return size() == 0;
+        }
+
         constexpr void reserve(size_type new_cap) {
             size_type prev_cap = capacity();
             if (new_cap > prev_cap) {
@@ -562,6 +566,21 @@ namespace std {
                 get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
                 c.shrt.set_empty();
             }
+        }
+
+        constexpr bool starts_with( const CharT* s ) const {
+            auto iterator = cbegin();
+            while (iterator != cend()) {
+                if (*s == '\0') {
+                    return true;
+                }
+                if (*s != *iterator) {
+                    return false;
+                }
+                ++iterator;
+                ++s;
+            }
+            return *s == '\0';
         }
 
         constexpr int compare( const basic_string& str ) const noexcept {
