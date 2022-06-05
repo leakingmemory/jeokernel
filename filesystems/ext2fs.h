@@ -58,13 +58,18 @@ public:
 
 class ext2fs_inode;
 
+struct ext2fs_inode_with_id {
+    uint32_t inode_num;
+    std::shared_ptr<ext2fs_inode> inode;
+};
+
 class ext2fs : public blockdev_filesystem {
     friend ext2fs_provider;
 private:
     std::mutex mtx;
     std::unique_ptr<ext2super> superblock;
     std::vector<ext2fs_group> groups;
-    std::vector<std::tuple<uint32_t,std::shared_ptr<ext2fs_inode>>> inodes;
+    std::vector<ext2fs_inode_with_id> inodes;
     uint32_t BlockSize;
 public:
     ext2fs(std::shared_ptr<blockdev> bdev);

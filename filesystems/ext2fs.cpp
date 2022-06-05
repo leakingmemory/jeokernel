@@ -241,8 +241,8 @@ std::shared_ptr<ext2fs_inode> ext2fs::GetInode(std::size_t inode_num) {
     {
         std::lock_guard lock{mtx};
         for (auto &inode: inodes) {
-            if (std::get<0>(inode) == inode_num) {
-                return std::get<1>(inode);
+            if (inode.inode_num == inode_num) {
+                return inode.inode;
             }
         }
     }
@@ -250,13 +250,13 @@ std::shared_ptr<ext2fs_inode> ext2fs::GetInode(std::size_t inode_num) {
     if (loadedInode) {
         std::lock_guard lock{mtx};
         for (auto &inode : inodes) {
-            if (std::get<0>(inode) == inode_num) {
-                return std::get<1>(inode);
+            if (inode.inode_num == inode_num) {
+                return inode.inode;
             }
         }
-        std::tuple<uint32_t,std::shared_ptr<ext2fs_inode>> tuple = std::make_tuple((uint32_t) inode_num, loadedInode);
-        inodes.push_back(tuple);
-        return std::get<1>(tuple);
+        ext2fs_inode_with_id with_id{.inode_num = (uint32_t) inode_num, .inode = loadedInode};
+        inodes.push_back(with_id);
+        return with_id.inode;
     }
     return {};
 }
