@@ -80,6 +80,7 @@ private:
 public:
     std::shared_ptr<ext2fs_inode> GetInode(std::size_t inode_num);
     std::shared_ptr<directory> GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
+    std::shared_ptr<fileitem> GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
 public:
     std::shared_ptr<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
 };

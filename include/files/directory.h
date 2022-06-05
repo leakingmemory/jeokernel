@@ -29,6 +29,7 @@ public:
     virtual ~directory() = default;
     uint32_t Mode() override = 0;
     virtual std::vector<std::shared_ptr<directory_entry>> Entries() = 0;
+    std::shared_ptr<fileitem> Resolve(std::string filename);
 };
 
 #endif //FSBITS_DIRECTORY_H

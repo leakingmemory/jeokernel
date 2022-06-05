@@ -5,8 +5,9 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include "ls.h"
 
-int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector<std::string>::iterator &args) {
+int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
     std::shared_ptr<filesystem> fs = open_filesystem(fsname, bdev);
     if (!fs) {
         std::cerr << "Failed to open filesystem " << fsname << "\n";
@@ -16,6 +17,16 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
     if (!rootdir) {
         std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
         return 1;
+    }
+    if (args != args_end) {
+        auto cmd = *args;
+        ++args;
+        if (cmd == "ls") {
+            return ls(rootdir, args, args_end);
+        } else {
+            std::cerr << "Invalid command: " << cmd << "\n";
+            return 1;
+        }
     }
     for (auto entry : rootdir->Entries()) {
         auto item = entry->Item();
@@ -95,7 +106,7 @@ int cppmain(std::vector<std::string> args) {
         }
     }
     ++iterator;
-    return blockdevmain(fs_blockdev, fs_name, iterator);
+    return blockdevmain(fs_blockdev, fs_name, iterator, args.end());
 }
 
 int main(int argc, char **argv) {

@@ -304,6 +304,9 @@ std::vector<std::shared_ptr<directory_entry>> ext2fs_directory::Entries() {
                         if (dirent->file_type == 2) {
                             std::shared_ptr<directory> dir{Filesystem().GetDirectory(fs, dirent->inode)};
                             entries.emplace_back(new directory_entry(name, dir));
+                        } else if (dirent->file_type == 1) {
+                            std::shared_ptr<fileitem> file{Filesystem().GetFile(fs, dirent->inode)};
+                            entries.emplace_back(new directory_entry(name, file));
                         }
                     }
                 } else {
@@ -342,6 +345,19 @@ std::shared_ptr<directory> ext2fs::GetDirectory(std::shared_ptr<filesystem> shar
         return {};
     }
     return std::make_shared<ext2fs_directory>(shared_this, inode_obj);
+}
+
+std::shared_ptr<fileitem> ext2fs::GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
+    if (!shared_this || this != ((ext2fs *) &(*shared_this))) {
+        std::cerr << "Wrong shared reference for filesystem when opening directory\n";
+        return {};
+    }
+    auto inode_obj = GetInode(inode_num);
+    if (!inode_obj) {
+        std::cerr << "Failed to open inode " << inode_num << "\n";
+        return {};
+    }
+    return std::make_shared<ext2fs_file>(shared_this, inode_obj);
 }
 
 std::shared_ptr<directory> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {
