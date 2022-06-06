@@ -52,6 +52,7 @@ namespace std {
 
     stderr &stderr::write(const char *s, std::streamsize count) {
         cout.write(s, count);
+        return *this;
     }
 
     stderr cerr{};
