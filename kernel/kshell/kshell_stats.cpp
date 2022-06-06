@@ -34,7 +34,7 @@ void kshell_stats_visitor::Visit(const std::string &name, long long value) {
     get_klogger() << str.str().c_str();
 }
 
-void kshell_stats::Exec(const std::vector<std::string> &cmd) {
+void kshell_stats::Exec(kshell &, const std::vector<std::string> &cmd) {
     kshell_stats_visitor visitor{""};
     GetStatisticsRoot().Accept(visitor);
 }

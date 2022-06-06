@@ -15,7 +15,7 @@ public:
     const std::string &Command() const override {
         return command;
     }
-    void Exec(const std::vector<std::string> &cmd) override;
+    void Exec(kshell &, const std::vector<std::string> &cmd) override;
 };
 
 

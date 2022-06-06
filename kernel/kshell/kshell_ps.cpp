@@ -16,7 +16,7 @@ void tab(std::stringstream &str, uint8_t characters) {
     str << padding;
 }
 
-void kshell_ps::Exec(const std::vector<std::string> &cmd) {
+void kshell_ps::Exec(kshell &, const std::vector<std::string> &cmd) {
     auto tasks = get_scheduler()->get_task_infos();
     get_klogger() << "PID     CPU   FLA PRI PTS NAME\n";
     for (auto &task : tasks) {

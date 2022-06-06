@@ -6,7 +6,7 @@
 #include "keyboard/keyboard.h"
 #include "sstream"
 
-kshell::kshell() : mtx(), exit(false), shell([this] () { std::this_thread::set_name("[kshell]"); run(); }) {
+kshell::kshell() : mtx(), exit(false), cwd_ref(), cwd(), shell([this] () { std::this_thread::set_name("[kshell]"); run(); }) {
 }
 
 kshell::~kshell() {
@@ -19,6 +19,7 @@ kshell::~kshell() {
 
 [[noreturn]] void kshell::run() {
     std::string input{};
+    Cwd(get_kernel_rootdir());
     while(true) {
         std::shared_ptr<keyboard_line_consumer> consumer{new keyboard_line_consumer()};
         get_klogger() << "# ";
@@ -114,7 +115,7 @@ void kshell::Exec(const std::vector<std::string> &cmd) {
         std::string cmdstr = cmd[0];
         for (auto cmdexec : commands) {
             if (cmdexec->Command() == cmdstr) {
-                cmdexec->Exec(cmd);
+                cmdexec->Exec(*this, cmd);
                 return;
             }
         }

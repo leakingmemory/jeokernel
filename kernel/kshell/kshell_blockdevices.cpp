@@ -7,7 +7,7 @@
 #include <sstream>
 #include <blockdevs/blockdev.h>
 
-void kshell_blockdevices::Exec(const std::vector<std::string> &cmd) {
+void kshell_blockdevices::Exec(kshell &, const std::vector<std::string> &cmd) {
     auto &system = get_blockdevsystem();
     auto names = system.GetBlockdevices();
     std::stringstream str{};

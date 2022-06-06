@@ -1,22 +1,21 @@
 //
-// Created by sigsegv on 1/30/22.
+// Created by sigsegv on 6/6/22.
 //
 
-#ifndef JEOKERNEL_KSHELL_PS_H
-#define JEOKERNEL_KSHELL_PS_H
+#ifndef JEOKERNEL_KSHELL_LS_H
+#define JEOKERNEL_KSHELL_LS_H
 
 #include "kshell.h"
 
-class kshell_ps : public kshell_command {
+class kshell_ls : public kshell_command {
 private:
     std::string command;
 public:
-    kshell_ps() : command("ps") {}
+    kshell_ls() : command("ls") {}
     const std::string &Command() const override {
         return command;
     }
     void Exec(kshell &, const std::vector<std::string> &cmd) override;
 };
 
-
-#endif //JEOKERNEL_KSHELL_PS_H
+#endif //JEOKERNEL_KSHELL_LS_H

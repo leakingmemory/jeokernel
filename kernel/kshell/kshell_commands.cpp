@@ -7,6 +7,7 @@
 #include "kshell_ps.h"
 #include "kshell_stats.h"
 #include "kshell_blockdevices.h"
+#include "kshell_ls.h"
 #include <acpi/acpica_interface.h>
 
 class kshell_echo : public kshell_command {
@@ -17,7 +18,7 @@ public:
     const std::string &Command() const override {
         return command;
     }
-    void Exec(const std::vector<std::string> &cmd) override {
+    void Exec(kshell &, const std::vector<std::string> &cmd) override {
         auto iterator = cmd.cbegin();
         if (iterator == cmd.cend()) {
             get_klogger() << "\n";
@@ -46,7 +47,7 @@ public:
     const std::string &Command() const override {
         return command;
     }
-    void Exec(const std::vector<std::string> &cmd) override {
+    void Exec(kshell &, const std::vector<std::string> &cmd) override {
         get_acpica_interface().reboot();
     }
 };
@@ -59,7 +60,7 @@ public:
     const std::string &Command() const override {
         return command;
     }
-    void Exec(const std::vector<std::string> &cmd) override {
+    void Exec(kshell &, const std::vector<std::string> &cmd) override {
         get_acpica_interface().poweroff();
     }
 };
@@ -71,4 +72,5 @@ kshell_commands::kshell_commands(kshell &shell) {
     shell.AddCommand(std::make_shared<kshell_ps>());
     shell.AddCommand(std::make_shared<kshell_stats>());
     shell.AddCommand(std::make_shared<kshell_blockdevices>());
+    shell.AddCommand(std::make_shared<kshell_ls>());
 }
