@@ -57,6 +57,7 @@
 #include <physpagemap.h>
 #include <stage1.h>
 #include <iostream>
+#include <core/blockdevsystem.h>
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -905,6 +906,7 @@ done_with_mem_extension:
         init_pci();
         init_devices();
         init_keyboard();
+        init_blockdevsystem();
         get_drivers().AddDriver(new vga_driver());
         get_drivers().AddDriver(new pci_bridge_driver());
         get_drivers().AddDriver(new uhci_driver());

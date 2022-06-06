@@ -8,6 +8,7 @@
 #include "kshell_stats.h"
 #include "kshell_blockdevices.h"
 #include "kshell_ls.h"
+#include "kshell_mount.h"
 #include <acpi/acpica_interface.h>
 
 class kshell_echo : public kshell_command {
@@ -73,4 +74,5 @@ kshell_commands::kshell_commands(kshell &shell) {
     shell.AddCommand(std::make_shared<kshell_stats>());
     shell.AddCommand(std::make_shared<kshell_blockdevices>());
     shell.AddCommand(std::make_shared<kshell_ls>());
+    shell.AddCommand(std::make_shared<kshell_mount>());
 }

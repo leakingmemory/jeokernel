@@ -65,6 +65,10 @@ std::vector<std::shared_ptr<kdirent>> kdirectory_impl::Entries(std::shared_ptr<k
     return items;
 }
 
+void kdirectory_impl::Mount(const std::shared_ptr<directory> &fsroot) {
+    mounts.push_back({.name = kpath, .rootdir = fsroot});
+}
+
 std::vector<std::shared_ptr<kdirent>> kdirectory::Entries() {
     kfile *cwd_file = &(*impl);
     kdirectory_impl *dir = dynamic_cast<kdirectory_impl *>(cwd_file);
@@ -125,6 +129,11 @@ std::shared_ptr<kfile> kdirectory::Resolve(std::string filename) {
         }
     }
     return {};
+}
+
+void kdirectory::Mount(const std::shared_ptr<directory> &fsroot) {
+    auto *impl = dynamic_cast<kdirectory_impl *> (&(*(this->impl)));
+    impl->Mount(fsroot);
 }
 
 std::shared_ptr<kdirectory> get_kernel_rootdir() {

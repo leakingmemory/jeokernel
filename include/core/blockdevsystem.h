@@ -59,6 +59,7 @@ public:
     virtual std::shared_ptr<blockdev> GetBlockdevice(const std::string &name) = 0;
 };
 
+void init_blockdevsystem();
 blockdevsystem &get_blockdevsystem();
 
 #endif //JEOKERNEL_BLOCKDEVSYSTEM_H

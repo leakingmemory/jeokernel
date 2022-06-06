@@ -13,6 +13,7 @@
 #include <klogger.h>
 #include <blockdevs/parttable_readers.h>
 #include <tuple>
+#include <filesystems/filesystem.h>
 
 static parttable_readers *parttableReaders = nullptr;
 static blockdevsystem *blockdevSystem = nullptr;
@@ -247,12 +248,14 @@ std::shared_ptr<blockdev> blockdevsystem_impl::GetBlockdevice(const std::string 
     return {};
 }
 
+void init_blockdevsystem() {
+    parttableReaders = new parttable_readers;
+    blockdevSystem = new blockdevsystem_impl;
+
+    init_filesystem_providers();
+    register_filesystem_providers();
+}
+
 blockdevsystem &get_blockdevsystem() {
-    if (parttableReaders == nullptr) {
-        parttableReaders = new parttable_readers;
-    }
-    if (blockdevSystem == nullptr) {
-        blockdevSystem = new blockdevsystem_impl;
-    }
     return *blockdevSystem;
 }

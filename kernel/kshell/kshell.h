@@ -36,6 +36,9 @@ public:
     kdirectory &Cwd() {
         return *cwd;
     }
+    std::shared_ptr<kfile> CwdRef() {
+        return cwd_ref;
+    }
     constexpr bool is_white(int ch) const {
         return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
     }

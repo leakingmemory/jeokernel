@@ -11,6 +11,7 @@
 #include <vector>
 
 class fileitem;
+class directory;
 class kdirectory;
 class kdirectory_impl;
 
@@ -47,6 +48,7 @@ private:
 public:
     kdirectory_impl(const std::shared_ptr<kfile> &parent, const std::string &kpath, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem), parent(parent), kpath(kpath) {}
     std::vector<std::shared_ptr<kdirent>> Entries(std::shared_ptr<kfile> this_impl);
+    void Mount(const std::shared_ptr<directory> &fsroot);
 };
 
 class kdirectory : public kfile {
@@ -56,8 +58,10 @@ public:
     kdirectory(const std::shared_ptr<kfile> &impl) : kfile(impl->file), impl(impl) {}
     std::vector<std::shared_ptr<kdirent>> Entries();
     std::shared_ptr<kfile> Resolve(std::string filename);
+    void Mount(const std::shared_ptr<directory> &fsroot);
 };
 
 std::shared_ptr<kdirectory> get_kernel_rootdir();
+bool mount(std::shared_ptr<kfile> mountpoint, std::shared_ptr<directory> fsroot);
 
 #endif //JEOKERNEL_KFILES_H
