@@ -22,6 +22,10 @@ std::size_t kfile::Size() {
     return file ? file->Size() : 0;
 }
 
+std::size_t kfile::Read(uint64_t offset, void *ptr, std::size_t len) {
+    return file ? file->Read(offset, ptr, len) : 0;
+}
+
 std::vector<std::shared_ptr<kdirent>> kdirectory_impl::Entries(std::shared_ptr<kfile> this_ref) {
     std::shared_ptr<fileitem> listing_ref{file};
     directory *listing;

@@ -25,6 +25,7 @@ public:
     virtual ~kfile() = default;
     uint32_t Mode();
     std::size_t Size();
+    std::size_t Read(uint64_t offset, void *ptr, std::size_t len);
 };
 
 class kdirent {

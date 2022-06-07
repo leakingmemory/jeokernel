@@ -11,6 +11,7 @@
 #include "kshell_ls.h"
 #include "kshell_mount.h"
 #include "kshell_cd.h"
+#include "kshell_cat.h"
 #include <acpi/acpica_interface.h>
 
 class kshell_echo : public kshell_command {
@@ -93,4 +94,5 @@ kshell_commands::kshell_commands(kshell &shell) {
     shell.AddCommand(std::make_shared<kshell_ls>());
     shell.AddCommand(std::make_shared<kshell_mount>());
     shell.AddCommand(std::make_shared<kshell_cd>());
+    shell.AddCommand(std::make_shared<kshell_cat>());
 }
