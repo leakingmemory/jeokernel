@@ -119,8 +119,10 @@ public:
     void Read(ext2inode &inode);
 private:
     std::shared_ptr<blockdev_block> ReadBlocks(uint32_t startingBlock, uint32_t startingOffset, uint32_t length);
+    std::shared_ptr<filepage> ReadBlockRaw(std::size_t blki);
 public:
     std::shared_ptr<filepage_pointer> ReadBlock(std::size_t blki);
+    std::size_t ReadBytes(uint64_t offset, void *ptr, std::size_t length);
 };
 
 class ext2fs_inode_reader {

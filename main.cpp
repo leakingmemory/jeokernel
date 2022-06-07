@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include "ls.h"
+#include "cat.h"
 
 int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
     std::shared_ptr<filesystem> fs = open_filesystem(fsname, bdev);
@@ -23,6 +24,8 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         ++args;
         if (cmd == "ls") {
             return ls(rootdir, args, args_end);
+        } else if (cmd == "cat") {
+            return cat(rootdir, args, args_end);
         } else {
             std::cerr << "Invalid command: " << cmd << "\n";
             return 1;
