@@ -456,6 +456,9 @@ std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock,
     }
     uint32_t numBlocks = startingOffset + length;
     uint32_t lastBlockLength = numBlocks % blocksize;
+    if (lastBlockLength == 0) {
+        lastBlockLength = blocksize;
+    }
     numBlocks += blocksize - lastBlockLength;
     numBlocks /= blocksize;
     uint32_t firstReadLength = 0;
