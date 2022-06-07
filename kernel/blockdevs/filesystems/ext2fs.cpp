@@ -270,6 +270,8 @@ public:
     ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode);
     uint32_t Mode() override;
     std::size_t Size() override;
+    std::shared_ptr<filepage> GetPage(std::size_t pagenum) override;
+    std::size_t Read(uint64_t offset, void *ptr, std::size_t length) override;
 };
 
 ext2fs_file::ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : fs(fs), inode(inode) {
@@ -281,6 +283,14 @@ uint32_t ext2fs_file::Mode() {
 
 std::size_t ext2fs_file::Size() {
     return inode->filesize;
+}
+
+std::shared_ptr<filepage> ext2fs_file::GetPage(std::size_t pagenum) {
+    return inode->ReadBlockRaw(pagenum);
+}
+
+std::size_t ext2fs_file::Read(uint64_t offset, void *ptr, std::size_t length) {
+    return inode->ReadBytes(offset, ptr, length);
 }
 
 class ext2fs_directory : public directory, public ext2fs_file {
@@ -297,6 +307,8 @@ private:
     }
     uint32_t Mode() override;
     std::size_t Size() override;
+    std::shared_ptr<filepage> GetPage(std::size_t pagenum) override;
+    std::size_t Read(uint64_t offset, void *ptr, std::size_t length) override;
 };
 
 std::vector<std::shared_ptr<directory_entry>> ext2fs_directory::Entries() {
@@ -351,6 +363,14 @@ uint32_t ext2fs_directory::Mode() {
 
 std::size_t ext2fs_directory::Size() {
     return ext2fs_file::Size();
+}
+
+std::shared_ptr<filepage> ext2fs_directory::GetPage(std::size_t pagenum) {
+    return {};
+}
+
+std::size_t ext2fs_directory::Read(uint64_t offset, void *ptr, std::size_t length) {
+    return 0;
 }
 
 std::shared_ptr<directory> ext2fs::GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
@@ -513,7 +533,7 @@ std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock,
     return finalBlock;
 }
 
-std::shared_ptr<filepage_pointer> ext2fs_inode::ReadBlock(std::size_t blki) {
+std::shared_ptr<filepage> ext2fs_inode::ReadBlockRaw(std::size_t blki) {
     std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
     if (blki < blockCache.size()) {
         if (!blockCache[blki]) {
@@ -538,15 +558,53 @@ std::shared_ptr<filepage_pointer> ext2fs_inode::ReadBlock(std::size_t blki) {
                 if (!blockCache[blki]) {
                     blockCache[blki] = page;
                 }
-                return blockCache[blki]->Pointer();
+                return blockCache[blki];
             } else {
                 std::cerr << "Read error for inode block " << startingBlock << "\n";
                 return {};
             }
         }
-        return blockCache[blki]->Pointer();
+        return blockCache[blki];
     }
     return {};
+}
+
+std::shared_ptr<filepage_pointer> ext2fs_inode::ReadBlock(std::size_t blki) {
+    auto block = ReadBlockRaw(blki);
+    if (block) {
+        return block->Pointer();
+    }
+    return {};
+}
+
+std::size_t ext2fs_inode::ReadBytes(uint64_t offset, void *ptr, std::size_t length) {
+    uint8_t *p = (uint8_t *) ptr;
+    if ((offset + ((uint64_t) length)) > filesize) {
+        if (offset >= filesize) {
+            return 0;
+        }
+        length = (std::size_t) (filesize - offset);
+    }
+    std::size_t vec = 0;
+    while (vec < length) {
+        uint64_t cur = offset + vec;
+        uint64_t blk = cur / FILEPAGE_PAGE_SIZE;
+        uint32_t blkoff = (uint32_t) (cur % FILEPAGE_PAGE_SIZE);
+        uint32_t blklen = FILEPAGE_PAGE_SIZE;
+        if (blklen > (length - vec)) {
+            blklen = length - vec;
+        }
+
+        auto blkp = ReadBlock(blk);
+        if (blkp) {
+            memcpy(p + vec, ((uint8_t *) blkp->Pointer()) + blkoff, blklen);
+        } else {
+            bzero(p + vec, blklen);
+        }
+
+        vec += blklen;
+    }
+    return length;
 }
 
 ext2fs_provider::ext2fs_provider() {
