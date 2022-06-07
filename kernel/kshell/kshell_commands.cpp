@@ -4,11 +4,13 @@
 
 #include "kshell_commands.h"
 #include <sstream>
+#include <iostream>
 #include "kshell_ps.h"
 #include "kshell_stats.h"
 #include "kshell_blockdevices.h"
 #include "kshell_ls.h"
 #include "kshell_mount.h"
+#include "kshell_cd.h"
 #include <acpi/acpica_interface.h>
 
 class kshell_echo : public kshell_command {
@@ -66,13 +68,29 @@ public:
     }
 };
 
+class kshell_pwd : public kshell_command {
+private:
+    std::string command;
+public:
+    kshell_pwd() : command("pwd") {}
+    const std::string &Command() const override {
+        return command;
+    }
+    void Exec(kshell &shell, const std::vector<std::string> &cmd) override {
+        auto cwd = shell.Cwd();
+        std::cout << cwd.Kpath() << "\n";
+    }
+};
+
 kshell_commands::kshell_commands(kshell &shell) {
     shell.AddCommand(std::make_shared<kshell_echo>());
     shell.AddCommand(std::make_shared<kshell_reboot>());
     shell.AddCommand(std::make_shared<kshell_poweroff>());
+    shell.AddCommand(std::make_shared<kshell_pwd>());
     shell.AddCommand(std::make_shared<kshell_ps>());
     shell.AddCommand(std::make_shared<kshell_stats>());
     shell.AddCommand(std::make_shared<kshell_blockdevices>());
     shell.AddCommand(std::make_shared<kshell_ls>());
     shell.AddCommand(std::make_shared<kshell_mount>());
+    shell.AddCommand(std::make_shared<kshell_cd>());
 }

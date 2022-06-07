@@ -49,6 +49,7 @@ public:
     kdirectory_impl(const std::shared_ptr<kfile> &parent, const std::string &kpath, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem), parent(parent), kpath(kpath) {}
     std::vector<std::shared_ptr<kdirent>> Entries(std::shared_ptr<kfile> this_impl);
     void Mount(const std::shared_ptr<directory> &fsroot);
+    std::string Kpath();
 };
 
 class kdirectory : public kfile {
@@ -59,6 +60,7 @@ public:
     std::vector<std::shared_ptr<kdirent>> Entries();
     std::shared_ptr<kfile> Resolve(std::string filename);
     void Mount(const std::shared_ptr<directory> &fsroot);
+    std::string Kpath();
 };
 
 std::shared_ptr<kdirectory> get_kernel_rootdir();

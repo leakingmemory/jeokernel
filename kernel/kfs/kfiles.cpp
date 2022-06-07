@@ -50,7 +50,7 @@ std::vector<std::shared_ptr<kdirent>> kdirectory_impl::Entries(std::shared_ptr<k
             directory *fsdir = dynamic_cast<directory *> (&(*fsfile));
             if (fsdir != nullptr && name != ".." && name != ".") {
                 std::string subpath{kpath};
-                if (!subpath[subpath.size() - 1] != '/') {
+                if (subpath[subpath.size() - 1] != '/') {
                     subpath.append("/", 1);
                 }
                 subpath.append(name);
@@ -67,6 +67,10 @@ std::vector<std::shared_ptr<kdirent>> kdirectory_impl::Entries(std::shared_ptr<k
 
 void kdirectory_impl::Mount(const std::shared_ptr<directory> &fsroot) {
     mounts.push_back({.name = kpath, .rootdir = fsroot});
+}
+
+std::string kdirectory_impl::Kpath() {
+    return kpath;
 }
 
 std::vector<std::shared_ptr<kdirent>> kdirectory::Entries() {
@@ -113,7 +117,7 @@ std::shared_ptr<kfile> kdirectory::Resolve(std::string filename) {
             std::string remaining{};
             remaining.append(filename.c_str() + count);
             filename = remaining;
-        } while (component == ".");
+        } while (component == "." && !filename.empty());
     }
     for (auto entry : Entries()) {
         if (component == entry->Name()) {
@@ -134,6 +138,11 @@ std::shared_ptr<kfile> kdirectory::Resolve(std::string filename) {
 void kdirectory::Mount(const std::shared_ptr<directory> &fsroot) {
     auto *impl = dynamic_cast<kdirectory_impl *> (&(*(this->impl)));
     impl->Mount(fsroot);
+}
+
+std::string kdirectory::Kpath() {
+    auto *impl = dynamic_cast<kdirectory_impl *> (&(*(this->impl)));
+    return impl->Kpath();
 }
 
 std::shared_ptr<kdirectory> get_kernel_rootdir() {
