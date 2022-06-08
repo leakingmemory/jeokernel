@@ -35,6 +35,18 @@ struct ext2super {
     little_endian<uint32_t> major_version;
     little_endian<uint16_t> owner_uid;
     little_endian<uint16_t> owner_gid;
+    /* dynamic rev: */
+    little_endian<uint32_t> first_inode;
+    little_endian<uint16_t> inode_size;
+    little_endian<uint16_t> block_group_nr;
+    little_endian<uint32_t> feature_compat;
+    little_endian<uint32_t> feature_incompat;
+    little_endian<uint32_t> feature_ro_compat;
+    little_endian<uint64_t> uuid_low;
+    little_endian<uint64_t> uuid_high;
+    char volume_name[16];
+    char last_mounted[64];
+    little_endian<uint32_t> algo_bitmap;
 };
 
 struct ext2blockgroup {
