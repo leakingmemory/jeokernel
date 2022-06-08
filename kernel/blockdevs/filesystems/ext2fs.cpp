@@ -32,7 +32,7 @@ ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(
     }
 }
 
-bool ext2fs::HasSuperblock() {
+bool ext2fs::HasSuperblock() const {
     if (superblock) {
         return true;
     } else {
@@ -40,16 +40,24 @@ bool ext2fs::HasSuperblock() {
     }
 }
 
-int ext2fs::VersionMajor() {
+int ext2fs::VersionMajor() const {
     return superblock->major_version;
 }
 
-int ext2fs::VersionMinor() {
+int ext2fs::VersionMinor() const {
     return superblock->minor_version;
 }
 
-uint16_t ext2fs::FsSignature() {
+uint16_t ext2fs::FsSignature() const {
     return superblock->ext2_signature;
+}
+
+std::size_t ext2fs::InodeSize() const {
+    if (IsDynamic()) {
+        return superblock->inode_size;
+    } else {
+        return 128;
+    }
 }
 
 uint64_t ext2fs::FsBlockToPhysBlock(uint64_t fs_block) {
@@ -153,7 +161,7 @@ bool ext2fs::ReadBlockGroups() {
             }
             groupObject.InodeTableBlock = FsBlockToPhysBlock(group.inode_table);
             groupObject.InodeTableOffset = FsBlockOffsetOnPhys(group.inode_table);
-            auto inodeTableSize = superblock->inodes_per_group * sizeof(ext2inode);
+            auto inodeTableSize = superblock->inodes_per_group * InodeSize();
             auto inodeTablePhysBlocks = (inodeTableSize + groupObject.InodeTableOffset) / bdev->GetBlocksize();
             std::cout << "Inode table starts at " << groupObject.InodeTableBlock << " offset " << groupObject.InodeTableOffset
             << " size of " << inodeTableSize << " and blocks " << inodeTablePhysBlocks << "\n";
@@ -178,9 +186,9 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
         return {};
     }
     auto &group = groups[group_idx];
-    auto offset = inode_off * sizeof(ext2inode);
+    auto offset = inode_off * InodeSize();
     offset += group.InodeTableOffset;
-    auto end = offset + sizeof(ext2inode) - 1;
+    auto end = offset + InodeSize() - 1;
     auto block_num = offset / bdev->GetBlocksize();
     offset = offset % bdev->GetBlocksize();
     auto block_end = end / bdev->GetBlocksize();
