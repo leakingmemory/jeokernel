@@ -232,6 +232,31 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
             inode_obj->blockRefs.push_back(inode.block[i]);
         }
     }
+    lock = {};
+    {
+        uint64_t indirect_block = inode.block[EXT2_NUM_DIRECT_BLOCK_PTRS];
+        if (indirect_block != 0) {
+            std::cout << " <" << indirect_block << ">";
+            indirect_block *= BlockSize;
+            auto indirect_block_phys = indirect_block / bdev->GetBlocksize();
+            auto indirect_block_offset = indirect_block % bdev->GetBlocksize();
+            indirect_block += BlockSize - 1;
+            auto indirect_phys_blocks = (indirect_block / bdev->GetBlocksize()) - indirect_block_phys + 1;
+            auto rd = bdev->ReadBlock(indirect_block_phys, indirect_phys_blocks);
+            if (rd) {
+                uint32_t *indirect_bptrs = (uint32_t *) (((uint8_t *) (rd->Pointer())) + indirect_block_offset);
+                auto numIndirects = BlockSize / sizeof(*indirect_bptrs);
+                for (int i = 0; i < numIndirects; i++) {
+                    if (indirect_bptrs[i]) {
+                        std::cout << " " << indirect_bptrs[i];
+                        inode_obj->blockRefs.push_back(indirect_bptrs[i]);
+                    }
+                }
+            } else {
+                std::cerr << "Error: Read error, indirect block pointers for file\n";
+            }
+        }
+    }
     inode_obj->filesize = inode.size;
     inode_obj->mode = inode.mode;
     auto pages = inode_obj->filesize / FILEPAGE_PAGE_SIZE;
