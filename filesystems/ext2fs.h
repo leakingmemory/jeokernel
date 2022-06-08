@@ -73,10 +73,14 @@ private:
     uint32_t BlockSize;
 public:
     ext2fs(std::shared_ptr<blockdev> bdev);
-    bool HasSuperblock();
-    int VersionMajor();
-    int VersionMinor();
-    uint16_t FsSignature();
+    bool HasSuperblock() const;
+    int VersionMajor() const ;
+    int VersionMinor() const ;
+    bool IsDynamic() const {
+        return VersionMajor() >= 1;
+    }
+    uint16_t FsSignature() const;
+    std::size_t InodeSize() const;
 private:
     uint64_t FsBlockToPhysBlock(uint64_t fs_block);
     uint64_t FsBlockOffsetOnPhys(uint64_t fs_block);
