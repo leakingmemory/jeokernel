@@ -200,13 +200,23 @@ struct ELF64_header {
     uint16_t e_shnum;
     uint16_t e_shstrndx;
 
+    uintptr_t get_program_entry_offset(uint16_t index) const {
+        uintptr_t off = e_phoff;
+        index = index % e_phnum;
+        off += e_phentsize * index;
+        return off;
+    }
     const ELF64_program_entry &get_program_entry(uint16_t index) const {
         uint8_t *ptr = (uint8_t *) this;
-        ptr += e_phoff;
-        index = index % e_phnum;
-        ptr += e_phentsize * index;
+        ptr += get_program_entry_offset(index);
         ELF64_program_entry *pe = (ELF64_program_entry *) ptr;
         return *pe;
+    }
+    uintptr_t get_section_entry_offset(uint16_t index) const {
+        uintptr_t off = e_shoff;
+        index = index % e_shnum;
+        off += e_shentsize * index;
+        return off;
     }
     const ELF64_section_entry &get_section_entry(uint16_t index) const {
         uint8_t *ptr = (uint8_t *) this;
