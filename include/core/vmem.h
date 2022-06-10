@@ -31,6 +31,9 @@ public:
 
     void release();
 
+    constexpr std::size_t pagesize() const {
+        return 4096;
+    }
     std::size_t npages() const;
     vmem_page page(std::size_t pnum);
 

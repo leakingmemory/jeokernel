@@ -6,9 +6,9 @@
 #include <pagealloc.h>
 
 vmem::vmem(uint64_t size) {
-    uint64_t overshoot = size & 0xFFF;
+    uint64_t overshoot = size & (pagesize() - 1);
     if (overshoot != 0) {
-        size += 0x1000 - overshoot;
+        size += pagesize() - overshoot;
     }
     this->base = vpagealloc(size);
     this->size = size;
@@ -22,11 +22,11 @@ void vmem::release() {
 }
 
 std::size_t vmem::npages() const {
-    return this->size / 0x1000;
+    return this->size / pagesize();
 }
 
 vmem_page vmem::page(std::size_t pnum) {
-    return vmem_page(((uint64_t) (pnum * 0x1000)) + this->base);
+    return vmem_page(((uint64_t) (pnum * pagesize())) + this->base);
 }
 
 void vmem::reload() {
