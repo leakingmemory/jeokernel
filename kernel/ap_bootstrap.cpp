@@ -12,6 +12,7 @@
 #include "ApStartup.h"
 #include <core/scheduler.h>
 #include <core/nanotime.h>
+#include <pagealloc.h>
 
 TaskStateSegment *get_tss(int cpun);
 GlobalDescriptorTable *get_gdt();
@@ -87,6 +88,8 @@ extern "C" {
         }
 
         lapic->eio();
+
+        vmem_set_per_cpu_pagetables();
 
         asm("sti");
 

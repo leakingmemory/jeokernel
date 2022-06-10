@@ -12,6 +12,10 @@
 
 #endif
 
+#define PMLT4_USERSPACE_START 256
+
+class ApStartup;
+
 uint64_t vpagealloc(uint64_t size);
 void pmemcounts();
 uint64_t ppagealloc(uint64_t size);
@@ -30,6 +34,9 @@ void reload_pagetables();
 
 void *pagealloc(uint64_t size);
 void pagefree(void *vaddr);
+
+void vmem_switch_to_multicpu(ApStartup *apStartup, int numCpus);
+void vmem_set_per_cpu_pagetables();
 
 void setup_pvpage_stats();
 

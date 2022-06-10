@@ -8,8 +8,10 @@
 #include <concurrency/critical_section.h>
 #include <mutex>
 #include <sstream>
+#include <iostream>
 #include <stats/statistics_root.h>
 #include <physpagemap.h>
+#include "ApStartup.h"
 
 #define DEBUG_PALLOC_FAILURE
 
@@ -18,7 +20,11 @@ static long long int total_vpages = 0;
 static long long int allocated_ppages = 0;
 static long long int allocated_vpages = 0;
 
-#define _get_pml4t()  (*((pagetable *) 0x1000))
+static ApStartup *apStartup = nullptr;
+static pagetable **per_cpu_pagetables = nullptr;
+static bool is_v_multicpu = false;
+
+#define _get_pml4t()  (is_v_multicpu ? *(per_cpu_pagetables[apStartup->GetCpuNum()]) : (*((pagetable *) 0x1000)))
 
 uint64_t vpagealloc(uint64_t size) {
     std::lock_guard lock{get_pagetables_lock()};
@@ -27,10 +33,11 @@ uint64_t vpagealloc(uint64_t size) {
         size += 4096;
     }
     size /= 4096;
+
     pagetable &pml4t = _get_pml4t();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
-    int i = 512;
+    int i = PMLT4_USERSPACE_START;
     while (i > 0) {
         --i;
         if (pml4t[i].present) {
@@ -293,7 +300,7 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     auto *phys = get_physpagemap();
-    for (int i = 0; i < 512; i++) {
+    for (int i = 0; i < PMLT4_USERSPACE_START; i++) {
         if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
             for (int j = 0; j < 512; j++) {
@@ -480,7 +487,8 @@ void free_stack(uint64_t vaddr) {
 }
 
 void reload_pagetables() {
-    uint64_t cr3 = 0x1000;
+    critical_section cli{};
+    uint64_t cr3 = (uint64_t) &(_get_pml4t());
     asm("mov %0,%%cr3; " :: "r"(cr3));
 }
 
@@ -576,6 +584,25 @@ public:
         return std::make_shared<pvpage_stats>();
     }
 };
+
+void vmem_switch_to_multicpu(ApStartup *apStartupP, int numCpus) {
+    critical_section cli{};
+    apStartup = apStartupP;
+    per_cpu_pagetables = (pagetable **) (void *) pagealloc(numCpus * sizeof(*per_cpu_pagetables));
+    for (int i = 0; i < numCpus; i++) {
+        per_cpu_pagetables[i] = (pagetable *) (void *) pv_fix_pagealloc(sizeof(*(per_cpu_pagetables[i])));
+        memcpy(per_cpu_pagetables[i], &(_get_pml4t()), sizeof(*(per_cpu_pagetables[i])));
+        static_assert(sizeof(*(per_cpu_pagetables[i])) == 4096);
+    }
+    vmem_set_per_cpu_pagetables();
+    is_v_multicpu = true;
+}
+
+void vmem_set_per_cpu_pagetables() {
+    pagetable *table = per_cpu_pagetables[apStartup->GetCpuNum()];
+    std::cout << "Set per-cpu pagetables root to " << std::hex << ((uintptr_t) table) << std::dec << "\n";
+    asm("mov %0, %%rax; mov %%rax, %%cr3" :: "r"(table) : "%rax");
+}
 
 void setup_pvpage_stats() {
     {

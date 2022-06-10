@@ -14,6 +14,7 @@
 #include "start_ap.h"
 #include "PITTimerCalib.h"
 #include "IOApic.h"
+#include <pagealloc.h>
 
 void set_tss(int cpun, struct TaskStateSegment *tss);
 void set_its(int cpun, struct InterruptTaskState *its);
@@ -73,6 +74,8 @@ ApStartup::~ApStartup() {
 void ApStartup::Init(PITTimerCalib *calib_timer) {
     tasklist *scheduler = get_scheduler();
     scheduler->start_multi_cpu(bsp_cpu_num);
+
+    vmem_switch_to_multicpu(this, apicsInfo->GetNumberOfCpus());
 
     const uint32_t *ap_count = install_ap_bootstrap();
 
