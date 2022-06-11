@@ -310,7 +310,7 @@ extern "C" {
                             }
                             uint32_t mem_ext_consumed = 0;
                             memory_extended = 0;
-                            for (int i = 0; i < 512; i++) {
+                            for (int i = 0; i < PMLT4_USERSPACE_START; i++) {
                                 if (pml4t[i].present == 0) {
                                     pagetable *pt = allocate_pageentr();
                                     if (pt == nullptr) {
@@ -418,6 +418,20 @@ done_with_mem_extension:
         set_tss(0, tss);
         set_its(0, int_task_state);
         tss->install_bsp(*gdt);
+
+        {
+            auto &userCode = gdt->get_descriptor(3);
+            auto &userData = gdt->get_descriptor(4);
+            constexpr uint64_t base4k = (((uint64_t) PMLT4_USERSPACE_START) << (9+9+9)) * 4096;
+            userCode.set_base(0);
+            userCode.set_limit(0xFFFFFF);
+            userCode.granularity = 0xA;
+            userCode.type = 0xFA;
+            userData.set_base(0);
+            userData.set_limit(0);
+            userData.granularity = 0xA;
+            userData.type = 0xF2;
+        }
 
         uint64_t *gdt_ptr = (uint64_t *) &(gdt->get_descriptor(0));
         get_klogger() << "GDT at " << ((uint64_t) gdt_ptr) << "\n";

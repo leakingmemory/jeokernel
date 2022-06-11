@@ -1,6 +1,6 @@
 #include <loaderconfig.h>
 
-#define GDTR_PTR_ADDR (GDT_ADDR + (GDT_SIZE * 8))
+#define GDTR_PTR_ADDR (GDT_ADDR + ((GDT_SIZE + (LDT_DESC_SIZE * 2)) * 8))
 
 .code16
 

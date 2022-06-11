@@ -12,10 +12,11 @@
 
 #endif
 
-#define PMLT4_USERSPACE_START 256
+#define PMLT4_USERSPACE_START 0x10
 
 class ApStartup;
 
+pagetable &get_root_pagetable();
 uint64_t vpagealloc(uint64_t size);
 void pmemcounts();
 uint64_t ppagealloc(uint64_t size);

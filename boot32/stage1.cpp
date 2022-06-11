@@ -643,7 +643,7 @@ stack_allocated:
             uint32_t entrypoint_addr = elf64_header.e_entry;
 
             {
-                GDT_table<GDT_SIZE> &init_gdt64 = *((GDT_table<GDT_SIZE> *) GDT_ADDR);
+                GDT_table<GDT_SIZE + (LDT_DESC_SIZE * 2)> &init_gdt64 = *((GDT_table<GDT_SIZE + (LDT_DESC_SIZE * 2)> *) GDT_ADDR);
                 static_assert(sizeof(init_gdt64) <= GDT_MAX_SIZE);
                 memset(&init_gdt64, 0, sizeof(init_gdt64));
                 init_gdt64[0] = GDT(0, 0x1FFFF, 0, 0);

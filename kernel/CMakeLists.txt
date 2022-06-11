@@ -31,6 +31,7 @@ add_subdirectory(blockdevsystem)
 add_subdirectory(libcxxrt/src)
 add_subdirectory(exceptionhandling)
 add_subdirectory(kfs)
+add_subdirectory(exec)
 
 add_library(bootstrap bootstrap.S)
 
@@ -64,3 +65,4 @@ target_link_libraries(kernel PRIVATE blockdevsystem)
 target_link_libraries(kernel PRIVATE cxxrt-static)
 target_link_libraries(kernel PRIVATE exceptionhandling)
 target_link_libraries(kernel PRIVATE kfs)
+target_link_libraries(kernel PRIVATE exec)

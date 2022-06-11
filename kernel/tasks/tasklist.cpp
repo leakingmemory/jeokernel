@@ -164,6 +164,7 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     }
     if (win != current_task) {
         current_task->set_running(false);
+
         if (!current_task->is_end()) {
             current_task->set_stack_quarantine(true);
             current_task->save_state(interrupt);
@@ -195,22 +196,65 @@ evicted_task:
     }
 }
 
+bool tasklist::page_fault(Interrupt &interrupt) {
+    critical_section cli{};
+    uint8_t cpu = 0;
+    if (multicpu) {
+        ApStartup *apStartup = GetApStartup();
+        cpu = apStartup->GetCpuNum();
+    }
+    task *current_task = nullptr;
+
+    {
+        std::lock_guard lock{_lock};
+
+        for (task *t : tasks) {
+            if (t->get_cpu() == cpu && t->is_running()) {
+                current_task = t;
+                break;
+            }
+        }
+
+        if (current_task == nullptr) {
+            wild_panic("current task was not found");
+        }
+    }
+
+    bool handled = current_task->page_fault(interrupt);
+    switch_tasks(interrupt, cpu);
+    return handled;
+}
+
 uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
-                        uint64_t r9, const std::vector<task_resource *> &resources) {
+                            uint64_t r9, const std::vector<task_resource *> &resources) {
     std::vector<task_resource *> my_resources{};
     for (auto resource : resources) {
         my_resources.push_back(resource);
     }
+
+    task_stack_resource *stack_resource = new task_stack_resource;
+    uint64_t rbp = stack_resource->get_address();
+    uint64_t rsp = rbp;
+
+    my_resources.push_back(stack_resource);
+
+    return new_task(rip, cs, 0x10, rbp, rsp, rdi, rsi, rdx, rcx, r8, r9, my_resources);
+}
+
+
+uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint16_t ds, uint64_t rbp, uint64_t rsp, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
+                        uint64_t r9, const std::vector<task_resource *> &resources) {
     x86_fpu_state fpusse_state{};
     InterruptStackFrame cpu_state{
-        .ds = 0x10,
-        .es = 0x10,
-        .fs = 0x10,
-        .gs = 0x10,
+        .ds = ds,
+        .es = ds,
+        .fs = ds,
+        .gs = ds,
         .r9 = r9,
         .r8 = r8,
         .rsi = rsi,
         .rdi = rdi,
+        .rbp = rbp,
         .rdx = rdx,
         .rcx = rcx
     };
@@ -218,18 +262,14 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rs
         .rip = rip,
         .cs = cs,
         .rflags = 0x202,
-        .ss = 0x10
+        .rsp = rsp,
+        .ss = ds
     };
-    task_stack_resource *stack_resource = new task_stack_resource;
-    cpu_state.rbp = stack_resource->get_address();
-    cpu_frame.rsp = cpu_state.rbp;
-
-    my_resources.push_back(stack_resource);
 
     critical_section cli{};
     std::lock_guard lock{_lock};
 
-    task *t = new task(cpu_frame, cpu_state, fpusse_state, my_resources);
+    task *t = new task(cpu_frame, cpu_state, fpusse_state, resources);
     tasks.push_back(t);
     t->set_id(get_next_id());
     t->set_blocked(false);

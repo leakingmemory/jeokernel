@@ -19,7 +19,7 @@ public:
     PageFault &operator = (PageFault &&) = delete;
     PageFault &operator = (PageFault &) = delete;
 
-    void handle();
+    bool handle();
 };
 
 

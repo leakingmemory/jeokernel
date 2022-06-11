@@ -156,7 +156,7 @@ void Interrupt::apply_error_code_correction() {
 }
 
 extern "C" {
-    void interrupt_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame, x86_fpu_state *fpusse) {
+    bool interrupt_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame, x86_fpu_state *fpusse) {
         InterruptCpuFrame *cpuFrame = (InterruptCpuFrame *) (void *) (((uint8_t *) stack_frame) + (sizeof(*stack_frame) - 8)/*error-code-norm-not-avail*/);
         Interrupt interrupt{cpuFrame, stack_frame, fpusse, (uint8_t) interrupt_vector};
         if (interrupt_vector < 0x20) {
@@ -169,7 +169,7 @@ extern "C" {
                     get_klogger() << ss.str().c_str();
                 }
 #endif
-                return;
+                return false;
             }
         }
         switch (interrupt_vector) {
@@ -238,7 +238,9 @@ extern "C" {
             case 0xE: {
                 interrupt.apply_error_code_correction();
                 PageFault trap{interrupt};
-                trap.handle();
+                if (trap.handle()) {
+                    return true;
+                }
                 break;
             }
             case 0x10: {
@@ -280,11 +282,11 @@ extern "C" {
                     cpu = apStartup->GetCpuNum();
                 }
                 get_scheduler()->switch_tasks(interrupt, cpu);
-                return;
+                return false;
             }
             case 0xFF: {
                 /* send the spurious irqs here */
-                return; // ignore
+                return false; // ignore
             }
         }
         if (interrupt_vector >= 0x20 && interrupt_vector < (0x20 + HW_INT_N)) {
@@ -294,10 +296,11 @@ extern "C" {
                 interrupt.print_debug();
                 wild_panic("unhandled interrupt");
             }
-            return;
+            return false;
         }
         get_klogger() << "\nReceived interrupt " << interrupt_vector << "\n";
         interrupt.print_debug();
         wild_panic("unknown interrupt");
+        return false;
     }
 }

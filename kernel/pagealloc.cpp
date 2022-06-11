@@ -26,6 +26,10 @@ static bool is_v_multicpu = false;
 
 #define _get_pml4t()  (is_v_multicpu ? *(per_cpu_pagetables[apStartup->GetCpuNum()]) : (*((pagetable *) 0x1000)))
 
+pagetable &get_root_pagetable() {
+    return _get_pml4t();
+}
+
 uint64_t vpagealloc(uint64_t size) {
     std::lock_guard lock{get_pagetables_lock()};
 

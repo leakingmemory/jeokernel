@@ -47,6 +47,26 @@ struct GDT {
     }
 } __attribute__((__packed__));
 
+struct LDTP {
+    uint16_t limit_low;
+    uint32_t base_low : 24;
+    uint8_t type;
+    uint8_t limit_high : 4;
+    uint8_t granularity : 4;
+    uint64_t base_high : 40;
+    uint32_t reserved;
+
+    void set_base(uint64_t base_addr) {
+        base_low = base_addr & 0xFFFFFF;
+        base_high = (base_addr >> 24);
+    }
+    void set_limit(uint32_t limit) {
+        limit_low = limit & 0xFFFF;
+        limit_high = (limit >> 16) & 0x0F;
+    }
+} __attribute__((__packed__));
+static_assert(sizeof(LDTP) == (2*sizeof(GDT)));
+
 struct GDT_addr_64_in_32 {
     uint32_t low;
     uint32_t high;
