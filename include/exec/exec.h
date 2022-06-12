@@ -12,8 +12,9 @@ class kfile;
 class Exec {
 private:
     std::shared_ptr<kfile> binary;
+    std::string name;
 public:
-    Exec(std::shared_ptr<kfile> binary) : binary(binary) {}
+    Exec(std::shared_ptr<kfile> binary, const std::string &name) : binary(binary), name(name) {}
     void Run();
 };
 

@@ -15,6 +15,7 @@ struct exec_pageinfo {
 };
 
 void Exec::Run() {
+    std::string cmd_name = name;
     UserElf userElf{binary};
     if (!userElf.is_valid()) {
         std::cerr << "Not valid ELF64\n";
@@ -157,5 +158,6 @@ void Exec::Run() {
         resources.push_back(process);
         auto pid = scheduler->new_task(entrypoint, 0x18 | 3 /* ring3 / lowest*/, 0x20 | 3, 0, 0, 0, 0, 0, 0, 0, 0, resources);
         std::cout << "Started task " << pid << "\n";
+        scheduler->set_name(pid, cmd_name);
     }
 }

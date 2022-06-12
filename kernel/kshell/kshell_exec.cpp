@@ -35,7 +35,7 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         if (ldir != nullptr) {
             std::cerr << "exec: is a directory: " << filename << "\n";
         } else {
-            class Exec exec{litem};
+            class Exec exec{litem, filename};
             exec.Run();
         }
     } else {
@@ -44,7 +44,7 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         if (ldir != nullptr) {
             std::cerr << "exec: is a directory: " << filename << "\n";
         } else {
-            class Exec exec{litem};
+            class Exec exec{litem, filename};
             exec.Run();
         }
     }

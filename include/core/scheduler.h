@@ -330,6 +330,8 @@ public:
                       uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
                       uint64_t r9, const std::vector<task_resource *> &resources);
 
+    bool terminate_blocked(task *t);
+
     void exit(uint8_t cpu, bool returnToCallerIfNotTerminatedImmediately = false);
 
     uint32_t get_current_task_id();
@@ -374,6 +376,7 @@ public:
 
     std::vector<task_info> get_task_infos();
 
+    bool set_name(uint32_t pid, const std::string &name);
     void set_name(const std::string &name);
 };
 

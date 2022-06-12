@@ -276,6 +276,23 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint16_t ds, uint64_t rbp
     return t->get_id();
 }
 
+bool tasklist::terminate_blocked(task *end_task) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    auto iterator = tasks.begin();
+    while (iterator != tasks.end()) {
+        task *t = *iterator;
+        if (t == end_task) {
+            tasks.erase(iterator);
+            delete t;
+            return true;
+        }
+        ++iterator;
+    }
+    return false;
+}
+
 void tasklist::exit(uint8_t cpu, bool returnToCallerIfNotTerminatedImmediately) {
     task *current_task = nullptr;
 
@@ -702,6 +719,18 @@ std::vector<task_info> tasklist::get_task_infos() {
         }
     }
     return infos;
+}
+
+bool tasklist::set_name(uint32_t pid, const std::string &name) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    for (task *t : tasks) {
+        if (t->get_id() == pid) {
+            t->set_name(name);
+            return true;
+        }
+    }
+    return false;
 }
 
 void tasklist::set_name(const std::string &name) {

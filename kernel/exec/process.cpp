@@ -6,6 +6,9 @@
 #include <exec/process.h>
 #include <pagealloc.h>
 #include <strings.h>
+#include <mutex>
+#include <thread>
+#include "concurrency/raw_semaphore.h"
 
 PagetableRoot::PagetableRoot(uint16_t addr) : physpage(ppagealloc(PAGESIZE)), vm(PAGESIZE), branches((pagetable *) vm.pointer()), addr(addr) {
     vm.page(0).rwmap(physpage);
@@ -205,8 +208,51 @@ void Process::task_enter() {
 void Process::task_leave() {
 }
 
+struct process_pfault {
+    task *task;
+    Process *process;
+    uintptr_t ip;
+    uintptr_t address;
+};
+
+static hw_spinlock pfault_lck{};
+static raw_semaphore pfault_sema{-1};
+static std::vector<process_pfault> faults{};
+static std::thread *pfault_thread{nullptr};
+
 bool Process::page_fault(task &current_task, Interrupt &intr) {
     std::cout << "Page fault in user process\n";
     current_task.set_blocked(true);
+    uint64_t address{0};
+    asm("mov %%cr2, %0" : "=r"(address));
+    std::lock_guard lock{pfault_lck};
+    process_pfault pf{.task = &current_task, .process = this, .ip = intr.rip(), .address = address};
+    faults.push_back(pf);
+    pfault_sema.release();
+    if (pfault_thread == nullptr) {
+        pfault_thread = new std::thread([] () {
+            std::this_thread::set_name("[pfault]");
+            while (true) {
+                pfault_sema.acquire();
+                process_pfault pfault{};
+                {
+                    std::lock_guard lock{pfault_lck};
+                    auto iterator = faults.begin();
+                    if (iterator == faults.end()) {
+                        continue;
+                    }
+                    pfault = *iterator;
+                    faults.erase(iterator);
+                }
+                pfault.process->resolve_page_fault(*(pfault.task), pfault.ip, pfault.address);
+            }
+        });
+    }
     return true;
+}
+
+void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr) {
+    auto *scheduler = get_scheduler();
+    std::cerr << "PID " << current_task.get_id() << ": Page fault at " << std::hex << ip << " addr " << fault_addr << std::dec << "\n";
+    scheduler->terminate_blocked(&current_task);
 }

@@ -54,6 +54,7 @@ public:
     void task_enter() override;
     void task_leave() override;
     bool page_fault(task &current_task, Interrupt &intr) override;
+    void resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr);
 };
 
 #endif //JEOKERNEL_PROCESS_H
