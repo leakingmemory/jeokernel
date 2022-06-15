@@ -26,6 +26,17 @@ std::size_t kfile::Read(uint64_t offset, void *ptr, std::size_t len) {
     return file ? file->Read(offset, ptr, len) : 0;
 }
 
+filepage_ref kfile::GetPage(std::size_t pagenum) {
+    if (file == nullptr) {
+        return {};
+    }
+    auto page = file->GetPage(pagenum);
+    auto data = page->Raw();
+    filepage_ref ref{data};
+    data->initDone();
+    return ref;
+}
+
 std::vector<std::shared_ptr<kdirent>> kdirectory_impl::Entries(std::shared_ptr<kfile> this_ref) {
     std::shared_ptr<fileitem> listing_ref{file};
     directory *listing;

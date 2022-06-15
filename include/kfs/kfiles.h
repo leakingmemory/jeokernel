@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "filepage_data.h"
 
 class fileitem;
 class directory;
@@ -26,6 +27,7 @@ public:
     uint32_t Mode();
     std::size_t Size();
     std::size_t Read(uint64_t offset, void *ptr, std::size_t len);
+    filepage_ref GetPage(std::size_t pagenum);
 };
 
 class kdirent {
