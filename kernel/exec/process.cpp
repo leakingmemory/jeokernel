@@ -260,6 +260,12 @@ bool Process::page_fault(task &current_task, Interrupt &intr) {
     return true;
 }
 
+bool Process::exception(task &current_task, const std::string &name, Interrupt &intr) {
+    std::cout << "Exception <"<< name <<"> in user process at " << std::hex << intr.rip() << " code " << intr.error_code() << std::dec << "\n";
+    current_task.set_end(true);
+    return true;
+}
+
 void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr) {
     auto *scheduler = get_scheduler();
     std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};

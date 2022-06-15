@@ -175,37 +175,51 @@ extern "C" {
         switch (interrupt_vector) {
             case 0: {
                 CpuExceptionTrap trap{"division by zero", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 1: {
                 CpuExceptionTrap trap{"debug trap", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 3: {
                 CpuExceptionTrap trap{"breakpoint trap", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 4: {
                 CpuExceptionTrap trap{"overflow", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 5: {
                 CpuExceptionTrap trap{"bound range exceeded", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 6: {
                 CpuExceptionTrap trap{"invalid opcode", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 7: {
                 CpuExceptionTrap trap{"device not available", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 8: {
@@ -216,23 +230,31 @@ extern "C" {
             }
             case 0xA: {
                 CpuExceptionTrap trap{"invalid tss", interrupt};
-                trap.handle();
+                if (trap.handle(true)) {
+                    return true;
+                }
                 break;
             }
             case 0xB: {
                 CpuExceptionTrap trap{"segment not present", interrupt};
-                trap.handle();
+                if (trap.handle(true)) {
+                    return true;
+                }
                 break;
             }
             case 0xC: {
                 CpuExceptionTrap trap{"stack segment fault", interrupt};
-                trap.handle();
+                if (trap.handle(true)) {
+                    return true;
+                }
                 break;
             }
             case 0xD: {
                 interrupt.apply_error_code_correction();
                 CpuExceptionTrap trap{"general protection fault", interrupt};
-                trap.handle();
+                if (trap.handle(true)) {
+                    return true;
+                }
                 break;
             }
             case 0xE: {
@@ -245,32 +267,44 @@ extern "C" {
             }
             case 0x10: {
                 CpuExceptionTrap trap{"x87 floating point exception", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 0x11: {
                 CpuExceptionTrap trap{"alignment check", interrupt};
-                trap.handle();
+                if (trap.handle(true)) {
+                    return true;
+                }
                 break;
             }
             case 0x12: {
                 CpuExceptionTrap trap{"machine check", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 0x13: {
                 CpuExceptionTrap trap{"simd floating point exception", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 0x14: {
                 CpuExceptionTrap trap{"virtualization exception", interrupt};
-                trap.handle();
+                if (trap.handle(false)) {
+                    return false;
+                }
                 break;
             }
             case 0x1E: {
                 CpuExceptionTrap trap{"security exception", interrupt};
-                trap.handle();
+                if (trap.handle(true)) {
+                    return true;
+                }
                 break;
             }
             case 0xFE: {

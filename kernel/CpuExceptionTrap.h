@@ -20,9 +20,17 @@ public:
     CpuExceptionTrap &operator = (CpuExceptionTrap &&) = delete;
     CpuExceptionTrap &operator = (CpuExceptionTrap &) = delete;
 
-    void handle() {
+    bool handle(bool errorCode) {
+        if (errorCode ? (interrupt.error_code() & 4) != 0 : (interrupt.cs() & 3) == 3) {
+            auto *scheduler = get_scheduler();
+            std::string name{fault_text};
+            if (scheduler->exception(name, interrupt)) {
+                return true;
+            }
+        }
         interrupt.print_debug();
         wild_panic(fault_text);
+        return false;
     }
 };
 

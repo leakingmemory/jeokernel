@@ -225,6 +225,35 @@ bool tasklist::page_fault(Interrupt &interrupt) {
     return handled;
 }
 
+bool tasklist::exception(const std::string &name, Interrupt &interrupt) {
+    critical_section cli{};
+    uint8_t cpu = 0;
+    if (multicpu) {
+        ApStartup *apStartup = GetApStartup();
+        cpu = apStartup->GetCpuNum();
+    }
+    task *current_task = nullptr;
+
+    {
+        std::lock_guard lock{_lock};
+
+        for (task *t : tasks) {
+            if (t->get_cpu() == cpu && t->is_running()) {
+                current_task = t;
+                break;
+            }
+        }
+
+        if (current_task == nullptr) {
+            wild_panic("current task was not found");
+        }
+    }
+
+    bool handled = current_task->exception(name, interrupt);
+    switch_tasks(interrupt, cpu);
+    return handled;
+}
+
 uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
                             uint64_t r9, const std::vector<task_resource *> &resources) {
     std::vector<task_resource *> my_resources{};

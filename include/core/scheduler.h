@@ -71,6 +71,9 @@ public:
     virtual bool page_fault(task &current_task, Interrupt &intr) {
         return false;
     }
+    virtual bool exception(task &current_task, const std::string &name, Interrupt &intr) {
+        return false;
+    }
 };
 
 #define TASK_EVENT_EXIT         0
@@ -279,6 +282,15 @@ public:
         return false;
     }
 
+    bool exception(const std::string &name, Interrupt &intr) {
+        for (auto *resource : resources) {
+            if (resource->exception(*this, name, intr)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void set_name(const std::string &name) {
         this->name = name;
     }
@@ -322,6 +334,7 @@ public:
     void switch_tasks(Interrupt &interrupt, uint8_t cpu);
 
     bool page_fault(Interrupt &interrupt);
+    bool exception(const std::string &name, Interrupt &interrupt);
 
     uint32_t new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi,
                   uint64_t rdx, uint64_t rcx, uint64_t r8, uint64_t r9,
