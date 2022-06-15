@@ -7,10 +7,12 @@
 
 #include <memory>
 #include <vector>
+#include <mutex>
 #include <pagetable.h>
 #include <core/vmem.h>
 #include <pagealloc.h>
 #include <core/scheduler.h>
+#include <kfs/filepage_data.h>
 
 #define PAGESIZE 4096
 
@@ -32,6 +34,11 @@ public:
     PagetableRoot(PagetableRoot &&mv);
 };
 
+struct PhysMapping {
+    filepage_ref data;
+    uint32_t page;
+};
+
 class MemMapping {
     friend Process;
 private:
@@ -39,12 +46,14 @@ private:
     uint32_t pagenum;
     uint32_t pages;
     uint32_t image_skip_pages;
+    std::vector<PhysMapping> mappings;
 public:
     MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages);
 };
 
 class Process : public task_resource {
 private:
+    std::mutex mtx;
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
 public:

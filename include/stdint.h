@@ -31,12 +31,14 @@ typedef int32_t ssize_t;
 typedef int32_t ptrdiff_t;
 typedef int32_t intptr_t;
 typedef uint32_t uintptr_t;
+typedef uint32_t phys_t;
 #else
 typedef unsigned long int size_t;
 typedef signed long int ssize_t;
 typedef int64_t ptrdiff_t;
 typedef int64_t intptr_t;
 typedef uint64_t uintptr_t;
+typedef uint64_t phys_t;
 #endif
 
 #define offsetof __builtin_offsetof
