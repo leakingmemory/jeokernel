@@ -31,21 +31,29 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         } else {
             litem = get_kernel_rootdir();
         }
-        kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
-        if (ldir != nullptr) {
-            std::cerr << "exec: is a directory: " << filename << "\n";
+        if (litem) {
+            kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
+            if (ldir != nullptr) {
+                std::cerr << "exec: is a directory: " << filename << "\n";
+            } else {
+                class Exec exec{litem, filename};
+                exec.Run();
+            }
         } else {
-            class Exec exec{litem, filename};
-            exec.Run();
+            std::cerr << "exec: not found: " << filename << "\n";
         }
     } else {
         auto litem = dir->Resolve(filename);
-        kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
-        if (ldir != nullptr) {
-            std::cerr << "exec: is a directory: " << filename << "\n";
+        if (litem) {
+            kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
+            if (ldir != nullptr) {
+                std::cerr << "exec: is a directory: " << filename << "\n";
+            } else {
+                class Exec exec{litem, filename};
+                exec.Run();
+            }
         } else {
-            class Exec exec{litem, filename};
-            exec.Run();
+            std::cerr << "exec: not found: " << filename << "\n";
         }
     }
 }
