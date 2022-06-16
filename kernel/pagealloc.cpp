@@ -22,12 +22,15 @@ static long long int allocated_vpages = 0;
 
 static ApStartup *apStartup = nullptr;
 static pagetable **per_cpu_pagetables = nullptr;
+static int v_num_cpus = 0;
 static bool is_v_multicpu = false;
 
-#define _get_pml4t()  (is_v_multicpu ? *(per_cpu_pagetables[apStartup->GetCpuNum()]) : (*((pagetable *) 0x1000)))
+#define _get_pml4t_this_cpu()  (is_v_multicpu ? *(per_cpu_pagetables[apStartup->GetCpuNum()]) : (*((pagetable *) 0x1000)))
+#define _get_pml4t_cpu0()  (is_v_multicpu ? *(per_cpu_pagetables[0]) : (*((pagetable *) 0x1000)))
+static phys_t ppagealloc_locked(uintptr_t size);
 
 pagetable &get_root_pagetable() {
-    return _get_pml4t();
+    return _get_pml4t_this_cpu();
 }
 
 uint64_t vpagealloc(uint64_t size) {
@@ -38,7 +41,7 @@ uint64_t vpagealloc(uint64_t size) {
     }
     size /= 4096;
 
-    pagetable &pml4t = _get_pml4t();
+    pagetable &pml4t = _get_pml4t_cpu0();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     int i = PMLT4_USERSPACE_START;
@@ -101,6 +104,250 @@ uint64_t vpagealloc(uint64_t size) {
     return 0;
 }
 
+uint64_t vpagealloc32(uint64_t size) {
+    std::lock_guard lock{get_pagetables_lock()};
+
+    if ((size & 4095) != 0) {
+        size += 4096;
+    }
+    size /= 4096;
+
+    pagetable &pml4t = _get_pml4t_cpu0();
+    uint64_t starting_addr = 0;
+    uint64_t count = 0;
+    int i = 0;
+    if (pml4t[i].present) {
+        auto &pdpt = pml4t[i].get_subtable();
+        int j = (int) (((uint32_t) 0xFFFFFFFF) >> (9+9+12)) + 1;
+        while (j > 0) {
+            --j;
+            if (pdpt[j].present) {
+                auto &pdt = pdpt[j].get_subtable();
+                int k = 512;
+                while (k > 0) {
+                    --k;
+                    if (pdt[k].present) {
+                        auto &pt = pdt[k].get_subtable();
+                        int l = 512;
+                        while (l > 0) {
+                            --l;
+                            /* the page acquire check */
+                            if (pt[l].os_virt_avail) {
+                                count++;
+                                if (count == size) {
+                                    starting_addr = i << 9;
+                                    starting_addr |= j;
+                                    starting_addr = starting_addr << 9;
+                                    starting_addr |= k;
+                                    starting_addr = starting_addr << 9;
+                                    starting_addr |= l;
+                                    starting_addr = starting_addr << 12;
+                                    uint64_t ending_addr = starting_addr + (count * 4096);
+                                    for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
+                                        pageentr *pe = get_pageentr64(pml4t, addr);
+                                        pe->os_virt_avail = 0; // GRAB
+                                        if (addr == starting_addr) {
+                                            pe->os_virt_start = 1; // GRAB
+                                        }
+                                        pe->present = 0;
+                                    }
+                                    allocated_vpages += size;
+                                    return starting_addr;
+                                }
+                            } else {
+                                count = 0;
+                            }
+                        }
+                    } else {
+                        count = 0;
+                    }
+                }
+            } else {
+                count = 0;
+            }
+        }
+    } else {
+        count = 0;
+    }
+    return 0;
+}
+
+static VPerCpuPagetables vpercpuallocpagetable_setup(int i, int j, int k) {
+    std::shared_ptr<vmem> vm3{};
+    if (is_v_multicpu && v_num_cpus > 1) {
+        auto &cpu0pmlt4 = per_cpu_pagetables[0];
+        auto &cpu1pmlt4 = per_cpu_pagetables[1];
+        vmem vm1{sizeof(pagetable) * v_num_cpus};
+        pagetable *tables1 = (pagetable *) vm1.pointer();
+        if (cpu0pmlt4[i]->page_ppn == cpu1pmlt4[i]->page_ppn) {
+            auto phys = ppagealloc(sizeof(pagetable) * v_num_cpus);
+            vm1.page(0).rwmap(((phys_t) cpu0pmlt4[i]->page_ppn) << 12);
+            for (int cpu = 1; cpu < v_num_cpus; cpu++) {
+                vm1.page(cpu).rwmap(phys + (sizeof(pagetable) * (cpu - 1)));
+            }
+            vm1.reload();
+            for (int cpu = 1; cpu < v_num_cpus; cpu++) {
+                memcpy(tables1[cpu], tables1[0], sizeof(tables1[cpu]));
+                static_assert(sizeof(tables1[cpu]) == sizeof(pagetable));
+                auto &pmlt4 = *(per_cpu_pagetables[cpu]);
+                pmlt4[i].page_ppn = (phys + (sizeof(pagetable) * (cpu - 1))) >> 12;
+            }
+            reload_pagetables();
+        } else {
+            for (int cpu = 0; cpu < v_num_cpus; cpu++) {
+                auto &pmlt4 = per_cpu_pagetables[cpu];
+                vm1.page(cpu).rwmap(((phys_t) pmlt4[i]->page_ppn) << 12);
+            }
+            reload_pagetables();
+        }
+        vmem vm2{sizeof(pagetable) * v_num_cpus};
+        pagetable *tables2 = (pagetable *) vm2.pointer();
+        if (tables1[0][j].page_ppn == tables1[1][j].page_ppn) {
+            auto phys = ppagealloc(sizeof(pagetable) * v_num_cpus);
+            vm2.page(0).rwmap(((phys_t) tables1[0][j].page_ppn) << 12);
+            for (int cpu = 1; cpu < v_num_cpus; cpu++) {
+                vm2.page(cpu).rwmap(phys + (sizeof(pagetable) * (cpu - 1)));
+            }
+            vm2.reload();
+            for (int cpu = 1; cpu < v_num_cpus; cpu++) {
+                memcpy(tables2[cpu], tables2[0], sizeof(tables2[cpu]));
+                static_assert(sizeof(tables2[cpu]) == sizeof(pagetable));
+                auto &tbl = tables1[cpu];
+                tbl[j].page_ppn = (phys + (sizeof(pagetable) * (cpu - 1))) >> 12;
+            }
+            reload_pagetables();
+        } else {
+            for (int cpu = 0; cpu < v_num_cpus; cpu++) {
+                auto &tbl = tables1[cpu];
+                vm2.page(cpu).rwmap(((phys_t) tbl[j].page_ppn) << 12);
+            }
+            reload_pagetables();
+        }
+        vm3 = std::make_shared<vmem>(sizeof(pagetable) * v_num_cpus);
+        pagetable *tables3 = (pagetable *) vm3->pointer();
+        if (tables2[0][k].page_ppn == tables2[1][k].page_ppn) {
+            auto phys = ppagealloc(sizeof(pagetable) * v_num_cpus);
+            vm3->page(0).rwmap(((phys_t) tables2[0][k].page_ppn) << 12);
+            for (int cpu = 1; cpu < v_num_cpus; cpu++) {
+                vm3->page(cpu).rwmap(phys + (sizeof(pagetable) * (cpu - 1)));
+            }
+            vm3->reload();
+            for (int cpu = 1; cpu < v_num_cpus; cpu++) {
+                memcpy(tables2[cpu], tables2[0], sizeof(tables2[cpu]));
+                static_assert(sizeof(tables2[cpu]) == sizeof(pagetable));
+                auto &tbl = tables2[cpu];
+                tbl[k].page_ppn = (phys + (sizeof(pagetable) * (cpu - 1))) >> 12;
+            }
+            reload_pagetables();
+        } else {
+            for (int cpu = 0; cpu < v_num_cpus; cpu++) {
+                auto &tbl = tables2[cpu];
+                vm3->page(cpu).rwmap(((phys_t) tbl[k].page_ppn) << 12);
+            }
+            reload_pagetables();
+        }
+    }
+    uintptr_t ptr = (((uintptr_t) i) << (9+9+9+12)) + (((uintptr_t) j) << (9+9+12)) + (((uintptr_t) k) << (9+12));
+    return {.vm = vm3, .tables = (pagetable *) vm3->pointer(), .numTables = v_num_cpus, .pointer = ptr};
+}
+
+VPerCpuPagetables vpercpuallocpagetable() {
+    std::unique_lock lock{get_pagetables_lock()};
+
+    pagetable &pml4t = _get_pml4t_cpu0();
+    int i = PMLT4_USERSPACE_START;
+    while (i > 0) {
+        --i;
+        if (pml4t[i].present) {
+            auto &pdpt = pml4t[i].get_subtable();
+            int j = 512;
+            while (j > 0) {
+                --j;
+                if (pdpt[j].present) {
+                    auto &pdt = pdpt[j].get_subtable();
+                    int k = 512;
+                    while (k > 0) {
+                        --k;
+                        if (pdt[k].present) {
+                            auto &pt = pdt[k].get_subtable();
+                            bool suitable{true};
+                            int l = 512;
+                            while (l > 0) {
+                                --l;
+                                /* the page acquire check */
+                                if (pt[l].os_virt_avail == 0) {
+                                    suitable = false;
+                                    break;
+                                }
+                            }
+                            if (suitable) {
+                                l = 512;
+                                while (l > 0) {
+                                    --l;
+                                    pt[l].os_virt_avail = 0;
+                                }
+                                pt[l].os_virt_start = 1;
+                                lock.release();
+                                return vpercpuallocpagetable_setup(i, j, k);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return {};
+}
+
+VPerCpuPagetables vpercpuallocpagetable32() {
+    std::unique_lock lock{get_pagetables_lock()};
+
+    pagetable &pml4t = _get_pml4t_cpu0();
+    int i = 0;
+    if (pml4t[i].present) {
+        auto &pdpt = pml4t[i].get_subtable();
+        int j = (int) (((uint32_t) 0xFFFFFFFF) >> (9+9+12)) + 1;
+        while (j > 0) {
+            --j;
+            if (pdpt[j].present) {
+                auto &pdt = pdpt[j].get_subtable();
+                int k = 512;
+                while (k > 0) {
+                    --k;
+                    if (pdt[k].present) {
+                        auto &pt = pdt[k].get_subtable();
+                        bool suitable{true};
+                        int l = 512;
+                        while (l > 0) {
+                            --l;
+                            /* the page acquire check */
+                            if (pt[l].os_virt_avail == 0) {
+                                suitable = false;
+                                break;
+                            }
+                        }
+                        if (suitable) {
+                            l = 512;
+                            while (l > 0) {
+                                --l;
+                                pt[l].os_virt_avail = 0;
+                            }
+                            pt[l].os_virt_start = 1;
+                            lock.release();
+                            return vpercpuallocpagetable_setup(i, j, k);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return {};
+}
+
+uint32_t vpagetablecount() {
+    return 512;
+}
+
 void pmemcounts() {
     uint64_t scan = 0;
     uint64_t free_pages = 0;
@@ -119,63 +366,66 @@ void pmemcounts() {
 }
 
 //#define DEBUG_PALLOC_FAILURE
-uint64_t ppagealloc(uint64_t size) {
+static phys_t ppagealloc_locked(uintptr_t size) {
 #ifdef DEBUG_PALLOC_FAILURE
     uint64_t scan = 0;
     uint64_t free_pages = 0;
     {
 #endif
-    std::lock_guard lock{get_pagetables_lock()};
 
-    if ((size & 4095) != 0) {
-        size += 4096;
-    }
-    size /= 4096;
-    pagetable &pml4t = _get_pml4t();
-    uint64_t starting_addr = 0;
-    uint64_t count = 0;
-    auto *phys = get_physpagemap();
-    for (uint32_t page = 512; page < phys->max(); page++) {
-        if (!phys->claimed(page)) {
-            if (starting_addr != 0) {
-                count++;
-                if (count == size) {
-                    uint64_t ending_addr = starting_addr + (count * 4096);
-                    for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
-                        phys->claim(addr >> 12); // GRAB
+        if ((size & 4095) != 0) {
+            size += 4096;
+        }
+        size /= 4096;
+        uint64_t starting_addr = 0;
+        uint64_t count = 0;
+        auto *phys = get_physpagemap();
+        for (uint32_t page = 512; page < phys->max(); page++) {
+            if (!phys->claimed(page)) {
+                if (starting_addr != 0) {
+                    count++;
+                    if (count == size) {
+                        uint64_t ending_addr = starting_addr + (count * 4096);
+                        for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
+                            phys->claim(addr >> 12); // GRAB
+                        }
+                        allocated_ppages += size;
+                        return starting_addr;
                     }
-                    allocated_ppages += size;
-                    return starting_addr;
+                } else {
+                    starting_addr = page;
+                    starting_addr = starting_addr << 12;
+                    if (size == 1) {
+                        phys->claim(starting_addr >> 12); // GRAB
+                        ++allocated_ppages;
+                        return starting_addr;
+                    } else {
+                        count = 1;
+                    }
                 }
             } else {
-                starting_addr = page;
-                starting_addr = starting_addr << 12;
-                if (size == 1) {
-                    phys->claim(starting_addr >> 12); // GRAB
-                    ++allocated_ppages;
-                    return starting_addr;
-                } else {
-                    count = 1;
-                }
+                starting_addr = 0;
             }
-        } else {
-            starting_addr = 0;
         }
-    }
 #ifdef DEBUG_PALLOC_FAILURE
     }
     get_klogger() << "Ppage allocation failure " << scan << " pages scanned, " << free_pages << " free encountered\n";
 #endif
     return 0;
 }
-uint32_t ppagealloc32(uint32_t size) {
+
+phys_t ppagealloc(uintptr_t size) {
+    std::lock_guard lock{get_pagetables_lock()};
+    return ppagealloc_locked(size);
+}
+
+phys_t ppagealloc32(uint32_t size) {
     std::lock_guard lock{get_pagetables_lock()};
 
     if ((size & 4095) != 0) {
         size += 4096;
     }
     size /= 4096;
-    pagetable &pml4t = _get_pml4t();
     uint32_t starting_addr = 0;
     uint32_t count = 0;
 
@@ -217,7 +467,7 @@ uint32_t ppagealloc32(uint32_t size) {
 uint64_t vpagefree(uint64_t addr) {
     std::lock_guard lock{get_pagetables_lock()};
 
-    pagetable &pml4t = _get_pml4t();
+    pagetable &pml4t = _get_pml4t_cpu0();
     addr = addr >> 12;
     uint64_t first = addr;
     uint64_t size{0};
@@ -258,7 +508,7 @@ uint64_t vpagefree(uint64_t addr) {
 uint64_t vpagesize(uint64_t addr) {
     std::lock_guard lock{get_pagetables_lock()};
 
-    const pagetable &pml4t = _get_pml4t();
+    const pagetable &pml4t = _get_pml4t_cpu0();
     addr = addr >> 12;
     uint64_t first = addr;
     uint64_t size{0};
@@ -300,7 +550,7 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
         size += 4096;
     }
     size /= 4096;
-    pagetable &pml4t = _get_pml4t();
+    pagetable &pml4t = _get_pml4t_cpu0();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     auto *phys = get_physpagemap();
@@ -442,10 +692,10 @@ void free_stack(uint64_t vaddr) {
             int j = paddr & 511;
             paddr = paddr >> 9;
             int i = paddr & 511;
-            if (_get_pml4t()[i].present == 0) {
+            if (_get_pml4t_cpu0()[i].present == 0) {
                 wild_panic("Stack is outside allocatable");
             }
-            auto &pdpt = _get_pml4t()[i].get_subtable();
+            auto &pdpt = _get_pml4t_cpu0()[i].get_subtable();
             if (pdpt[j].present == 0) {
                 wild_panic("Stack is outside allocatable");
             }
@@ -492,14 +742,14 @@ void free_stack(uint64_t vaddr) {
 
 void reload_pagetables() {
     critical_section cli{};
-    uint64_t cr3 = (uint64_t) &(_get_pml4t());
+    uint64_t cr3 = (uint64_t) &(_get_pml4t_this_cpu());
     asm("mov %0,%%cr3; " :: "r"(cr3));
 }
 
 void ppagefree(uint64_t addr, uint64_t size) {
     std::lock_guard lock{get_pagetables_lock()};
 
-    pagetable &pml4t = _get_pml4t();
+    pagetable &pml4t = _get_pml4t_cpu0();
     addr = addr >> 12;
     if ((size & 4095) != 0) {
         size += 4096;
@@ -593,9 +843,10 @@ void vmem_switch_to_multicpu(ApStartup *apStartupP, int numCpus) {
     critical_section cli{};
     apStartup = apStartupP;
     per_cpu_pagetables = (pagetable **) (void *) pagealloc(numCpus * sizeof(*per_cpu_pagetables));
+    v_num_cpus = numCpus;
     for (int i = 0; i < numCpus; i++) {
         per_cpu_pagetables[i] = (pagetable *) (void *) pv_fix_pagealloc(sizeof(*(per_cpu_pagetables[i])));
-        memcpy(per_cpu_pagetables[i], &(_get_pml4t()), sizeof(*(per_cpu_pagetables[i])));
+        memcpy(per_cpu_pagetables[i], &(_get_pml4t_this_cpu()), sizeof(*(per_cpu_pagetables[i])));
         static_assert(sizeof(*(per_cpu_pagetables[i])) == 4096);
     }
     vmem_set_per_cpu_pagetables();
@@ -617,7 +868,7 @@ void setup_pvpage_stats() {
         allocated_ppages = 0;
         allocated_vpages = 0;
         auto *phys = get_physpagemap();
-        pagetable &pml4t = _get_pml4t();
+        pagetable &pml4t = _get_pml4t_cpu0();
         for (int i = 0; i < 512; i++) {
             if (pml4t[i].present) {
                 auto &pdpt = pml4t[i].get_subtable();

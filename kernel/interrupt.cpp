@@ -2,6 +2,7 @@
 // Created by sigsegv on 26.04.2021.
 //
 
+#include <iostream>
 #include <klogger.h>
 #include <interrupt_frame.h>
 #include <string>
@@ -19,7 +20,7 @@
 
 //#define PRINT_HANDLED_CPU_INTR
 
-void Interrupt::print_debug(bool double_fault) const {
+void Interrupt::print_debug(bool double_fault, bool stack_dump) const {
     get_klogger() << "Interrupt " << _interrupt << " at " << cs() << ":" << rip() << " rflags " << rflags() << " err " << error_code() << "\n"
     << "ax=" << rax() << " bx="<< rbx() << " cx=" << rcx() << " dx="<< rdx() << "\n"
     << "si=" << rsi() << " di="<< rdi() << " bp=" << rbp() << " sp="<< rsp() << "\n"
@@ -35,6 +36,9 @@ void Interrupt::print_debug(bool double_fault) const {
             << " 5 " << xmm5_high() << xmm5_low() << "\n"
             << "xmm6 " << xmm6_high() << xmm6_low()
             << " 7 " << xmm7_high() << xmm7_low() << "\n";
+    if (!stack_dump) {
+        return;
+    }
     if (is_nanotime_available()) {
         critical_section cli{};
         uint64_t nanos = get_nanotime_ref() + 2000000000;
@@ -336,5 +340,13 @@ extern "C" {
         interrupt.print_debug();
         wild_panic("unknown interrupt");
         return false;
+    }
+
+    bool syscall_main_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame, x86_fpu_state *fpusse) {
+        InterruptCpuFrame *cpuFrame = (InterruptCpuFrame *) (void *) (((uint8_t *) stack_frame) + (sizeof(*stack_frame) - 8)/*error-code-norm-not-avail*/);
+        Interrupt interrupt{cpuFrame, stack_frame, fpusse, (uint8_t) 0x80};
+        get_klogger() << "Syscall:\n";
+        interrupt.print_debug(false, false);
+        return true;
     }
 }

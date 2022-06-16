@@ -14,6 +14,7 @@
 #include "start_ap.h"
 #include "PITTimerCalib.h"
 #include "IOApic.h"
+#include "SyscallSupport.h"
 #include <pagealloc.h>
 
 void set_tss(int cpun, struct TaskStateSegment *tss);
@@ -76,6 +77,7 @@ void ApStartup::Init(PITTimerCalib *calib_timer) {
     scheduler->start_multi_cpu(bsp_cpu_num);
 
     vmem_switch_to_multicpu(this, apicsInfo->GetNumberOfCpus());
+    SyscallSupport::Instance().GlobalSetup().CpuSetup();
 
     const uint32_t *ap_count = install_ap_bootstrap();
 

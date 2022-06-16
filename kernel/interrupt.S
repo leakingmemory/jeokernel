@@ -361,6 +361,7 @@
 .globl interrupt_immFD_handler
 .globl interrupt_immFE_handler
 .globl interrupt_immFF_handler
+.globl syscall_enter
 
 interrupt_imm00_handler:
     intpush
@@ -1398,5 +1399,34 @@ interrupt_imm_handler_return_with_code:
     intpop
     add $8, %rsp
     sti
+    iretq
+
+syscall_enter:
+    movq %rax, %cr2
+    movq $syscall_stack, %rax
+    movq (%rax),%rax
+    movq %rsp, -0x10(%rax)
+    movq %rax, %rsp
+    movq %cr2, %rax
+    movq %r11, -0x18(%rsp) // rflags
+    movq %rcx, -0x28(%rsp) // rip
+    movq $0x23, %rcx
+    movq %rcx, -8(%rsp) // ss
+    movq $0x1b, %rcx
+    movq %rcx, -0x20(%rsp) // cs
+    subq $0x28, %rsp
+    intpush
+    cld
+    call syscall_main_handler
+    testq $0xFF, %rax
+    jnz syscall_leave_by_iret
+    intpop
+    addq $0x28, %rsp
+    movq -0x28(%rsp), %rcx
+    movq -0x18(%rsp), %r11
+    movq -0x10(%rsp), %rsp
+    sysretq
+syscall_leave_by_iret:
+    intpop
     iretq
 

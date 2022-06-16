@@ -303,7 +303,7 @@ public:
      */
     [[nodiscard]] std::vector<std::tuple<size_t,uint64_t>> unwind_stack(const caller_stack &stack, uint64_t rbp) const;
 
-    void print_debug(bool double_fault = false) const;
+    void print_debug(bool double_fault = false, bool stack_dump = true) const;
 };
 
 #endif //JEOKERNEL_INTERRUPT_FRAME_H
