@@ -54,11 +54,11 @@ filepage_data::~filepage_data() {
 }
 
 void filepage_data::up() {
-    asm("lock incl %0" : "=rm"(ref));
+    asm("lock incl %0" : "=m"(ref));
 }
 
 void filepage_data::down() {
-    asm("lock decl %0" : "=rm"(ref));
+    asm("lock decl %0" : "=m"(ref));
 }
 
 void filepage_data::initDone() {

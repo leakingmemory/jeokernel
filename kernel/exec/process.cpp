@@ -217,7 +217,7 @@ void Process::task_leave() {
 }
 
 struct process_pfault {
-    task *task;
+    task *pfaultTask;
     Process *process;
     uintptr_t ip;
     uintptr_t address;
@@ -235,7 +235,7 @@ bool Process::page_fault(task &current_task, Interrupt &intr) {
     uint64_t address{0};
     asm("mov %%cr2, %0" : "=r"(address));
     std::lock_guard lock{pfault_lck};
-    process_pfault pf{.task = &current_task, .process = this, .ip = intr.rip(), .address = address};
+    process_pfault pf{.pfaultTask = &current_task, .process = this, .ip = intr.rip(), .address = address};
     faults.push_back(pf);
     pfault_sema.release();
     if (pfault_thread == nullptr) {
@@ -253,7 +253,7 @@ bool Process::page_fault(task &current_task, Interrupt &intr) {
                     pfault = *iterator;
                     faults.erase(iterator);
                 }
-                pfault.process->resolve_page_fault(*(pfault.task), pfault.ip, pfault.address);
+                pfault.process->resolve_page_fault(*(pfault.pfaultTask), pfault.ip, pfault.address);
             }
         });
     }
