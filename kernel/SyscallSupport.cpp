@@ -30,6 +30,9 @@ SyscallSupport &SyscallSupport::CpuSetup() {
     asm("movl $0xC0000083, %%ecx; rdmsr; movq $0x0200, %%rax; wrmsr;" ::: "%ecx", "%rax", "%rdx");
     // EFER - Syscall (SCE) enable
     asm("movl $0xC0000080, %%ecx; rdmsr; orl $0x001, %%eax; wrmsr; " ::: "%eax", "%ecx", "%edx");
+
+    // MSR_GS_BASE -
+    asm("movl $0xC0000102, %%ecx; xor %%rdx, %%rdx; mov %0, %%rax; wrmsr; " :: "r"(syscall_stack_m8) : "%eax", "%rcx", "%rdx");
     return *this;
 }
 

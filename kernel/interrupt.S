@@ -1402,12 +1402,14 @@ interrupt_imm_handler_return_with_code:
     iretq
 
 syscall_enter:
-    movq %rax, %cr2
+    swapgs
+    movq %rax, %gs:0
+    swapgs
     movq $syscall_stack, %rax
     movq (%rax),%rax
     movq %rsp, -0x10(%rax)
     movq %rax, %rsp
-    movq %cr2, %rax
+    movq -8(%rsp), %rax
     movq %r11, -0x18(%rsp) // rflags
     movq %rcx, -0x28(%rsp) // rip
     movq $0x23, %rcx
