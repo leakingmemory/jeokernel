@@ -8,6 +8,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(__cplusplus) && !defined(IA32)
+#include <string>
+#endif
+
 #define ET_NONE 0
 #define ET_REL 1
 #define ET_EXEC 2
@@ -269,6 +273,28 @@ struct ELF64_header {
         }
         return nullptr;
     }
+
+#if defined(__cplusplus) && !defined(IA32)
+    std::string get_string(uint32_t index) const {
+        const char *strtab = get_strtab();
+        auto strtab_len = get_strtab_len();
+        if (index >= strtab_len) {
+            return "";
+        }
+        const char *str = strtab + index;
+        return std::string(str);
+    }
+
+    const ELF64_section_entry *get_ctors_table() const {
+        for (uint16_t i = 0; i < e_shnum; i++) {
+            const ELF64_section_entry &se = get_section_entry(i);
+            if (se.sh_type == SHT_PROGBITS && get_string(se.sh_name) == ".ctors") {
+                return &se;
+            }
+        }
+        return nullptr;
+    }
+#endif
 
     const uint32_t get_symbols(const ELF64_section_entry &symtab) const {
         return symtab.sh_size / sizeof(ELF64_symbol_entry);

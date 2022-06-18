@@ -729,6 +729,25 @@ done_with_mem_extension:
                     }
                 }
             }
+
+            const auto *ctor_list_section = kernel_elf->elf().get_elf64_header().get_ctors_table();
+            if (ctor_list_section != nullptr) {
+                typedef void (*init_func)();
+
+                auto *ctor_list = (uintptr_t *) (void **) ctor_list_section->sh_addr;
+
+                auto size = ctor_list_section->sh_size;
+                auto num = size / sizeof(*ctor_list);
+
+                get_klogger() << "Run global construct <.ctors>\n";
+                for (int i = 0; i < num; i++) {
+                    if (ctor_list[i] != 0) {
+                        intptr_t faddr = (intptr_t) ctor_list[i];
+                        get_klogger() << "Construct " << ((uintptr_t) faddr) << "\n";
+                        ((init_func) ctor_list[i])();
+                    }
+                }
+            }
         }
         std::cout << "Kernel ELF constructors done\n";
 
