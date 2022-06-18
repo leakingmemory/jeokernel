@@ -125,7 +125,10 @@ void Exec::Run() {
                 }
                 if (currentFlags != flags || page.filep != (offset + (index - start))) {
                     if (flags != none && index != start) {
-                        process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0, (flags & exec) != 0, true);
+                        auto success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0, (flags & exec) != 0, true);
+                        if (!success) {
+                            std::cerr << "Error: Map failed\n";
+                        }
                     }
                     start = index;
                     flags = currentFlags;
@@ -134,7 +137,10 @@ void Exec::Run() {
                 ++index;
             }
             if (flags != none && index != start) {
-                process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0, (flags & exec) != 0, true);
+                auto success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0, (flags & exec) != 0, true);
+                if (!success) {
+                    std::cerr << "Error: Map failed\n";
+                }
             }
         }
 
