@@ -32,6 +32,7 @@ add_subdirectory(libcxxrt/src)
 add_subdirectory(exceptionhandling)
 add_subdirectory(kfs)
 add_subdirectory(exec)
+add_subdirectory(syscall)
 
 add_library(bootstrap bootstrap.S)
 
@@ -66,3 +67,4 @@ target_link_libraries(kernel PRIVATE cxxrt-static)
 target_link_libraries(kernel PRIVATE exceptionhandling)
 target_link_libraries(kernel PRIVATE kfs)
 target_link_libraries(kernel PRIVATE exec)
+target_link_libraries(kernel PRIVATE syscall)

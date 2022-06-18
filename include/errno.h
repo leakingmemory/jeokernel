@@ -9,5 +9,6 @@ extern int errno;
 
 #define ENOENT 2
 #define EINTR  4
+#define ENOSYS  38 // Not a syscall
 
 #endif //JEOKERNEL_ERRNO_H
