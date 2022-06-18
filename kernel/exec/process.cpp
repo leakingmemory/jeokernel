@@ -63,7 +63,7 @@ bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func)
         static_assert((mask >> 26) == 1);
         index = pagenum >> 27;
     }
-    if (pageoff >= sizeOfUserspaceRoots) {
+    if (index >= sizeOfUserspaceRoots) {
         return false;
     }
     PagetableRoot *root = nullptr;
