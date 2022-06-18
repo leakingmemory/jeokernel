@@ -272,6 +272,7 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
     {
         constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_START) << (9 + 9 + 9 + 12);
         if (fault_addr < relocationOffset) {
+            std::cerr << "User process page fault: Below userspace address minimum\n";
             goto pfault_fail;
         }
         uint32_t page;
@@ -288,6 +289,7 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
             }
         }
         if (mapping == nullptr) {
+            std::cerr << "User process page fault: No mapping for page " << std::hex << page << std::dec << "\n";
             goto pfault_fail;
         }
         phys_t physpage = mapping->image_skip_pages + (page - mapping->pagenum);
@@ -305,10 +307,12 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
             }
         }
         if (root == nullptr) {
+            std::cerr << "User process page fault: No pagetable root for page " << std::hex << page << std::dec << "\n";
             goto pfault_fail;
         }
         auto b1 = (*(root->branches))[(page >> (9+9)) & 511];
         if (b1.present == 0) {
+            std::cerr << "User process page fault: Pagetable directory not present for page " << std::hex << page << std::dec << "\n";
             goto pfault_fail;
         }
         vmem vm{PAGESIZE};
@@ -316,6 +320,7 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
         vm.reload();
         auto b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
         if (b2.present == 0) {
+            std::cerr << "User process page fault: Pagetable not present for page " << std::hex << page << std::dec << "\n";
             goto pfault_fail;
         }
         vm.page(0).rwmap(b2.page_ppn << 12);
@@ -331,6 +336,7 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
             for (auto &m : mappings) {
                 if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
                     if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
+                        std::cerr << "User process page fault: Mapping was removed for page " << std::hex << page << std::dec << "\n";
                         goto pfault_fail;
                     }
                     ok = true;
@@ -338,12 +344,14 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
                 }
             }
             if (!ok) {
+                std::cerr << "User process page fault: Mapping was removed for page " << std::hex << page << std::dec << "\n";
                 goto pfault_fail;
             }
             ok = false;
             for (auto &r : pagetableRoots) {
                 if (r.addr == rootAddr) {
                     if (root != &r) {
+                        std::cerr << "User process page fault: Pagetable root was removed for page " << std::hex << page << std::dec << "\n";
                         goto pfault_fail;
                     }
                     ok = true;
@@ -351,17 +359,20 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
                 }
             }
             if (!ok) {
+                std::cerr << "User process page fault: Pagetable root was removed for page " << std::hex << page << std::dec << "\n";
                 goto pfault_fail;
             }
             auto &b1 = (*(root->branches))[(page >> (9+9)) & 511];
             std::cout << "Root branch " << std::hex << ((root->physpage << 12) + (((page >> (9+9)) & 511) * sizeof(b1))) << std::dec << "\n";
             if (b1.present == 0) {
+                std::cerr << "User process page fault: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
                 goto pfault_fail;
             }
             vm.page(0).rmap(b1.page_ppn << 12);
             vm.reload();
             auto &b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
             if (b2.present == 0) {
+                std::cerr << "User process page fault: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
                 goto pfault_fail;
             }
             auto b2phys = b2.page_ppn << 12;
