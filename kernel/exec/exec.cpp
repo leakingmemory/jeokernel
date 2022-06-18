@@ -147,7 +147,7 @@ void Exec::Run() {
         {
             int i = startpage;
             for (const auto &page: pages) {
-                std::cout << "Page " << std::hex << (startpage+i) << " -> file:" << page.filep << std::dec << (page.write ? " write" : "") << (page.exec ? " exec" : "") << "\n";
+                std::cout << "Page " << std::hex << i << " -> file:" << page.filep << std::dec << (page.write ? " write" : "") << (page.exec ? " exec" : "") << "\n";
                 ++i;
             }
         }
