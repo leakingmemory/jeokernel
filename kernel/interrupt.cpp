@@ -351,6 +351,16 @@ extern "C" {
             get_klogger() << "Not a valid syscall:\n";
             interrupt.print_debug(false, false);
         }
-        return result == SyscallResult::CONTEXT_SWITCH;
+        if (result == SyscallResult::CONTEXT_SWITCH) {
+            uint8_t cpu{0};
+            auto *scheduler = get_scheduler();
+            if (scheduler->is_multicpu()) {
+                ApStartup *apStartup = GetApStartup();
+                cpu = apStartup->GetCpuNum();
+            }
+            get_scheduler()->switch_tasks(interrupt, cpu);
+            return true;
+        }
+        return false;
     }
 }

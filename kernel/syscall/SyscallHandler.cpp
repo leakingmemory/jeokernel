@@ -5,6 +5,7 @@
 #include <errno.h>
 #include "interrupt_frame.h"
 #include "SyscallHandler.h"
+#include "Exit.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -26,6 +27,7 @@ SyscallResult SyscallHandler::Call(Interrupt &intr) {
 
 class SyscallHandlerImpl : public SyscallHandler {
 private:
+    Exit exit{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

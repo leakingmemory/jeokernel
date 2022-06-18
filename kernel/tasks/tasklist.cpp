@@ -365,6 +365,39 @@ void tasklist::exit(uint8_t cpu, bool returnToCallerIfNotTerminatedImmediately) 
     }
 }
 
+void tasklist::user_exit(int64_t returnValue) {
+    task *current_task = nullptr;
+
+    int cpu;
+    if (multicpu) {
+        cpu = GetApStartup()->GetCpuNum();
+    } else {
+        cpu = 0;
+    }
+
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    for (task *t : tasks) {
+        if (t->get_cpu() == cpu && t->is_running()) {
+            current_task = t;
+            break;
+        }
+    }
+
+    if (current_task == nullptr) {
+        wild_panic("current task was not found");
+    }
+
+    current_task->set_end(true);
+
+    for (task *t : tasks) {
+        if (t != current_task) {
+            t->event(event_handler_loop, TASK_EVENT_EXIT, current_task->get_id(), 0);
+        }
+    }
+}
+
 uint32_t tasklist::get_next_id() {
     while (true) {
         uint32_t id = ++serial;
