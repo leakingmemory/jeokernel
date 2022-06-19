@@ -468,6 +468,16 @@ void tasklist::join(uint32_t task_id) {
     }
 }
 
+void tasklist::when_not_running(task &t, std::function<void()> func) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    if (!t.is_running()) {
+        func();
+        return;
+    }
+    t.when_not_running(func);
+}
+
 uint32_t tasklist::get_current_task_id() {
     critical_section cli{};
 
@@ -537,6 +547,12 @@ task &tasklist::get_current_task_with_lock() {
     }
 
     return *current_task;
+}
+
+task &tasklist::get_current_task() {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    return get_current_task_with_lock();
 }
 
 void tasklist::event_in_event_handler(uint64_t v0, uint64_t v1, uint64_t v2, uint8_t res_acq) {

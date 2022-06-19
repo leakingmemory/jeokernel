@@ -10,6 +10,8 @@
 #include <thread>
 #include <kfs/kfiles.h>
 #include "concurrency/raw_semaphore.h"
+#include "StdinDesc.h"
+#include "StdoutDesc.h"
 
 PagetableRoot::PagetableRoot(uint16_t addr) : physpage(ppagealloc(PAGESIZE)), vm(PAGESIZE), branches((pagetable *) vm.pointer()), addr(addr) {
     vm.page(0).rwmap(physpage);
@@ -51,7 +53,11 @@ PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std
 MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages)
 : image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), mappings() {}
 
-Process::Process() : pagetableRoots(), mappings() {}
+Process::Process() : pagetableRoots(), mappings(), fileDescriptors() {
+    fileDescriptors.push_back(StdinDesc::Descriptor());
+    fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
+    fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
+}
 
 bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func) {
     constexpr uint32_t sizeOfUserspaceRoots = 512 - PMLT4_USERSPACE_START;
@@ -221,6 +227,7 @@ struct process_pfault {
     Process *process;
     uintptr_t ip;
     uintptr_t address;
+    std::function<void (bool)> func;
 };
 
 static hw_spinlock pfault_lck{};
@@ -228,15 +235,7 @@ static raw_semaphore pfault_sema{-1};
 static std::vector<process_pfault> faults{};
 static std::thread *pfault_thread{nullptr};
 
-bool Process::page_fault(task &current_task, Interrupt &intr) {
-    std::cout << "Page fault in user process with pagetable root " << std::hex << ((uintptr_t) get_root_pagetable())
-    << " code " << intr.error_code() << std::dec << "\n";
-    current_task.set_blocked(true);
-    uint64_t address{0};
-    asm("mov %%cr2, %0" : "=r"(address));
-    std::lock_guard lock{pfault_lck};
-    process_pfault pf{.pfaultTask = &current_task, .process = this, .ip = intr.rip(), .address = address};
-    faults.push_back(pf);
+void Process::activate_pfault_thread() {
     pfault_sema.release();
     if (pfault_thread == nullptr) {
         pfault_thread = new std::thread([] () {
@@ -253,10 +252,26 @@ bool Process::page_fault(task &current_task, Interrupt &intr) {
                     pfault = *iterator;
                     faults.erase(iterator);
                 }
-                pfault.process->resolve_page_fault(*(pfault.pfaultTask), pfault.ip, pfault.address);
+                if (pfault.pfaultTask != nullptr) {
+                    pfault.process->resolve_page_fault(*(pfault.pfaultTask), pfault.ip, pfault.address);
+                } else {
+                    pfault.process->resolve_read_page(pfault.address, pfault.func);
+                }
             }
         });
     }
+}
+
+bool Process::page_fault(task &current_task, Interrupt &intr) {
+    std::cout << "Page fault in user process with pagetable root " << std::hex << ((uintptr_t) get_root_pagetable())
+    << " code " << intr.error_code() << std::dec << "\n";
+    current_task.set_blocked(true);
+    uint64_t address{0};
+    asm("mov %%cr2, %0" : "=r"(address));
+    std::lock_guard lock{pfault_lck};
+    process_pfault pf{.pfaultTask = &current_task, .process = this, .ip = intr.rip(), .address = address, .func = [] (bool) {}};
+    faults.push_back(pf);
+    activate_pfault_thread();
     return true;
 }
 
@@ -266,14 +281,79 @@ bool Process::exception(task &current_task, const std::string &name, Interrupt &
     return true;
 }
 
-void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr) {
-    auto *scheduler = get_scheduler();
-    std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
+bool Process::readable(uintptr_t addr) {
+    std::lock_guard<hw_spinlock> lock{mtx};
+    {
+        constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_START) << (9 + 9 + 9 + 12);
+        if (addr < relocationOffset) {
+            std::cerr << "User process page resolve: Below userspace address minimum\n";
+            return false;
+        }
+        uint32_t page;
+        {
+            uintptr_t addr{addr - relocationOffset};
+            addr = addr >> 12;
+            page = addr;
+        }
+        MemMapping *mapping{nullptr};
+        for (auto &m: mappings) {
+            if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
+                mapping = &m;
+                break;
+            }
+        }
+        if (mapping == nullptr) {
+            std::cerr << "User process page resolve: No mapping for page " << std::hex << page << std::dec << "\n";
+            return false;
+        }
+        phys_t physpage = mapping->image_skip_pages + (page - mapping->pagenum);
+        uint16_t rootAddr;
+        {
+            uint32_t addr{page};
+            addr = addr >> (9 + 9 + 9);
+            rootAddr = addr;
+        }
+        PagetableRoot *root{nullptr};
+        for (auto &r: pagetableRoots) {
+            if (r.addr == rootAddr) {
+                root = &r;
+                break;
+            }
+        }
+        if (root == nullptr) {
+            std::cerr << "User process page resolve: No pagetable root for page " << std::hex << page << std::dec
+                      << "\n";
+            return false;
+        }
+        auto b1 = (*(root->branches))[(page >> (9 + 9)) & 511];
+        if (b1.present == 0) {
+            std::cerr << "User process page resolve: Pagetable directory not present for page " << std::hex << page
+                      << std::dec << "\n";
+            return false;
+        }
+        vmem vm{PAGESIZE};
+        vm.page(0).rmap(b1.page_ppn << 12);
+        vm.reload();
+        auto b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
+        if (b2.present == 0) {
+            std::cerr << "User process page resolve: Pagetable not present for page " << std::hex << page << std::dec
+                      << "\n";
+            return false;
+        }
+        vm.page(0).rwmap(b2.page_ppn << 12);
+        vm.reload();
+        auto b3 = (*((pagetable *) vm.pointer()))[page & 511];
+        return b3.present != 0 && b3.user_access != 0;
+    }
+}
+
+bool Process::resolve_page(uintptr_t fault_addr) {
+    std::unique_ptr<std::lock_guard<hw_spinlock>> lock{new std::lock_guard(mtx)};
     {
         constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_START) << (9 + 9 + 9 + 12);
         if (fault_addr < relocationOffset) {
-            std::cerr << "User process page fault: Below userspace address minimum\n";
-            goto pfault_fail;
+            std::cerr << "User process page resolve: Below userspace address minimum\n";
+            return false;
         }
         uint32_t page;
         {
@@ -289,8 +369,8 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
             }
         }
         if (mapping == nullptr) {
-            std::cerr << "User process page fault: No mapping for page " << std::hex << page << std::dec << "\n";
-            goto pfault_fail;
+            std::cerr << "User process page resolve: No mapping for page " << std::hex << page << std::dec << "\n";
+            return false;
         }
         phys_t physpage = mapping->image_skip_pages + (page - mapping->pagenum);
         uint16_t rootAddr;
@@ -307,21 +387,21 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
             }
         }
         if (root == nullptr) {
-            std::cerr << "User process page fault: No pagetable root for page " << std::hex << page << std::dec << "\n";
-            goto pfault_fail;
+            std::cerr << "User process page resolve: No pagetable root for page " << std::hex << page << std::dec << "\n";
+            return false;
         }
         auto b1 = (*(root->branches))[(page >> (9+9)) & 511];
         if (b1.present == 0) {
-            std::cerr << "User process page fault: Pagetable directory not present for page " << std::hex << page << std::dec << "\n";
-            goto pfault_fail;
+            std::cerr << "User process page resolve: Pagetable directory not present for page " << std::hex << page << std::dec << "\n";
+            return false;
         }
         vmem vm{PAGESIZE};
         vm.page(0).rmap(b1.page_ppn << 12);
         vm.reload();
         auto b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
         if (b2.present == 0) {
-            std::cerr << "User process page fault: Pagetable not present for page " << std::hex << page << std::dec << "\n";
-            goto pfault_fail;
+            std::cerr << "User process page resolve: Pagetable not present for page " << std::hex << page << std::dec << "\n";
+            return false;
         }
         vm.page(0).rwmap(b2.page_ppn << 12);
         vm.reload();
@@ -331,49 +411,49 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
             lock = {};
             auto image = mapping->image;
             auto loaded_page = image->GetPage(physpage);
-            lock = std::make_unique<std::lock_guard<std::mutex>>(mtx);
+            lock = std::make_unique<std::lock_guard<hw_spinlock>>(mtx);
             bool ok{false};
             for (auto &m : mappings) {
                 if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
                     if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
-                        std::cerr << "User process page fault: Mapping was removed for page " << std::hex << page << std::dec << "\n";
-                        goto pfault_fail;
+                        std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page << std::dec << "\n";
+                        return false;
                     }
                     ok = true;
                     break;
                 }
             }
             if (!ok) {
-                std::cerr << "User process page fault: Mapping was removed for page " << std::hex << page << std::dec << "\n";
-                goto pfault_fail;
+                std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page << std::dec << "\n";
+                return false;
             }
             ok = false;
             for (auto &r : pagetableRoots) {
                 if (r.addr == rootAddr) {
                     if (root != &r) {
-                        std::cerr << "User process page fault: Pagetable root was removed for page " << std::hex << page << std::dec << "\n";
-                        goto pfault_fail;
+                        std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex << page << std::dec << "\n";
+                        return false;
                     }
                     ok = true;
                     break;
                 }
             }
             if (!ok) {
-                std::cerr << "User process page fault: Pagetable root was removed for page " << std::hex << page << std::dec << "\n";
-                goto pfault_fail;
+                std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex << page << std::dec << "\n";
+                return false;
             }
             auto &b1 = (*(root->branches))[(page >> (9+9)) & 511];
             std::cout << "Root branch " << std::hex << ((root->physpage << 12) + (((page >> (9+9)) & 511) * sizeof(b1))) << std::dec << "\n";
             if (b1.present == 0) {
-                std::cerr << "User process page fault: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
-                goto pfault_fail;
+                std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
+                return false;
             }
             vm.page(0).rmap(b1.page_ppn << 12);
             vm.reload();
             auto &b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
             if (b2.present == 0) {
-                std::cerr << "User process page fault: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
-                goto pfault_fail;
+                std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
+                return false;
             }
             auto b2phys = b2.page_ppn << 12;
             vm.page(0).rwmap(b2phys);
@@ -381,19 +461,75 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
             auto &b3 = (*((pagetable *) vm.pointer()))[page & 511];
             if (b3.present == 0) {
                 std::cout << std::hex << ((b2phys) + (page & 511)) << " *" << (b3.user_access != 0 ? "u" : "k") << (b3.writeable != 0 ? "w" : "r")
-                << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
-                << "\n";
+                          << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
+                          << "\n";
                 mapping->mappings.push_back({.data = loaded_page, .page = page});
                 b3.page_ppn = loaded_page.PhysAddr() >> 12;
                 b3.present = 1;
                 reload_pagetables();
             }
-            current_task.set_blocked(false);
-            return;
+            return true;
         } else {
         }
     }
-pfault_fail:
+    return false;
+}
+
+void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr) {
+    if (resolve_page(fault_addr)) {
+        current_task.set_blocked(false);
+        return;
+    }
     std::cerr << "PID " << current_task.get_id() << ": Page fault at " << std::hex << ip << " addr " << fault_addr << std::dec << "\n";
-    scheduler->terminate_blocked(&current_task);
+    get_scheduler()->terminate_blocked(&current_task);
+}
+
+void Process::resolve_read_page(uintptr_t addr, std::function<void(bool)> func) {
+    if (resolve_page(addr)) {
+        func(true);
+    } else {
+        func(false);
+    }
+}
+
+void Process::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(bool)> func) {
+    uintptr_t end = addr + len;
+    if (addr == end) {
+        func(true);
+        return;
+    }
+    while (readable(addr)) {
+        addr += 4096;
+        len -= 4096;
+        uintptr_t next_addr = addr & ~((uintptr_t) 4095);
+        if (next_addr >= end) {
+            func(true);
+            return;
+        }
+    }
+    std::lock_guard lock{pfault_lck};
+    faults.push_back({.pfaultTask = nullptr, .process = this, .ip = 0, .address = addr, .func = [this, addr, len, end, func] (bool success) mutable {
+        if (!success) {
+            func(false);
+        } else {
+            addr += 4096;
+            len -= 4096;
+            uintptr_t next_addr = addr & ~((uintptr_t) 4095);
+            if (next_addr < end) {
+                resolve_read(addr, len, func);
+            } else {
+                func(true);
+            }
+        }
+    }});
+    activate_pfault_thread();
+}
+
+FileDescriptor Process::get_file_descriptor(int fd) {
+    for (auto desc : fileDescriptors) {
+        if (desc.FD() == fd) {
+            return desc;
+        }
+    }
+    return {};
 }

@@ -2,6 +2,6 @@ include(../toolchain.cmake)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h)
+add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h Write.cpp Write.h)
 
 target_include_directories(syscall PRIVATE ../../include)

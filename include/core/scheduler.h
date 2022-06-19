@@ -119,6 +119,7 @@ private:
     task_bits bits;
     std::vector<task_resource *> resources;
     std::vector<task_event_handler *> event_handlers;
+    std::vector<std::function<void ()>> do_when_not_running;
     std::string name;
 public:
     task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL), resources(), event_handlers(), name("[]") {
@@ -148,10 +149,17 @@ public:
             for (auto *resource : resources) {
                 resource->task_leave();
             }
+            for (auto &func : do_when_not_running) {
+                func();
+            }
+            do_when_not_running.clear();
         }
     }
     bool is_running() {
         return bits.running;
+    }
+    void when_not_running(std::function<void ()> func) {
+        do_when_not_running.push_back(func);
     }
     void set_blocked(bool blocked) {
         bits.blocked = blocked ? true : false;
@@ -193,6 +201,13 @@ public:
     }
     bool is_end() {
         return bits.end;
+    }
+
+    InterruptCpuFrame &get_cpu_frame() {
+        return cpu_frame;
+    }
+    InterruptStackFrame &get_cpu_state() {
+        return cpu_state;
     }
 
     void set_id(uint32_t id) {
@@ -273,6 +288,16 @@ public:
         return info;
     }
 
+    template <class T> T *get_resource() const {
+        for (auto *resource : resources) {
+            T *resource_with_type = dynamic_cast<T *>(resource);
+            if (resource_with_type != nullptr) {
+                return resource_with_type;
+            }
+        }
+        return nullptr;
+    }
+
     bool page_fault(Interrupt &intr) {
         for (auto *resource : resources) {
             if (resource->page_fault(*this, intr)) {
@@ -351,9 +376,12 @@ public:
     uint32_t get_current_task_id();
     void join(uint32_t task_id);
 
+    void when_not_running(task &t, std::function<void ()> func);
+
     task &get_task_with_lock(uint32_t task_id);
     task *get_nullable_task_with_lock(uint32_t task_id);
     task &get_current_task_with_lock();
+    task &get_current_task();
 
     void add_task_event_handler(task_event_handler *handler);
     /**

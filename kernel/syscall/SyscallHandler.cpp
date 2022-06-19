@@ -6,6 +6,7 @@
 #include "interrupt_frame.h"
 #include "SyscallHandler.h"
 #include "Exit.h"
+#include "Write.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -16,8 +17,11 @@ SyscallResult SyscallHandler::Call(Interrupt &intr) {
     for (auto *handler : handlers) {
         if (handler->number == number) {
             SyscallAdditionalParams additionalParams{(int64_t) intr.r8(), (int64_t) intr.r9()};
+            intr.get_cpu_state().rax = 0;
             uint64_t result = (uint64_t) handler->Call((int64_t) intr.rdi(), (int64_t) intr.rsi(), (int64_t) intr.rdx(), (int64_t) intr.r10(), additionalParams);
-            intr.get_cpu_state().rax = result;
+            if (result != 0) {
+                intr.get_cpu_state().rax = result;
+            }
             return additionalParams.DoContextSwitch() ? SyscallResult::CONTEXT_SWITCH : SyscallResult::FAST_RETURN;
         }
     }
@@ -28,6 +32,7 @@ SyscallResult SyscallHandler::Call(Interrupt &intr) {
 class SyscallHandlerImpl : public SyscallHandler {
 private:
     Exit exit{*this};
+    Write write{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
