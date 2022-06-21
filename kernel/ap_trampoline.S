@@ -50,7 +50,7 @@ ap_trampoline_8060:
     mov %eax, %cr4
 
     // Page tables
-    mov $0x01000, %eax
+    mov $0x05000, %eax
     mov %eax, %cr3
 
     mov %cr4, %eax

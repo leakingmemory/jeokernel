@@ -6,6 +6,7 @@
 #include <pagealloc.h>
 #include <concurrency/critical_section.h>
 #include <mutex>
+#include <klogger.h>
 #include "mallocator.h"
 
 void *BasicMemoryAllocatorImpl::sm_allocate(uint32_t size) {
@@ -136,10 +137,16 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
     static_assert(sizeof(AllocImpl::allocation_unit) == sizeof(Alloc::allocation_unit));
 
     void *memoryAllocatorP = (AllocImpl *) vpagealloc(0x41000);
+    if (memoryAllocatorP == nullptr) {
+        wild_panic("Out of virtual kernel space");
+    }
     {
         {
             std::optional<pageentr> pe = get_pageentr((uint64_t) memoryAllocatorP);
             uint64_t ppage = ppagealloc(4096);
+            if (ppage == 0) {
+                wild_panic("Out of kernel phys space");
+            }
             pe->page_ppn = ppage >> 12;
             pe->writeable = 1;
             pe->execution_disabled = 1;
@@ -152,6 +159,9 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
         {
             std::optional<pageentr> pe = get_pageentr(((uint64_t) memoryAllocatorP) + 4096);
             uint64_t ppage = ppagealloc(4096);
+            if (ppage == 0) {
+                wild_panic("Out of kernel phys space");
+            }
             pe->page_ppn = ppage >> 12;
             pe->writeable = 1;
             pe->execution_disabled = 1;
@@ -174,6 +184,9 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
         }
     }
     Alloc *allocator = (Alloc *) impl->sm_allocate(size);
+    if (allocator == nullptr) {
+        wild_panic("Couldn't allocate allocator");
+    }
     Alloc *basicMemoryAllocator = new ((void *) allocator) Alloc(impl);
     basicMemoryAllocator->Consume(size);
     return basicMemoryAllocator;

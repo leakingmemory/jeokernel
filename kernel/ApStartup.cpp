@@ -58,7 +58,7 @@ ApStartup::ApStartup(GlobalDescriptorTable *gdt, TaskStateSegment *cpu_tss, Inte
         InterruptTaskState *int_task_state = (i - 1) != bsp_cpu_num ? new InterruptTaskState(*tss) : cpu_its;
         set_its(i, int_task_state);
         get_klogger() << (uint64_t) int_task_state << " for cpu " << (uint8_t) i << " to gdt sel ";
-        get_klogger() << (uint16_t) tss->install(*gdt, i) << "\n";
+        get_klogger() << (uint16_t) tss->install(*gdt, i - 1) << "\n";
     }
 
     gdt->reload();

@@ -25,12 +25,42 @@ static pagetable **per_cpu_pagetables = nullptr;
 static int v_num_cpus = 0;
 static bool is_v_multicpu = false;
 
-#define _get_pml4t_this_cpu()  (is_v_multicpu ? *(per_cpu_pagetables[apStartup->GetCpuNum()]) : (*((pagetable *) 0x1000)))
-#define _get_pml4t_cpu0()  (is_v_multicpu ? *(per_cpu_pagetables[0]) : (*((pagetable *) 0x1000)))
+#define _get_pml4t_this_cpu()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[apStartup->GetCpuNum()]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + 0x1000))))
+#define _get_pml4t_cpu0()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[0]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + 0x1000))))
 static phys_t ppagealloc_locked(uintptr_t size);
 
 pagetable &get_root_pagetable() {
     return _get_pml4t_this_cpu();
+}
+
+void relocate_kernel_vmemory() {
+    /* copy the initial pagetable for starting up APs - needs some of the 16/32bit memory fixed mappings */
+    memcpy((void *) 0x5000, (void *) 0x1000, 0x1000);
+    memcpy((void *) 0x6000, (void *) 0x2000, 0x1000);
+    memcpy((void *) 0x7000, (void *) 0x3000, 0x1000);
+    (*((pagetable *) 0x5000))[0].page_ppn = 0x6000 / 0x1000;
+    (*((pagetable *) 0x6000))[0].page_ppn = 0x7000 / 0x1000;
+
+    auto pmlt4 = _get_pml4t_cpu0();
+    auto &pdtp = pmlt4[0].get_subtable();
+    uint32_t pdt_ppn;
+    {
+        auto &pdt = pdtp[0].get_subtable();
+        pdt_ppn = pdt[0].page_ppn;
+    }
+    {
+        auto &pdt = pdtp[1].get_subtable();
+        pdt[0].page_ppn = pdt_ppn;
+        pdt[0].present = 1;
+        pdt[0].os_virt_avail = 1;
+    }
+    {
+        auto &pdt = pdtp[0].get_subtable();
+        for (int i = 0; i < 512; i++) {
+            pdt[i].present = 0;
+        }
+    }
+    set_pagetable_virt_offset(KERNEL_MEMORY_OFFSET);
 }
 
 uint64_t vpagealloc(uint64_t size) {
@@ -50,12 +80,14 @@ uint64_t vpagealloc(uint64_t size) {
         if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
             int j = 512;
-            while (j > 0) {
+            int lj = i != 0 ? 0 : 1;
+            while (j > lj) {
                 --j;
                 if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
                     int k = 512;
-                    while (k > 0) {
+                    int lk = (i != 0 || j != 1) ? 0 : 1;
+                    while (k > lk) {
                         --k;
                         if (pdt[k].present) {
                             auto &pt = pdt[k].get_subtable();
@@ -119,12 +151,14 @@ uint64_t vpagealloc32(uint64_t size) {
     if (pml4t[i].present) {
         auto &pdpt = pml4t[i].get_subtable();
         int j = (int) (((uint32_t) 0xFFFFFFFF) >> (9+9+12)) + 1;
-        while (j > 0) {
+        int lj = i != 0 ? 0 : 1;
+        while (j > lj) {
             --j;
             if (pdpt[j].present) {
                 auto &pdt = pdpt[j].get_subtable();
                 int k = 512;
-                while (k > 0) {
+                int lk = (i != 0 || j != 1) ? 0 : 1;
+                while (k > lk) {
                     --k;
                     if (pdt[k].present) {
                         auto &pt = pdt[k].get_subtable();
@@ -175,13 +209,14 @@ uint64_t vpagealloc32(uint64_t size) {
 static VPerCpuPagetables vpercpuallocpagetable_setup(int i, int j, int k) {
     std::shared_ptr<vmem> vm3{};
     if (is_v_multicpu && v_num_cpus > 1) {
-        auto &cpu0pmlt4 = per_cpu_pagetables[0];
-        auto &cpu1pmlt4 = per_cpu_pagetables[1];
+        typedef typeof per_cpu_pagetables[0][0] pt_typ;
+        auto &cpu0pmlt4 = *((pt_typ *) (((uint8_t *) per_cpu_pagetables[0]) + get_pagetable_virt_offset()));
+        auto &cpu1pmlt4 = *((pt_typ *) (((uint8_t *) per_cpu_pagetables[1]) + get_pagetable_virt_offset()));
         vmem vm1{sizeof(pagetable) * v_num_cpus};
         pagetable *tables1 = (pagetable *) vm1.pointer();
-        if (cpu0pmlt4[i]->page_ppn == cpu1pmlt4[i]->page_ppn) {
+        if (cpu0pmlt4[i].page_ppn == cpu1pmlt4[i].page_ppn) {
             auto phys = ppagealloc(sizeof(pagetable) * v_num_cpus);
-            vm1.page(0).rwmap(((phys_t) cpu0pmlt4[i]->page_ppn) << 12);
+            vm1.page(0).rwmap(((phys_t) cpu0pmlt4[i].page_ppn) << 12);
             for (int cpu = 1; cpu < v_num_cpus; cpu++) {
                 vm1.page(cpu).rwmap(phys + (sizeof(pagetable) * (cpu - 1)));
             }
@@ -189,14 +224,14 @@ static VPerCpuPagetables vpercpuallocpagetable_setup(int i, int j, int k) {
             for (int cpu = 1; cpu < v_num_cpus; cpu++) {
                 memcpy(tables1[cpu], tables1[0], sizeof(tables1[cpu]));
                 static_assert(sizeof(tables1[cpu]) == sizeof(pagetable));
-                auto &pmlt4 = *(per_cpu_pagetables[cpu]);
+                auto &pmlt4 = *((pt_typ *) (((uint8_t *) per_cpu_pagetables[cpu]) + get_pagetable_virt_offset()));
                 pmlt4[i].page_ppn = (phys + (sizeof(pagetable) * (cpu - 1))) >> 12;
             }
             reload_pagetables();
         } else {
             for (int cpu = 0; cpu < v_num_cpus; cpu++) {
-                auto &pmlt4 = per_cpu_pagetables[cpu];
-                vm1.page(cpu).rwmap(((phys_t) pmlt4[i]->page_ppn) << 12);
+                auto &pmlt4 = *((pt_typ *) (((uint8_t *) per_cpu_pagetables[cpu]) + get_pagetable_virt_offset()));
+                vm1.page(cpu).rwmap(((phys_t) pmlt4[i].page_ppn) << 12);
             }
             reload_pagetables();
         }
@@ -543,7 +578,7 @@ uint64_t vpagesize(uint64_t addr) {
 }
 
 
-uint64_t pv_fix_pagealloc(uint64_t size) {
+uint64_t pv_fixp1g_pagealloc(uint64_t size) {
     std::lock_guard lock{get_pagetables_lock()};
 
     if ((size & 4095) != 0) {
@@ -557,10 +592,10 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
     for (int i = 0; i < PMLT4_USERSPACE_START; i++) {
         if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
-            for (int j = 0; j < 512; j++) {
+            for (int j = i != 0 ? 0 : 1; j < 512; j++) {
                 if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
-                    for (int k = i == 0 && j == 0 ? 1 : 0; k < 512; k++) {
+                    for (int k = i == 0 && j == 1 ? 1 : 0; k < 512; k++) {
                         if (pdt[k].present) {
                             auto &pt = pdt[k].get_subtable();
                             for (int l = 0; l < 512; l++) {
@@ -572,6 +607,7 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
                                 p_addr += k;
                                 p_addr = p_addr << 9;
                                 p_addr += l;
+                                p_addr -= KERNEL_MEMORY_OFFSET >> 12;
                                 if (p_addr < phys->max() && !phys->claimed(p_addr) && pt[l].os_virt_avail == 1) {
                                     p_addr = p_addr << 12;
                                     if (starting_addr != 0) {
@@ -579,7 +615,7 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
                                         if (count == size) {
                                             uint64_t ending_addr = starting_addr + (count * 4096);
                                             for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
-                                                pageentr *pe = get_pageentr64(pml4t, addr);
+                                                pageentr *pe = get_pageentr64(pml4t, addr + KERNEL_MEMORY_OFFSET);
                                                 pe->os_virt_avail = 0; // GRAB
                                                 phys->claim(addr >> 12); // GRAB
                                                 if (addr == starting_addr) {
@@ -636,10 +672,11 @@ uint64_t pv_fix_pagealloc(uint64_t size) {
     return 0;
 }
 
-uint64_t pv_fix_pagefree(uint64_t vaddr) {
-    uint64_t vai = (uint64_t) vaddr;
+uint64_t pv_fixp1g_pagefree(uint64_t vaddr) {
+    uint64_t vai = vaddr;
+    vai += KERNEL_MEMORY_OFFSET;
     uint64_t phys = get_phys_from_virt(vai);
-    uint64_t size = vpagefree(vai);
+    uint64_t size = vpagefree(vaddr);
     ppagefree(phys, size);
     reload_pagetables();
     return size;
@@ -742,7 +779,7 @@ void free_stack(uint64_t vaddr) {
 
 void reload_pagetables() {
     critical_section cli{};
-    uint64_t cr3 = (uint64_t) &(_get_pml4t_this_cpu());
+    uint64_t cr3 = (uint64_t) &(_get_pml4t_this_cpu()) - get_pagetable_virt_offset();
     asm("mov %0,%%cr3; " :: "r"(cr3));
 }
 
@@ -766,16 +803,72 @@ void ppagefree(uint64_t addr, uint64_t size) {
         int j = (int) (paddr & 511);
         paddr = paddr >> 9;
         int i = (int) (paddr & 511);
-        pageentr &pe = pml4t[i].get_subtable()[j].get_subtable()[k].get_subtable()[l];
         if (!phys->claimed(addr) || addr >= phys->max()) {
             wild_panic("PFree pointed at available page");
         }
         phys->release(addr);
-        pe.os_zero = 1;
         ++addr;
         --size;
         --allocated_ppages;
     }
+}
+
+void *pagealloc_phys32(uint64_t size) {
+    uint64_t vpages = vpagealloc(size);
+    if (vpages != 0) {
+        uint64_t ppages = ppagealloc32(size);
+        if (ppages != 0) {
+            for (uint64_t offset = 0; offset < size; offset += 4096) {
+                std::optional<pageentr> pe = get_pageentr(vpages + offset);
+                uint64_t page_ppn = ppages + offset;
+                page_ppn = page_ppn >> 12;
+                pe->page_ppn = page_ppn;
+                pe->present = 1;
+                pe->writeable = 1;
+                pe->execution_disabled = 1;
+                pe->write_through = 0;
+                pe->cache_disabled = 0;
+                update_pageentr(vpages + offset, *pe);
+            }
+
+            reload_pagetables();
+        } else {
+            vpagefree(vpages);
+            vpages = 0;
+
+            reload_pagetables();
+        }
+    }
+    return (void *) vpages;
+}
+
+void *pagealloc32(uint64_t size) {
+    uint64_t vpages = vpagealloc32(size);
+    if (vpages != 0) {
+        uint64_t ppages = ppagealloc32(size);
+        if (ppages != 0) {
+            for (uint64_t offset = 0; offset < size; offset += 4096) {
+                std::optional<pageentr> pe = get_pageentr(vpages + offset);
+                uint64_t page_ppn = ppages + offset;
+                page_ppn = page_ppn >> 12;
+                pe->page_ppn = page_ppn;
+                pe->present = 1;
+                pe->writeable = 1;
+                pe->execution_disabled = 1;
+                pe->write_through = 0;
+                pe->cache_disabled = 0;
+                update_pageentr(vpages + offset, *pe);
+            }
+
+            reload_pagetables();
+        } else {
+            vpagefree(vpages);
+            vpages = 0;
+
+            reload_pagetables();
+        }
+    }
+    return (void *) vpages;
 }
 
 void *pagealloc(uint64_t size) {
@@ -806,6 +899,7 @@ void *pagealloc(uint64_t size) {
     }
     return (void *) vpages;
 }
+
 void pagefree(void *vaddr) {
     uint64_t vai = (uint64_t) vaddr;
     uint64_t phys = get_phys_from_virt(vai);
@@ -845,8 +939,8 @@ void vmem_switch_to_multicpu(ApStartup *apStartupP, int numCpus) {
     per_cpu_pagetables = (pagetable **) (void *) pagealloc(numCpus * sizeof(*per_cpu_pagetables));
     v_num_cpus = numCpus;
     for (int i = 0; i < numCpus; i++) {
-        per_cpu_pagetables[i] = (pagetable *) (void *) pv_fix_pagealloc(sizeof(*(per_cpu_pagetables[i])));
-        memcpy(per_cpu_pagetables[i], &(_get_pml4t_this_cpu()), sizeof(*(per_cpu_pagetables[i])));
+        per_cpu_pagetables[i] = (pagetable *) (void *) pv_fixp1g_pagealloc(sizeof(*(per_cpu_pagetables[i])));
+        memcpy(((uint8_t *) (per_cpu_pagetables[i])) + KERNEL_MEMORY_OFFSET, &(_get_pml4t_this_cpu()), sizeof(*(per_cpu_pagetables[i])));
         static_assert(sizeof(*(per_cpu_pagetables[i])) == 4096);
     }
     vmem_set_per_cpu_pagetables();

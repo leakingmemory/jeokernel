@@ -4,6 +4,7 @@
 
 #include <new>
 #include <mutex>
+#include <klogger.h>
 #include "ChainedAllocatorRoot.h"
 #include "ChainedAllocator.h"
 

@@ -9,21 +9,38 @@
 #include "InterruptDescriptorTable.h"
 
 InterruptDescriptorTable::InterruptDescriptorTable() {
-    idt_table = new ((void *) pv_fix_pagealloc(sizeof(*idt_table))) IDTTable<256>();
+    physptr = ppagealloc(sizeof(*idt_table));
+    if (physptr == 0) {
+        wild_panic("Failed to allocate IDT <phys>");
+    }
+    idt_table = (IDTTable<256> *) vpagealloc(sizeof(*idt_table));
     if (idt_table == nullptr) {
         wild_panic("Failed to allocate IDT");
     }
+    for (uintptr_t offset = 0; offset < sizeof(*idt_table); offset += 4096) {
+        update_pageentr(((uintptr_t) idt_table) + offset, [this, offset] (pageentr &pe) {
+            pe.page_ppn = (physptr + offset) >> 12;
+            pe.present = 1;
+            pe.writeable = 1;
+            pe.execution_disabled = 1;
+            pe.user_access = 0;
+            pe.write_through = 0;
+            pe.cache_disabled = 0;
+        });
+    }
+    idt_table = new ((void *) idt_table) IDTTable<256>();
 }
 
 InterruptDescriptorTable::~InterruptDescriptorTable() {
     if (idt_table != nullptr) {
         idt_table->~IDTTable();
-        pv_fix_pagefree((uint64_t) idt_table);
+        vpagefree((uint64_t) idt_table);
+        ppagefree(physptr, sizeof(*idt_table));
         idt_table = nullptr;
     }
 }
 
 void InterruptDescriptorTable::install() {
-    uint64_t pointer = (uint64_t) &(idt_table->pointer);
+    uintptr_t pointer = (uintptr_t) &(idt_table->pointer);
     asm("mov %0, %%rax; lidt (%%rax)":: "r"(pointer) : "%rax");
 }

@@ -2,8 +2,8 @@ ENTRY(bootstrap)
 
 SECTIONS
 {
-	/* we need 1MB of space atleast */
-	. = 1536K;
+	/* 30bit up - (9+9+12)bit - (pagetable alignment) */
+	. = 1026M;
 
   	/* text section */
 	.text ALIGN(4K) : SUBALIGN(8)

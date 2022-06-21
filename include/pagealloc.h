@@ -14,6 +14,7 @@
 #endif
 
 #define PMLT4_USERSPACE_START 0x10
+#define KERNEL_MEMORY_OFFSET    (1024*1024*1024)
 
 class ApStartup;
 class vmem;
@@ -25,6 +26,7 @@ struct VPerCpuPagetables {
     uintptr_t pointer;
 };
 
+void relocate_kernel_vmemory();
 pagetable &get_root_pagetable();
 uintptr_t vpagealloc(uintptr_t size);
 uintptr_t vpagealloc32(uintptr_t size);
@@ -38,14 +40,16 @@ uintptr_t vpagefree(uintptr_t addr);
 uintptr_t vpagesize(uintptr_t addr);
 void ppagefree(phys_t addr, uintptr_t size);
 
-uintptr_t pv_fix_pagealloc(uintptr_t size);
-uintptr_t pv_fix_pagefree(uintptr_t addr);
+uintptr_t pv_fixp1g_pagealloc(uintptr_t size);
+uintptr_t pv_fixp1g_pagefree(uintptr_t addr);
 
 uintptr_t alloc_stack(uintptr_t size);
 void free_stack(uintptr_t addr);
 
 void reload_pagetables();
 
+void *pagealloc_phys32(uintptr_t size);
+void *pagealloc32(uintptr_t size);
 void *pagealloc(uintptr_t size);
 void pagefree(void *vaddr);
 

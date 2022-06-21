@@ -3,10 +3,11 @@
 //
 
 #include <cpuio.h>
+#include <pagealloc.h>
 #include "b8000.h"
 
 b8000::b8000() {
-    videobuf = ((_plainvga_letter *) 0xb8000);
+    videobuf = ((_plainvga_letter *) ((uintptr_t) KERNEL_MEMORY_OFFSET + 0xb8000));
     cpos = 0;
     for (int i = 0; i < 80*25; i++) {
         videobuf[i].chr = ' ';

@@ -56,6 +56,7 @@ struct TSS_entry_with_iobmap {
 class TaskStateSegment {
 private:
     TSS_entry_with_iobmap *tss_entry;
+    uint32_t physptr;
 public:
     TaskStateSegment();
     /*

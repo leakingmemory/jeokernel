@@ -11,6 +11,9 @@
 #include <std/compilerwarnings.h>
 #endif
 
+uintptr_t get_pagetable_virt_offset();
+void set_pagetable_virt_offset(uintptr_t offset);
+
 struct GDT {
     uint16_t limit_low : 16;
     uint32_t base_low : 24;
@@ -135,7 +138,7 @@ struct pageentr {
     uint8_t dirty : 1;
     uint8_t size : 1;
     uint8_t global : 1;
-    uint8_t os_zero : 2;
+    uint8_t ignored2 : 2;
     uint8_t os_virt_avail : 1;
     uint32_t page_ppn : 28;
     uint16_t reserved1 : 12;
@@ -146,7 +149,7 @@ struct pageentr {
     uint64_t get_subtable_addr() const {
         uint64_t addr = page_ppn;
         addr *= 4096;
-        return addr;
+        return addr + get_pagetable_virt_offset();
     }
     typedef pageentr pdpt[512];
     pdpt &get_subtable() const {

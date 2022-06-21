@@ -4,6 +4,9 @@
 .globl ap_started
 
 ap_started:
+    // Page tables
+    mov $0x01000, %rax
+    mov %rax, %cr3
     movq $0x10,%rax
     mov %ax,%ds
     mov %ax,%es

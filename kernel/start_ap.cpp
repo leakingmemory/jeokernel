@@ -27,11 +27,11 @@ const uint32_t *install_ap_bootstrap() {
         ++bootstrap_ptr;
         ++bootstrap_location;
     }
-    std::optional<pageentr> pe = get_pageentr(0x8000);
+    std::optional<pageentr> pe = get_pageentr(KERNEL_MEMORY_OFFSET + 0x8000);
     pe->execution_disabled = 0;
     pe->writeable = 0;
     pe->present = 1;
-    update_pageentr(0x8000, *pe);
+    update_pageentr(KERNEL_MEMORY_OFFSET + 0x8000, *pe);
     reload_pagetables();
-    return (const uint32_t *) (0x8FF0);
+    return (const uint32_t *) (KERNEL_MEMORY_OFFSET + 0x8FF0);
 }

@@ -178,7 +178,7 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
             pe.dirty = 0;
             pe.size = 0;
             pe.global = 0;
-            pe.os_zero = 0;
+            pe.ignored2 = 0;
             pe.os_virt_avail = 0;
             pe.page_ppn = 0;
             pe.reserved1 = 0;
@@ -208,7 +208,7 @@ void Process::task_enter() {
         pe.dirty = 0;
         pe.size = 0;
         pe.global = 0;
-        pe.os_zero = 0;
+        pe.ignored2 = 0;
         pe.os_virt_avail = 0;
         pe.page_ppn = (root.physpage >> 12);
         pe.reserved1 = 0;

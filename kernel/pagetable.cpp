@@ -20,7 +20,17 @@ hw_spinlock &get_pagetables_lock() {
     return *pagetables_lock;
 }
 
-#define _get_pml4t()  (*((pagetable *) 0x1000))
+#define _get_pml4t()  (*((pagetable *) ((uintptr_t) get_pagetable_virt_offset() + 0x1000)))
+
+static uintptr_t pagetable_virt_offset = 0;
+
+uintptr_t get_pagetable_virt_offset() {
+    return pagetable_virt_offset;
+}
+
+void set_pagetable_virt_offset(uintptr_t offset) {
+    pagetable_virt_offset = offset;
+}
 
 std::optional<pageentr> get_pageentr(uint64_t addr) {
     critical_section cli{};

@@ -70,6 +70,7 @@ public:
         size = this->simple_physpagemap_managed::max();
     }
     static void memmap(vmem &vm, std::vector<uint64_t> &pages, int need_pages);
+    void relocate();
     uint32_t max() override;
     void set_max(uint32_t max) override;
 };
@@ -110,3 +111,4 @@ void extendable_physpagemap_managed::set_max(uint32_t max) {
 void extend_to_advanced_physpagemap(uint64_t base_mapaddr) {
     physp = new extendable_physpagemap_managed(*((simple_physpagemap_managed *) physp));
 }
+

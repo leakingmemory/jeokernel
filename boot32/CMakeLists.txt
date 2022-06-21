@@ -15,6 +15,8 @@ enable_language(C ASM)
 
 add_executable(jeokernel bootstrap.S stage1.cpp plainvga32.cpp plainvga32.h strs.cpp ../include/strs.h strings.cpp )
 
+target_compile_options(jeokernel PRIVATE -g)
+
 target_include_directories(jeokernel PRIVATE ../include)
 
 #set(CMAKE_CXX_LINK_EXECUTABLE "ld -m elf_i386 -nostdlib -T ${CMAKE_SOURCE_DIR}/boot32.ld <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES>")

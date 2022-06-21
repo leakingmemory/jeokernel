@@ -35,19 +35,25 @@ template <int n> struct IDTTable {
     IDTDescr idts[n];
     IDTPointer pointer;
 
-    IDTTable() {
+    IDTTable(phys_t addr) {
         memset(&(idts[0]), 0, sizeof(idts));
         pointer.size = sizeof(idts) - 1;
-        pointer.addr = (uint64_t) &(idts[0]);
+        pointer.addr = addr;
+    }
+    IDTTable() : IDTTable((uint64_t) &(idts[0])) {
     }
     bool is_valid_index(int idx) const {
         return idx >= 0 && idx < n;
+    }
+    phys_t PointerOffset() {
+        return (((uintptr_t) &pointer) - ((uintptr_t) this));
     }
 };
 
 class InterruptDescriptorTable {
 private:
     IDTTable<256> *idt_table;
+    phys_t physptr;
 public:
     InterruptDescriptorTable();
     /**

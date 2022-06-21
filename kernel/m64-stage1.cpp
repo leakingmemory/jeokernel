@@ -143,7 +143,7 @@ ApStartup *GetApStartup() {
     return apStartup;
 }
 
-#define _get_pml4t()  (*((pagetable *) 0x1000))
+#define _get_pml4t()  (*((pagetable *) ((uintptr_t) get_pagetable_virt_offset() + 0x1000)))
 
 void vmem_graph() {
     auto *phys = get_physpagemap();
@@ -166,9 +166,9 @@ void vmem_graph() {
 
 pagetable *allocate_pageentr() {
     static_assert(sizeof(pagetable) == 4096);
-    uint64_t addr = pv_fix_pagealloc(4096);
+    uint64_t addr = pv_fixp1g_pagealloc(4096);
     if (addr != 0) {
-        return (pagetable *) memset((void *) addr, 0, 4096);
+        return (pagetable *) memset((void *) (addr + KERNEL_MEMORY_OFFSET), 0, 4096);
     } else {
         return nullptr;
     }
@@ -181,7 +181,6 @@ extern "C" {
         uint64_t physmapaddr = stage1Data->physpageMapAddr;
 
         multiboot_info = multibootInfoHeaderPtr;
-        bootstrap_stackptr = stackptr; // For reuse with AP startup
         /*
          * Let's try to alloc a stack
          */
@@ -190,12 +189,17 @@ extern "C" {
         setup_simplest_malloc_impl();
         extend_to_advanced_physpagemap(physmapaddr);
 
+        auto *ap_boot_stack = new normal_stack;
+        bootstrap_stackptr = ap_boot_stack->get_addr();
+
         stage1_stack = new normal_stack;
         uint64_t stack = stage1_stack->get_addr();
         asm("mov %0, %%rax; mov %%rax,%%rsp; jmp secondboot; hlt;" :: "r"(stack) : "%rax");
     }
 
     void init_m64() {
+        relocate_kernel_vmemory();
+
         b8000logger *b8000Logger = new b8000logger();
 
         set_klogger(b8000Logger);
@@ -316,19 +320,19 @@ extern "C" {
                                     if (pt == nullptr) {
                                         break;
                                     }
-                                    pml4t[i].page_ppn = (((uint64_t) pt) >> 12);
+                                    pml4t[i].page_ppn = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
                                     pml4t[i].writeable = 1;
                                     pml4t[i].present = 1;
                                     mem_ext_consumed += 4096;
                                 }
                                 auto &pdpt = pml4t[i].get_subtable();
-                                for (int j = 0; j < 512; j++) {
+                                for (int j = i != 0 ? 0 : 1; j < 512; j++) {
                                     if (pdpt[j].present == 0) {
                                         pagetable *pt = allocate_pageentr();
                                         if (pt == nullptr) {
                                             goto done_with_mem_extension;
                                         }
-                                        pdpt[j].page_ppn = (((uint64_t) pt) >> 12);
+                                        pdpt[j].page_ppn = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
                                         pdpt[j].writeable = 1;
                                         pdpt[j].present = 1;
                                         mem_ext_consumed += 4096;
@@ -343,7 +347,7 @@ extern "C" {
                                             for (int l = 0; l < 512; l++) {
                                                 (*pt)[l].os_virt_avail = 1;
                                             }
-                                            pdt[k].page_ppn = (((uint64_t) pt) >> 12);
+                                            pdt[k].page_ppn = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
                                             pdt[k].writeable = 1;
                                             pdt[k].present = 1;
                                             mem_ext_consumed += 4096;
@@ -353,7 +357,7 @@ extern "C" {
                                         addr = (addr << 9) + j;
                                         addr = (addr << 9) + k;
                                         addr = addr << (9 + 12);
-                                        if (addr > end_phys_addr) {
+                                        if (addr > (end_phys_addr + KERNEL_MEMORY_OFFSET)) {
                                             goto done_with_mem_extension;
                                         }
                                     }
@@ -422,7 +426,6 @@ done_with_mem_extension:
         {
             auto &userCode = gdt->get_descriptor(3);
             auto &userData = gdt->get_descriptor(4);
-            constexpr uint64_t base4k = (((uint64_t) PMLT4_USERSPACE_START) << (9+9+9)) * 4096;
             userCode.set_base(0);
             userCode.set_limit(0xFFFFFF);
             userCode.granularity = 0xA;

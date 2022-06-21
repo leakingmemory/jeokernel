@@ -79,8 +79,12 @@ extern "C" {
             //              << "\n";
         }
 
-        get_scheduler()->create_current_idle_task(cpu_num);
-        get_scheduler()->set_name("[idle]");
+        {
+            std::stringstream name{};
+            name << "[idle" << cpu_num << "]";
+            get_scheduler()->create_current_idle_task(cpu_num);
+            get_scheduler()->set_name(name.str());
+        }
 
         {
             std::stringstream sstr{};

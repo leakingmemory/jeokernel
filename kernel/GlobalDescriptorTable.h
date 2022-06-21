@@ -7,6 +7,7 @@
 
 #include <loaderconfig.h>
 #include <pagetable.h>
+#include <pagealloc.h>
 
 #define BSP_TSS_GD  6
 #define TSS_GD(cpu) (((cpu) * 2) + 8)
@@ -16,7 +17,8 @@ class GlobalDescriptorTable {
 private:
     GDT_table<GDT_SIZE + (LDT_DESC_SIZE * 2)> *gdt;
 public:
-    GlobalDescriptorTable()  : gdt((typeof(gdt)) GDT_ADDR) {
+    GlobalDescriptorTable()  : gdt((typeof(gdt)) (GDT_ADDR + KERNEL_MEMORY_OFFSET)) {
+        gdt->set_ptr();
     }
 
     constexpr uint16_t get_selector(int n) const {
@@ -42,7 +44,7 @@ public:
     }
 
     void reload() {
-        uint64_t gdt64 = GDT_ADDR + ((GDT_SIZE + (LDT_DESC_SIZE * 2)) * 8);
+        uintptr_t gdt64 = (uintptr_t) GDT_ADDR + KERNEL_MEMORY_OFFSET + ((GDT_SIZE + (LDT_DESC_SIZE * 2)) * 8);
         asm("lgdt (%0)" :: "r"(gdt64));
     }
 };
