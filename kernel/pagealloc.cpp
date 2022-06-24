@@ -49,15 +49,17 @@ void relocate_kernel_vmemory() {
         pdt_ppn = pdt[0].page_ppn;
     }
     {
-        auto &pdt = pdtp[1].get_subtable();
+        auto &pdt = pdtp[USERSPACE_LOW_END].get_subtable();
         pdt[0].page_ppn = pdt_ppn;
         pdt[0].present = 1;
         pdt[0].os_virt_avail = 1;
     }
     {
-        auto &pdt = pdtp[0].get_subtable();
-        for (int i = 0; i < 512; i++) {
-            pdt[i].present = 0;
+        for (int low = 0; low < USERSPACE_LOW_END; low++) {
+            auto &pdt = pdtp[low].get_subtable();
+            for (int i = 0; i < 512; i++) {
+                pdt[i].present = 0;
+            }
         }
     }
     set_pagetable_virt_offset(KERNEL_MEMORY_OFFSET);
@@ -74,19 +76,24 @@ uint64_t vpagealloc(uint64_t size) {
     pagetable &pml4t = _get_pml4t_cpu0();
     uint64_t starting_addr = 0;
     uint64_t count = 0;
-    int i = PMLT4_USERSPACE_START;
+    int i = PMLT4_USERSPACE_HIGH_START;
     while (i > 0) {
         --i;
         if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
             int j = 512;
-            int lj = i != 0 ? 0 : 1;
+            int lj;
+            if (i != 0) {
+                lj = 0;
+            } else {
+                lj = USERSPACE_LOW_END;
+            }
             while (j > lj) {
                 --j;
                 if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
                     int k = 512;
-                    int lk = (i != 0 || j != 1) ? 0 : 1;
+                    int lk = (i != 0 || j != lj) ? 0 : 1;
                     while (k > lk) {
                         --k;
                         if (pdt[k].present) {
@@ -151,13 +158,18 @@ uint64_t vpagealloc32(uint64_t size) {
     if (pml4t[i].present) {
         auto &pdpt = pml4t[i].get_subtable();
         int j = (int) (((uint32_t) 0xFFFFFFFF) >> (9+9+12)) + 1;
-        int lj = i != 0 ? 0 : 1;
+        int lj;
+        if (i != 0) {
+            lj = 0;
+        } else {
+            lj = USERSPACE_LOW_END;
+        }
         while (j > lj) {
             --j;
             if (pdpt[j].present) {
                 auto &pdt = pdpt[j].get_subtable();
                 int k = 512;
-                int lk = (i != 0 || j != 1) ? 0 : 1;
+                int lk = (i != 0 || j != lj) ? 0 : 1;
                 while (k > lk) {
                     --k;
                     if (pdt[k].present) {
@@ -290,13 +302,20 @@ VPerCpuPagetables vpercpuallocpagetable() {
     std::unique_lock lock{get_pagetables_lock()};
 
     pagetable &pml4t = _get_pml4t_cpu0();
-    int i = PMLT4_USERSPACE_START;
+    int i = PMLT4_USERSPACE_HIGH_START;
     while (i > 0) {
         --i;
         if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
+            int lj;
+            if (i != 0) {
+                lj = 0;
+            } else {
+                lj = USERSPACE_LOW_END;
+            }
+            ++lj;
             int j = 512;
-            while (j > 0) {
+            while (j > lj) {
                 --j;
                 if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
@@ -341,8 +360,15 @@ VPerCpuPagetables vpercpuallocpagetable32() {
     int i = 0;
     if (pml4t[i].present) {
         auto &pdpt = pml4t[i].get_subtable();
+        int lj;
+        if (i != 0) {
+            lj = 0;
+        } else {
+            lj = USERSPACE_LOW_END;
+        }
+        ++lj;
         int j = (int) (((uint32_t) 0xFFFFFFFF) >> (9+9+12)) + 1;
-        while (j > 0) {
+        while (j > lj) {
             --j;
             if (pdpt[j].present) {
                 auto &pdt = pdpt[j].get_subtable();
@@ -589,13 +615,19 @@ uint64_t pv_fixp1g_pagealloc(uint64_t size) {
     uint64_t starting_addr = 0;
     uint64_t count = 0;
     auto *phys = get_physpagemap();
-    for (int i = 0; i < PMLT4_USERSPACE_START; i++) {
+    for (int i = 0; i < PMLT4_USERSPACE_HIGH_START; i++) {
         if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
-            for (int j = i != 0 ? 0 : 1; j < 512; j++) {
+            int lj;
+            if (i != 0) {
+                lj = 0;
+            } else {
+                lj = USERSPACE_LOW_END;
+            }
+            for (int j = lj; j < 512; j++) {
                 if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
-                    for (int k = i == 0 && j == 1 ? 1 : 0; k < 512; k++) {
+                    for (int k = i == 0 && j == lj ? 1 : 0; k < 512; k++) {
                         if (pdt[k].present) {
                             auto &pt = pdt[k].get_subtable();
                             for (int l = 0; l < 512; l++) {
@@ -966,7 +998,13 @@ void setup_pvpage_stats() {
         for (int i = 0; i < 512; i++) {
             if (pml4t[i].present) {
                 auto &pdpt = pml4t[i].get_subtable();
-                for (int j = 0; j < 512; j++) {
+                int lj;
+                if (i != 0) {
+                    lj = 0;
+                } else {
+                    lj = USERSPACE_LOW_END;
+                }
+                for (int j = lj; j < 512; j++) {
                     if (pdpt[j].present) {
                         auto &pdt = pdpt[j].get_subtable();
                         for (int k = 0; k < 512; k++) {

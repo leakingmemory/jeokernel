@@ -19,7 +19,7 @@ PagetableRoot::PagetableRoot(uint16_t addr) : physpage(ppagealloc(PAGESIZE)), vm
 }
 
 PagetableRoot::~PagetableRoot() {
-    constexpr uint32_t sizeOfUserspaceRoots = 512 - PMLT4_USERSPACE_START;
+    constexpr uint32_t sizeOfUserspaceRoots = 512 - PMLT4_USERSPACE_HIGH_START;
     if (physpage != 0) {
         {
             pagetable *table;
@@ -60,7 +60,7 @@ Process::Process() : pagetableRoots(), mappings(), fileDescriptors() {
 }
 
 bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func) {
-    constexpr uint32_t sizeOfUserspaceRoots = 512 - PMLT4_USERSPACE_START;
+    constexpr uint32_t sizeOfUserspaceRoots = 512 - PMLT4_USERSPACE_HIGH_START;
     uint32_t pageoff;
     uint32_t index;
     {
@@ -197,7 +197,7 @@ void Process::task_enter() {
     critical_section cli{};
     auto &pt = get_root_pagetable();
     for (auto &root : pagetableRoots) {
-        auto pe_index = root.addr + PMLT4_USERSPACE_START;
+        auto pe_index = root.addr + PMLT4_USERSPACE_HIGH_START;
         auto &pe = pt[pe_index];
         pe.present = 1;
         pe.writeable = 1;
@@ -284,7 +284,7 @@ bool Process::exception(task &current_task, const std::string &name, Interrupt &
 bool Process::readable(uintptr_t addr) {
     std::lock_guard<hw_spinlock> lock{mtx};
     {
-        constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_START) << (9 + 9 + 9 + 12);
+        constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9 + 12);
         if (addr < relocationOffset) {
             std::cerr << "User process page resolve: Below userspace address minimum\n";
             return false;
@@ -350,7 +350,7 @@ bool Process::readable(uintptr_t addr) {
 bool Process::resolve_page(uintptr_t fault_addr) {
     std::unique_ptr<std::lock_guard<hw_spinlock>> lock{new std::lock_guard(mtx)};
     {
-        constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_START) << (9 + 9 + 9 + 12);
+        constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9 + 12);
         if (fault_addr < relocationOffset) {
             std::cerr << "User process page resolve: Below userspace address minimum\n";
             return false;

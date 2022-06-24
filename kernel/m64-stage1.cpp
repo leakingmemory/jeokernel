@@ -314,7 +314,7 @@ extern "C" {
                             }
                             uint32_t mem_ext_consumed = 0;
                             memory_extended = 0;
-                            for (int i = 0; i < PMLT4_USERSPACE_START; i++) {
+                            for (int i = 0; i < PMLT4_USERSPACE_HIGH_START; i++) {
                                 if (pml4t[i].present == 0) {
                                     pagetable *pt = allocate_pageentr();
                                     if (pt == nullptr) {

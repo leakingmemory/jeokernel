@@ -21,7 +21,7 @@ void Exec::Run() {
         std::cerr << "Not valid ELF64\n";
         return;
     }
-    uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_START) << (9+9+9+12);
+    uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9+9+9+12);
     {
         std::vector<std::shared_ptr<ELF64_program_entry>> loads{};
         uintptr_t start = (uintptr_t) ((intptr_t) -1);
