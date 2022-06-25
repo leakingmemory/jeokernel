@@ -15,6 +15,10 @@ raw_spinlock *get_ap_start_lock() {
     return ap_start_lock;
 }
 
+extern "C" {
+void ap_started();
+}
+
 const uint32_t *install_ap_bootstrap() {
     ap_start_lock = new raw_spinlock();
     vmem vm{4096};
@@ -27,6 +31,7 @@ const uint32_t *install_ap_bootstrap() {
         ++bootstrap_ptr;
         ++bootstrap_location;
     }
+    *((uintptr_t *) (void *) (((uint8_t *) vm.pointer()) + 0x120)) = (uintptr_t) (void *) ap_started;
     std::optional<pageentr> pe = get_pageentr(KERNEL_MEMORY_OFFSET + 0x8000);
     pe->execution_disabled = 0;
     pe->writeable = 0;

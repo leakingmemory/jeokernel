@@ -1419,7 +1419,7 @@ syscall_enter:
     subq $0x28, %rsp
     intpush
     cld
-    call syscall_main_handler
+    callq syscall_main_handler
     testq $0xFF, %rax
     jnz syscall_leave_by_iret
     intpop

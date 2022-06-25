@@ -21,11 +21,15 @@ SyscallSupport &SyscallSupport::Instance() {
     return *syscallSupport;
 }
 
+extern "C" {
+void syscall_enter();
+}
+
 SyscallSupport &SyscallSupport::CpuSetup() {
     // STAR - Segments
     asm("movl $0xC0000081, %%ecx; rdmsr; movl $0x180008, %%edx; wrmsr; " ::: "%eax", "%ecx", "%edx");
     // LSTAR - Syscall entrypoint 64bit
-    asm("movl $0xC0000082, %%ecx; movq $syscall_enter, %%rdx; movq %%rdx, %%rax; shrq $32, %%rdx; wrmsr;" ::: "%ecx", "%rax", "%rdx");
+    asm("movl $0xC0000082, %%ecx; movq %0, %%rdx; movq %%rdx, %%rax; shrq $32, %%rdx; wrmsr;" :: "r"(syscall_enter) : "%ecx", "%rax", "%rdx");
     // CSTAR - Flags to clear - IF/InterruptEnable
     asm("movl $0xC0000083, %%ecx; rdmsr; movq $0x0200, %%rax; wrmsr;" ::: "%ecx", "%rax", "%rdx");
     // EFER - Syscall (SCE) enable

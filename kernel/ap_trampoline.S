@@ -10,7 +10,10 @@
 ap_trampoline:
     cli
     cld
-    ljmp $0x0800,$0x0040
+    #ljmp $0x0800,$0x0040
+    .byte 0xEA
+    .word 0x0040
+    .word 0x0800
 .align 16
 ap_trampoline_gdt32_8010:
     .long 0, 0
@@ -29,7 +32,10 @@ ap_trampoline_8040:
     movl    %cr0, %eax
     orl     $1, %eax
     movl    %eax, %cr0
-    ljmp    $8, $0x8060
+    #ljmpw    $8, $0x8060
+    .byte 0xEA
+    .word 0x8060
+    .word 0x0008
 .code32
 .align 32
 ap_trampoline_8060:
@@ -69,31 +75,24 @@ ap_trampoline_8060:
     mov %eax, %cr0
     //jmp ap_started
 
-    // JMP FAR 0x08:ap_started
+    // JMP FAR 0x08:0x8100
     .byte 0xEA
-    .long ap_started
+    .long 0x8100
     .word 0x0008
+.code64
+.align 256
+ap_trampoline_8100:
+    #jmpq *ap_trampoline_8120
+    movq 0x8120, %rax
+    .byte 0xFF
+    .byte 0xE0
+    ud2
 
-    mov $0xb8000,%ebx
-    movl $0x46464646,(%ebx)
-    add $4, %ebx
-    movl $0x46464646,(%ebx)
-    mov $0xb8080,%ebx
-    movl $0x46464646,(%ebx)
-    add $4, %ebx
-    movl $0x46464646,(%ebx)
-    add $4, %ebx
-    movl $0x46464646,(%ebx)
-    add $4, %ebx
-    movl $0x46464646,(%ebx)
-    add $4, %ebx
-    movl $0x46464646,(%ebx)
-    add $4, %ebx
-    movl $0x46464646,(%ebx)
-    add $0x18, %ebx
-    movl $0x46464646,(%ebx)
-ap_stop:
-    jmp $0x08,$0x8060
+.align 32
+ap_trampoline_8120:
+    .quad 0xaddda000000addda # ap_started
+
+    ud2
 
 ap_trampoline_end:
     hlt
