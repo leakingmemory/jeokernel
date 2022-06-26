@@ -82,10 +82,6 @@ static uint64_t lapic_100ms = 0;
 static tasklist *scheduler = nullptr;
 static ApStartup *apStartup = nullptr;
 
-extern "C" {
-    uint64_t bootstrap_stackptr = 0;
-}
-
 const MultibootInfoHeader &get_multiboot2(vmem &vm) {
     uint64_t base_addr = (uint64_t) multiboot_info;
     uint64_t offset = base_addr & 0x0FFF;
@@ -191,7 +187,7 @@ extern "C" {
         extend_to_advanced_physpagemap(physmapaddr);
 
         auto *ap_boot_stack = new normal_stack;
-        bootstrap_stackptr = ap_boot_stack->get_addr();
+        *((uint64_t *) 0x8150) = ap_boot_stack->get_addr();
 
         stage1_stack = new normal_stack;
         uint64_t stack = stage1_stack->get_addr();

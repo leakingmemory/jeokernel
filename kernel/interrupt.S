@@ -1404,9 +1404,8 @@ interrupt_imm_handler_return_with_code:
 syscall_enter:
     swapgs
     movq %rax, %gs:0
+    movq %gs:-8, %rax
     swapgs
-    movq $syscall_stack, %rax
-    movq (%rax),%rax
     movq %rsp, -0x10(%rax)
     movq %rax, %rsp
     movq -8(%rsp), %rax
@@ -1426,7 +1425,11 @@ syscall_enter:
     addq $0x28, %rsp
     movq -0x28(%rsp), %rcx
     movq -0x18(%rsp), %r11
+    movq %rax, -8(%rsp)
+    movq %rsp, %rax
     movq -0x10(%rsp), %rsp
+    movq %rsp, -0x10(%rax)
+    movq -8(%rax),%rax
     sysretq
 syscall_leave_by_iret:
     intpop

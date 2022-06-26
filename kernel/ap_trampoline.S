@@ -7,6 +7,7 @@
 .globl ap_trampoline
 .globl ap_trampoline_end
 
+.align 256
 ap_trampoline:
     cli
     cld
@@ -82,17 +83,22 @@ ap_trampoline_8060:
 .code64
 .align 256
 ap_trampoline_8100:
-    #jmpq *ap_trampoline_8120
-    movq 0x8120, %rax
+    movq 0x8150, %rdi
+    movq 0x8140, %rax
+    #jmpq (%rax) / jmpq *ap_trampoline_8140
     .byte 0xFF
     .byte 0xE0
     ud2
 
-.align 32
-ap_trampoline_8120:
+.align 64
+ap_trampoline_8140:
     .quad 0xaddda000000addda # ap_started
 
     ud2
+
+.align 16
+ap_trampoline_8150:
+    .quad 0x557744cccc997733 # stackptr
 
 ap_trampoline_end:
     hlt

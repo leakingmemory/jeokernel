@@ -37,6 +37,8 @@ SyscallSupport &SyscallSupport::CpuSetup() {
 
     // MSR_GS_BASE -
     asm("movl $0xC0000102, %%ecx; mov %0, %%rax; mov %%rax, %%rdx; shrq $32, %%rdx; wrmsr; " :: "r"(syscall_stack_m8) : "%eax", "%rcx", "%rdx");
+
+    *(((uint64_t *) syscall_stack_m8) - 1) = (uint64_t) syscall_stack;
     return *this;
 }
 

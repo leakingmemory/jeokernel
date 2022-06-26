@@ -23,6 +23,8 @@ const uint32_t *install_ap_bootstrap() {
     ap_start_lock = new raw_spinlock();
     vmem vm{4096};
     vm.page(0).rwmap(0x8000, true);
+    uintptr_t &stackptr_ref = *((uintptr_t *) (void *) (((uint8_t *) vm.pointer()) + 0x150));
+    uintptr_t stackptr = stackptr_ref;
     uint8_t *bootstrap_location = (uint8_t *) vm.pointer();
     uint8_t *bootstrap_ptr = (uint8_t *) (void *) ap_trampoline;
     uint8_t *bootstrap_end = (uint8_t *) (void *) ap_trampoline_end;
@@ -31,7 +33,8 @@ const uint32_t *install_ap_bootstrap() {
         ++bootstrap_ptr;
         ++bootstrap_location;
     }
-    *((uintptr_t *) (void *) (((uint8_t *) vm.pointer()) + 0x120)) = (uintptr_t) (void *) ap_started;
+    *((uintptr_t *) (void *) (((uint8_t *) vm.pointer()) + 0x140)) = (uintptr_t) (void *) ap_started;
+    stackptr_ref = stackptr;
     std::optional<pageentr> pe = get_pageentr(KERNEL_MEMORY_OFFSET + 0x8000);
     pe->execution_disabled = 0;
     pe->writeable = 0;

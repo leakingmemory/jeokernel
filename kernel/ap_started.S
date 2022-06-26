@@ -13,8 +13,8 @@ ap_started:
     mov %ax,%fs
     mov %ax,%gs
     mov %ax,%ss
-    movq (bootstrap_stackptr), %rsp
-    mov %rsp, %rbp
+    movq %rdi, %rsp
+    movq %rsp, %rbp
     call ap_bootstrap
 ap_start_overrun:
     hlt
