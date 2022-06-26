@@ -1,6 +1,8 @@
 .section .text
 .code32
 
+#include <loaderconfig.h>
+
 #define MB_KERNEL_MAGIC 0x1BADB002
 #define MB_HFLAG_MODALIGN   (1<<0)      /* Align loaded modules on page boundaries */
 #define MB_HFLAG_MEMINFO   (1<<1)      /* Memory map */
@@ -28,6 +30,7 @@ multiboot_entrypoint:
     .short 0 /* pad */
     .short 0 /* pad */
 multiboot_entrypoint_end:
+#ifndef VGA_TEXT_CONSOLE
     .short 5 /* framebuffer */
     .short 0 /* flags */
     .long (framebuffer_request_end - multiboot_entrypoint_end) /* size */
@@ -36,6 +39,7 @@ multiboot_entrypoint_end:
     .long 24 /* depth */
     .short 0 /* padding */
     .short 0 /* padding */
+#endif
 framebuffer_request_end:
     /* end tag : */
     .short 0 /* end */

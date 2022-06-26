@@ -2,6 +2,7 @@
 // Created by sigsegv on 17.04.2021.
 //
 
+#include <loaderconfig.h>
 #include <stdint.h>
 #include "textconsole/b8000logger.h"
 #include "TaskStateSegment.h"
@@ -384,6 +385,7 @@ done_with_mem_extension:
         setup_pvpage_stats();
         setup_simplest_malloc_stats();
 
+#ifndef VGA_TEXT_CONSOLE
         std::shared_ptr<framebuffer_kconsole> kcons{};
         framebuffer_kconsole_spinlocked *fb_kcons_locked{nullptr};
         {
@@ -404,6 +406,7 @@ done_with_mem_extension:
                 }
             } while (part != nullptr);
         }
+#endif
 
         for (const std::tuple<uint64_t,uint64_t> &res_mem : reserved_mem) {
             uint64_t base_addr = std::get<0>(res_mem);
@@ -785,12 +788,14 @@ done_with_mem_extension:
             scheduler->create_current_idle_task(0);
         }
 
+#ifndef VGA_TEXT_CONSOLE
 #ifndef SYNC_FB_CONSOLE
         if (fb_kcons_locked != nullptr) {
             auto *fb_kcons_wthread = new framebuffer_kcons_with_worker_thread(kcons);
             set_klogger(fb_kcons_wthread);
             delete fb_kcons_locked;
         }
+#endif
 #endif
 
         LocalApic lapic{nullptr};

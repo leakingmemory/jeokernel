@@ -9,5 +9,6 @@
 #define LDT_DESC_SIZE   2
 #define GDT_ADDR        0x21000
 #define GDT_MAX_SIZE    0x01000
+//#define VGA_TEXT_CONSOLE
 
 #endif //JEOKERNEL_LOADERCONFIG_H
