@@ -8,7 +8,7 @@
 static PerCpuVMem *perCpuVMem = nullptr;
 
 PerCpuVMem::PerCpuVMem() : pagetables(), freePages() {
-    pagetables = vpercpuallocpagetable32();
+    pagetables = vpercpuallocpagetable();
     if (pagetables.pointer == 0) {
         wild_panic("Couldn't alloc vpercpu");
     }
