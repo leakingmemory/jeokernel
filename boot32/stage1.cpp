@@ -638,6 +638,34 @@ good_data_page_alloc:
                 }
             }
 
+            {
+                const auto *rela_dyn = elf64_header.get_rela_dyn_section();
+                if (rela_dyn != nullptr) {
+                    ELF64_rela_dyn *rela_dyns = (ELF64_rela_dyn *) (void *) (((uint8_t *) &(elf64_header.start)) +rela_dyn->sh_offset);
+                    /* X - May not handle very big images (in the astronomical range >4G->1TB) due to overflow */
+                    static_assert((3 << 3) == sizeof(*rela_dyns));
+                    auto rela_dyn_count = (uint32_t) (rela_dyn->sh_size >> 3);
+                    rela_dyn_count = rela_dyn_count / 3;
+                    for (uint32_t i = 0; i < rela_dyn_count; i++) {
+                        switch (rela_dyns[i].rela_type) {
+                            case R_X86_64_RELATIVE: {
+                                if (rela_dyns[i].sym_index != 0) {
+                                    asm("ud2");
+                                }
+                                pageentr *pe = get_pageentr64(pml4t, rela_dyns[i].offset & ~((uint64_t) 0xFFF));
+                                if (pe == nullptr) {
+                                    asm("ud2");
+                                }
+                                uint64_t phys = pe->page_ppn << 12;
+                                phys += rela_dyns[i].offset & 0xFFF;
+                                *((uint64_t *) phys) += rela_dyns[i].addendum;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
             /*
              * TODO - Hardcoded to search for space in pt3 page table, the sixth in the first pdt
              * leaf table (table 2M-12M, search area 11M-12M).

@@ -230,6 +230,32 @@ struct ELF64_header {
         ELF64_section_entry *se = (ELF64_section_entry *) ptr;
         return *se;
     }
+    const ELF64_section_entry *get_rela_dyn_section() const {
+        const char *strtab = nullptr;
+        for (uint16_t i = 0; i < e_shnum; i++) {
+            const ELF64_section_entry &se = get_section_entry(i);
+            const int8_t *ptr = (int8_t *) ((void *) &start);
+            ptr += se.sh_offset;
+            const char *str = (const char *) ptr;
+            if (se.sh_type == SHT_RELA && strcmp(get_cstring(se.sh_name), ".rela.dyn")) {
+                return &se;
+            }
+        }
+        return nullptr;
+    }
+    const ELF64_section_entry *get_dynstr_section() const {
+        const char *strtab = nullptr;
+        for (uint16_t i = 0; i < e_shnum; i++) {
+            const ELF64_section_entry &se = get_section_entry(i);
+            const int8_t *ptr = (int8_t *) ((void *) &start);
+            ptr += se.sh_offset;
+            const char *str = (const char *) ptr;
+            if (se.sh_type == SHT_STRTAB && strcmp(get_cstring(se.sh_name), ".dynstr")) {
+                return &se;
+            }
+        }
+        return nullptr;
+    }
     const char *get_strtab() const {
         const char *strtab = nullptr;
         for (uint16_t i = 0; i < e_shnum; i++) {
@@ -264,6 +290,16 @@ struct ELF64_header {
         return nullptr;
     }
 
+    const ELF64_section_entry *get_dynsym() const {
+        for (uint16_t i = 0; i < e_shnum; i++) {
+            const ELF64_section_entry &se = get_section_entry(i);
+            if (se.sh_type == SHT_DYNSYM) {
+                return &se;
+            }
+        }
+        return nullptr;
+    }
+
     const ELF64_section_entry *get_init_table() const {
         for (uint16_t i = 0; i < e_shnum; i++) {
             const ELF64_section_entry &se = get_section_entry(i);
@@ -274,15 +310,31 @@ struct ELF64_header {
         return nullptr;
     }
 
-#if defined(__cplusplus) && !defined(IA32)
-    std::string get_string(uint32_t index) const {
-        const char *strtab = get_strtab();
-        auto strtab_len = get_strtab_len();
+    static const char *get_strtab_cstring(const char *strtab, uint32_t strtab_len, uint32_t index) {
         if (index >= strtab_len) {
             return "";
         }
         const char *str = strtab + index;
-        return std::string(str);
+        return str;
+    }
+    const char *get_strtab_cstring(ELF64_section_entry *section, uint32_t index) {
+        if (section != nullptr) {
+        const int8_t *ptr = (int8_t *) ((void *) &start);
+        ptr += section->sh_offset;
+        const char *str = (const char *) ptr;
+            return get_strtab_cstring(str, section->sh_size, index);
+        }
+    }
+
+    const char *get_cstring(uint32_t index) const {
+        const char *strtab = get_strtab();
+        auto strtab_len = get_strtab_len();
+        return get_strtab_cstring(strtab, strtab_len, index);
+    }
+
+#if defined(__cplusplus) && !defined(LOADER)
+    std::string get_string(uint32_t index) const {
+        return std::string(get_cstring(index));
     }
 
     const ELF64_section_entry *get_ctors_table() const {
@@ -306,6 +358,19 @@ struct ELF64_header {
         i = i % get_symbols(symtab);
         return syms[i];
     }
+};
+
+#define R_X86_64_NONE       0
+#define R_X86_64_64         1
+#define R_X86_64_GLOB_DAT   6
+#define R_X86_64_JUMP_SLOT  7
+#define R_X86_64_RELATIVE   8
+
+struct ELF64_rela_dyn {
+    uint64_t offset;
+    uint32_t rela_type;
+    uint32_t sym_index;
+    int64_t addendum;
 };
 
 class ELF {
