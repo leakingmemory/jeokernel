@@ -326,7 +326,6 @@ VPerCpuPagetables vpercpuallocpagetable() {
             } else {
                 lj = USERSPACE_LOW_END;
             }
-            ++lj;
             int j = 512;
             while (j > lj) {
                 --j;
