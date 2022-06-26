@@ -65,54 +65,56 @@ void relocate_kernel_vmemory() {
     set_pagetable_virt_offset(KERNEL_MEMORY_OFFSET);
 }
 
-uint64_t vpagealloc(uint64_t size) {
-    std::lock_guard lock{get_pagetables_lock()};
+uint64_t vpagealloc(uint64_t vsize) {
+    std::unique_lock lock{get_pagetables_lock()};
 
+    auto size = vsize;
     if ((size & 4095) != 0) {
         size += 4096;
     }
     size /= 4096;
 
     pagetable &pml4t = _get_pml4t_cpu0();
-    uint64_t starting_addr = 0;
+    uint64_t ending_addr = 0;
     uint64_t count = 0;
-    int i = PMLT4_USERSPACE_HIGH_START;
-    while (i > 0) {
-        --i;
+    int i = 0;
+    while (i < PMLT4_USERSPACE_HIGH_START) {
         if (pml4t[i].present) {
             auto &pdpt = pml4t[i].get_subtable();
-            int j = 512;
-            int lj;
+            int j;
             if (i != 0) {
-                lj = 0;
+                j = 0;
             } else {
-                lj = USERSPACE_LOW_END;
+                j = USERSPACE_LOW_END;
+                if (j < 4) {
+                    j = 4; /* above 32bit */
+                }
             }
-            while (j > lj) {
-                --j;
+            while (j < 512) {
                 if (pdpt[j].present) {
                     auto &pdt = pdpt[j].get_subtable();
-                    int k = 512;
-                    int lk = (i != 0 || j != lj) ? 0 : 1;
-                    while (k > lk) {
-                        --k;
+                    int k = (i != 0 || j != USERSPACE_LOW_END) ? 0 : 1;
+                    while (k < 512) {
                         if (pdt[k].present) {
                             auto &pt = pdt[k].get_subtable();
-                            int l = 512;
-                            while (l > 0) {
-                                --l;
+                            int l = 0;
+                            while (l < 512) {
                                 /* the page acquire check */
                                 if (pt[l].os_virt_avail) {
+                                    ending_addr = i << 9;
+                                    ending_addr |= j;
+                                    ending_addr = ending_addr << 9;
+                                    ending_addr |= k;
+                                    ending_addr = ending_addr << 9;
+                                    ending_addr |= l;
+                                    ending_addr = ending_addr << 12;
+                                    uint64_t starting_addr;
+                                    if (count == 0) {
+                                        starting_addr = ending_addr;
+                                    }
+                                    ending_addr += 4096;
                                     count++;
                                     if (count == size) {
-                                        starting_addr = i << 9;
-                                        starting_addr |= j;
-                                        starting_addr = starting_addr << 9;
-                                        starting_addr |= k;
-                                        starting_addr = starting_addr << 9;
-                                        starting_addr |= l;
-                                        starting_addr = starting_addr << 12;
-                                        uint64_t ending_addr = starting_addr + (count * 4096);
                                         for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
                                             pageentr *pe = get_pageentr64(pml4t, addr);
                                             pe->os_virt_avail = 0; // GRAB
@@ -127,20 +129,25 @@ uint64_t vpagealloc(uint64_t size) {
                                 } else {
                                     count = 0;
                                 }
+                                l++;
                             }
                         } else {
                             count = 0;
                         }
+                        k++;
                     }
                 } else {
                     count = 0;
                 }
+                j++;
             }
         } else {
             count = 0;
         }
+        i++;
     }
-    return 0;
+    lock.release();
+    return vpagealloc32(vsize);
 }
 
 uint64_t vpagealloc32(uint64_t size) {
@@ -152,43 +159,42 @@ uint64_t vpagealloc32(uint64_t size) {
     size /= 4096;
 
     pagetable &pml4t = _get_pml4t_cpu0();
-    uint64_t starting_addr = 0;
+    uint64_t ending_addr = 0;
     uint64_t count = 0;
     int i = 0;
     if (pml4t[i].present) {
         auto &pdpt = pml4t[i].get_subtable();
-        int j = (int) (((uint32_t) 0xFFFFFFFF) >> (9+9+12)) + 1;
-        int lj;
+        int j;
         if (i != 0) {
-            lj = 0;
+            j = 0;
         } else {
-            lj = USERSPACE_LOW_END;
+            j = USERSPACE_LOW_END;
         }
-        while (j > lj) {
-            --j;
+        while (j < 4/*GB*/) {
             if (pdpt[j].present) {
                 auto &pdt = pdpt[j].get_subtable();
-                int k = 512;
-                int lk = (i != 0 || j != lj) ? 0 : 1;
-                while (k > lk) {
-                    --k;
+                int k = (i != 0 || j != USERSPACE_LOW_END) ? 0 : 1;
+                while (k < 512) {
                     if (pdt[k].present) {
                         auto &pt = pdt[k].get_subtable();
-                        int l = 512;
-                        while (l > 0) {
-                            --l;
+                        int l = 0;
+                        while (l < 512) {
                             /* the page acquire check */
                             if (pt[l].os_virt_avail) {
+                                ending_addr = i << 9;
+                                ending_addr |= j;
+                                ending_addr = ending_addr << 9;
+                                ending_addr |= k;
+                                ending_addr = ending_addr << 9;
+                                ending_addr |= l;
+                                ending_addr = ending_addr << 12;
+                                uint64_t starting_addr;
+                                if (count == 0) {
+                                    starting_addr = ending_addr;
+                                }
+                                ending_addr += 4096;
                                 count++;
                                 if (count == size) {
-                                    starting_addr = i << 9;
-                                    starting_addr |= j;
-                                    starting_addr = starting_addr << 9;
-                                    starting_addr |= k;
-                                    starting_addr = starting_addr << 9;
-                                    starting_addr |= l;
-                                    starting_addr = starting_addr << 12;
-                                    uint64_t ending_addr = starting_addr + (count * 4096);
                                     for (uint64_t addr = starting_addr; addr < ending_addr; addr += 4096) {
                                         pageentr *pe = get_pageentr64(pml4t, addr);
                                         pe->os_virt_avail = 0; // GRAB
@@ -203,18 +209,22 @@ uint64_t vpagealloc32(uint64_t size) {
                             } else {
                                 count = 0;
                             }
+                            l++;
                         }
                     } else {
                         count = 0;
                     }
+                    k++;
                 }
             } else {
                 count = 0;
             }
+            j++;
         }
     } else {
         count = 0;
     }
+    i++;
     return 0;
 }
 

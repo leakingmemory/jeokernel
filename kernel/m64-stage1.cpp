@@ -258,10 +258,6 @@ extern "C" {
                                         get_klogger() << "   - Added " << start << " - ";
                                         for (uint64_t addr = start;
                                              addr < (entr.base_addr + entr.length); addr += 0x1000) {
-                                            pageentr *pe = get_pageentr64(pml4t, addr);
-                                            if (pe == nullptr) {
-                                                break;
-                                            }
                                             if (phys->max() <= (addr >> 12)) {
                                                 auto i = phys->max();
                                                 phys->set_max((addr >> 12) + 1);
@@ -287,10 +283,6 @@ extern "C" {
                                                                                           : phys_mem_watermark;
                                     for (uint64_t addr = start;
                                          addr < (entr.base_addr + entr.length); addr += 0x1000) {
-                                        pageentr *pe = get_pageentr64(pml4t, addr);
-                                        if (pe == nullptr) {
-                                            break;
-                                        }
                                         if (phys->max() <= (addr >> 12)) {
                                             auto i = phys->max();
                                             phys->set_max((addr >> 12) + 1);
@@ -327,7 +319,7 @@ extern "C" {
                                     mem_ext_consumed += 4096;
                                 }
                                 auto &pdpt = pml4t[i].get_subtable();
-                                for (int j = i != 0 ? 0 : 1; j < 512; j++) {
+                                for (int j = i != 0 ? 0 : USERSPACE_LOW_END; j < 512; j++) {
                                     if (pdpt[j].present == 0) {
                                         pagetable *pt = allocate_pageentr();
                                         if (pt == nullptr) {
