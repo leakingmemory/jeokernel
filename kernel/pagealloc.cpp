@@ -56,6 +56,9 @@ void relocate_kernel_vmemory() {
     }
     {
         for (int low = 0; low < USERSPACE_LOW_END; low++) {
+            if (pdtp[low].present == 0) {
+                continue;
+            }
             auto &pdt = pdtp[low].get_subtable();
             for (int i = 0; i < 512; i++) {
                 pdt[i].present = 0;
