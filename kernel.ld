@@ -2,8 +2,8 @@ ENTRY(bootstrap)
 
 SECTIONS
 {
-	/* 30bit up - (9+9+12)bit - (pagetable alignment) */
-	. = 1026M;
+	/* 3G up */
+	. = 3074M;
 
   	/* text section */
 	.text ALIGN(4K) : SUBALIGN(8)

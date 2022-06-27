@@ -175,10 +175,10 @@ void boot_stage1(void *multiboot_header_addr) {
     pdpt[0].writeable = 1;
     pdpt[0].present = 1;
     pdpt[0].os_virt_avail = 1;
-    pdpt[1].page_ppn = 0x4000 / 4096;
-    pdpt[1].writeable = 1;
-    pdpt[1].present = 1;
-    pdpt[1].os_virt_avail = 1;
+    pdpt[3].page_ppn = 0x4000 / 4096;
+    pdpt[3].writeable = 1;
+    pdpt[3].present = 1;
+    pdpt[3].os_virt_avail = 1;
     pdt0[0].page_ppn = 0xa000 / 4096;
     pdt0[0].writeable = 1;
     pdt0[0].present = 1;
