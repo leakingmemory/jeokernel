@@ -9,7 +9,6 @@
 static SyscallSupport *syscallSupport = nullptr;
 
 void *syscall_stack = nullptr;
-void *syscall_stack_m8 = nullptr;
 
 SyscallSupport::SyscallSupport() {
 }
@@ -36,9 +35,9 @@ SyscallSupport &SyscallSupport::CpuSetup() {
     asm("movl $0xC0000080, %%ecx; rdmsr; orl $0x001, %%eax; wrmsr; " ::: "%eax", "%ecx", "%edx");
 
     // MSR_GS_BASE -
-    asm("movl $0xC0000102, %%ecx; mov %0, %%rax; mov %%rax, %%rdx; shrq $32, %%rdx; wrmsr; " :: "r"(syscall_stack_m8) : "%eax", "%rcx", "%rdx");
+    asm("movl $0xC0000102, %%ecx; mov %0, %%rax; mov %%rax, %%rdx; shrq $32, %%rdx; wrmsr; " :: "r"(syscall_stack) : "%eax", "%rcx", "%rdx");
 
-    *(((uint64_t *) syscall_stack_m8) - 1) = (uint64_t) syscall_stack;
+    *(((uint64_t *) syscall_stack) - 1) = (uint64_t) syscall_stack;
     return *this;
 }
 
@@ -47,6 +46,5 @@ SyscallSupport &SyscallSupport::GlobalSetup() {
     if (syscall_stack == nullptr) {
         wild_panic("Unable to allocate syscall stack");
     }
-    syscall_stack_m8 = (void *) (((uintptr_t) syscall_stack) - 8);
     return *this;
 }

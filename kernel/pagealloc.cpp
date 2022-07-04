@@ -982,10 +982,20 @@ void vmem_switch_to_multicpu(ApStartup *apStartupP, int numCpus) {
     apStartup = apStartupP;
     per_cpu_pagetables = (pagetable **) (void *) pagealloc(numCpus * sizeof(*per_cpu_pagetables));
     v_num_cpus = numCpus;
+    pagetable &pmlt4 = _get_pml4t_this_cpu();
+    pmlt4[0].user_access = 1;
+    pagetable *l3 = (pagetable *) (void *) ((((phys_t) pmlt4[0].page_ppn) << 12) + KERNEL_MEMORY_OFFSET);
     for (int i = 0; i < numCpus; i++) {
         per_cpu_pagetables[i] = (pagetable *) (void *) pv_fixp1g_pagealloc(sizeof(*(per_cpu_pagetables[i])));
-        memcpy(((uint8_t *) (per_cpu_pagetables[i])) + KERNEL_MEMORY_OFFSET, &(_get_pml4t_this_cpu()), sizeof(*(per_cpu_pagetables[i])));
+        pagetable &per_cpu_l4 = *((pagetable *) (void *) (((uint8_t *) (per_cpu_pagetables[i])) + KERNEL_MEMORY_OFFSET));
+        memcpy(&per_cpu_l4, &pmlt4, sizeof(*(per_cpu_pagetables[i])));
         static_assert(sizeof(*(per_cpu_pagetables[i])) == 4096);
+
+        phys_t per_cpu_l3_ph = pv_fixp1g_pagealloc(sizeof(pagetable));
+        pagetable *per_cpu_l3 = (pagetable *) (((uint8_t *) per_cpu_l3_ph) + KERNEL_MEMORY_OFFSET);
+        memcpy(per_cpu_l3, l3, sizeof(*per_cpu_l3));
+
+        per_cpu_l4[0].page_ppn = (uint32_t) (per_cpu_l3_ph >> 12);
     }
     vmem_set_per_cpu_pagetables();
     is_v_multicpu = true;

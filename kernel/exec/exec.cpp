@@ -21,7 +21,8 @@ void Exec::Run() {
         std::cerr << "Not valid ELF64\n";
         return;
     }
-    uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9+9+9+12);
+    constexpr uint64_t lowerUserspaceEnd = ((uint64_t) USERSPACE_LOW_END) << (9+9+12);
+    constexpr uint64_t upperUserspaceStart = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9+9+9+12);
     {
         std::vector<std::shared_ptr<ELF64_program_entry>> loads{};
         uintptr_t start = (uintptr_t) ((intptr_t) -1);
@@ -44,6 +45,12 @@ void Exec::Run() {
         auto endpage = end >> 12;
         if ((end & (PAGESIZE - 1)) != 0) {
             ++endpage;
+        }
+        uint64_t relocationOffset;
+        if (endpage <= lowerUserspaceEnd) {
+            relocationOffset = 0;
+        } else {
+            relocationOffset = upperUserspaceStart;
         }
         std::vector<exec_pageinfo> pages{};
         pages.reserve(endpage - startpage);
@@ -112,7 +119,7 @@ void Exec::Run() {
         Process *process = new Process();
         {
             uint32_t index = 0;
-            uint32_t start = 0;
+            uint32_t start = 0xFFFFFFFF;
             uint32_t flags = none;
             uint32_t offset = 0;
             for (auto &page: pages) {

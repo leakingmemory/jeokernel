@@ -1403,33 +1403,30 @@ interrupt_imm_handler_return_with_code:
 
 syscall_enter:
     swapgs
-    movq %rax, %gs:0
+    movq %rax, %gs:-0x10
     movq %gs:-8, %rax
     swapgs
-    movq %rsp, -0x10(%rax)
+    movq %rsp, -0x20(%rax)
     movq %rax, %rsp
-    movq -8(%rsp), %rax
-    movq %r11, -0x18(%rsp) // rflags
-    movq %rcx, -0x28(%rsp) // rip
+    movq -0x10(%rsp), %rax
+    movq %r11, -0x28(%rsp) // rflags
+    movq %rcx, -0x38(%rsp) // rip
     movq $0x23, %rcx
-    movq %rcx, -8(%rsp) // ss
+    movq %rcx, -0x18(%rsp) // ss
     movq $0x1b, %rcx
-    movq %rcx, -0x20(%rsp) // cs
-    subq $0x28, %rsp
+    movq %rcx, -0x30(%rsp) // cs
+    movq -0x38(%rsp),%rcx
+    subq $0x38, %rsp
     intpush
     cld
     callq syscall_main_handler
     testq $0xFF, %rax
     jnz syscall_leave_by_iret
     intpop
-    addq $0x28, %rsp
-    movq -0x28(%rsp), %rcx
-    movq -0x18(%rsp), %r11
-    movq %rax, -8(%rsp)
-    movq %rsp, %rax
-    movq -0x10(%rsp), %rsp
-    movq %rsp, -0x10(%rax)
-    movq -8(%rax),%rax
+    addq $0x38, %rsp
+    movq -0x38(%rsp), %rcx
+    movq -0x28(%rsp), %r11
+    movq -0x20(%rsp), %rsp
     sysretq
 syscall_leave_by_iret:
     intpop

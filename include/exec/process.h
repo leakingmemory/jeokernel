@@ -55,6 +55,7 @@ public:
 class Process : public task_resource {
 private:
     hw_spinlock mtx;
+    std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
     std::vector<FileDescriptor> fileDescriptors;

@@ -53,97 +53,152 @@ PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std
 MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages)
 : image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), mappings() {}
 
-Process::Process() : pagetableRoots(), mappings(), fileDescriptors() {
+Process::Process() : pagetableLow(), pagetableRoots(), mappings(), fileDescriptors() {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
 }
 
 bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func) {
-    constexpr uint32_t sizeOfUserspaceRoots = 512 - PMLT4_USERSPACE_HIGH_START;
-    uint32_t pageoff;
-    uint32_t index;
-    {
-        constexpr uint32_t mask = 0x7FFFFFF;
-        pageoff = pagenum & mask;
-        static_assert((mask >> 26) == 1);
-        index = pagenum >> 27;
-    }
-    if (index >= sizeOfUserspaceRoots) {
-        return false;
-    }
-    PagetableRoot *root = nullptr;
-    for (auto &ptr : pagetableRoots) {
-        if (ptr.addr == index) {
-            root = &ptr;
-            break;
-        }
-    }
-    if (root == nullptr) {
-        root = &(pagetableRoots.emplace_back(index));
-    }
-    {
-        constexpr uint32_t mask = 0x7FFFFFF;
-        pageoff = pageoff & mask;
-        static_assert((mask >> 18) == 0x1FF);
-        index = pageoff >> 18;
-    }
-    auto &b1 = (*(root->branches))[index];
-    vmem vm{sizeof(pagetable)};
-    static_assert(sizeof(pagetable) == vm.pagesize());
-    pagetable *table = (pagetable *) vm.pointer();
-    if (b1.page_ppn == 0) {
-        auto phys = ppagealloc(sizeof(pagetable));
-        if (phys == 0) {
-            std::cerr << "Couldn't allocate phys page for pagetable\n";
+    if ((pagenum >> (9+9+9)) < PMLT4_USERSPACE_HIGH_START) {
+        uint32_t lowRoot = pagenum >> (9+9);
+        if (lowRoot >= USERSPACE_LOW_END) {
             return false;
         }
-        b1.present = 1;
-        b1.writeable = 1;
-        b1.user_access = 1;
-        b1.page_ppn = (phys >> 12);
-        b1.execution_disabled = 0;
-        vm.page(0).rwmap((b1.page_ppn << 12));
-        vm.reload();
-        bzero(table, sizeof(*table));
+        PagetableRoot *root = nullptr;
+        for (auto &ptr: pagetableLow) {
+            if (ptr.addr == lowRoot) {
+                root = &ptr;
+                break;
+            }
+        }
+        if (root == nullptr) {
+            root = &(pagetableLow.emplace_back(lowRoot));
+        }
+        uint32_t pageoff;
+        uint32_t index;
+        {
+            constexpr uint32_t mask = 0x3FFFF;
+            pageoff = pagenum & mask;
+            static_assert((mask >> 9) == 0x1FF);
+            index = pageoff >> 9;
+        }
+        auto &b1 = (*(root->branches))[index];
+        vmem vm{sizeof(pagetable)};
+        static_assert(sizeof(pagetable) == vm.pagesize());
+        pagetable *table = (pagetable *) vm.pointer();
+        if (b1.page_ppn == 0) {
+            auto phys = ppagealloc(sizeof(pagetable));
+            if (phys == 0) {
+                std::cerr << "Couldn't allocate phys page for pagetable\n";
+                return false;
+            }
+            b1.present = 1;
+            b1.writeable = 1;
+            b1.user_access = 1;
+            b1.page_ppn = (phys >> 12);
+            b1.execution_disabled = 0;
+            vm.page(0).rwmap((b1.page_ppn << 12));
+            vm.reload();
+            bzero(table, sizeof(*table));
+        } else {
+            vm.page(0).rwmap((b1.page_ppn << 12));
+            vm.reload();
+        }
+        auto &b2 = (*table)[pageoff & 0x1FF];
+        func(b2);
+        std::cout << std::hex << " " << ((uintptr_t) &b1)<<"=>"<<((uintptr_t) &b2) << " "
+                  << (b2.present != 0 ? "p" : "*") << (b2.user_access != 0 ? "u" : "k")
+                  << (b2.writeable != 0 ? "w" : "r") << (b2.execution_disabled != 0 ? "n" : "e") << " " << b2.page_ppn
+                  << std::dec << "\n";
+        return true;
     } else {
-        vm.page(0).rwmap((b1.page_ppn << 12));
-        vm.reload();
-    }
-    {
-        constexpr uint32_t mask = 0x3FFFF;
-        pageoff = pageoff & mask;
-        static_assert((mask >> 9) == 0x1FF);
-        index = pageoff >> 9;
-    }
-    auto &b2 = (*table)[index];
-    phys_t b2phys;
-    if (b2.page_ppn == 0) {
-        auto phys = ppagealloc(sizeof(pagetable));
-        if (phys == 0) {
-            std::cerr << "Couldn't allocate phys page for pagetable\n";
+        constexpr uint32_t sizeOfUserspaceRoots = 512 - PMLT4_USERSPACE_HIGH_START;
+        uint32_t pageoff;
+        uint32_t index;
+        {
+            constexpr uint32_t mask = 0x7FFFFFF;
+            pageoff = pagenum & mask;
+            static_assert((mask >> 26) == 1);
+            index = pagenum >> 27;
+        }
+        if (index >= sizeOfUserspaceRoots) {
             return false;
         }
-        b2.present = 1;
-        b2.writeable = 1;
-        b2.user_access = 1;
-        b2.page_ppn = (phys >> 12);
-        b2.execution_disabled = 0;
-        b2phys = b2.page_ppn << 12;
-        vm.page(0).rwmap(b2phys);
-        vm.reload();
-        bzero(table, sizeof(*table));
-    } else {
-        b2phys = b2.page_ppn << 12;
-        vm.page(0).rwmap(b2phys);
-        vm.reload();
+        PagetableRoot *root = nullptr;
+        for (auto &ptr: pagetableRoots) {
+            if (ptr.addr == index) {
+                root = &ptr;
+                break;
+            }
+        }
+        if (root == nullptr) {
+            root = &(pagetableRoots.emplace_back(index));
+        }
+        {
+            constexpr uint32_t mask = 0x7FFFFFF;
+            pageoff = pageoff & mask;
+            static_assert((mask >> 18) == 0x1FF);
+            index = pageoff >> 18;
+        }
+        auto &b1 = (*(root->branches))[index];
+        vmem vm{sizeof(pagetable)};
+        static_assert(sizeof(pagetable) == vm.pagesize());
+        pagetable *table = (pagetable *) vm.pointer();
+        if (b1.page_ppn == 0) {
+            auto phys = ppagealloc(sizeof(pagetable));
+            if (phys == 0) {
+                std::cerr << "Couldn't allocate phys page for pagetable\n";
+                return false;
+            }
+            b1.present = 1;
+            b1.writeable = 1;
+            b1.user_access = 1;
+            b1.page_ppn = (phys >> 12);
+            b1.execution_disabled = 0;
+            vm.page(0).rwmap((b1.page_ppn << 12));
+            vm.reload();
+            bzero(table, sizeof(*table));
+        } else {
+            vm.page(0).rwmap((b1.page_ppn << 12));
+            vm.reload();
+        }
+        {
+            constexpr uint32_t mask = 0x3FFFF;
+            pageoff = pageoff & mask;
+            static_assert((mask >> 9) == 0x1FF);
+            index = pageoff >> 9;
+        }
+        auto &b2 = (*table)[index];
+        phys_t b2phys;
+        if (b2.page_ppn == 0) {
+            auto phys = ppagealloc(sizeof(pagetable));
+            if (phys == 0) {
+                std::cerr << "Couldn't allocate phys page for pagetable\n";
+                return false;
+            }
+            b2.present = 1;
+            b2.writeable = 1;
+            b2.user_access = 1;
+            b2.page_ppn = (phys >> 12);
+            b2.execution_disabled = 0;
+            b2phys = b2.page_ppn << 12;
+            vm.page(0).rwmap(b2phys);
+            vm.reload();
+            bzero(table, sizeof(*table));
+        } else {
+            b2phys = b2.page_ppn << 12;
+            vm.page(0).rwmap(b2phys);
+            vm.reload();
+        }
+        auto &b3 = (*table)[pageoff & 0x1FF];
+        func(b3);
+        std::cout << std::hex << (b2phys + (pageoff & 0x1FF)) << " " << (b3.present != 0 ? "p" : "*")
+                  << (b3.user_access != 0 ? "u" : "k") << (b3.writeable != 0 ? "w" : "r")
+                  << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
+                  << "\n";
+        return true;
     }
-    auto &b3 = (*table)[pageoff & 0x1FF];
-    func(b3);
-    std::cout << std::hex << (b2phys + (pageoff & 0x1FF)) << " " << (b3.present != 0 ? "p" : "*") << (b3.user_access != 0 ? "u" : "k") << (b3.writeable != 0 ? "w" : "r")
-              << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
-              << "\n";
-    return true;
 }
 
 bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite) {
@@ -196,6 +251,30 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
 void Process::task_enter() {
     critical_section cli{};
     auto &pt = get_root_pagetable();
+    if constexpr(USERSPACE_LOW_END > 0) {
+        for (auto &root : pagetableLow) {
+            auto pe_index = root.addr;
+            auto &pe_root = pt[0];
+            pagetable &ptl3 = pe_root.get_subtable();
+            auto &pe = ptl3[pe_index];
+            pe.present = 1;
+            pe.writeable = 1;
+            pe.user_access = 1;
+            pe.write_through = 0;
+            pe.cache_disabled = 0;
+            pe.accessed = 0;
+            pe.dirty = 0;
+            pe.size = 0;
+            pe.global = 0;
+            pe.ignored2 = 0;
+            pe.os_virt_avail = 0;
+            pe.page_ppn = (root.physpage >> 12);
+            pe.reserved1 = 0;
+            pe.os_virt_start = 0;
+            pe.ignored3 = 0;
+            pe.execution_disabled = 0;
+        }
+    }
     for (auto &root : pagetableRoots) {
         auto pe_index = root.addr + PMLT4_USERSPACE_HIGH_START;
         auto &pe = pt[pe_index];
@@ -284,16 +363,21 @@ bool Process::exception(task &current_task, const std::string &name, Interrupt &
 bool Process::readable(uintptr_t addr) {
     std::lock_guard<hw_spinlock> lock{mtx};
     {
-        constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9 + 12);
-        if (addr < relocationOffset) {
-            std::cerr << "User process page resolve: Below userspace address minimum\n";
-            return false;
-        }
+        constexpr phys_t userspaceLowEnd = ((phys_t) USERSPACE_LOW_END) << (9 + 9 + 12);
+        constexpr phys_t userspaceHighStart = ((phys_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9 + 12);
         uint32_t page;
-        {
-            uintptr_t addr{addr - relocationOffset};
-            addr = addr >> 12;
-            page = addr;
+        if (addr < userspaceHighStart) {
+            if (addr >= userspaceLowEnd) {
+                std::cerr << "User process page resolve: Outside userspace address space\n";
+                return false;
+            }
+            uintptr_t xaddr{addr};
+            xaddr = xaddr >> 12;
+            page = xaddr;
+        } else {
+            uintptr_t xaddr{addr - userspaceHighStart};
+            xaddr = xaddr >> 12;
+            page = xaddr;
         }
         MemMapping *mapping{nullptr};
         for (auto &m: mappings) {
@@ -313,35 +397,59 @@ bool Process::readable(uintptr_t addr) {
             addr = addr >> (9 + 9 + 9);
             rootAddr = addr;
         }
-        PagetableRoot *root{nullptr};
-        for (auto &r: pagetableRoots) {
-            if (r.addr == rootAddr) {
-                root = &r;
-                break;
-            }
-        }
-        if (root == nullptr) {
-            std::cerr << "User process page resolve: No pagetable root for page " << std::hex << page << std::dec
-                      << "\n";
-            return false;
-        }
-        auto b1 = (*(root->branches))[(page >> (9 + 9)) & 511];
-        if (b1.present == 0) {
-            std::cerr << "User process page resolve: Pagetable directory not present for page " << std::hex << page
-                      << std::dec << "\n";
-            return false;
-        }
         vmem vm{PAGESIZE};
-        vm.page(0).rmap(b1.page_ppn << 12);
-        vm.reload();
-        auto b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
-        if (b2.present == 0) {
-            std::cerr << "User process page resolve: Pagetable not present for page " << std::hex << page << std::dec
-                      << "\n";
-            return false;
+        if (addr < userspaceHighStart) {
+            PagetableRoot *root{nullptr};
+            for (auto &r: pagetableLow) {
+                if (r.addr == rootAddr) {
+                    root = &r;
+                    break;
+                }
+            }
+            if (root == nullptr) {
+                std::cerr << "User process page resolve: No low pagetable root for page " << std::hex << page << std::dec
+                          << "\n";
+                return false;
+            }
+            auto b2 = (*(root->branches))[(page >> 9) & 511];
+            if (b2.present == 0) {
+                std::cerr << "User process page resolve: Pagetable low directory not present for page " << std::hex << page
+                          << std::dec << "\n";
+                return false;
+            }
+            vm.page(0).rmap(b2.page_ppn << 12);
+            vm.reload();
+        } else {
+            PagetableRoot *root{nullptr};
+            for (auto &r: pagetableRoots) {
+                if (r.addr == rootAddr) {
+                    root = &r;
+                    break;
+                }
+            }
+            if (root == nullptr) {
+                std::cerr << "User process page resolve: No pagetable root for page " << std::hex << page << std::dec
+                          << "\n";
+                return false;
+            }
+            auto b1 = (*(root->branches))[(page >> (9 + 9)) & 511];
+            if (b1.present == 0) {
+                std::cerr << "User process page resolve: Pagetable directory not present for page " << std::hex << page
+                          << std::dec << "\n";
+                return false;
+            }
+            vm.page(0).rmap(b1.page_ppn << 12);
+            vm.reload();
+            auto b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
+            if (b2.present == 0) {
+                std::cerr << "User process page resolve: Pagetable not present for page " << std::hex << page
+                          << std::dec
+                          << "\n";
+                return false;
+            }
+            vm.page(0).rwmap(b2.page_ppn << 12);
+            vm.reload();
         }
-        vm.page(0).rwmap(b2.page_ppn << 12);
-        vm.reload();
         auto b3 = (*((pagetable *) vm.pointer()))[page & 511];
         return b3.present != 0 && b3.user_access != 0;
     }
@@ -349,38 +457,70 @@ bool Process::readable(uintptr_t addr) {
 
 bool Process::resolve_page(uintptr_t fault_addr) {
     std::unique_ptr<std::lock_guard<hw_spinlock>> lock{new std::lock_guard(mtx)};
-    {
-        constexpr uint64_t relocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9 + 12);
-        if (fault_addr < relocationOffset) {
-            std::cerr << "User process page resolve: Below userspace address minimum\n";
+    constexpr uint64_t highRelocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9 + 12);
+    uint32_t page;
+    if (fault_addr < highRelocationOffset) {
+        constexpr phys_t lowUserpaceMax = ((phys_t) USERSPACE_LOW_END) << (9+9+12);
+        if (fault_addr >= lowUserpaceMax) {
+            std::cerr << "User process page resolve: Not within userpace memory limits\n";
             return false;
         }
-        uint32_t page;
         {
-            uintptr_t addr{fault_addr - relocationOffset};
+            uintptr_t addr{fault_addr};
             addr = addr >> 12;
             page = addr;
         }
-        MemMapping *mapping{nullptr};
-        for (auto &m : mappings) {
-            if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-                mapping = &m;
+    } else {
+        {
+            uintptr_t addr{fault_addr - highRelocationOffset};
+            addr = addr >> 12;
+            page = addr;
+        }
+    }
+    MemMapping *mapping{nullptr};
+    for (auto &m : mappings) {
+        if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
+            mapping = &m;
+            break;
+        }
+    }
+    if (mapping == nullptr) {
+        std::cerr << "User process page resolve: No mapping for page " << std::hex << page << std::dec << "\n";
+        return false;
+    }
+    phys_t physpage = mapping->image_skip_pages + (page - mapping->pagenum);
+    uint16_t rootAddr;
+    vmem vm{PAGESIZE};
+    pageentr *b2;
+    PagetableRoot *root{nullptr};
+    if (fault_addr < highRelocationOffset) {
+        {
+            uint32_t addr{page};
+            addr = addr >> (9+9);
+            rootAddr = addr;
+        }
+        for (auto &r: pagetableLow) {
+            if (r.addr == rootAddr) {
+                root = &r;
                 break;
             }
         }
-        if (mapping == nullptr) {
-            std::cerr << "User process page resolve: No mapping for page " << std::hex << page << std::dec << "\n";
+        if (root == nullptr) {
+            std::cerr << "User process page resolve: No low pagetable root for page " << std::hex << page << std::dec << "\n";
             return false;
         }
-        phys_t physpage = mapping->image_skip_pages + (page - mapping->pagenum);
-        uint16_t rootAddr;
+        b2 = &((*(root->branches))[(page >> 9) & 511]);
+        if (b2->present == 0) {
+            std::cerr << "User process page resolve: Pagetable directory not present for page " << std::hex << page << std::dec << "\n";
+            return false;
+        }
+    } else {
         {
             uint32_t addr{page};
             addr = addr >> (9+9+9);
             rootAddr = addr;
         }
-        PagetableRoot *root{nullptr};
-        for (auto &r : pagetableRoots) {
+        for (auto &r: pagetableRoots) {
             if (r.addr == rootAddr) {
                 root = &r;
                 break;
@@ -395,43 +535,46 @@ bool Process::resolve_page(uintptr_t fault_addr) {
             std::cerr << "User process page resolve: Pagetable directory not present for page " << std::hex << page << std::dec << "\n";
             return false;
         }
-        vmem vm{PAGESIZE};
         vm.page(0).rmap(b1.page_ppn << 12);
         vm.reload();
-        auto b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
-        if (b2.present == 0) {
+        b2 = &((*((pagetable *) vm.pointer()))[(page >> 9) & 511]);
+        if (b2->present == 0) {
             std::cerr << "User process page resolve: Pagetable not present for page " << std::hex << page << std::dec << "\n";
             return false;
         }
-        vm.page(0).rwmap(b2.page_ppn << 12);
-        vm.reload();
-        auto b3 = (*((pagetable *) vm.pointer()))[page & 511];
-        if (b3.present == 0) {
-            std::cout << "Loading page " << std::hex << page << " for addr " << fault_addr << " from " << physpage << std::dec << "\n";
-            lock = {};
-            auto image = mapping->image;
-            auto loaded_page = image->GetPage(physpage);
-            lock = std::make_unique<std::lock_guard<hw_spinlock>>(mtx);
-            bool ok{false};
-            for (auto &m : mappings) {
-                if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-                    if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
-                        std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page << std::dec << "\n";
-                        return false;
-                    }
-                    ok = true;
-                    break;
+    }
+    vm.page(0).rwmap(b2->page_ppn << 12);
+    vm.reload();
+    auto b3 = (*((pagetable *) vm.pointer()))[page & 511];
+    if (b3.present == 0) {
+        std::cout << "Loading page " << std::hex << page << " for addr " << fault_addr << " from " << physpage << std::dec << "\n";
+        lock = {};
+        auto image = mapping->image;
+        auto loaded_page = image->GetPage(physpage);
+        lock = std::make_unique<std::lock_guard<hw_spinlock>>(mtx);
+        bool ok{false};
+        for (auto &m : mappings) {
+            if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
+                if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
+                    std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page << std::dec << "\n";
+                    return false;
                 }
+                ok = true;
+                break;
             }
-            if (!ok) {
-                std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page << std::dec << "\n";
-                return false;
-            }
-            ok = false;
-            for (auto &r : pagetableRoots) {
+        }
+        if (!ok) {
+            std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page << std::dec << "\n";
+            return false;
+        }
+        ok = false;
+        pageentr *b2;
+        if (fault_addr < highRelocationOffset) {
+            for (auto &r: pagetableLow) {
                 if (r.addr == rootAddr) {
                     if (root != &r) {
-                        std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex << page << std::dec << "\n";
+                        std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex
+                                  << page << std::dec << "\n";
                         return false;
                     }
                     ok = true;
@@ -439,7 +582,31 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                 }
             }
             if (!ok) {
-                std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex << page << std::dec << "\n";
+                std::cerr << "User process page resolve: Pagetable low root was removed for page " << std::hex << page
+                          << std::dec << "\n";
+                return false;
+            }
+            b2 = &((*(root->branches))[(page >> 9) & 511]);
+            std::cout << "Low root branch " << std::hex << ((root->physpage << 12) + (((page >> (9+9)) & 511) * sizeof(*b2))) << std::dec << "\n";
+            if (b2->present == 0) {
+                std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
+                return false;
+            }
+        } else {
+            for (auto &r: pagetableRoots) {
+                if (r.addr == rootAddr) {
+                    if (root != &r) {
+                        std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex
+                                  << page << std::dec << "\n";
+                        return false;
+                    }
+                    ok = true;
+                    break;
+                }
+            }
+            if (!ok) {
+                std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex << page
+                          << std::dec << "\n";
                 return false;
             }
             auto &b1 = (*(root->branches))[(page >> (9+9)) & 511];
@@ -450,27 +617,28 @@ bool Process::resolve_page(uintptr_t fault_addr) {
             }
             vm.page(0).rmap(b1.page_ppn << 12);
             vm.reload();
-            auto &b2 = (*((pagetable *) vm.pointer()))[(page >> 9) & 511];
-            if (b2.present == 0) {
+            b2 = &((*((pagetable *) vm.pointer()))[(page >> 9) & 511]);
+            if (b2->present == 0) {
                 std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
                 return false;
             }
-            auto b2phys = b2.page_ppn << 12;
-            vm.page(0).rwmap(b2phys);
-            vm.reload();
-            auto &b3 = (*((pagetable *) vm.pointer()))[page & 511];
-            if (b3.present == 0) {
-                std::cout << std::hex << ((b2phys) + (page & 511)) << " *" << (b3.user_access != 0 ? "u" : "k") << (b3.writeable != 0 ? "w" : "r")
-                          << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
-                          << "\n";
-                mapping->mappings.push_back({.data = loaded_page, .page = page});
-                b3.page_ppn = loaded_page.PhysAddr() >> 12;
-                b3.present = 1;
-                reload_pagetables();
-            }
-            return true;
-        } else {
         }
+        auto b2phys = b2->page_ppn << 12;
+        vm.page(0).rwmap(b2phys);
+        vm.reload();
+        auto &b3 = (*((pagetable *) vm.pointer()))[page & 511];
+        if (b3.present == 0) {
+            std::cout << std::hex << ((b2phys) + (page & 511)) << " *" << (b3.user_access != 0 ? "u" : "k") << (b3.writeable != 0 ? "w" : "r")
+                      << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
+                      << "\n";
+            mapping->mappings.push_back({.data = loaded_page, .page = page});
+            b3.page_ppn = loaded_page.PhysAddr() >> 12;
+            b3.present = 1;
+            b3.user_access = 1;
+            reload_pagetables();
+        }
+        return true;
+    } else {
     }
     return false;
 }
