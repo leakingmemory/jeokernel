@@ -119,7 +119,7 @@ void Exec::Run() {
         Process *process = new Process();
         {
             uint32_t index = 0;
-            uint32_t start = 0xFFFFFFFF;
+            uint32_t start = 0;
             uint32_t flags = none;
             uint32_t offset = 0;
             for (auto &page: pages) {
@@ -131,7 +131,7 @@ void Exec::Run() {
                     currentFlags |= exec;
                 }
                 if (currentFlags != flags || page.filep != (offset + (index - start))) {
-                    if (flags != none && index != start) {
+                    if (flags != none) {
                         auto success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0, (flags & exec) != 0, true);
                         if (!success) {
                             std::cerr << "Error: Map failed\n";
@@ -143,7 +143,7 @@ void Exec::Run() {
                 }
                 ++index;
             }
-            if (flags != none && index != start) {
+            if (flags != none) {
                 auto success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0, (flags & exec) != 0, true);
                 if (!success) {
                     std::cerr << "Error: Map failed\n";
