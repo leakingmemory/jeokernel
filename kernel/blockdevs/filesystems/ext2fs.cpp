@@ -256,6 +256,46 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
                 std::cerr << "Error: Read error, indirect block pointers for file\n";
             }
         }
+        uint64_t double_indirect_block = inode.block[EXT2_NUM_DIRECT_BLOCK_PTRS + 1];
+        if (double_indirect_block != 0) {
+            std::cout << " <<" << double_indirect_block << ">>";
+            double_indirect_block *= BlockSize;
+            auto double_indirect_block_phys = double_indirect_block / bdev->GetBlocksize();
+            auto double_indirect_block_offset = double_indirect_block % bdev->GetBlocksize();
+            double_indirect_block += BlockSize - 1;
+            auto double_indirect_phys_blocks = (double_indirect_block / bdev->GetBlocksize()) - double_indirect_block_phys + 1;
+            auto dbrd = bdev->ReadBlock(double_indirect_block_phys, double_indirect_phys_blocks);
+            if (dbrd) {
+                uint32_t *double_indirect_bptrs = (uint32_t *) (((uint8_t *) (dbrd->Pointer())) + double_indirect_block_offset);
+                auto numDblIndirects = BlockSize / sizeof(*double_indirect_bptrs);
+                for (int i = 0; i < numDblIndirects; i++) {
+                    uint64_t indirect_block = double_indirect_bptrs[i];
+                    if (indirect_block != 0) {
+                        std::cout << " <" << indirect_block << ">";
+                        indirect_block *= BlockSize;
+                        auto indirect_block_phys = indirect_block / bdev->GetBlocksize();
+                        auto indirect_block_offset = indirect_block % bdev->GetBlocksize();
+                        indirect_block += BlockSize - 1;
+                        auto indirect_phys_blocks = (indirect_block / bdev->GetBlocksize()) - indirect_block_phys + 1;
+                        auto rd = bdev->ReadBlock(indirect_block_phys, indirect_phys_blocks);
+                        if (rd) {
+                            uint32_t *indirect_bptrs = (uint32_t *) (((uint8_t *) (rd->Pointer())) + indirect_block_offset);
+                            auto numIndirects = BlockSize / sizeof(*indirect_bptrs);
+                            for (int i = 0; i < numIndirects; i++) {
+                                if (indirect_bptrs[i]) {
+                                    std::cout << " " << indirect_bptrs[i];
+                                    inode_obj->blockRefs.push_back(indirect_bptrs[i]);
+                                }
+                            }
+                        } else {
+                            std::cerr << "Error: Read error, indirect block pointers for file\n";
+                        }
+                    }
+                }
+            } else {
+                std::cerr << "Error: Read error, indirect block pointers for file\n";
+            }
+        }
     }
     inode_obj->filesize = inode.size;
     inode_obj->mode = inode.mode;
