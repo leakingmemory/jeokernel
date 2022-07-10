@@ -69,12 +69,14 @@ public:
     filepage_ref &operator =(const filepage_ref &cp) {
         filepage_ref loc{cp};
         swap(loc);
+        return *this;
     }
     filepage_ref &operator =(filepage_ref &&mv) {
         this->data = mv.data;
         if (this != &mv) {
             mv.data = {};
         }
+        return *this;
     }
 
     uintptr_t PhysAddr() {
