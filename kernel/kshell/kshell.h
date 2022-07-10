@@ -22,10 +22,10 @@ class kshell {
 private:
     std::mutex mtx;
     bool exit;
-    std::thread shell;
     std::vector<std::shared_ptr<kshell_command>> commands;
     std::shared_ptr<kfile> cwd_ref;
     kdirectory *cwd;
+    std::thread shell;
 public:
     kshell();
     ~kshell();
