@@ -35,8 +35,12 @@ namespace std {
     public:
         constexpr explicit vector_iterator_base(T *ptr) noexcept : ptr(ptr) {}
 
-        constexpr T & operator *() {
+        constexpr T & operator *() const {
             return *ptr;
+        }
+
+        constexpr T * operator ->() const {
+            return ptr;
         }
 
         constexpr bool operator ==(const vector_iterator_base &other) const noexcept {
