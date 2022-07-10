@@ -59,6 +59,100 @@ Process::Process() : pagetableLow(), pagetableRoots(), mappings(), fileDescripto
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
 }
 
+std::optional<pageentr> Process::Pageentry(uint32_t pagenum) {
+    if ((pagenum >> (9+9+9)) < PMLT4_USERSPACE_HIGH_START) {
+        uint32_t lowRoot = pagenum >> (9+9);
+        if (lowRoot >= USERSPACE_LOW_END) {
+            return {};
+        }
+        PagetableRoot *root = nullptr;
+        for (auto &ptr: pagetableLow) {
+            if (ptr.addr == lowRoot) {
+                root = &ptr;
+                break;
+            }
+        }
+        if (root == nullptr) {
+            return {};
+        }
+        uint32_t pageoff;
+        uint32_t index;
+        {
+            constexpr uint32_t mask = 0x3FFFF;
+            pageoff = pagenum & mask;
+            static_assert((mask >> 9) == 0x1FF);
+            index = pageoff >> 9;
+        }
+        const auto &b1 = (*(root->branches))[index];
+        vmem vm{sizeof(pagetable)};
+        static_assert(sizeof(pagetable) == vm.pagesize());
+        pagetable *table = (pagetable *) vm.pointer();
+        if (b1.page_ppn == 0) {
+            return {};
+        }
+        vm.page(0).rwmap((b1.page_ppn << 12));
+        vm.reload();
+        const auto &b2 = (*table)[pageoff & 0x1FF];
+        return b2;
+    } else {
+        constexpr uint32_t sizeOfUserspaceRoots = PMLT4_USERSPACE_HIGH_END - PMLT4_USERSPACE_HIGH_START;
+        uint32_t pageoff;
+        uint32_t index;
+        {
+            constexpr uint32_t mask = 0x7FFFFFF;
+            pageoff = pagenum & mask;
+            static_assert((mask >> 26) == 1);
+            index = pagenum >> 27;
+        }
+        if (index >= sizeOfUserspaceRoots) {
+            return {};
+        }
+        PagetableRoot *root = nullptr;
+        for (auto &ptr: pagetableRoots) {
+            if (ptr.addr == index) {
+                root = &ptr;
+                break;
+            }
+        }
+        if (root == nullptr) {
+            return {};
+        }
+        {
+            constexpr uint32_t mask = 0x7FFFFFF;
+            pageoff = pageoff & mask;
+            static_assert((mask >> 18) == 0x1FF);
+            index = pageoff >> 18;
+        }
+        const auto &b1 = (*(root->branches))[index];
+        vmem vm{sizeof(pagetable)};
+        static_assert(sizeof(pagetable) == vm.pagesize());
+        pagetable *table = (pagetable *) vm.pointer();
+        if (b1.page_ppn == 0) {
+            return {};
+        } else {
+            vm.page(0).rwmap((b1.page_ppn << 12));
+            vm.reload();
+        }
+        {
+            constexpr uint32_t mask = 0x3FFFF;
+            pageoff = pageoff & mask;
+            static_assert((mask >> 9) == 0x1FF);
+            index = pageoff >> 9;
+        }
+        const auto &b2 = (*table)[index];
+        phys_t b2phys;
+        if (b2.page_ppn == 0) {
+            return {};
+        } else {
+            b2phys = b2.page_ppn << 12;
+            vm.page(0).rwmap(b2phys);
+            vm.reload();
+        }
+        const auto &b3 = (*table)[pageoff & 0x1FF];
+        return b3;
+    }
+}
+
 bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func) {
     if ((pagenum >> (9+9+9)) < PMLT4_USERSPACE_HIGH_START) {
         uint32_t lowRoot = pagenum >> (9+9);
@@ -113,7 +207,7 @@ bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func)
                   << std::dec << "\n";
         return true;
     } else {
-        constexpr uint32_t sizeOfUserspaceRoots = 512 - PMLT4_USERSPACE_HIGH_START;
+        constexpr uint32_t sizeOfUserspaceRoots = PMLT4_USERSPACE_HIGH_END - PMLT4_USERSPACE_HIGH_START;
         uint32_t pageoff;
         uint32_t index;
         {
@@ -122,7 +216,7 @@ bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func)
             static_assert((mask >> 26) == 1);
             index = pagenum >> 27;
         }
-        if (index >= sizeOfUserspaceRoots) {
+        if (index >= (sizeOfUserspaceRoots + PMLT4_USERSPACE_HIGH_START)) {
             return false;
         }
         PagetableRoot *root = nullptr;
@@ -201,11 +295,7 @@ bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func)
     }
 }
 
-bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite) {
-    std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " -> " << image_skip_pages << (write ? " write" : "") << (execute ? " exec" : "") << std::dec << "\n";
-    if (write && !copyOnWrite) {
-        std::cerr << "Error mapping: Write without COW is not supported\n";
-    }
+bool Process::CheckMapOverlap(uint32_t pagenum, uint32_t pages) {
     for (const auto &mapping : mappings) {
         {
             auto overlap_page = mapping.pagenum > pagenum ? mapping.pagenum : pagenum;
@@ -220,6 +310,115 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
                 return false;
             }
         }
+    }
+    return true;
+}
+
+struct MemoryArea {
+    uint32_t start;
+    uint32_t end;
+
+    uint32_t Length() {
+        return end - start;
+    }
+    MemoryArea Combine(const MemoryArea &other) {
+        MemoryArea area{other};
+        if (area.start > start) {
+            area.start = start;
+        }
+        if (area.end < end) {
+            area.end = end;
+        }
+        return area;
+    }
+    bool Overlaps(MemoryArea &other) {
+        return (Combine(other).Length() < (Length() + other.Length()));
+    }
+};
+
+uint32_t Process::FindFree(uint32_t pages) {
+    std::vector<MemoryArea> freemem{};
+    {
+        std::vector<MemoryArea> mappings{};
+        {
+            mappings.reserve(this->mappings.size());
+            for (int i = 0; i < this->mappings.size(); i++) {
+                auto &mapping = this->mappings[i];
+                MemoryArea area{.start = mapping.pagenum, .end = (mapping.pagenum + mapping.pages)};
+                auto iterator = mappings.begin();
+                while (iterator != mappings.end()) {
+                    if (iterator->Overlaps(area)) {
+                        area = iterator->Combine(area);
+                        mappings.erase(iterator);
+                        continue;
+                    }
+                    ++iterator;
+                }
+                auto num = mappings.size();
+                mappings.push_back({});
+                bool between = false;
+                for (int i = 0; i < num; i++) {
+                    if (mappings[i].start > area.start) {
+                        between = true;
+                        for (int j = num; j > i; j--) {
+                            mappings[j] = mappings[j - 1];
+                        }
+                        mappings[i] = area;
+                        break;
+                    }
+                }
+                if (!between) {
+                    mappings[num] = area;
+                }
+            }
+        }
+
+        constexpr uint32_t lowLim = ((uintptr_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9);
+        constexpr uintptr_t highLimBase = ((uintptr_t) PMLT4_USERSPACE_HIGH_END) << (9 + 9 + 9);
+        constexpr uint32_t highLim = highLimBase < 0x100000000 ? highLimBase : 0xFFFFFFFF;
+
+        auto start = lowLim;
+        auto iterator = mappings.begin();
+        while (iterator != mappings.end()) {
+            if (iterator->start > start) {
+                freemem.push_back({.start = start, .end = iterator->start});
+            }
+            if (iterator->end > start) {
+                start = iterator->end;
+            }
+            ++iterator;
+        }
+        if (start < highLim) {
+            freemem.push_back({.start = start, .end = highLim});
+        }
+    }
+    MemoryArea *memoryArea = nullptr;
+    for (auto &fmem : freemem) {
+        auto size = fmem.end - fmem.start;
+        if (size >= pages) {
+            if (memoryArea == nullptr) {
+                memoryArea = &fmem;
+            } else {
+                auto compSize = memoryArea->end - memoryArea->start;
+                if (compSize > size) {
+                    memoryArea = &fmem;
+                }
+            }
+        }
+    }
+    if (memoryArea == nullptr) {
+        return 0;
+    }
+    return memoryArea->start;
+}
+
+bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite) {
+    std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " -> " << image_skip_pages << (write ? " write" : "") << (execute ? " exec" : "") << std::dec << "\n";
+    if (write && !copyOnWrite) {
+        std::cerr << "Error mapping: Write without COW is not supported\n";
+    }
+    if (!CheckMapOverlap(pagenum, pages)) {
+        return false;
     }
     mappings.emplace_back(image, pagenum, pages, image_skip_pages);
     for (uint32_t p = 0; p < pages; p++) {
@@ -240,6 +439,38 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
             pe.os_virt_start = 0;
             pe.ignored3 = 0;
             pe.execution_disabled = !execute;
+        });
+        if (!success) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Process::Map(uint32_t pagenum, uint32_t pages) {
+    std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " on demand " << std::dec << "\n";
+    if (!CheckMapOverlap(pagenum, pages)) {
+        return false;
+    }
+    mappings.emplace_back(std::shared_ptr<kfile>(), pagenum, pages, 0);
+    for (uint32_t p = 0; p < pages; p++) {
+        bool success = Pageentry(pagenum + p, [] (pageentr &pe) {
+            pe.present = 0;
+            pe.writeable = 1;
+            pe.user_access = 1;
+            pe.write_through = 0;
+            pe.cache_disabled = 0;
+            pe.accessed = 0;
+            pe.dirty = 0;
+            pe.size = 0;
+            pe.global = 0;
+            pe.ignored2 = 0;
+            pe.os_virt_avail = 0;
+            pe.page_ppn = 0;
+            pe.reserved1 = 0;
+            pe.os_virt_start = 0;
+            pe.ignored3 = 0;
+            pe.execution_disabled = 0;
         });
         if (!success) {
             return false;
@@ -276,7 +507,11 @@ void Process::task_enter() {
         }
     }
     for (auto &root : pagetableRoots) {
-        auto pe_index = root.addr + PMLT4_USERSPACE_HIGH_START;
+        if (root.addr < PMLT4_USERSPACE_HIGH_START ||
+            root.addr >= PMLT4_USERSPACE_HIGH_END) {
+            continue;
+        }
+        auto pe_index = root.addr;
         auto &pe = pt[pe_index];
         pe.present = 1;
         pe.writeable = 1;
@@ -360,6 +595,120 @@ bool Process::exception(task &current_task, const std::string &name, Interrupt &
     return true;
 }
 
+uintptr_t Process::push_64(uintptr_t ptr, uint64_t val, const std::function<void(bool, uintptr_t)> &func) {
+    constexpr auto length = sizeof(val);
+    uintptr_t dstptr{ptr - length};
+    std::function<void (bool, uintptr_t)> f{func};
+    resolve_read(dstptr, length, [this, dstptr, val, length, f] (bool success) mutable {
+        if (!success) {
+            f(false, 0);
+        }
+        auto offset = dstptr & ((uintptr_t) PAGESIZE-1);
+        auto pageaddr = dstptr - offset;
+        auto end = dstptr + length;
+        vmem vm{end - pageaddr};
+        auto firstPage = (pageaddr >> 12);
+        for (int i = 0; i < vm.npages(); i++) {
+            auto pe = Pageentry(firstPage + i);
+            uintptr_t ph{pe->page_ppn};
+            ph = ph << 12;
+            vm.page(i).rwmap(ph);
+        }
+        void *ptr = (void *) ((uint8_t *) vm.pointer() + offset);
+        *((uint64_t *) ptr) = val;
+        f(true, dstptr);
+    });
+    return dstptr;
+}
+
+uintptr_t Process::push_string(uintptr_t ptr, const std::string &str, const std::function<void (bool, uintptr_t)> &func) {
+    auto length = str.size() + 1;
+    uintptr_t dstptr{ptr - length};
+    std::string strcp{str};
+    std::function<void (bool, uintptr_t)> f{func};
+    resolve_read(dstptr, length, [this, dstptr, strcp, length, f] (bool success) mutable {
+        if (!success) {
+            f(false, 0);
+            return;
+        }
+        auto offset = dstptr & ((uintptr_t) PAGESIZE-1);
+        auto pageaddr = dstptr - offset;
+        auto end = dstptr + length;
+        vmem vm{end - pageaddr};
+        auto firstPage = (pageaddr >> 12);
+        for (int i = 0; i < vm.npages(); i++) {
+            auto pe = Pageentry(firstPage + i);
+            uintptr_t ph{pe->page_ppn};
+            ph = ph << 12;
+            vm.page(i).rwmap(ph);
+        }
+        memcpy((uint8_t *) vm.pointer() + offset, strcp.c_str(), length);
+        f(true, dstptr);
+    });
+    return dstptr;
+}
+
+void Process::push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &begin,
+                           const std::vector<std::string>::iterator &end, const std::vector<uintptr_t> &strptrs,
+                           const std::function<void(bool, const std::vector<uintptr_t> &, uintptr_t)> &func) {
+    std::function<void(bool, const std::vector<uintptr_t> &, uintptr_t)> f{func};
+    if (begin != end) {
+        std::vector<std::string>::iterator b{begin};
+        std::vector<std::string>::iterator e{end};
+        std::vector<uintptr_t> strp{strptrs};
+        push_string(ptr, *b, [this, b, e, f, strp] (bool success, uintptr_t ptr) mutable {
+            if (!success) {
+                f(false, strp, ptr);
+                return;
+            }
+            strp.push_back(ptr);
+            ++b;
+            push_strings(ptr, b, e, strp, f);
+        });
+    } else {
+        f(true, strptrs, ptr);
+    }
+}
+
+void Process::push_rev_ptrs(uintptr_t ptr, const std::vector<uintptr_t>::iterator &begin,
+                            const std::vector<uintptr_t>::iterator &end,
+                            const std::function<void(bool, uintptr_t)> &func) {
+    std::function<void(bool, uintptr_t)> f{func};
+    if (begin != end) {
+        std::vector<uintptr_t>::iterator b{begin};
+        --b;
+        std::vector<uintptr_t>::iterator e{end};
+        push_64(ptr, *b, [this, b, e, f] (bool success, uintptr_t ptr) mutable {
+            if (!success) {
+                f(false, ptr);
+                return;
+            }
+            push_rev_ptrs(ptr, b, e, f);
+        });
+    } else {
+        f(true, ptr);
+    }
+}
+
+void Process::push_strings(uintptr_t ptr, const std::vector<std::string> &strs,
+                           const std::function<void(bool, uintptr_t)> &func) {
+    std::function<void(bool, uintptr_t)> f{func};
+    std::shared_ptr<std::vector<std::string>> persistent{new std::vector<std::string>(strs)};
+    push_strings(ptr, persistent->begin(), persistent->end(), std::vector<uintptr_t>(), [this, persistent, f] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t ptr) mutable {
+        if (!success) {
+            f(false, ptr);
+            return;
+        }
+        std::shared_ptr<std::vector<uintptr_t>> persistentPtrs
+                {new std::vector<uintptr_t>(ptrs)};
+        persistentPtrs->push_back(0);
+        ptr = ptr & ~((uintptr_t) 0xF);
+        push_rev_ptrs(ptr, persistentPtrs->end(), persistentPtrs->begin(), [persistentPtrs, f] (bool success, uintptr_t ptr) mutable {
+            f(success, ptr);
+        });
+    });
+}
+
 bool Process::readable(uintptr_t addr) {
     std::lock_guard<hw_spinlock> lock{mtx};
     {
@@ -371,14 +720,10 @@ bool Process::readable(uintptr_t addr) {
                 std::cerr << "User process page resolve: Outside userspace address space\n";
                 return false;
             }
-            uintptr_t xaddr{addr};
-            xaddr = xaddr >> 12;
-            page = xaddr;
-        } else {
-            uintptr_t xaddr{addr - userspaceHighStart};
-            xaddr = xaddr >> 12;
-            page = xaddr;
         }
+        uintptr_t xaddr{addr};
+        xaddr = xaddr >> 12;
+        page = xaddr;
         MemMapping *mapping{nullptr};
         for (auto &m: mappings) {
             if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
@@ -465,17 +810,11 @@ bool Process::resolve_page(uintptr_t fault_addr) {
             std::cerr << "User process page resolve: Not within userpace memory limits\n";
             return false;
         }
-        {
-            uintptr_t addr{fault_addr};
-            addr = addr >> 12;
-            page = addr;
-        }
-    } else {
-        {
-            uintptr_t addr{fault_addr - highRelocationOffset};
-            addr = addr >> 12;
-            page = addr;
-        }
+    }
+    {
+        uintptr_t addr{fault_addr};
+        addr = addr >> 12;
+        page = addr;
     }
     MemMapping *mapping{nullptr};
     for (auto &m : mappings) {
@@ -550,14 +889,34 @@ bool Process::resolve_page(uintptr_t fault_addr) {
         std::cout << "Loading page " << std::hex << page << " for addr " << fault_addr << " from " << physpage << std::dec << "\n";
         lock = {};
         auto image = mapping->image;
-        auto loaded_page = image->GetPage(physpage);
+        phys_t phys_page;
+        filepage_ref loaded_page{};
+        if (image) {
+            loaded_page = image->GetPage(physpage);
+            phys_page = loaded_page.PhysAddr();
+        } else {
+            phys_page = ppagealloc(PAGESIZE);
+        }
+        if (phys_page == 0) {
+            std::cerr << "User process page resolve: Failed to allocate phys page\n";
+            return false;
+        }
         lock = std::make_unique<std::lock_guard<hw_spinlock>>(mtx);
         bool ok{false};
         for (auto &m : mappings) {
             if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-                if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
-                    std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page << std::dec << "\n";
-                    return false;
+                if (m.image) {
+                    if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
+                        std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page
+                                  << std::dec << "\n";
+                        return false;
+                    }
+                } else {
+                    if (mapping != &m || loaded_page) {
+                        std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page
+                                  << std::dec << "\n";
+                        return false;
+                    }
                 }
                 ok = true;
                 break;
@@ -632,7 +991,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                       << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
                       << "\n";
             mapping->mappings.push_back({.data = loaded_page, .page = page});
-            b3.page_ppn = loaded_page.PhysAddr() >> 12;
+            b3.page_ppn = phys_page >> 12;
             b3.present = 1;
             b3.user_access = 1;
             reload_pagetables();

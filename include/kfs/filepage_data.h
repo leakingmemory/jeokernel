@@ -82,6 +82,14 @@ public:
     uintptr_t PhysAddr() {
         return data ? data->physpage : 0;
     }
+
+    operator bool() {
+        if (data) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 };
 
 #endif //JEOKERNEL_FILEPAGE_DATA_H

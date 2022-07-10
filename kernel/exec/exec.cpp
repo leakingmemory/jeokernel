@@ -8,6 +8,8 @@
 #include <kfs/kfiles.h>
 #include "UserElf.h"
 
+#define USERSPACE_DEFAULT_STACKSIZE     ((uintptr_t) ((uintptr_t) 32*1048576))
+
 struct exec_pageinfo {
     uint32_t filep;
     bool write;
@@ -166,11 +168,50 @@ void Exec::Run() {
             entrypoint += relocationOffset;
         }
 
-        std::vector<task_resource *> resources{};
-        auto *scheduler = get_scheduler();
-        resources.push_back(process);
-        auto pid = scheduler->new_task(entrypoint, 0x18 | 3 /* ring3 / lowest*/, 0x20 | 3, 0, 0, 0, 0, 0, 0, 0, 0, resources);
-        std::cout << "Started task " << pid << "\n";
-        scheduler->set_name(pid, cmd_name);
+        constexpr uintptr_t stackPages = USERSPACE_DEFAULT_STACKSIZE / PAGESIZE;
+        uintptr_t stackAddr = process->FindFree(stackPages);
+        if (stackAddr == 0) {
+            std::cerr << "Error: Unable to allocate stack space\n";
+            delete process;
+            return;
+        }
+        if (!process->Map(stackAddr, stackPages)) {
+            std::cerr << "Error: Unable to allocate stack space (map failed)\n";
+            delete process;
+            return;
+        }
+        stackAddr += stackPages;
+        stackAddr = stackAddr << 12;
+
+        std::vector<std::string> argv{};
+        argv.push_back(name);
+        auto argc = argv.size();
+        process->push_strings(stackAddr, argv, [process, argc, entrypoint, cmd_name] (bool success, uintptr_t argvAddr) {
+            if (!success) {
+                std::cerr << "Error: Failed to push args to stack for new process\n";
+                delete process;
+                return;
+            }
+            process->push_64(argvAddr, argvAddr, [process, argc, entrypoint, cmd_name] (bool success, uintptr_t argvpAddr) {
+                if (!success) {
+                    std::cerr << "Error: Failed to push args ptr to stack for new process\n";
+                    delete process;
+                    return;
+                }
+                process->push_64(argvpAddr, argc, [process, entrypoint, cmd_name] (bool success, uintptr_t stackAddr) {
+                    if (!success) {
+                        std::cerr << "Error: Failed to push args count to stack for new process\n";
+                        delete process;
+                        return;
+                    }
+                    std::vector<task_resource *> resources{};
+                    auto *scheduler = get_scheduler();
+                    resources.push_back(process);
+                    auto pid = scheduler->new_task(entrypoint, 0x18 | 3 /* ring3 / lowest*/, 0x20 | 3, 0, stackAddr, 0, 0, 0, 0, 0, 0, resources);
+                    std::cout << "Started task " << pid << "\n";
+                    scheduler->set_name(pid, cmd_name);
+                });
+            });
+        });
     }
 }
