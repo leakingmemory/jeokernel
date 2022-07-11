@@ -37,6 +37,7 @@ public:
 
 struct PhysMapping {
     filepage_ref data;
+    phys_t phys_page;
     uint32_t page;
 };
 
@@ -47,9 +48,11 @@ private:
     uint32_t pagenum;
     uint32_t pages;
     uint32_t image_skip_pages;
+    bool cow;
     std::vector<PhysMapping> mappings;
 public:
-    MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages);
+    MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool cow);
+    ~MemMapping();
 };
 
 class Process : public task_resource {

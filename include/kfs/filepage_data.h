@@ -83,7 +83,7 @@ public:
         return data ? data->physpage : 0;
     }
 
-    operator bool() {
+    operator bool() const {
         if (data) {
             return true;
         } else {

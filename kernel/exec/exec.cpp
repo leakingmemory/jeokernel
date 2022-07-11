@@ -10,6 +10,8 @@
 
 #define USERSPACE_DEFAULT_STACKSIZE     ((uintptr_t) ((uintptr_t) 32*1048576))
 
+//#define DEBUG_USERSPACE_PAGELIST
+
 struct exec_pageinfo {
     uint32_t filep;
     bool write;
@@ -56,8 +58,9 @@ void Exec::Run() {
         }
         std::vector<exec_pageinfo> pages{};
         pages.reserve(endpage - startpage);
+        constexpr uint32_t doNotLoad = -1;
         for (auto i = startpage; i < endpage; i++) {
-            pages.push_back({.filep = 0, .write = false, .exec = false});
+            pages.push_back({.filep = doNotLoad, .write = false, .exec = false});
         }
         for (auto &pe : loads) {
             auto vpageaddr = pe->p_vaddr >> 12;
@@ -74,14 +77,25 @@ void Exec::Run() {
                 vpageendaddr = (vpageendaddr >> 12) + 1;
             }
             auto vendaddr = vpageendaddr << 12;
+            auto pvendaddr = vendaddr;
             if (pe->p_filesz < pe->p_memsz) {
                 std::cerr << "Warning: Less filesize than memsize "<<pe->p_filesz << "<" << pe->p_memsz
                 << " may not be correctly implemented\n";
+                pvendaddr = pe->p_vaddr + pe->p_filesz;
+                if ((pvendaddr & (PAGESIZE - 1)) == 0) {
+                    pvendaddr = pvendaddr >> 12;
+                } else {
+                    pvendaddr = (pvendaddr >> 12) + 1;
+                }
             }
             for (auto i = vpageaddr; i < vpageendaddr; i++) {
                 auto rel = i - vpageaddr;
                 auto &page = pages[i - startpage];
-                page.filep = ppageaddr + rel;
+                if (i < pvendaddr) {
+                    page.filep = ppageaddr + rel;
+                } else {
+                    page.filep = doNotLoad;
+                }
             }
         }
         for (int i = 0; i < userElf.get_num_section_entries(); i++) {
@@ -117,6 +131,7 @@ void Exec::Run() {
         constexpr uint16_t read = 1;
         constexpr uint16_t write = 2;
         constexpr uint16_t exec = 4;
+        constexpr uint16_t zero = 8;
 
         Process *process = new Process();
         {
@@ -132,9 +147,18 @@ void Exec::Run() {
                 if (page.exec) {
                     currentFlags |= exec;
                 }
-                if (currentFlags != flags || page.filep != (offset + (index - start))) {
+                if (page.filep == doNotLoad) {
+                    currentFlags |= zero;
+                }
+                if (currentFlags != flags || (page.filep != doNotLoad && page.filep != (offset + (index - start)))) {
                     if (flags != none) {
-                        auto success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0, (flags & exec) != 0, true);
+                        bool success;
+                        if ((flags & zero) == 0) {
+                            success = process->Map(binary, startpage + start, index - start, offset,
+                                                        (flags & write) != 0, (flags & exec) != 0, true);
+                        } else {
+                            success = process->Map(startpage + start, index - start);
+                        }
                         if (!success) {
                             std::cerr << "Error: Map failed\n";
                         }
@@ -146,13 +170,20 @@ void Exec::Run() {
                 ++index;
             }
             if (flags != none) {
-                auto success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0, (flags & exec) != 0, true);
+                bool success;
+                if ((flags & zero) == 0) {
+                    success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0,
+                                                (flags & exec) != 0, true);
+                } else {
+                    success = process->Map(startpage + start, index - start);
+                }
                 if (!success) {
                     std::cerr << "Error: Map failed\n";
                 }
             }
         }
 
+#ifdef DEBUG_USERSPACE_PAGELIST
         {
             int i = startpage;
             for (const auto &page: pages) {
@@ -160,6 +191,7 @@ void Exec::Run() {
                 ++i;
             }
         }
+#endif
 
         uint64_t entrypoint = userElf.get_entrypoint_addr();
 

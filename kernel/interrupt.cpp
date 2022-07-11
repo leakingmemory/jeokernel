@@ -346,9 +346,10 @@ extern "C" {
     bool syscall_main_handler(uint64_t interrupt_vector, InterruptStackFrame *stack_frame, x86_fpu_state *fpusse) {
         InterruptCpuFrame *cpuFrame = (InterruptCpuFrame *) (void *) (((uint8_t *) stack_frame) + (sizeof(*stack_frame) - 8)/*error-code-norm-not-avail*/);
         Interrupt interrupt{cpuFrame, stack_frame, fpusse, (uint8_t) 0x80};
+        auto syscall = interrupt.rax();
         auto result = SyscallHandler::Instance().Call(interrupt);
         if (result == SyscallResult::NOT_A_SYSCALL) {
-            get_klogger() << "Not a valid syscall:\n";
+            std::cerr << "Not a valid syscall " << std::hex << syscall << "(" << std::dec << syscall << "):\n";
             interrupt.print_debug(false, false);
         }
         if (result == SyscallResult::CONTEXT_SWITCH) {
