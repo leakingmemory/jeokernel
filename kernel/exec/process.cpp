@@ -681,7 +681,12 @@ void Process::push_strings(uintptr_t ptr, const std::vector<std::string>::iterat
             push_strings(ptr, b, e, strp, f);
         });
     } else {
-        f(true, strptrs, ptr);
+        push_64(ptr, 0, [f, strptrs] (bool success, uintptr_t ptr) mutable {
+            if (!success) {
+                f(false, strptrs, ptr);
+            }
+            f(true, strptrs, ptr);
+        });
     }
 }
 
@@ -716,7 +721,6 @@ void Process::push_strings(uintptr_t ptr, const std::vector<std::string> &strs,
         }
         std::shared_ptr<std::vector<uintptr_t>> persistentPtrs
                 {new std::vector<uintptr_t>(ptrs)};
-        persistentPtrs->push_back(0);
         ptr = ptr & ~((uintptr_t) 0xF);
         push_rev_ptrs(ptr, persistentPtrs->end(), persistentPtrs->begin(), [persistentPtrs, f] (bool success, uintptr_t ptr) mutable {
             f(success, ptr);
