@@ -62,6 +62,7 @@ private:
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
     std::vector<FileDescriptor> fileDescriptors;
+    int32_t euid, egid, uid, gid;
 public:
     Process();
     Process(const Process &) = delete;
@@ -90,6 +91,18 @@ public:
     void resolve_read_page(uintptr_t addr, std::function<void (bool)> func);
     void resolve_read(uintptr_t addr, uintptr_t len, std::function<void (bool)> func);
     FileDescriptor get_file_descriptor(int);
+    int32_t geteuid() {
+        return euid;
+    }
+    int32_t getegid() {
+        return egid;
+    }
+    int32_t getuid() {
+        return uid;
+    }
+    int32_t getgid() {
+        return gid;
+    }
 };
 
 #endif //JEOKERNEL_PROCESS_H

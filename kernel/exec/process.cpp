@@ -64,7 +64,7 @@ MemMapping::~MemMapping() {
     }
 }
 
-Process::Process() : pagetableLow(), pagetableRoots(), mappings(), fileDescriptors() {
+Process::Process() : pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), euid(0), egid(0), uid(0), gid(0) {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());

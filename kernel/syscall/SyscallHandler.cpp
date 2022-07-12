@@ -7,6 +7,10 @@
 #include "SyscallHandler.h"
 #include "Exit.h"
 #include "Write.h"
+#include "Geteuid.h"
+#include "Getegid.h"
+#include "Getuid.h"
+#include "Getgid.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -33,6 +37,10 @@ class SyscallHandlerImpl : public SyscallHandler {
 private:
     Exit exit{*this};
     Write write{*this};
+    Geteuid geteuid{*this};
+    Getegid getegid{*this};
+    Getuid getuid{*this};
+    Getgid getgid{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
