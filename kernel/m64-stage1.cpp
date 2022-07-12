@@ -415,12 +415,21 @@ done_with_mem_extension:
         tss->install_bsp(*gdt);
 
         {
-            auto &userCode = gdt->get_descriptor(3);
             auto &userData = gdt->get_descriptor(4);
-            userCode.set_base(0);
-            userCode.set_limit(0xFFFFFF);
-            userCode.granularity = 0xA;
-            userCode.type = 0xFA;
+            {
+                auto &userCode = gdt->get_descriptor(3);
+                userCode.set_base(0);
+                userCode.set_limit(0xFFFFFF);
+                userCode.granularity = 0xA;
+                userCode.type = 0xFA;
+            }
+            {
+                auto &userCode = gdt->get_descriptor(5);
+                userCode.set_base(0);
+                userCode.set_limit(0xFFFFFF);
+                userCode.granularity = 0xA;
+                userCode.type = 0xFA;
+            }
             userData.set_base(0);
             userData.set_limit(0);
             userData.granularity = 0xA;

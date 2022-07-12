@@ -1413,7 +1413,7 @@ syscall_enter:
     movq %rcx, -0x38(%rsp) // rip
     movq $0x23, %rcx
     movq %rcx, -0x18(%rsp) // ss
-    movq $0x1b, %rcx
+    movq $0x2b, %rcx
     movq %rcx, -0x30(%rsp) // cs
     movq -0x38(%rsp),%rcx
     subq $0x38, %rsp
