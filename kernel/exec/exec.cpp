@@ -4,7 +4,7 @@
 
 #include <iostream>
 #include <exec/exec.h>
-#include <exec/process.h>
+#include <exec/procthread.h>
 #include <kfs/kfiles.h>
 #include "UserElf.h"
 
@@ -27,6 +27,10 @@ void Exec::Run() {
     }
     constexpr uint64_t lowerUserspaceEnd = ((uint64_t) USERSPACE_LOW_END) << (9+9+12);
     constexpr uint64_t upperUserspaceStart = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9+9+9+12);
+    uintptr_t tlsStart{0};
+    uintptr_t tlsMemSize{0};
+    uintptr_t tlsAlign{0};
+    uintptr_t fsBase{0};
     {
         std::vector<std::shared_ptr<ELF64_program_entry>> loads{};
         uintptr_t start = (uintptr_t) ((intptr_t) -1);
@@ -44,6 +48,19 @@ void Exec::Run() {
                     end = pe->p_vaddr + pe->p_memsz;
                 }
             }
+            if (pe->p_type == PHT_TLS) {
+                tlsStart = pe->p_vaddr;
+                tlsMemSize = pe->p_memsz;
+                tlsAlign = pe->p_align;
+            }
+        }
+        fsBase = tlsStart + tlsMemSize;
+        if (tlsAlign != 0) {
+            auto fsBaseOff = fsBase % tlsAlign;
+            if (fsBaseOff != 0) {
+                fsBase += tlsAlign;
+            }
+            fsBase -= fsBaseOff;
         }
         auto startpage = start >> 12;
         auto endpage = end >> 12;
@@ -133,7 +150,7 @@ void Exec::Run() {
         constexpr uint16_t exec = 4;
         constexpr uint16_t zero = 8;
 
-        Process *process = new Process();
+        auto *process = new ProcThread();
         {
             uint32_t index = 0;
             uint32_t start = 0;
@@ -155,9 +172,9 @@ void Exec::Run() {
                         bool success;
                         if ((flags & zero) == 0) {
                             success = process->Map(binary, startpage + start, index - start, offset,
-                                                        (flags & write) != 0, (flags & exec) != 0, true);
+                                                        (flags & write) != 0, (flags & exec) != 0, true, true);
                         } else {
-                            success = process->Map(startpage + start, index - start);
+                            success = process->Map(startpage + start, index - start, true);
                         }
                         if (!success) {
                             std::cerr << "Error: Map failed\n";
@@ -173,9 +190,9 @@ void Exec::Run() {
                 bool success;
                 if ((flags & zero) == 0) {
                     success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0,
-                                                (flags & exec) != 0, true);
+                                                (flags & exec) != 0, true, true);
                 } else {
-                    success = process->Map(startpage + start, index - start);
+                    success = process->Map(startpage + start, index - start, true);
                 }
                 if (!success) {
                     std::cerr << "Error: Map failed\n";
@@ -207,7 +224,7 @@ void Exec::Run() {
             delete process;
             return;
         }
-        if (!process->Map(stackAddr, stackPages)) {
+        if (!process->Map(stackAddr, stackPages, false)) {
             std::cerr << "Error: Unable to allocate stack space (map failed)\n";
             delete process;
             return;
@@ -219,31 +236,31 @@ void Exec::Run() {
         std::vector<std::string> argv{};
         argv.push_back(name);
         auto argc = argv.size();
-        process->push_strings(stackAddr, environ, [process, argv, argc, entrypoint, cmd_name] (bool success, uintptr_t environAddr) {
+        process->push_strings(stackAddr, environ, [process, argv, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t environAddr) {
             if (!success) {
                 std::cerr << "Error: Failed to push environment to stack for new process\n";
                 delete process;
                 return;
             }
-            process->push_strings(environAddr, argv, [process, environAddr, argc, entrypoint, cmd_name] (bool success, uintptr_t argvAddr) {
+            process->push_strings(environAddr, argv, [process, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t argvAddr) {
                 if (!success) {
                     std::cerr << "Error: Failed to push args to stack for new process\n";
                     delete process;
                     return;
                 }
-                process->push_64(argvAddr, environAddr, [process, argvAddr, argc, entrypoint, cmd_name] (bool success, uintptr_t environpAddr) {
+                process->push_64(argvAddr, environAddr, [process, argvAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t environpAddr) {
                     if (!success) {
                         std::cerr << "Error: Failed to push environ ptr to stack for new process\n";
                         delete process;
                         return;
                     }
-                    process->push_64(environpAddr, argvAddr, [process, argc, entrypoint, cmd_name] (bool success, uintptr_t argvpAddr) {
+                    process->push_64(environpAddr, argvAddr, [process, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t argvpAddr) {
                         if (!success) {
                             std::cerr << "Error: Failed to push args ptr to stack for new process\n";
                             delete process;
                             return;
                         }
-                        process->push_64(argvpAddr, argc, [process, entrypoint, cmd_name] (bool success, uintptr_t stackAddr) {
+                        process->push_64(argvpAddr, argc, [process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
                             if (!success) {
                                 std::cerr << "Error: Failed to push args count to stack for new process\n";
                                 delete process;
@@ -255,7 +272,7 @@ void Exec::Run() {
                             auto pid = scheduler->new_task(
                                     entrypoint,
                                     0x18 | 3 /* ring3 / lowest*/,
-                                    0x20 | 3, 0, stackAddr, 0, 0, 0,
+                                    0x20 | 3, fsBase, 0, stackAddr, 0, 0, 0,
                                     0, 0, 0, resources);
                             std::cout << "Started task " << pid << "\n";
                             scheduler->set_name(pid, cmd_name);

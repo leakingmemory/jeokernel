@@ -52,8 +52,8 @@ PagetableRoot::~PagetableRoot() {
 PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std::move(mv.vm)), branches(mv.branches), addr(mv.addr) {
 }
 
-MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool cow)
-: image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), cow(cow), mappings() {}
+MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool cow, bool binaryMapping)
+: image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), cow(cow), binary_mapping(binaryMapping), mappings() {}
 
 MemMapping::~MemMapping() {
     for (const auto &ppage : mappings) {
@@ -424,10 +424,10 @@ uint32_t Process::FindFree(uint32_t pages) {
     if (memoryArea == nullptr) {
         return 0;
     }
-    return memoryArea->start;
+    return memoryArea->end - pages;
 }
 
-bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite) {
+bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
     std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " -> " << image_skip_pages << (write ? " write" : "") << (execute ? " exec" : "") << std::dec << "\n";
     if (write && !copyOnWrite) {
         std::cerr << "Error mapping: Write without COW is not supported\n";
@@ -435,7 +435,7 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
     if (!CheckMapOverlap(pagenum, pages)) {
         return false;
     }
-    mappings.emplace_back(image, pagenum, pages, image_skip_pages, write && copyOnWrite);
+    mappings.emplace_back(image, pagenum, pages, image_skip_pages, write && copyOnWrite, binaryMap);
     for (uint32_t p = 0; p < pages; p++) {
         bool success = Pageentry(pagenum + p, [execute, write] (pageentr &pe) {
             pe.present = 0;
@@ -462,12 +462,12 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
     return true;
 }
 
-bool Process::Map(uint32_t pagenum, uint32_t pages) {
+bool Process::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
     std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " on demand " << std::dec << "\n";
     if (!CheckMapOverlap(pagenum, pages)) {
         return false;
     }
-    mappings.emplace_back(std::shared_ptr<kfile>(), pagenum, pages, 0, false);
+    mappings.emplace_back(std::shared_ptr<kfile>(), pagenum, pages, 0, false, binaryMap);
     for (uint32_t p = 0; p < pages; p++) {
         bool success = Pageentry(pagenum + p, [] (pageentr &pe) {
             pe.present = 0;
@@ -1083,6 +1083,17 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
         return;
     }
     std::cerr << "PID " << current_task.get_id() << ": Page fault at " << std::hex << ip << " addr " << fault_addr << std::dec << "\n";
+    {
+        auto &cpu = current_task.get_cpu_frame();
+        auto &state = current_task.get_cpu_state();
+        std::cerr << std::hex << "ax=" << state.rax << " bx="<<state.rbx << " cx=" << state.rcx << " dx="<< state.rdx << "\n"
+                 << "si=" << state.rsi << " di="<< state.rdi << " bp=" << state.rbp << " sp="<< cpu.rsp << "\n"
+                 << "r8=" << state.r8 << " r9="<< state.r9 << " rA="<< state.r10 <<" rB=" << state.r11 << "\n"
+                 << "rC=" << state.r12 << " rD="<< state.r13 <<" rE="<< state.r14 <<" rF="<< state.r15 << "\n"
+                 << "cs=" << cpu.cs << " ds=" << state.ds << " es=" << state.es << " fs=" << state.fs << " gs="
+                 << state.gs << " ss="<< cpu.ss <<"\n"
+                 << "fsbase=" << state.fsbase << "\n" << std::dec;
+    }
     get_scheduler()->terminate_blocked(&current_task);
 }
 
@@ -1134,4 +1145,112 @@ FileDescriptor Process::get_file_descriptor(int fd) {
         }
     }
     return {};
+}
+
+bool Process::brk(intptr_t delta_addr, uintptr_t &result) {
+    constexpr uint64_t highEnd = ((uint64_t) PMLT4_USERSPACE_HIGH_END) << (9 + 9 + 9 + 12);
+    std::lock_guard lock{mtx};
+    MemMapping *mapping{nullptr};
+    for (auto &m : mappings) {
+        if (!m.binary_mapping) {
+            continue;
+        }
+        if (mapping == nullptr) {
+            mapping = &m;
+            continue;
+        }
+        auto mappingEnd = m.pagenum + m.pages;
+        auto compMappingEnd = mapping->pagenum + mapping->pages;
+        if (mappingEnd > compMappingEnd) {
+            mapping = &m;
+        }
+    }
+    if (mapping == nullptr) {
+        return false;
+    }
+    if (mapping->image) {
+        return false;
+    }
+    uintptr_t addr = mapping->pagenum;
+    addr += mapping->pages;
+    addr = addr << 12;
+    addr += delta_addr;
+    if (addr > highEnd) {
+        return false;
+    }
+    result = addr;
+    if constexpr(USERSPACE_LOW_END != 512 || PMLT4_USERSPACE_HIGH_START != 1) {
+        constexpr uint64_t lowEnd = ((uint64_t) USERSPACE_LOW_END) << (9 + 9 + 12);
+        uintptr_t end = (uintptr_t) mapping->pagenum + mapping->pages;
+        end = end << 12;
+        if (end <= lowEnd && addr > lowEnd) {
+            return false;
+        }
+    }
+    auto page = addr >> 12;
+    if ((addr & (PAGESIZE-1)) != 0) {
+        ++page;
+    }
+    if (mapping->pagenum >= page) {
+        return false;
+    }
+    uintptr_t endpage = (uintptr_t) mapping->pagenum + mapping->pages;
+    if (endpage == page) {
+        return true;
+    }
+    if (endpage < page) {
+        /* extend */
+        if (!CheckMapOverlap(endpage, page - endpage)) {
+            return false;
+        }
+        mapping->pages = page - mapping->pagenum;
+        for (auto p = endpage; p < page; p++) {
+            bool success = Pageentry(p, [] (pageentr &pe) {
+                pe.present = 0;
+                pe.writeable = 1;
+                pe.user_access = 1;
+                pe.write_through = 0;
+                pe.cache_disabled = 0;
+                pe.accessed = 0;
+                pe.dirty = 0;
+                pe.size = 0;
+                pe.global = 0;
+                pe.ignored2 = 0;
+                pe.os_virt_avail = 0;
+                pe.page_ppn = 0;
+                pe.reserved1 = 0;
+                pe.os_virt_start = 0;
+                pe.ignored3 = 0;
+                pe.execution_disabled = 0;
+            });
+            if (!success) {
+                mapping->pages = endpage - mapping->pagenum;
+                return false;
+            }
+        }
+    } else {
+        /* shrink */
+        mapping->pages = page - mapping->pagenum;
+        for (auto p = page; p < endpage; p++) {
+            bool success = Pageentry(p, [] (pageentr &pe) {
+                pe.present = 0;
+            });
+            if (success) {
+                auto iterator = mapping->mappings.begin();
+                while (iterator != mapping->mappings.end()) {
+                    auto &pmap = *iterator;
+                    if (p == pmap.page) {
+                        ppagefree(pmap.phys_page, PAGESIZE);
+                        mapping->mappings.erase(iterator);
+                    } else {
+                        ++iterator;
+                    }
+                }
+            } else {
+                mapping->pages = endpage - mapping->pagenum;
+                return false;
+            }
+        }
+    }
+    return true;
 }

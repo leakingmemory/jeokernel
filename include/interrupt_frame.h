@@ -82,6 +82,7 @@ struct InterruptStackFrame {
     uint16_t es;
     uint16_t fs;
     uint16_t gs;
+    uint64_t fsbase;
     uint64_t r15;
     uint64_t r14;
     uint64_t r13;

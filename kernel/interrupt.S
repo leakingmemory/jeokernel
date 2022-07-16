@@ -17,6 +17,16 @@
    push %r13
    push %r14
    push %r15
+
+   // fsbase
+   xorq %rax, %rax
+   xorq %rdx, %rdx
+   movl $0xC0000100, %ecx
+   rdmsr
+   shlq $32, %rdx
+   orq %rdx, %rax
+   pushq %rax
+
    xor %rax, %rax
    xor %rbx, %rbx
    mov %gs, %ax
@@ -49,6 +59,14 @@
    mov %rax, %rbx
    and $0xFFFF, %rbx
    mov %bx, %gs
+
+   // fsbase
+   popq %rax
+   movl $0xC0000100, %ecx
+   movq %rax, %rdx
+   shrq $32, %rdx
+   wrmsr
+
    pop %r15
    pop %r14
    pop %r13

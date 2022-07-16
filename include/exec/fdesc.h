@@ -9,7 +9,7 @@
 #include <memory>
 #include <functional>
 
-class Process;
+class ProcThread;
 
 class FileDescriptorHandler {
 public:
@@ -36,7 +36,7 @@ public:
             return false;
         }
     }
-    void write(Process *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
+    void write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
 };
 
 #endif //JEOKERNEL_FDESC_H

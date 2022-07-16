@@ -3,12 +3,12 @@
 //
 
 #include <core/scheduler.h>
-#include <exec/process.h>
+#include <exec/procthread.h>
 #include "Getegid.h"
 
 int64_t Getegid::Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    Process *process = current_task->get_resource<Process>();
+    auto *process = current_task->get_resource<ProcThread>();
     return process->getegid();
 }

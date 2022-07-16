@@ -3,14 +3,14 @@
 //
 
 #include <core/scheduler.h>
-#include <exec/process.h>
+#include <exec/procthread.h>
 #include <errno.h>
 #include "Write.h"
 
 int64_t Write::Call(int64_t fd, int64_t ptr, int64_t len, int64_t, SyscallAdditionalParams &additionalParams) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    Process *process = current_task->get_resource<Process>();
+    auto *process = current_task->get_resource<ProcThread>();
     auto desc = process->get_file_descriptor(fd);
     if (!desc.Valid()) {
         return -EBADF;

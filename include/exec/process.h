@@ -49,13 +49,14 @@ private:
     uint32_t pages;
     uint32_t image_skip_pages;
     bool cow;
+    bool binary_mapping;
     std::vector<PhysMapping> mappings;
 public:
-    MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool cow);
+    MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool cow, bool binaryMapping);
     ~MemMapping();
 };
 
-class Process : public task_resource {
+class Process {
 private:
     hw_spinlock mtx;
     std::vector<PagetableRoot> pagetableLow;
@@ -69,27 +70,29 @@ public:
     Process(Process &&) = delete;
     Process &operator =(const Process &) = delete;
     Process &operator =(Process &&) = delete;
+private:
     std::optional<pageentr> Pageentry(uint32_t pagenum);
     bool Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func);
     bool CheckMapOverlap(uint32_t pagenum, uint32_t pages);
-    bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite);
-    bool Map(uint32_t pagenum, uint32_t pages);
-    uint32_t FindFree(uint32_t pages);
-    void task_enter() override;
-    void task_leave() override;
     void activate_pfault_thread();
-    bool page_fault(task &current_task, Interrupt &intr) override;
-    bool exception(task &current_task, const std::string &name, Interrupt &intr) override;
-    uintptr_t push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
     uintptr_t push_string(uintptr_t ptr, const std::string &, const std::function<void (bool,uintptr_t)> &);
     void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
     void push_rev_ptrs(uintptr_t ptr, const std::vector<uintptr_t>::iterator &, const std::vector<uintptr_t>::iterator &, const std::function<void (bool,uintptr_t)> &);
-    void push_strings(uintptr_t ptr, const std::vector<std::string> &, const std::function<void (bool,uintptr_t)> &);
     bool readable(uintptr_t addr);
     bool resolve_page(uintptr_t fault_addr);
     void resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr);
     void resolve_read_page(uintptr_t addr, std::function<void (bool)> func);
+public:
     void resolve_read(uintptr_t addr, uintptr_t len, std::function<void (bool)> func);
+    bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite, bool binaryMap);
+    bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
+    uint32_t FindFree(uint32_t pages);
+    void task_enter();
+    void task_leave();
+    bool page_fault(task &current_task, Interrupt &intr);
+    bool exception(task &current_task, const std::string &name, Interrupt &intr);
+    uintptr_t push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
+    void push_strings(uintptr_t ptr, const std::vector<std::string> &, const std::function<void (bool,uintptr_t)> &);
     FileDescriptor get_file_descriptor(int);
     int32_t geteuid() {
         return euid;
@@ -103,6 +106,7 @@ public:
     int32_t getgid() {
         return gid;
     }
+    bool brk(intptr_t delta_addr, uintptr_t &result);
 };
 
 #endif //JEOKERNEL_PROCESS_H

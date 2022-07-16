@@ -11,6 +11,7 @@
 #include "Getegid.h"
 #include "Getuid.h"
 #include "Getgid.h"
+#include "Brk.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -41,6 +42,7 @@ private:
     Getegid getegid{*this};
     Getuid getuid{*this};
     Getgid getgid{*this};
+    Brk brk{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

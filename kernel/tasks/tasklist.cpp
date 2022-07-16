@@ -267,11 +267,11 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rs
 
     my_resources.push_back(stack_resource);
 
-    return new_task(rip, cs, 0x10, rbp, rsp, rdi, rsi, rdx, rcx, r8, r9, my_resources);
+    return new_task(rip, cs, 0x10, 0, rbp, rsp, rdi, rsi, rdx, rcx, r8, r9, my_resources);
 }
 
 
-uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint16_t ds, uint64_t rbp, uint64_t rsp, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
+uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint16_t ds, uint64_t fsbase, uint64_t rbp, uint64_t rsp, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
                         uint64_t r9, const std::vector<task_resource *> &resources) {
     x86_fpu_state fpusse_state{};
     InterruptStackFrame cpu_state{
@@ -279,6 +279,7 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint16_t ds, uint64_t rbp
         .es = ds,
         .fs = ds,
         .gs = ds,
+        .fsbase = fsbase,
         .r9 = r9,
         .r8 = r8,
         .rsi = rsi,
