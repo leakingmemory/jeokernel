@@ -5,12 +5,15 @@
 #ifndef JEOKERNEL_PROCTHREAD_H
 #define JEOKERNEL_PROCTHREAD_H
 
+#include <sys/types.h>
 #include <exec/process.h>
 
 class ProcThread : public task_resource {
 private:
     std::shared_ptr<Process> process;
     uintptr_t fsBase;
+    uintptr_t tidAddress;
+    uintptr_t robustListHead;
 public:
     ProcThread();
     void resolve_read(uintptr_t addr, uintptr_t len, std::function<void (bool)> func);
@@ -29,8 +32,15 @@ public:
     int32_t getuid();
     int32_t getgid();
     bool brk(intptr_t delta_addr, uintptr_t &result);
+    pid_t getpid();
     void SetFsBase(uintptr_t ptr) {
         fsBase = ptr;
+    }
+    void SetTidAddress(uintptr_t addr) {
+        tidAddress = addr;
+    }
+    void SetRobustListHead(uintptr_t addr) {
+        robustListHead = addr;
     }
 };
 

@@ -59,6 +59,7 @@ public:
 class Process {
 private:
     hw_spinlock mtx;
+    pid_t pid;
     std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
@@ -107,6 +108,9 @@ public:
         return gid;
     }
     bool brk(intptr_t delta_addr, uintptr_t &result);
+    pid_t getpid() {
+        return pid;
+    }
 };
 
 #endif //JEOKERNEL_PROCESS_H

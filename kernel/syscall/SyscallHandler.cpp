@@ -12,6 +12,9 @@
 #include "Getuid.h"
 #include "Getgid.h"
 #include "Brk.h"
+#include "ArchPrctl.h"
+#include "SetTidAddress.h"
+#include "SetRobustList.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -26,6 +29,9 @@ SyscallResult SyscallHandler::Call(Interrupt &intr) {
             uint64_t result = (uint64_t) handler->Call((int64_t) intr.rdi(), (int64_t) intr.rsi(), (int64_t) intr.rdx(), (int64_t) intr.r10(), additionalParams);
             if (result != 0) {
                 intr.get_cpu_state().rax = result;
+            }
+            if (additionalParams.DoModifyCpuState()) {
+                additionalParams.ModifyCpuState(intr);
             }
             return additionalParams.DoContextSwitch() ? SyscallResult::CONTEXT_SWITCH : SyscallResult::FAST_RETURN;
         }
@@ -43,6 +49,9 @@ private:
     Getuid getuid{*this};
     Getgid getgid{*this};
     Brk brk{*this};
+    ArchPrctl archPrctl{*this};
+    SetTidAddress setTidAddress{*this};
+    SetRobustList setRobustList{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

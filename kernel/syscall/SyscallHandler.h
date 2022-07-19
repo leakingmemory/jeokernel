@@ -8,12 +8,15 @@
 #include <cstdint>
 #include <vector>
 
+class Interrupt;
+
 class SyscallAdditionalParams {
 private:
     int64_t param5, param6;
+    std::function<void (Interrupt &)> modifyCpuState;
     bool doContextSwitch;
 public:
-    SyscallAdditionalParams(int64_t param5, int64_t param6) : param5(param5), param6(param6), doContextSwitch(false) {
+    SyscallAdditionalParams(int64_t param5, int64_t param6) : param5(param5), param6(param6), modifyCpuState(), doContextSwitch(false) {
     }
     int64_t Param5() const {
         return param5;
@@ -26,6 +29,19 @@ public:
     }
     void DoContextSwitch(bool doContextSwitch) {
         this->doContextSwitch = doContextSwitch;
+    }
+    bool DoModifyCpuState() const noexcept {
+        if (modifyCpuState) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+    void ModifyCpuState(Interrupt &intr) {
+        modifyCpuState(intr);
+    }
+    void ModifyCpuState(const std::function<void (Interrupt &)> &func) {
+        modifyCpuState = func;
     }
 };
 

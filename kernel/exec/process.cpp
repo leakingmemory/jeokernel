@@ -2,6 +2,7 @@
 // Created by sigsegv on 6/8/22.
 //
 
+#include <sys/types.h>
 #include <iostream>
 #include <exec/process.h>
 #include <pagealloc.h>
@@ -14,6 +15,10 @@
 #include "StdoutDesc.h"
 
 //#define DEBUG_PROCESS_PAGEENTR
+
+static hw_spinlock pidLock{};
+static std::vector<pid_t> pids{};
+static pid_t next = 1;
 
 PagetableRoot::PagetableRoot(uint16_t addr) : physpage(ppagealloc(PAGESIZE)), vm(PAGESIZE), branches((pagetable *) vm.pointer()), addr(addr) {
     vm.page(0).rwmap(physpage);
@@ -64,10 +69,56 @@ MemMapping::~MemMapping() {
     }
 }
 
-Process::Process() : pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), euid(0), egid(0), uid(0), gid(0) {
+static pid_t FindNextPid() {
+    auto numPids = pids.size();
+    uint32_t i = 0;
+    while (i < numPids) {
+        if (next < pids[i]) {
+            pid_t pid = next;
+            ++next;
+            return pid;
+        }
+        if (next == pids[i]) {
+            ++next;
+            if (next < 1) {
+                next = 1;
+                return FindNextPid();
+            }
+        }
+        ++i;
+    }
+    pid_t pid = next;
+    ++next;
+    return pid;
+}
+
+static pid_t AllocPid() {
+    std::lock_guard lock{pidLock};
+    pid_t pid = FindNextPid();
+    auto numPids = pids.size();
+    pids.push_back(0);
+    uint32_t i = 0;
+    while (i < numPids) {
+        if (pid < pids[i]) {
+            uint32_t j = numPids;
+            while (i < j) {
+                --j;
+                pids[j + 1] = pids[j];
+            }
+            pids[i] = pid;
+            return pid;
+        }
+        ++i;
+    }
+    pids[numPids] = pid;
+    return pid;
+}
+
+Process::Process() : pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), euid(0), egid(0), uid(0), gid(0) {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
+    pid = AllocPid();
 }
 
 std::optional<pageentr> Process::Pageentry(uint32_t pagenum) {

@@ -79,6 +79,10 @@ namespace std {
         R operator()(Args... args) {
             return _invoke->invoke(args...);
         }
+
+        explicit operator bool () const noexcept {
+            return _invoke != nullptr;
+        }
     };
 
 }

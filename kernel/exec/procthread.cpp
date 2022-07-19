@@ -4,7 +4,7 @@
 
 #include <exec/procthread.h>
 
-ProcThread::ProcThread() : process(new Process()), fsBase(0) {}
+ProcThread::ProcThread() : process(new Process()), fsBase(0), tidAddress(0), robustListHead(0) {}
 
 void ProcThread::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(bool)> func) {
     process->resolve_read(addr, len, func);
@@ -56,4 +56,8 @@ int32_t ProcThread::getgid() {
 }
 bool ProcThread::brk(intptr_t delta_addr, uintptr_t &result) {
     return process->brk(delta_addr, result);
+}
+
+pid_t ProcThread::getpid() {
+    return process->getpid();
 }
