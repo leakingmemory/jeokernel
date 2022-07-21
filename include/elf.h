@@ -373,6 +373,17 @@ struct ELF64_rela_dyn {
     int64_t addendum;
 };
 
+struct ELF64_auxv {
+    uint64_t type;
+    union {
+        int64_t value;
+        uintptr_t uintptr;
+    };
+};
+
+#define AT_NULL     0
+#define AT_RANDOM   25
+
 class ELF {
 private:
     union {

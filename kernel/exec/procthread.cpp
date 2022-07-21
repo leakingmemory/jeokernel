@@ -33,11 +33,19 @@ bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
 bool ProcThread::exception(task &current_task, const std::string &name, Interrupt &intr) {
     return process->exception(current_task, name, intr);
 }
+
+uintptr_t
+ProcThread::push_data(uintptr_t ptr, const void *data, uintptr_t length, const std::function<void(bool, uintptr_t)> &func) {
+    return process->push_data(ptr, data, length, func);
+}
 uintptr_t ProcThread::push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &func) {
     return process->push_64(ptr, val, func);
 }
-void ProcThread::push_strings(uintptr_t ptr, const std::vector<std::string> &strs, const std::function<void (bool,uintptr_t)> &func) {
-    return process->push_strings(ptr, strs, func);
+
+void ProcThread::push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &begin,
+                              const std::vector<std::string>::iterator &end, const std::vector<uintptr_t> &pointers,
+                              const std::function<void(bool, const std::vector<uintptr_t> &, uintptr_t)> &func) {
+    process->push_strings(ptr, begin, end, pointers, func);
 }
 FileDescriptor ProcThread::get_file_descriptor(int fd) {
     return process->get_file_descriptor(fd);

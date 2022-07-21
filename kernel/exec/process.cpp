@@ -687,6 +687,35 @@ uintptr_t Process::push_64(uintptr_t ptr, uint64_t val, const std::function<void
     return dstptr;
 }
 
+uintptr_t Process::push_data(uintptr_t ptr, const void *data, uintptr_t length, const std::function<void(bool, uintptr_t)> &func) {
+    std::function<void (bool, uintptr_t)> f{func};
+    if (length == 0) {
+        f(true, ptr);
+        return ptr;
+    }
+    uintptr_t dstptr{ptr - length};
+    resolve_read(dstptr, length, [this, dstptr, data, length, f] (bool success) mutable {
+        if (!success) {
+            f(false, 0);
+            return;
+        }
+        auto offset = dstptr & ((uintptr_t) PAGESIZE-1);
+        auto pageaddr = dstptr - offset;
+        auto end = dstptr + length;
+        vmem vm{end - pageaddr};
+        auto firstPage = (pageaddr >> 12);
+        for (int i = 0; i < vm.npages(); i++) {
+            auto pe = Pageentry(firstPage + i);
+            uintptr_t ph{pe->page_ppn};
+            ph = ph << 12;
+            vm.page(i).rwmap(ph);
+        }
+        memcpy((uint8_t *) vm.pointer() + offset, data, length);
+        f(true, dstptr);
+    });
+    return dstptr;
+}
+
 uintptr_t Process::push_string(uintptr_t ptr, const std::string &str, const std::function<void (bool, uintptr_t)> &func) {
     auto length = str.size() + 1;
     uintptr_t dstptr{ptr - length};
@@ -732,51 +761,8 @@ void Process::push_strings(uintptr_t ptr, const std::vector<std::string>::iterat
             push_strings(ptr, b, e, strp, f);
         });
     } else {
-        push_64(ptr, 0, [f, strptrs] (bool success, uintptr_t ptr) mutable {
-            if (!success) {
-                f(false, strptrs, ptr);
-            }
-            f(true, strptrs, ptr);
-        });
+        f(true, strptrs, ptr);
     }
-}
-
-void Process::push_rev_ptrs(uintptr_t ptr, const std::vector<uintptr_t>::iterator &begin,
-                            const std::vector<uintptr_t>::iterator &end,
-                            const std::function<void(bool, uintptr_t)> &func) {
-    std::function<void(bool, uintptr_t)> f{func};
-    if (begin != end) {
-        std::vector<uintptr_t>::iterator b{begin};
-        --b;
-        std::vector<uintptr_t>::iterator e{end};
-        push_64(ptr, *b, [this, b, e, f] (bool success, uintptr_t ptr) mutable {
-            if (!success) {
-                f(false, ptr);
-                return;
-            }
-            push_rev_ptrs(ptr, b, e, f);
-        });
-    } else {
-        f(true, ptr);
-    }
-}
-
-void Process::push_strings(uintptr_t ptr, const std::vector<std::string> &strs,
-                           const std::function<void(bool, uintptr_t)> &func) {
-    std::function<void(bool, uintptr_t)> f{func};
-    std::shared_ptr<std::vector<std::string>> persistent{new std::vector<std::string>(strs)};
-    push_strings(ptr, persistent->begin(), persistent->end(), std::vector<uintptr_t>(), [this, persistent, f] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t ptr) mutable {
-        if (!success) {
-            f(false, ptr);
-            return;
-        }
-        std::shared_ptr<std::vector<uintptr_t>> persistentPtrs
-                {new std::vector<uintptr_t>(ptrs)};
-        ptr = ptr & ~((uintptr_t) 0xF);
-        push_rev_ptrs(ptr, persistentPtrs->end(), persistentPtrs->begin(), [persistentPtrs, f] (bool success, uintptr_t ptr) mutable {
-            f(success, ptr);
-        });
-    });
 }
 
 bool Process::readable(uintptr_t addr) {

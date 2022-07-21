@@ -77,8 +77,6 @@ private:
     bool CheckMapOverlap(uint32_t pagenum, uint32_t pages);
     void activate_pfault_thread();
     uintptr_t push_string(uintptr_t ptr, const std::string &, const std::function<void (bool,uintptr_t)> &);
-    void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
-    void push_rev_ptrs(uintptr_t ptr, const std::vector<uintptr_t>::iterator &, const std::vector<uintptr_t>::iterator &, const std::function<void (bool,uintptr_t)> &);
     bool readable(uintptr_t addr);
     bool resolve_page(uintptr_t fault_addr);
     void resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr);
@@ -92,8 +90,9 @@ public:
     void task_leave();
     bool page_fault(task &current_task, Interrupt &intr);
     bool exception(task &current_task, const std::string &name, Interrupt &intr);
+    uintptr_t push_data(uintptr_t ptr, const void *, uintptr_t length, const std::function<void (bool,uintptr_t)> &);
     uintptr_t push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
-    void push_strings(uintptr_t ptr, const std::vector<std::string> &, const std::function<void (bool,uintptr_t)> &);
+    void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
     FileDescriptor get_file_descriptor(int);
     int32_t geteuid() {
         return euid;
