@@ -20,6 +20,7 @@
 #include "syscall/SyscallHandler.h"
 
 //#define PRINT_HANDLED_CPU_INTR
+//#define SYSCALL_NOT_FOUND_KILL
 
 void Interrupt::print_debug(bool double_fault, bool stack_dump) const {
     get_klogger() << "Interrupt " << _interrupt << " at " << cs() << ":" << rip() << " rflags " << rflags() << " err " << error_code() << "\n"
@@ -351,6 +352,11 @@ extern "C" {
         if (result == SyscallResult::NOT_A_SYSCALL) {
             std::cerr << "Not a valid syscall " << std::hex << syscall << "(" << std::dec << syscall << "):\n";
             interrupt.print_debug(false, false);
+#ifdef SYSCALL_NOT_FOUND_KILL
+            auto *scheduler = get_scheduler();
+            scheduler->user_exit(0xff);
+            result = SyscallResult::CONTEXT_SWITCH;
+#endif
         }
         if (result == SyscallResult::CONTEXT_SWITCH) {
             uint8_t cpu{0};
