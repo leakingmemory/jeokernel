@@ -6,8 +6,16 @@
 
 ProcThread::ProcThread() : process(new Process()), fsBase(0), tidAddress(0), robustListHead(0) {}
 
+phys_t ProcThread::phys_addr(uintptr_t addr) {
+    return process->phys_addr(addr);
+}
+
 void ProcThread::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(bool)> func) {
     process->resolve_read(addr, len, func);
+}
+
+bool ProcThread::resolve_write(uintptr_t addr, uintptr_t len) {
+    return process->resolve_write(addr, len);
 }
 bool ProcThread::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
     return process->Map(image, pagenum, pages, image_skip_pages, write, execute, copyOnWrite, binaryMap);

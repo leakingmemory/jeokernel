@@ -16,7 +16,9 @@ private:
     uintptr_t robustListHead;
 public:
     ProcThread();
+    phys_t phys_addr(uintptr_t addr);
     void resolve_read(uintptr_t addr, uintptr_t len, std::function<void (bool)> func);
+    bool resolve_write(uintptr_t addr, uintptr_t len);;
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     uint32_t FindFree(uint32_t pages);

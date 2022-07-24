@@ -1114,6 +1114,134 @@ bool Process::resolve_page(uintptr_t fault_addr) {
     return false;
 }
 
+ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
+    std::unique_ptr<std::lock_guard<hw_spinlock>> lock{new std::lock_guard(mtx)};
+    constexpr uint64_t highRelocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9 + 12);
+    uint32_t page;
+    if (fault_addr < highRelocationOffset) {
+        constexpr phys_t lowUserpaceMax = ((phys_t) USERSPACE_LOW_END) << (9+9+12);
+        if (fault_addr >= lowUserpaceMax) {
+            std::cerr << "User process page resolve (w): Not within userpace memory limits\n";
+            return ResolveWrite::ERROR;
+        }
+    }
+    {
+        uintptr_t addr{fault_addr};
+        addr = addr >> 12;
+        page = addr;
+    }
+    MemMapping *mapping{nullptr};
+    for (auto &m : mappings) {
+        if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
+            mapping = &m;
+            break;
+        }
+    }
+    if (mapping == nullptr) {
+        std::cerr << "User process page resolve (w): No mapping for page " << std::hex << page << std::dec << "\n";
+        return ResolveWrite::ERROR;
+    }
+    if (!mapping->cow && mapping->image) {
+        std::cerr << "User process page resolve (w): Read only page " << std::hex << page << std::dec << "\n";
+        return ResolveWrite::ERROR;
+    }
+    phys_t physpage = mapping->image_skip_pages + (page - mapping->pagenum);
+    uint16_t rootAddr;
+    vmem vm{PAGESIZE};
+    pageentr *b2;
+    PagetableRoot *root{nullptr};
+    if (fault_addr < highRelocationOffset) {
+        {
+            uint32_t addr{page};
+            addr = addr >> (9+9);
+            rootAddr = addr;
+        }
+        for (auto &r: pagetableLow) {
+            if (r.addr == rootAddr) {
+                root = &r;
+                break;
+            }
+        }
+        if (root == nullptr) {
+            std::cerr << "User process page resolven (w): No low pagetable root for page " << std::hex << page << std::dec << "\n";
+            return ResolveWrite::ERROR;
+        }
+        b2 = &((*(root->branches))[(page >> 9) & 511]);
+        if (b2->present == 0) {
+            std::cerr << "User process page resolve (w): Pagetable directory not present for page " << std::hex << page << std::dec << "\n";
+            return ResolveWrite::ERROR;
+        }
+    } else {
+        {
+            uint32_t addr{page};
+            addr = addr >> (9+9+9);
+            rootAddr = addr;
+        }
+        for (auto &r: pagetableRoots) {
+            if (r.addr == rootAddr) {
+                root = &r;
+                break;
+            }
+        }
+        if (root == nullptr) {
+            std::cerr << "User process page resolve (w): No pagetable root for page " << std::hex << page << std::dec << "\n";
+            return ResolveWrite::ERROR;
+        }
+        auto b1 = (*(root->branches))[(page >> (9+9)) & 511];
+        if (b1.present == 0) {
+            std::cerr << "User process page resolve (w): Pagetable directory not present for page " << std::hex << page << std::dec << "\n";
+            return ResolveWrite::ERROR;
+        }
+        vm.page(0).rmap(b1.page_ppn << 12);
+        vm.reload();
+        b2 = &((*((pagetable *) vm.pointer()))[(page >> 9) & 511]);
+        if (b2->present == 0) {
+            std::cerr << "User process page resolve (w): Pagetable not present for page " << std::hex << page << std::dec << "\n";
+            return ResolveWrite::ERROR;
+        }
+    }
+    vm.page(0).rwmap(b2->page_ppn << 12);
+    vm.reload();
+    auto &b3 = (*((pagetable *) vm.pointer()))[page & 511];
+    if (b3.present == 0) {
+        std::cerr << "User process page resolve (w): Page not present for page " << std::hex << page << std::dec << "\n";
+        return ResolveWrite::ERROR;
+    }
+    if (b3.writeable != 0) {
+        return ResolveWrite::WAS_WRITEABLE;
+    }
+    if (mapping->cow) {
+        for (auto &pagemap : mapping->mappings) {
+            if (page == pagemap.page && pagemap.data) {
+                auto phys = ppagealloc(PAGESIZE);
+                if (phys == 0) {
+                    std::cerr << "Error: Unable to allocate phys page for copy on write\n";
+                    return ResolveWrite::ERROR;
+                }
+                std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+                vmem vm{PAGESIZE * 2};
+                vm.page(0).rwmap(phys);
+                vm.page(1).rmap(pagemap.data.PhysAddr());
+                vm.reload();
+                uint8_t *src = (uint8_t *) vm.pointer();
+                src += PAGESIZE;
+                memcpy(vm.pointer(), src, PAGESIZE);
+                b3.user_access = 1;
+                b3.page_ppn = phys >> 12;
+                b3.writeable = 1;
+                b3.execution_disabled = 1;
+                b3.present = 1;
+                vm.reload();
+                pagemap.data = {};
+                pagemap.phys_page = phys;
+                return ResolveWrite::MADE_WRITEABLE;
+            }
+        }
+    }
+    std::cerr << "User process page resolve (w): Page not mapped for write " << std::hex << page << std::dec << "\n";
+    return ResolveWrite::ERROR;
+}
+
 void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr) {
     if (resolve_page(fault_addr)) {
         current_task.set_blocked(false);
@@ -1140,6 +1268,21 @@ void Process::resolve_read_page(uintptr_t addr, std::function<void(bool)> func) 
     } else {
         func(false);
     }
+}
+
+phys_t Process::phys_addr(uintptr_t addr) {
+    uint64_t vpage{addr >> 12};
+    uint32_t vpagerange{(uint32_t) vpage};
+    if (vpage != vpagerange) {
+        return 0;
+    }
+    auto pe = Pageentry(vpagerange);
+    if (!pe || pe->present == 0) {
+        return 0;
+    }
+    phys_t paddr{pe->page_ppn};
+    paddr = paddr << 12;
+    return paddr;
 }
 
 void Process::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(bool)> func) {
@@ -1173,6 +1316,25 @@ void Process::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(boo
         }
     }});
     activate_pfault_thread();
+}
+
+bool Process::resolve_write(uintptr_t addr, uintptr_t len) {
+    uintptr_t end = addr + len;
+    if (addr == end) {
+        return true;
+    }
+    std::lock_guard lock{pfault_lck};
+    while (true) {
+        auto res = resolve_write_page(addr);
+        if (res != ResolveWrite::WAS_WRITEABLE && res != ResolveWrite::MADE_WRITEABLE) {
+            return false;
+        }
+        addr += 4096;
+        uintptr_t next_addr = addr & ~((uintptr_t) 4095);
+        if (next_addr >= end) {
+            return true;
+        }
+    }
 }
 
 FileDescriptor Process::get_file_descriptor(int fd) {

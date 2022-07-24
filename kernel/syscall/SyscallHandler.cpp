@@ -15,6 +15,7 @@
 #include "ArchPrctl.h"
 #include "SetTidAddress.h"
 #include "SetRobustList.h"
+#include "Uname.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -52,6 +53,7 @@ private:
     ArchPrctl archPrctl{*this};
     SetTidAddress setTidAddress{*this};
     SetRobustList setRobustList{*this};
+    Uname uname{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
