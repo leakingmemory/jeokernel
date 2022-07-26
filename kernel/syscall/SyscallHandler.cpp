@@ -17,6 +17,7 @@
 #include "SetRobustList.h"
 #include "Uname.h"
 #include "Writev.h"
+#include "Mmap.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -56,6 +57,7 @@ private:
     SetRobustList setRobustList{*this};
     Uname uname{*this};
     Writev writev{*this};
+    Mmap mmap{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
