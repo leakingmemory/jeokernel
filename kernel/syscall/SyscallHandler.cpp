@@ -16,6 +16,7 @@
 #include "SetTidAddress.h"
 #include "SetRobustList.h"
 #include "Uname.h"
+#include "Writev.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -54,6 +55,7 @@ private:
     SetTidAddress setTidAddress{*this};
     SetRobustList setRobustList{*this};
     Uname uname{*this};
+    Writev writev{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

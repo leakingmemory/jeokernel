@@ -37,6 +37,7 @@ public:
         }
     }
     void write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
+    void writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void (intptr_t)> func);
 };
 
 #endif //JEOKERNEL_FDESC_H
