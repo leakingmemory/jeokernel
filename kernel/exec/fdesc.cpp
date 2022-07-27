@@ -4,6 +4,7 @@
 
 #include <exec/procthread.h>
 #include <exec/fdesc.h>
+#include <exec/usermem.h>
 #include <errno.h>
 #include <sys/uio.h>
 #include <iostream>
@@ -50,25 +51,9 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
 #endif
     process->resolve_read(usersp_iov_ptr, sizeof(iovec), [process, handler, usersp_iov_ptr, iovcnt, state, func] (bool success) mutable {
         if (success) {
-            auto iov_offset = usersp_iov_ptr & (PAGESIZE-1);
-            auto iov_base = usersp_iov_ptr - iov_offset;
             auto iov_len = sizeof(iovec) * iovcnt;
-#ifdef WRITEV_DEBUG
-            std::cout << "writev: map iovs base=" << std::hex << iov_base << " off=" << iov_offset
-                      << " len=" << iov_len << std::dec << "\n";
-#endif
-            std::shared_ptr<vmem> vm{new vmem(iov_len + iov_offset)};
-            for (int i = 0; i < vm->npages(); i++) {
-                auto phys = process->phys_addr(iov_base);
-                if (phys == 0) {
-                    func(-EFAULT);
-                    return;
-                }
-                vm->page(i).rmap(phys);
-                iov_base += PAGESIZE;
-            }
-            vm->reload();
-            iovec *iov = (iovec *) (void *) ((uintptr_t) vm->pointer() + iov_offset);
+            UserMemory umem{*process, usersp_iov_ptr, iov_len};
+            iovec *iov = (iovec *) umem.Pointer();
             for (int i = 0; i < iovcnt; i++) {
 #ifdef WRITEV_DEBUG
                 std::cout << "writev: iov: 0x" << std::hex << (uintptr_t) iov[i].iov_base << std::dec
@@ -90,7 +75,7 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
                 if (iov[i].iov_len == 0) {
                     continue;
                 }
-                process->resolve_read((uintptr_t) iov[i].iov_base, iov[i].iov_len, [handler, process, vm, iov, iovcnt, i, state, func] (bool success) mutable {
+                process->resolve_read((uintptr_t) iov[i].iov_base, iov[i].iov_len, [handler, process, umem, iov, iovcnt, i, state, func] (bool success) mutable {
                     std::unique_lock lock{state->lock};
                     if (state->failed) {
                         return;
