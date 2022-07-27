@@ -57,8 +57,8 @@ PagetableRoot::~PagetableRoot() {
 PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std::move(mv.vm)), branches(mv.branches), addr(mv.addr) {
 }
 
-MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool cow, bool binaryMapping)
-: image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), cow(cow), binary_mapping(binaryMapping), mappings() {}
+MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping)
+: image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), load(load), cow(cow), binary_mapping(binaryMapping), mappings() {}
 
 MemMapping::~MemMapping() {
     for (const auto &ppage : mappings) {
@@ -478,7 +478,7 @@ uint32_t Process::FindFree(uint32_t pages) {
     return memoryArea->end - pages;
 }
 
-bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
+bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
     std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " -> " << image_skip_pages << (write ? " write" : "") << (execute ? " exec" : "") << std::dec << "\n";
     if (write && !copyOnWrite) {
         std::cerr << "Error mapping: Write without COW is not supported\n";
@@ -486,7 +486,7 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
     if (!CheckMapOverlap(pagenum, pages)) {
         return false;
     }
-    mappings.emplace_back(image, pagenum, pages, image_skip_pages, write && copyOnWrite, binaryMap);
+    mappings.emplace_back(image, pagenum, pages, image_skip_pages, load, write && copyOnWrite, binaryMap);
     for (uint32_t p = 0; p < pages; p++) {
         bool success = Pageentry(pagenum + p, [execute, write] (pageentr &pe) {
             pe.present = 0;
@@ -518,7 +518,7 @@ bool Process::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
     if (!CheckMapOverlap(pagenum, pages)) {
         return false;
     }
-    mappings.emplace_back(std::shared_ptr<kfile>(), pagenum, pages, 0, false, binaryMap);
+    mappings.emplace_back(std::shared_ptr<kfile>(), pagenum, pages, 0, 0, false, binaryMap);
     for (uint32_t p = 0; p < pages; p++) {
         bool success = Pageentry(pagenum + p, [] (pageentr &pe) {
             pe.present = 0;
@@ -950,8 +950,28 @@ bool Process::resolve_page(uintptr_t fault_addr) {
         if (image) {
             loaded_page = image->GetPage(physpage);
             phys_page = loaded_page.PhysAddr();
+            if (mapping->load != 0) {
+                vmem vm{PAGESIZE*2};
+                vm.page(0).rmap(phys_page);
+                phys_page = ppagealloc(PAGESIZE);
+                if (phys_page != 0) {
+                    vm.page(1).rwmap(phys_page);
+                    vm.reload();
+                    memcpy((void *) ((uintptr_t) vm.pointer() + PAGESIZE), vm.pointer(), PAGESIZE);
+                    bzero((void *) ((uintptr_t) vm.pointer() + PAGESIZE + mapping->load), PAGESIZE - mapping->load);
+                    loaded_page = {};
+                } else {
+                    loaded_page = {};
+                }
+            }
         } else {
             phys_page = ppagealloc(PAGESIZE);
+            if (phys_page != 0) {
+                vmem vm{PAGESIZE};
+                vm.page(0).rwmap(phys_page);
+                vm.reload();
+                bzero(vm.pointer(), PAGESIZE);
+            }
         }
         if (phys_page == 0) {
             std::cerr << "User process page resolve: Failed to allocate phys page\n";
@@ -1080,6 +1100,9 @@ bool Process::resolve_page(uintptr_t fault_addr) {
             b3.page_ppn = phys_page >> 12;
             b3.present = 1;
             b3.user_access = 1;
+            if (b3.execution_disabled == 1 && !loaded_page && mapping->cow) {
+                b3.writeable = 1;
+            }
             reload_pagetables();
         }
         return true;

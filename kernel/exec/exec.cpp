@@ -14,6 +14,7 @@
 
 struct exec_pageinfo {
     uint32_t filep;
+    uint16_t load;
     bool write;
     bool exec;
 };
@@ -77,7 +78,7 @@ void Exec::Run() {
         pages.reserve(endpage - startpage);
         constexpr uint32_t doNotLoad = -1;
         for (auto i = startpage; i < endpage; i++) {
-            pages.push_back({.filep = doNotLoad, .write = false, .exec = false});
+            pages.push_back({.filep = doNotLoad, .load = 0, .write = false, .exec = false});
         }
         for (auto &pe : loads) {
             auto vpageaddr = pe->p_vaddr >> 12;
@@ -99,17 +100,17 @@ void Exec::Run() {
                 std::cerr << "Warning: Less filesize than memsize "<<pe->p_filesz << "<" << pe->p_memsz
                 << " may not be correctly implemented\n";
                 pvendaddr = pe->p_vaddr + pe->p_filesz;
-                if ((pvendaddr & (PAGESIZE - 1)) == 0) {
-                    pvendaddr = pvendaddr >> 12;
-                } else {
-                    pvendaddr = (pvendaddr >> 12) + 1;
-                }
             }
             for (auto i = vpageaddr; i < vpageendaddr; i++) {
                 auto rel = i - vpageaddr;
                 auto &page = pages[i - startpage];
-                if (i < pvendaddr) {
+                uintptr_t addr{i};
+                addr = addr << 12;
+                if (addr < pvendaddr) {
                     page.filep = ppageaddr + rel;
+                    if ((pvendaddr - addr) < PAGESIZE) {
+                        page.load = pvendaddr - addr;
+                    }
                 } else {
                     page.filep = doNotLoad;
                 }
@@ -156,6 +157,7 @@ void Exec::Run() {
             uint32_t start = 0;
             uint32_t flags = none;
             uint32_t offset = 0;
+            uint16_t load = 0;
             for (auto &page: pages) {
                 uint32_t currentFlags = read;
                 if (page.write) {
@@ -167,11 +169,14 @@ void Exec::Run() {
                 if (page.filep == doNotLoad) {
                     currentFlags |= zero;
                 }
-                if (currentFlags != flags || (page.filep != doNotLoad && page.filep != (offset + (index - start)))) {
+                if (currentFlags != flags || load != 0 || page.load != 0 || (page.filep != doNotLoad && page.filep != (offset + (index - start)))) {
                     if (flags != none) {
+                        if (load != 0 && (index - start) != 1) {
+                            wild_panic("Invalid load!=0 && len>1");
+                        }
                         bool success;
                         if ((flags & zero) == 0) {
-                            success = process->Map(binary, startpage + start, index - start, offset,
+                            success = process->Map(binary, startpage + start, index - start, offset, load,
                                                         (flags & write) != 0, (flags & exec) != 0, true, true);
                         } else {
                             success = process->Map(startpage + start, index - start, true);
@@ -184,12 +189,16 @@ void Exec::Run() {
                     flags = currentFlags;
                     offset = page.filep;
                 }
+                load = page.load;
                 ++index;
             }
             if (flags != none) {
                 bool success;
                 if ((flags & zero) == 0) {
-                    success = process->Map(binary, startpage + start, index - start, offset, (flags & write) != 0,
+                    if (load != 0 && (index - start) != 1) {
+                        wild_panic("Invalid load!=0 && len>1");
+                    }
+                    success = process->Map(binary, startpage + start, index - start, offset, load, (flags & write) != 0,
                                                 (flags & exec) != 0, true, true);
                 } else {
                     success = process->Map(startpage + start, index - start, true);

@@ -17,8 +17,8 @@ void ProcThread::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(
 bool ProcThread::resolve_write(uintptr_t addr, uintptr_t len) {
     return process->resolve_write(addr, len);
 }
-bool ProcThread::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
-    return process->Map(image, pagenum, pages, image_skip_pages, write, execute, copyOnWrite, binaryMap);
+bool ProcThread::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
+    return process->Map(image, pagenum, pages, image_skip_pages, load, write, execute, copyOnWrite, binaryMap);
 }
 bool ProcThread::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
     return process->Map(pagenum, pages, binaryMap);
