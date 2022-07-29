@@ -77,3 +77,7 @@ bool ProcThread::brk(intptr_t delta_addr, uintptr_t &result) {
 pid_t ProcThread::getpid() {
     return process->getpid();
 }
+
+int ProcThread::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize) {
+    return process->sigprocmask(how, set, oldset, sigsetsize);
+}

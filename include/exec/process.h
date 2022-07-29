@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <mutex>
+#include <signal.h>
 #include <pagetable.h>
 #include <core/vmem.h>
 #include <pagealloc.h>
@@ -64,6 +65,7 @@ public:
 class Process {
 private:
     hw_spinlock mtx;
+    sigset_t sigmask;
     pid_t pid;
     std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
@@ -118,6 +120,7 @@ public:
     pid_t getpid() {
         return pid;
     }
+    int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
 };
 
 #endif //JEOKERNEL_PROCESS_H

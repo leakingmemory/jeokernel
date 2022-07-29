@@ -5,13 +5,20 @@
 #ifndef JEOKERNEL_SIGNAL_H
 #define JEOKERNEL_SIGNAL_H
 
+#include <cstdint>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*
- * Stub, just to have acpica compile
- */
+typedef struct {
+    typedef uint32_t sigset_val_t;
+    sigset_val_t val[1024 / (8*sizeof(sigset_val_t))];
+} sigset_t;
+
+#define SIG_BLOCK   0
+#define SIG_UNBLOCK 1
+#define SIG_SETMASK 2
 
 typedef void (*sighandler_t)(int);
 

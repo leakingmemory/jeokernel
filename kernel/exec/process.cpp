@@ -9,6 +9,7 @@
 #include <strings.h>
 #include <mutex>
 #include <thread>
+#include <errno.h>
 #include <kfs/kfiles.h>
 #include "concurrency/raw_semaphore.h"
 #include "StdinDesc.h"
@@ -114,7 +115,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process() : pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), euid(0), egid(0), uid(0), gid(0) {
+Process::Process() : sigmask(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), euid(0), egid(0), uid(0), gid(0) {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -1475,4 +1476,43 @@ bool Process::brk(intptr_t delta_addr, uintptr_t &result) {
         }
     }
     return true;
+}
+
+int Process::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize) {
+    if (sigsetsize < 0 || sigsetsize > sizeof(sigmask)) {
+        return -EINVAL;
+    }
+    if (how != SIG_BLOCK && how != SIG_UNBLOCK && how != SIG_SETMASK) {
+        return -EINVAL;
+    }
+    std::lock_guard lock{mtx};
+    if (oldset != nullptr) {
+        memcpy(oldset, &sigmask, sigsetsize);
+    }
+    if (set != nullptr) {
+        switch (how) {
+            case SIG_BLOCK: {
+                sigset_t tmp{};
+                memcpy(&tmp, set, sigsetsize);
+                for (size_t i = 0; i < (sizeof(tmp) / sizeof(tmp.val[0])); i++) {
+                    sigmask.val[i] |= tmp.val[i];
+                }
+            }
+                break;
+            case SIG_UNBLOCK: {
+                sigset_t tmp{};
+                memcpy(&tmp, set, sigsetsize);
+                for (size_t i = 0; i < (sizeof(tmp) / sizeof(tmp.val[0])); i++) {
+                    sigmask.val[i] &= ~(tmp.val[i]);
+                }
+            }
+                break;
+            case SIG_SETMASK:
+                memcpy(&sigmask, set, sigsetsize);
+                break;
+            default:
+                return -EINVAL;
+        }
+    }
+    return 0;
 }

@@ -7,6 +7,9 @@
 #include <exec/procthread.h>
 
 UserMemory::UserMemory(ProcThread &proc, uintptr_t uptr, uintptr_t len, bool write) : vm(), valid(false) {
+    if (uptr == 0) {
+        return;
+    }
     offset = uptr & (PAGESIZE-1);
     auto base = uptr - offset;
     vm = std::make_shared<vmem>(len + offset);
