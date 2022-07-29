@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <exec/procthread.h>
+#include <core/uname_info.h>
 #include <errno.h>
 #include "Uname.h"
 
@@ -58,19 +59,28 @@ int64_t Uname::Call(int64_t utsnameptr, int64_t, int64_t, int64_t, SyscallAdditi
             }
             vm.reload();
             utsname *utsn = (utsname *) (void *) (((uint8_t *) vm.pointer()) + offset);
-            std::string sysname = "JEOKernel";
+            std::string sysname = "Linux";
             std::string nodename = "local";
-            std::string release = "0.1";
+            std::string release{};
             std::string version = "0.1";
-            std::string machine = "x86_64";
+            std::string machine{};
+            {
+                uname_info info = get_uname_info();
+                machine = info.arch;
+                release.append(info.linux_level);
+                release.append("-");
+                release.append(info.variant);
+                release.append("-");
+                release.append(machine);
+            }
             std::string domainname = "dom";
             memset(utsn, 0, sizeof(*utsn));
             memcpy(utsn->sysname, sysname.data(), capLen(sysname));
-            memcpy(utsn->nodename, sysname.data(), capLen(nodename));
-            memcpy(utsn->release, sysname.data(), capLen(release));
-            memcpy(utsn->version, sysname.data(), capLen(version));
-            memcpy(utsn->machine, sysname.data(), capLen(machine));
-            memcpy(utsn->domainname, sysname.data(), capLen(domainname));
+            memcpy(utsn->nodename, nodename.data(), capLen(nodename));
+            memcpy(utsn->release, release.data(), capLen(release));
+            memcpy(utsn->version, version.data(), capLen(version));
+            memcpy(utsn->machine, machine.data(), capLen(machine));
+            memcpy(utsn->domainname, domainname.data(), capLen(domainname));
             result = 0;
         }
 done_uname:
