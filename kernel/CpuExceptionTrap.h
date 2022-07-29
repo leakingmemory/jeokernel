@@ -21,7 +21,7 @@ public:
     CpuExceptionTrap &operator = (CpuExceptionTrap &) = delete;
 
     bool handle(bool errorCode) {
-        if (errorCode ? (interrupt.error_code() & 4) != 0 : (interrupt.cs() & 3) == 3) {
+        if ((interrupt.cs() & 3) == 3) {
             auto *scheduler = get_scheduler();
             std::string name{fault_text};
             if (scheduler->exception(name, interrupt)) {
