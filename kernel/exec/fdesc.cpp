@@ -53,6 +53,10 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
         if (success) {
             auto iov_len = sizeof(iovec) * iovcnt;
             UserMemory umem{*process, usersp_iov_ptr, iov_len};
+            if (!umem) {
+                func(-EFAULT);
+                return;
+            }
             iovec *iov = (iovec *) umem.Pointer();
             for (int i = 0; i < iovcnt; i++) {
 #ifdef WRITEV_DEBUG
