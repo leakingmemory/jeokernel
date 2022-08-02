@@ -37,6 +37,8 @@ public:
     bool brk(intptr_t delta_addr, uintptr_t &result);
     pid_t getpid();
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
+    int setrlimit(int resource, const rlimit &lim);
+    int getrlimit(int resource, rlimit &);
     void SetFsBase(uintptr_t ptr) {
         fsBase = ptr;
     }

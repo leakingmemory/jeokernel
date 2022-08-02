@@ -115,7 +115,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process() : sigmask(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), euid(0), egid(0), uid(0), gid(0) {
+Process::Process() : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), euid(0), egid(0), uid(0), gid(0) {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -1513,6 +1513,118 @@ int Process::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t 
             default:
                 return -EINVAL;
         }
+    }
+    return 0;
+}
+
+int Process::setrlimit(rlimit &lim, const rlimit &val) {
+    if (val.rlim_max > lim.rlim_max || val.rlim_cur > lim.rlim_max) {
+        return -EPERM;
+    }
+    if (val.rlim_max == rlim_INFINITY && lim.rlim_max != rlim_INFINITY) {
+        return -EPERM;
+    }
+    if (val.rlim_cur == rlim_INFINITY && lim.rlim_max != rlim_INFINITY) {
+        return -EPERM;
+    }
+    lim = val;
+    return 0;
+}
+
+int Process::setrlimit(int resource, const rlimit &lim) {
+    std::lock_guard lock{mtx};
+    switch (resource) {
+        case RLIMIT_CPU:
+            return setrlimit(rlimits.Cpu, lim);
+        case RLIMIT_FSIZE:
+            return setrlimit(rlimits.FileSize, lim);
+        case RLIMIT_DATA:
+            return setrlimit(rlimits.Data, lim);
+        case RLIMIT_STACK:
+            return setrlimit(rlimits.Stack, lim);
+        case RLIMIT_CORE:
+            return setrlimit(rlimits.CoreSize, lim);
+        case RLIMIT_RSS:
+            return setrlimit(rlimits.Rss, lim);
+        case RLIMIT_NPROC:
+            return setrlimit(rlimits.Nproc, lim);
+        case RLIMIT_NOFILE:
+            return setrlimit(rlimits.Nofile, lim);
+        case RLIMIT_MEMLOCK:
+            return setrlimit(rlimits.Memlocks, lim);
+        case RLIMIT_AS:
+            return setrlimit(rlimits.AddressSpace, lim);
+        case RLIMIT_LOCKS:
+            return setrlimit(rlimits.Locks, lim);
+        case RLIMIT_SIGPENDING:
+            return setrlimit(rlimits.Sigpending, lim);
+        case RLIMIT_MSGQUEUE:
+            return setrlimit(rlimits.Msgqueue, lim);
+        case RLIMIT_NICE:
+            return setrlimit(rlimits.Nice, lim);
+        case RLIMIT_RTPRIO:
+            return setrlimit(rlimits.Rtprio, lim);
+        case RLIMIT_RTTIME:
+            return setrlimit(rlimits.Rttime, lim);
+        default:
+            return -EINVAL;
+    }
+    return -EINVAL;
+}
+
+int Process::getrlimit(int resource, rlimit &result) {
+    std::lock_guard lock{mtx};
+    switch (resource) {
+        case RLIMIT_CPU:
+            result = rlimits.Cpu;
+            break;
+        case RLIMIT_FSIZE:
+            result = rlimits.FileSize;
+            break;
+        case RLIMIT_DATA:
+            result = rlimits.Data;
+            break;
+        case RLIMIT_STACK:
+            result = rlimits.Stack;
+            break;
+        case RLIMIT_CORE:
+            result = rlimits.CoreSize;
+            break;
+        case RLIMIT_RSS:
+            result = rlimits.Rss;
+            break;
+        case RLIMIT_NPROC:
+            result = rlimits.Nproc;
+            break;
+        case RLIMIT_NOFILE:
+            result = rlimits.Nofile;
+            break;
+        case RLIMIT_MEMLOCK:
+            result = rlimits.Memlocks;
+            break;
+        case RLIMIT_AS:
+            result = rlimits.AddressSpace;
+            break;
+        case RLIMIT_LOCKS:
+            result = rlimits.Locks;
+            break;
+        case RLIMIT_SIGPENDING:
+            result = rlimits.Sigpending;
+            break;
+        case RLIMIT_MSGQUEUE:
+            result = rlimits.Msgqueue;
+            break;
+        case RLIMIT_NICE:
+            result = rlimits.Nice;
+            break;
+        case RLIMIT_RTPRIO:
+            result = rlimits.Rtprio;
+            break;
+        case RLIMIT_RTTIME:
+            result = rlimits.Rttime;
+            break;
+        default:
+            return -EINVAL;
     }
     return 0;
 }

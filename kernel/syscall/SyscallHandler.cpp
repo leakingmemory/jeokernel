@@ -19,6 +19,7 @@
 #include "Writev.h"
 #include "Mmap.h"
 #include "Sigprocmask.h"
+#include "PrLimit64.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -60,6 +61,7 @@ private:
     Writev writev{*this};
     Mmap mmap{*this};
     Sigprocmask sigprocmask{*this};
+    PrLimit64 prLimit64{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

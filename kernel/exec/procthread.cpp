@@ -81,3 +81,11 @@ pid_t ProcThread::getpid() {
 int ProcThread::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize) {
     return process->sigprocmask(how, set, oldset, sigsetsize);
 }
+
+int ProcThread::setrlimit(int resource, const rlimit &lim) {
+    return process->setrlimit(resource, lim);
+}
+
+int ProcThread::getrlimit(int resource, rlimit &lim) {
+    return process->getrlimit(resource, lim);
+}

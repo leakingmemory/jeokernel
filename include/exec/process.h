@@ -15,6 +15,7 @@
 #include <core/scheduler.h>
 #include <kfs/filepage_data.h>
 #include <exec/fdesc.h>
+#include <sys/resource.h>
 
 #define PAGESIZE 4096
 
@@ -62,10 +63,49 @@ public:
     ~MemMapping();
 };
 
+constexpr rlim_t rlim_INFINITY = -1;
+
+constexpr rlim_t rlim_AS = (64ULL*1024ULL*1024ULL*1024ULL);
+constexpr rlim_t rlim_CORE = 1*1024*1024*1024;
+constexpr rlim_t rlim_CPU = rlim_INFINITY;
+constexpr rlim_t rlim_DATA = rlim_AS;
+constexpr rlim_t rlim_FSIZE = rlim_INFINITY;
+constexpr rlim_t rlim_LOCKS = 65536;
+constexpr rlim_t rlim_MEMLOCK = (64ULL*1024ULL*1024ULL*1024ULL);
+constexpr rlim_t rlim_MSGQUEUE = 32768;
+constexpr rlim_t rlim_NICE = 40;
+constexpr rlim_t rlim_NOFILE = 32768;
+constexpr rlim_t rlim_RSS = 64ULL*1024ULL*1024ULL*1024ULL;
+constexpr rlim_t rlim_RTPRIO = 99;
+constexpr rlim_t rlim_RTTIME = 60*1000000;
+constexpr rlim_t rlim_SIGPENDING = 512;
+constexpr rlim_t rlim_STACK = 16*1024*1024;
+constexpr rlim_t rlim_NPROC = 32768;
+
+struct RLimits {
+    rlimit AddressSpace{.rlim_cur = rlim_AS, .rlim_max = rlim_AS};
+    rlimit CoreSize{.rlim_cur = rlim_CORE, .rlim_max = rlim_CORE};
+    rlimit Cpu{.rlim_cur = rlim_CPU, .rlim_max = rlim_CPU};
+    rlimit Data{.rlim_cur = rlim_DATA, .rlim_max = rlim_DATA};
+    rlimit FileSize{.rlim_cur = rlim_FSIZE, .rlim_max = rlim_FSIZE};
+    rlimit Locks{.rlim_cur = rlim_LOCKS, .rlim_max = rlim_LOCKS};
+    rlimit Memlocks{.rlim_cur = rlim_MEMLOCK, .rlim_max = rlim_MEMLOCK};
+    rlimit Msgqueue{.rlim_cur = rlim_MSGQUEUE, .rlim_max = rlim_MSGQUEUE};
+    rlimit Nice{.rlim_cur = rlim_NICE, .rlim_max = rlim_NICE};
+    rlimit Nofile{.rlim_cur = rlim_NOFILE, .rlim_max = rlim_NOFILE};
+    rlimit Rss{.rlim_cur = rlim_RSS, .rlim_max = rlim_RSS};
+    rlimit Rtprio{.rlim_cur = rlim_RTPRIO, .rlim_max = rlim_RTPRIO};
+    rlimit Rttime{.rlim_cur = rlim_RTTIME, .rlim_max = rlim_RTTIME};
+    rlimit Sigpending{.rlim_cur = rlim_SIGPENDING, .rlim_max = rlim_SIGPENDING};
+    rlimit Stack{.rlim_cur = rlim_STACK, .rlim_max = rlim_STACK};
+    rlimit Nproc{.rlim_cur = rlim_NPROC, .rlim_max = rlim_NPROC};
+};
+
 class Process {
 private:
     hw_spinlock mtx;
     sigset_t sigmask;
+    RLimits rlimits;
     pid_t pid;
     std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
@@ -121,6 +161,11 @@ public:
         return pid;
     }
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
+private:
+    int setrlimit(rlimit &lim, const rlimit &val);
+public:
+    int setrlimit(int resource, const rlimit &lim);
+    int getrlimit(int resource, rlimit &);
 };
 
 #endif //JEOKERNEL_PROCESS_H
