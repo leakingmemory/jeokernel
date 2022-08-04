@@ -1309,6 +1309,68 @@ phys_t Process::phys_addr(uintptr_t addr) {
     return paddr;
 }
 
+void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::function<void(bool, size_t)> func) {
+    auto len = 0;
+    while (readable(addr)) {
+        auto page = addr >> 12;
+        auto pageaddr = page << 12;
+        auto offset = addr - pageaddr;
+        auto remaining = PAGESIZE - offset;
+        auto ppageaddr = phys_addr(pageaddr);
+        if (ppageaddr == 0) {
+            func(false, 0);
+            return;
+        }
+        vmem vm{PAGESIZE};
+        vm.page(0).rmap(ppageaddr);
+        vm.reload();
+        const char *str = (const char *) vm.pointer();
+        str += offset;
+        int i = 0;
+        while (i < remaining) {
+            if (*str == 0) {
+                func(true, len + add_len);
+                return;
+            }
+            ++str;
+            ++i;
+            ++len;
+        }
+        addr += remaining;
+    }
+    std::lock_guard lock{pfault_lck};
+    faults.push_back({.pfaultTask = nullptr, .process = this, .ip = 0, .address = addr, .func = [this, addr, func, len, add_len] (bool success) mutable {
+        if (!success) {
+            func(false, 0);
+        } else {
+            auto paddr = phys_addr(addr);
+            if (paddr == 0) {
+                func(false, 0);
+                return;
+            }
+            vmem vm{PAGESIZE};
+            vm.page(0).rmap(paddr);
+            vm.reload();
+            const char *str = (const char *) vm.pointer();
+            for (int i = 0; i < PAGESIZE; i++) {
+                if (*str == 0) {
+                    func(true, len + add_len);
+                    return;
+                }
+                ++len;
+                ++str;
+            }
+            addr += 4096;
+            resolve_read_nullterm(addr, len + add_len, func);
+        }
+    }});
+    activate_pfault_thread();
+}
+
+void Process::resolve_read_nullterm(uintptr_t addr, std::function<void(bool, size_t)> func) {
+    resolve_read_nullterm(addr, 0, func);
+}
+
 void Process::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(bool)> func) {
     uintptr_t end = addr + len;
     if (addr == end) {

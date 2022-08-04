@@ -10,6 +10,10 @@ phys_t ProcThread::phys_addr(uintptr_t addr) {
     return process->phys_addr(addr);
 }
 
+void ProcThread::resolve_read_nullterm(uintptr_t addr, std::function<void(bool, size_t)> func) {
+    process->resolve_read_nullterm(addr, func);
+}
+
 void ProcThread::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(bool)> func) {
     process->resolve_read(addr, len, func);
 }
