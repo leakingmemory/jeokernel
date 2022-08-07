@@ -11,7 +11,14 @@
 extern "C" {
 #endif
 
-    typedef uint64_t time_t;
+    typedef int64_t time_t;
+
+    struct timespec {
+        time_t tv_sec;
+        long int tv_nsec;
+    };
+
+    int clock_gettime(int which, struct timespec *);
 
     time_t time(time_t *tloc);
 

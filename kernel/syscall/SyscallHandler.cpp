@@ -22,6 +22,7 @@
 #include "PrLimit64.h"
 #include "Readlink.h"
 #include "Getrandom.h"
+#include "ClockGettime.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -66,6 +67,7 @@ private:
     PrLimit64 prLimit64{*this};
     Readlink readlink{*this};
     Getrandom getrandom{*this};
+    ClockGettime clockGettime{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
