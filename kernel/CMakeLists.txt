@@ -33,6 +33,7 @@ add_subdirectory(exceptionhandling)
 add_subdirectory(kfs)
 add_subdirectory(exec)
 add_subdirectory(syscall)
+add_subdirectory(sha2)
 
 add_library(bootstrap bootstrap.S)
 
@@ -68,3 +69,4 @@ target_link_libraries(kernel PRIVATE exceptionhandling)
 target_link_libraries(kernel PRIVATE kfs)
 target_link_libraries(kernel PRIVATE exec)
 target_link_libraries(kernel PRIVATE syscall)
+target_link_libraries(kernel PRIVATE sha2)
