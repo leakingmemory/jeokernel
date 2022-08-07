@@ -34,6 +34,7 @@ add_subdirectory(kfs)
 add_subdirectory(exec)
 add_subdirectory(syscall)
 add_subdirectory(sha2)
+add_subdirectory(random)
 
 add_library(bootstrap bootstrap.S)
 
@@ -70,3 +71,4 @@ target_link_libraries(kernel PRIVATE kfs)
 target_link_libraries(kernel PRIVATE exec)
 target_link_libraries(kernel PRIVATE syscall)
 target_link_libraries(kernel PRIVATE sha2)
+target_link_libraries(kernel PRIVATE random)

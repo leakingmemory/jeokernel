@@ -11,6 +11,7 @@
 class sha2alg {
 public:
     typedef uint32_t round_constants_type[64];
+    typedef uint8_t chunk_type[64];
     typedef uint8_t result_type[64];
     typedef uint32_t hash_values_type[8];
 private:
@@ -26,7 +27,7 @@ private:
     void Digest(const uint32_t data[16]);
 public:
     void Consume(const uint32_t data[16]);
-    void Consume(const uint8_t data[64]) {
+    void Consume(const chunk_type data) {
         const uint32_t *d = (const uint32_t *) &(data[0]);
         Consume(d);
     }

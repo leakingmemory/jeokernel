@@ -5,10 +5,6 @@
 #include <cstdio>
 
 extern "C" {
-    void sha2alg_print(const char *str) {
-        printf("%s", str);
-    }
-
     int sha2alg_test();
 }
 
