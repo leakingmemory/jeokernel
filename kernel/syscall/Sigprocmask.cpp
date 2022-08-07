@@ -18,7 +18,7 @@ int64_t Sigprocmask::Call(int64_t how, int64_t uptrset, int64_t uptroldset, int6
         int64_t result{0};
         {
             UserMemory uptrset_mem{*process, (uintptr_t) uptrset, (uintptr_t) sigsetsize};
-            UserMemory uptroldset_mem{*process, (uintptr_t) uptroldset, (uintptr_t) sigsetsize};
+            UserMemory uptroldset_mem{*process, (uintptr_t) uptroldset, (uintptr_t) sigsetsize, true};
             if ((!uptrset_mem && uptrset != 0) || (!uptroldset_mem && uptroldset != 0)) {
                 std::cerr << "sigprocmask: " << std::hex << (uintptr_t) uptrset << ", " << (uintptr_t) uptroldset << ", " << sigsetsize << std::dec << " memfault\n";
                 result = -EFAULT;
