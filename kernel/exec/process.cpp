@@ -115,7 +115,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process() : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), euid(0), egid(0), uid(0), gid(0) {
+Process::Process() : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), program_brk(0), euid(0), egid(0), uid(0), gid(0) {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -1432,7 +1432,7 @@ FileDescriptor Process::get_file_descriptor(int fd) {
     return {};
 }
 
-bool Process::brk(intptr_t delta_addr, uintptr_t &result) {
+bool Process::brk(intptr_t brk_addr, uintptr_t &result) {
     constexpr uint64_t highEnd = ((uint64_t) PMLT4_USERSPACE_HIGH_END) << (9 + 9 + 9 + 12);
     std::lock_guard lock{mtx};
     MemMapping *mapping{nullptr};
@@ -1459,11 +1459,21 @@ bool Process::brk(intptr_t delta_addr, uintptr_t &result) {
     uintptr_t addr = mapping->pagenum;
     addr += mapping->pages;
     addr = addr << 12;
+    if (program_brk > addr) {
+        return false;
+    }
+    if ((addr - program_brk) <= PAGESIZE) {
+        addr = program_brk;
+    }
+    auto original = addr;
+    intptr_t delta_addr = brk_addr - ((intptr_t) addr);
+    if (brk_addr <= 0) {
+        delta_addr = brk_addr;
+    }
     addr += delta_addr;
     if (addr > highEnd) {
         return false;
     }
-    result = addr;
     if constexpr(USERSPACE_LOW_END != 512 || PMLT4_USERSPACE_HIGH_START != 1) {
         constexpr uint64_t lowEnd = ((uint64_t) USERSPACE_LOW_END) << (9 + 9 + 12);
         uintptr_t end = (uintptr_t) mapping->pagenum + mapping->pages;
@@ -1481,6 +1491,7 @@ bool Process::brk(intptr_t delta_addr, uintptr_t &result) {
     }
     uintptr_t endpage = (uintptr_t) mapping->pagenum + mapping->pages;
     if (endpage == page) {
+        program_brk = result = addr;
         return true;
     }
     if (endpage < page) {
@@ -1537,6 +1548,7 @@ bool Process::brk(intptr_t delta_addr, uintptr_t &result) {
             }
         }
     }
+    program_brk = result = addr;
     return true;
 }
 

@@ -30,6 +30,10 @@ bool ProcThread::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
 uint32_t ProcThread::FindFree(uint32_t pages) {
     return process->FindFree(pages);
 }
+
+void ProcThread::SetProgramBreak(uintptr_t pbrk) {
+    process->SetProgramBreak(pbrk);
+}
 void ProcThread::task_enter() {
     process->task_enter();
 
@@ -74,8 +78,8 @@ int32_t ProcThread::getuid() {
 int32_t ProcThread::getgid() {
     return process->getgid();
 }
-bool ProcThread::brk(intptr_t delta_addr, uintptr_t &result) {
-    return process->brk(delta_addr, result);
+bool ProcThread::brk(intptr_t addr, uintptr_t &result) {
+    return process->brk(addr, result);
 }
 
 pid_t ProcThread::getpid() {

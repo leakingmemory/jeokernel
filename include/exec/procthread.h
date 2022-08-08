@@ -23,6 +23,7 @@ public:
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     uint32_t FindFree(uint32_t pages);
+    void SetProgramBreak(uintptr_t pbrk);
     void task_enter() override;
     void task_leave() override;
     bool page_fault(task &current_task, Interrupt &intr) override;

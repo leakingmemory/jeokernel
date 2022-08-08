@@ -111,6 +111,7 @@ private:
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
     std::vector<FileDescriptor> fileDescriptors;
+    uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
     Process();
@@ -140,6 +141,9 @@ public:
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     uint32_t FindFree(uint32_t pages);
+    void SetProgramBreak(uintptr_t pbrk) {
+        program_brk = pbrk;
+    }
     void task_enter();
     void task_leave();
     bool page_fault(task &current_task, Interrupt &intr);

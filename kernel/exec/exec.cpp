@@ -80,6 +80,7 @@ void Exec::Run() {
         for (auto i = startpage; i < endpage; i++) {
             pages.push_back({.filep = doNotLoad, .load = 0, .write = false, .exec = false});
         }
+        uintptr_t program_brk{0};
         for (auto &pe : loads) {
             auto vpageaddr = pe->p_vaddr >> 12;
             auto vpageoff = pe->p_vaddr & (PAGESIZE - 1);
@@ -89,6 +90,9 @@ void Exec::Run() {
                 std::cerr << "Error: Misalignment in ELF file prevents loading by page\n";
             }
             auto vpageendaddr = pe->p_vaddr + pe->p_memsz;
+            if (vpageendaddr > program_brk) {
+                program_brk = vpageendaddr;
+            }
             if ((vpageendaddr & (PAGESIZE - 1)) == 0) {
                 vpageendaddr = vpageendaddr >> 12;
             } else {
@@ -152,6 +156,7 @@ void Exec::Run() {
         constexpr uint16_t zero = 8;
 
         auto *process = new ProcThread();
+        process->SetProgramBreak(program_brk);
         {
             uint32_t index = 0;
             uint32_t start = 0;
