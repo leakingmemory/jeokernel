@@ -10,7 +10,7 @@
 
 //#define PRLIM64_DEBUG
 
-int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int64_t uptr_oldlim, SyscallAdditionalParams &) {
+int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int64_t uptr_oldlim, SyscallAdditionalParams &params) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
     auto *process = current_task->get_resource<ProcThread>();
@@ -22,6 +22,7 @@ int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int6
     }
     if (uptr_newlim != 0) {
         current_task->set_blocked(true);
+        params.DoContextSwitch(true);
         process->resolve_read(uptr_newlim, sizeof(rlimit), [scheduler, current_task, process, uptr_newlim, uptr_oldlim, resource] (bool success) {
             if (!success) {
                 scheduler->when_not_running(*current_task, [current_task] () {
@@ -71,6 +72,7 @@ int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int6
     } else {
         if (uptr_oldlim != 0) {
             current_task->set_blocked(true);
+            params.DoContextSwitch(true);
             process->resolve_read(uptr_oldlim, sizeof(rlimit), [scheduler, current_task, process, uptr_oldlim, resource] (bool success) {
                 if (success) {
                     if (!process->resolve_write(uptr_oldlim, sizeof(rlimit))) {
