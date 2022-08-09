@@ -62,6 +62,26 @@ PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std
 MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping)
 : image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), load(load), cow(cow), binary_mapping(binaryMapping), mappings() {}
 
+MemMapping::MemMapping(MemMapping &&mv) : image(mv.image), pagenum(mv.pagenum), pages(mv.pages), image_skip_pages(mv.image_skip_pages), load(mv.load), cow(mv.cow), binary_mapping(mv.binary_mapping), mappings(mv.mappings) {
+    mv.mappings.clear();
+}
+
+MemMapping &MemMapping::operator =(MemMapping &&mv) {
+    if (this == &mv) {
+        return *this;
+    }
+    image = mv.image;
+    pagenum = mv.pagenum;
+    pages = mv.pages;
+    image_skip_pages = mv.image_skip_pages;
+    load = mv.load;
+    cow = mv.cow;
+    binary_mapping = mv.binary_mapping;
+    mappings = mv.mappings;
+    mv.mappings.clear();
+    return *this;
+}
+
 MemMapping::~MemMapping() {
     for (const auto &ppage : mappings) {
         if (!ppage.data) {
@@ -582,12 +602,15 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
     std::function<void ()> apply_new_mappings = [this, &new_mappings] () {
         for (auto &mapping : new_mappings) {
             mappings.push_back(mapping);
+            mapping.mappings.clear();
         }
     };
     for (auto &pmapping : prot_mappings) {
         if (pmapping.start > pmapping.mapping->pagenum) {
             auto size_pages = pmapping.start - pmapping.mapping->pagenum;
             auto &map = new_mappings.emplace_back(pmapping.mapping->image, pmapping.mapping->pagenum, size_pages, pmapping.mapping->image_skip_pages, 0, pmapping.mapping->cow, pmapping.mapping->binary_mapping);
+            pmapping.mapping->pagenum = pmapping.start;
+            pmapping.mapping->pages -= size_pages;
             if (pmapping.mapping->image) {
                 pmapping.mapping->image_skip_pages += size_pages;
             }
@@ -748,7 +771,18 @@ bool Process::page_fault(task &current_task, Interrupt &intr) {
 }
 
 bool Process::exception(task &current_task, const std::string &name, Interrupt &intr) {
-    std::cout << "Exception <"<< name <<"> in user process at " << std::hex << intr.rip() << " code " << intr.error_code() << std::dec << "\n";
+    std::cerr << "Exception <"<< name <<"> in user process at " << std::hex << intr.rip() << " code " << intr.error_code() << std::dec << "\n";
+    {
+        auto &cpu = intr.get_cpu_frame();
+        auto &state = intr.get_cpu_state();
+        std::cerr << std::hex << "ax=" << state.rax << " bx="<<state.rbx << " cx=" << state.rcx << " dx="<< state.rdx << "\n"
+                  << "si=" << state.rsi << " di="<< state.rdi << " bp=" << state.rbp << " sp="<< cpu.rsp << "\n"
+                  << "r8=" << state.r8 << " r9="<< state.r9 << " rA="<< state.r10 <<" rB=" << state.r11 << "\n"
+                  << "rC=" << state.r12 << " rD="<< state.r13 <<" rE="<< state.r14 <<" rF="<< state.r15 << "\n"
+                  << "cs=" << cpu.cs << " ds=" << state.ds << " es=" << state.es << " fs=" << state.fs << " gs="
+                  << state.gs << " ss="<< cpu.ss <<"\n"
+                  << "fsbase=" << state.fsbase << "\n" << std::dec;
+    }
     current_task.set_end(true);
     return true;
 }
@@ -760,6 +794,7 @@ uintptr_t Process::push_64(uintptr_t ptr, uint64_t val, const std::function<void
     resolve_read(dstptr, length, [this, dstptr, val, length, f] (bool success) mutable {
         if (!success) {
             f(false, 0);
+            return;
         }
         auto offset = dstptr & ((uintptr_t) PAGESIZE-1);
         auto pageaddr = dstptr - offset;

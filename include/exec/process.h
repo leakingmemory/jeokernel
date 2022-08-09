@@ -60,6 +60,10 @@ private:
     std::vector<PhysMapping> mappings;
 public:
     MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping);
+    MemMapping(MemMapping &&mv);
+    MemMapping(const MemMapping &) = default;
+    MemMapping &operator =(MemMapping &&mv);
+    MemMapping &operator =(const MemMapping &) = default;
     ~MemMapping();
 };
 
