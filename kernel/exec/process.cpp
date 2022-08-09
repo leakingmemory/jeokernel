@@ -3,6 +3,7 @@
 //
 
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <iostream>
 #include <exec/process.h>
 #include <pagealloc.h>
@@ -484,6 +485,7 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
     if (write && !copyOnWrite) {
         std::cerr << "Error mapping: Write without COW is not supported\n";
     }
+    std::lock_guard lock{mtx};
     if (!CheckMapOverlap(pagenum, pages)) {
         return false;
     }
@@ -516,6 +518,7 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
 
 bool Process::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
     std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " on demand " << std::dec << "\n";
+    std::lock_guard lock{mtx};
     if (!CheckMapOverlap(pagenum, pages)) {
         return false;
     }
@@ -544,6 +547,94 @@ bool Process::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
         }
     }
     return true;
+}
+
+struct ProtectMapping {
+    uint32_t start, end;
+    MemMapping *mapping;
+};
+
+int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
+    uint32_t covered{0};
+    std::vector<ProtectMapping> prot_mappings{};
+    std::lock_guard lock{mtx};
+    for (auto &mapping : mappings) {
+        auto ol_start = mapping.pagenum;
+        if (ol_start < pagenum) {
+            ol_start = pagenum;
+        }
+        auto ol_end = mapping.pagenum + mapping.pages;
+        if (ol_end > (pagenum + pages)) {
+            ol_end = pagenum + pages;
+        }
+        if (ol_start >= ol_end) {
+            continue;
+        }
+        ProtectMapping p{.start = ol_start, .end = ol_end, .mapping = &mapping};
+        prot_mappings.push_back(p);
+        covered += ol_end - ol_start;
+    }
+    if (covered < pages) {
+        std::cerr << "mprotect: not all pages are mapped\n";
+        return -EINVAL;
+    }
+    std::vector<MemMapping> new_mappings{};
+    std::function<void ()> apply_new_mappings = [this, &new_mappings] () {
+        for (auto &mapping : new_mappings) {
+            mappings.push_back(mapping);
+        }
+    };
+    for (auto &pmapping : prot_mappings) {
+        if (pmapping.start > pmapping.mapping->pagenum) {
+            auto size_pages = pmapping.start - pmapping.mapping->pagenum;
+            auto &map = new_mappings.emplace_back(pmapping.mapping->image, pmapping.mapping->pagenum, size_pages, pmapping.mapping->image_skip_pages, 0, pmapping.mapping->cow, pmapping.mapping->binary_mapping);
+            if (pmapping.mapping->image) {
+                pmapping.mapping->image_skip_pages += size_pages;
+            }
+            auto iterator = pmapping.mapping->mappings.begin();
+            while (iterator != pmapping.mapping->mappings.end()) {
+                auto &mapping = *iterator;
+                if (mapping.page >= map.pagenum && mapping.page < (map.pagenum + map.pages)) {
+                    map.mappings.push_back((const PhysMapping &) mapping);
+                    pmapping.mapping->mappings.erase(iterator);
+                    continue;
+                }
+                ++iterator;
+            }
+        }
+        if (pmapping.end < (pmapping.mapping->pagenum + pmapping.mapping->pages)) {
+            auto size_pages1 = pmapping.end - pmapping.mapping->pagenum;
+            auto size_pages2 = pmapping.mapping->pages - size_pages1;
+            auto &map = new_mappings.emplace_back(pmapping.mapping->image, pmapping.mapping->pagenum + size_pages1, size_pages2, pmapping.mapping->image_skip_pages + size_pages1, 0, pmapping.mapping->cow, pmapping.mapping->binary_mapping);
+            pmapping.mapping->pages = size_pages1;
+            auto iterator = pmapping.mapping->mappings.begin();
+            while (iterator != pmapping.mapping->mappings.end()) {
+                auto &mapping = *iterator;
+                if (mapping.page >= map.pagenum && mapping.page < (map.pagenum + map.pages)) {
+                    map.mappings.push_back((const PhysMapping &) mapping);
+                    pmapping.mapping->mappings.erase(iterator);
+                    continue;
+                }
+                ++iterator;
+            }
+        }
+        if (prot == PROT_READ) {
+            auto end = pmapping.mapping->pagenum + pmapping.mapping->pages;
+            for (auto p = pmapping.mapping->pagenum; p < end; p++) {
+                Pageentry(p, [] (pageentr &pe) {
+                    pe.execution_disabled = 1;
+                    pe.writeable = 0;
+                });
+            }
+            pmapping.mapping->cow = false;
+        } else {
+            std::cerr << "mprotect: invalid prot let through\n";
+            apply_new_mappings();
+            return -EINVAL;
+        }
+    }
+    apply_new_mappings();
+    return 0;
 }
 
 void Process::task_enter() {

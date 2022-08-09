@@ -27,6 +27,10 @@ bool ProcThread::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pa
 bool ProcThread::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
     return process->Map(pagenum, pages, binaryMap);
 }
+
+int ProcThread::Protect(uint32_t pagenum, uint32_t pages, int prot) {
+    return process->Protect(pagenum, pages, prot);
+}
 uint32_t ProcThread::FindFree(uint32_t pages) {
     return process->FindFree(pages);
 }

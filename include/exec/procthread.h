@@ -22,6 +22,7 @@ public:
     bool resolve_write(uintptr_t addr, uintptr_t len);;
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
+    int Protect(uint32_t pagenum, uint32_t pages, int prot);
     uint32_t FindFree(uint32_t pages);
     void SetProgramBreak(uintptr_t pbrk);
     void task_enter() override;

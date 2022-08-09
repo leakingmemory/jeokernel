@@ -23,6 +23,7 @@
 #include "Readlink.h"
 #include "Getrandom.h"
 #include "ClockGettime.h"
+#include "Mprotect.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -68,6 +69,7 @@ private:
     Readlink readlink{*this};
     Getrandom getrandom{*this};
     ClockGettime clockGettime{*this};
+    Mprotect mprotect{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
