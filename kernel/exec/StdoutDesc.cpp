@@ -26,3 +26,9 @@ intptr_t StdoutDesc::write(const void *ptr, intptr_t len) {
     }
     return 0;
 }
+
+bool StdoutDesc::stat(struct stat &st) {
+    struct stat s{.st_mode = S_IFCHR | 00666, .st_blksize = 1024};
+    st = s;
+    return true;
+}

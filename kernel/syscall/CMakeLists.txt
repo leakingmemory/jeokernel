@@ -7,6 +7,6 @@ add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h W
         ArchPrctl.cpp ArchPrctl.h SetTidAddress.cpp SetTidAddress.h SetRobustList.cpp SetRobustList.h
         Uname.cpp Uname.h Writev.cpp Writev.h Mmap.cpp Mmap.h Sigprocmask.cpp Sigprocmask.h
         PrLimit64.cpp PrLimit64.h Readlink.cpp Readlink.h Getrandom.cpp Getrandom.h
-        ClockGettime.cpp ClockGettime.h Mprotect.cpp Mprotect.h)
+        ClockGettime.cpp ClockGettime.h Mprotect.cpp Mprotect.h Newfstatat.cpp Newfstatat.h)
 
 target_include_directories(syscall PRIVATE ../../include)

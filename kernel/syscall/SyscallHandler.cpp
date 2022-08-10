@@ -24,6 +24,7 @@
 #include "Getrandom.h"
 #include "ClockGettime.h"
 #include "Mprotect.h"
+#include "Newfstatat.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -70,6 +71,7 @@ private:
     Getrandom getrandom{*this};
     ClockGettime clockGettime{*this};
     Mprotect mprotect{*this};
+    Newfstatat newfstatat{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
