@@ -383,6 +383,8 @@ public:
     task &get_current_task_with_lock();
     task &get_current_task();
 
+    void all_tasks(std::function<void (task &)> func);
+
     void add_task_event_handler(task_event_handler *handler);
     /**
      * Consider using critical_section to disable interrupts while

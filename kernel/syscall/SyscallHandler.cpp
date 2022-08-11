@@ -25,6 +25,7 @@
 #include "ClockGettime.h"
 #include "Mprotect.h"
 #include "Newfstatat.h"
+#include "ExitGroup.h"
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
@@ -72,6 +73,7 @@ private:
     ClockGettime clockGettime{*this};
     Mprotect mprotect{*this};
     Newfstatat newfstatat{*this};
+    ExitGroup exitGroup{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

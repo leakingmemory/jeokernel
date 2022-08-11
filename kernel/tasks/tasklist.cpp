@@ -557,6 +557,14 @@ task &tasklist::get_current_task() {
     return get_current_task_with_lock();
 }
 
+void tasklist::all_tasks(std::function<void(task &)> func) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    for (auto *t : tasks) {
+        func(*t);
+    }
+}
+
 void tasklist::event_in_event_handler(uint64_t v0, uint64_t v1, uint64_t v2, uint8_t res_acq) {
     event_call ev{
         .v0 = v0,
