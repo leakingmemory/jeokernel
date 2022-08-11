@@ -27,12 +27,23 @@
 #include "Newfstatat.h"
 #include "ExitGroup.h"
 
+//#define SYSCALL_DEBUG
+
+#ifdef SYSCALL_DEBUG
+#include <iostream>
+#endif
+
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);
 }
 
 SyscallResult SyscallHandler::Call(Interrupt &intr) {
     uint64_t number = intr.rax();
+#ifdef SYSCALL_DEBUG
+    std::cout << "syscall " << std::dec << number << "(0x" << std::hex << intr.rdi() << ", 0x" << intr.rsi()
+              << ", 0x" << intr.rdx() << ", 0x" << intr.r10() << ", 0x" << intr.r8() << ", 0x" << intr.r9()
+              << std::dec << ")\n";
+#endif
     for (auto *handler : handlers) {
         if (handler->number == number) {
             SyscallAdditionalParams additionalParams{(int64_t) intr.r8(), (int64_t) intr.r9()};
@@ -44,7 +55,17 @@ SyscallResult SyscallHandler::Call(Interrupt &intr) {
             if (additionalParams.DoModifyCpuState()) {
                 additionalParams.ModifyCpuState(intr);
             }
-            return additionalParams.DoContextSwitch() ? SyscallResult::CONTEXT_SWITCH : SyscallResult::FAST_RETURN;
+            if (additionalParams.DoContextSwitch()) {
+#ifdef SYSCALL_DEBUG
+                std::cout << "Syscall returns with context switch\n";
+#endif
+                return SyscallResult::CONTEXT_SWITCH;
+            } else {
+#ifdef SYSCALL_DEBUG
+                std::cout << "Syscall fast returns\n";
+#endif
+                return SyscallResult::FAST_RETURN;
+            }
         }
     }
     intr.get_cpu_state().rax = (uint64_t) (-ENOSYS);
