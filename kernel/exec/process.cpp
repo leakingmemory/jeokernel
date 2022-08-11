@@ -1537,7 +1537,6 @@ bool Process::resolve_write(uintptr_t addr, uintptr_t len) {
     if (addr == end) {
         return true;
     }
-    std::lock_guard lock{pfault_lck};
     while (true) {
         auto res = resolve_write_page(addr);
         if (res != ResolveWrite::WAS_WRITEABLE && res != ResolveWrite::MADE_WRITEABLE) {
