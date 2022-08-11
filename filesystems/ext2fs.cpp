@@ -670,6 +670,9 @@ std::size_t ext2fs_inode::ReadBytes(uint64_t offset, void *ptr, std::size_t leng
         if (blklen > (length - vec)) {
             blklen = length - vec;
         }
+        if (blklen > (FILEPAGE_PAGE_SIZE - blkoff)) {
+            blklen = FILEPAGE_PAGE_SIZE - blkoff;
+        }
 
         auto blkp = ReadBlock(blk);
         if (blkp) {
