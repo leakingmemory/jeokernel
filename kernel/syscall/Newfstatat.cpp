@@ -14,7 +14,7 @@
 int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbuf, int64_t flag, SyscallAdditionalParams &params) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     if (uptr_filename == 0) {
         return -EINVAL;
     }

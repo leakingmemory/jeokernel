@@ -12,7 +12,7 @@
 int64_t Sigprocmask::Call(int64_t how, int64_t uptrset, int64_t uptroldset, int64_t sigsetsize, SyscallAdditionalParams &params) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     current_task->set_blocked(true);
     process->resolve_read(uptrset, sizeof(sigset_t), [scheduler, current_task, process, how, uptrset, uptroldset, sigsetsize] (bool success) {
         int64_t result{0};

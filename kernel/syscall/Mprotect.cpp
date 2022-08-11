@@ -24,7 +24,7 @@ int64_t Mprotect::Call(int64_t addr, int64_t len , int64_t prot, int64_t, Syscal
 
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
 
     auto end = addr + len;
     {

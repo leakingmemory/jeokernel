@@ -9,6 +9,7 @@
 #include <klogger.h>
 #include <concurrency/hw_spinlock.h>
 #include <string>
+#include <mutex>
 
 #define PREALLOC_TASK_SLOTS         8192
 #define PREALLOC_EVENT_LOOP         64
@@ -109,8 +110,10 @@ struct task_info {
 };
 
 class task_timeout100hz_handler_ref;
+class tasklist;
 
 class task {
+    friend tasklist;
     friend task_timeout100hz_handler_ref;
 private:
     InterruptCpuFrame cpu_frame;
@@ -379,6 +382,11 @@ public:
     uint32_t get_current_task_id();
     void join(uint32_t task_id);
 
+    template <class T> T *get_resource(const task &t) {
+        critical_section cli{};
+        std::lock_guard lock{_lock};
+        return t.template get_resource<T>();
+    }
     void when_not_running(task &t, std::function<void ()> func);
 
     task &get_task_with_lock(uint32_t task_id);

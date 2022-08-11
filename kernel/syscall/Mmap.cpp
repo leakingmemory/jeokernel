@@ -44,7 +44,7 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
 
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
 
     if ((flags & MAP_FIXED) != 0) {
         std::cerr << "mmap: error: fixed map is not impl\n";

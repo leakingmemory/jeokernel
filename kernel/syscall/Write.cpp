@@ -10,7 +10,7 @@
 int64_t Write::Call(int64_t fd, int64_t ptr, int64_t len, int64_t, SyscallAdditionalParams &additionalParams) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     auto desc = process->get_file_descriptor(fd);
     if (!desc.Valid()) {
         return -EBADF;

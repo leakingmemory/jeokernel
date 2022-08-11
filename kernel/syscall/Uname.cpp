@@ -30,7 +30,7 @@ constexpr size_t capLen(const std::string &str) {
 int64_t Uname::Call(int64_t utsnameptr, int64_t, int64_t, int64_t, SyscallAdditionalParams &additionalParams) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     current_task->set_blocked(true);
     process->resolve_read(utsnameptr, sizeof(utsname), [scheduler, process, current_task, utsnameptr] (bool success) {
         uint64_t pageaddr{(uint64_t) utsnameptr >> 12};

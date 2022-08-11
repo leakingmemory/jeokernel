@@ -11,7 +11,7 @@
 int64_t Readlink::Call(int64_t uptr_path, int64_t uptr_buf, int64_t bufsize, int64_t, SyscallAdditionalParams &params) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     current_task->set_blocked(true);
     params.DoContextSwitch(true);
     process->resolve_read_nullterm(uptr_path, [scheduler, current_task, process, uptr_path, uptr_buf, bufsize](bool success, size_t slen) {

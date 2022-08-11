@@ -11,7 +11,7 @@
 int64_t ClockGettime::Call(int64_t which, int64_t uptr_td, int64_t, int64_t, SyscallAdditionalParams &params) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     current_task->set_blocked(true);
     params.DoContextSwitch(true);
     process->resolve_read(uptr_td, sizeof(timespec), [scheduler, current_task, process, which, uptr_td](bool success) {

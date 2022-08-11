@@ -13,7 +13,7 @@
 int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int64_t uptr_oldlim, SyscallAdditionalParams &params) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
-    auto *process = current_task->get_resource<ProcThread>();
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
 #ifdef PRLIM64_DEBUG
     std::cout << "prlimit64(" << pid << ", " << resource << ", " << std::hex << uptr_newlim << ", " << uptr_oldlim << std::dec << ")\n";
 #endif
