@@ -163,12 +163,13 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
         }
     }
     if (win != current_task) {
-        current_task->set_running(false);
-
         if (!current_task->is_end()) {
             current_task->set_stack_quarantine(true);
             current_task->save_state(interrupt);
         }
+
+        current_task->set_running(false);
+
         win->restore_state(interrupt);
         win->set_running(true);
         if (multicpu) {

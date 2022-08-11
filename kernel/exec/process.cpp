@@ -1394,7 +1394,9 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
 
 void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr) {
     if (resolve_page(fault_addr)) {
-        current_task.set_blocked(false);
+        get_scheduler()->when_not_running(current_task, [&current_task] () {
+            current_task.set_blocked(false);
+        });
         return;
     }
     std::cerr << "PID " << current_task.get_id() << ": Page fault at " << std::hex << ip << " addr " << fault_addr << std::dec << "\n";
