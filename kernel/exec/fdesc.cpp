@@ -13,9 +13,14 @@
 
 void FileDescriptor::write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func) {
     auto handler = this->handler;
-    process->resolve_read(usersp_ptr, len, [handler, usersp_ptr, len, func] (bool success) mutable {
+    process->resolve_read(usersp_ptr, len, [process, handler, usersp_ptr, len, func] (bool success) mutable {
         if (success) {
-            func(handler->write((void *) usersp_ptr, len));
+            UserMemory umem{*process, usersp_ptr, (uintptr_t) len};
+            if (!umem) {
+                func(-EFAULT);
+                return;
+            }
+            func(handler->write((const void *) umem.Pointer(), len));
         } else {
             func(-EFAULT);
         }
