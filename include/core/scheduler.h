@@ -136,7 +136,7 @@ public:
     task(task &&mv) : cpu_frame(mv.cpu_frame), cpu_state(mv.cpu_state),
                       fpu_sse_state(mv.fpu_sse_state), bits(mv.bits),
                       resources(std::move(mv.resources)), event_handlers(std::move(mv.event_handlers)),
-                      do_when_not_running(std::move(mv.do_when_not_running)), name(std::move(name)) {
+                      do_when_not_running(std::move(mv.do_when_not_running)), name(std::move(mv.name)) {
         mv.resources.clear();
         mv.event_handlers.clear();
     }
@@ -313,17 +313,17 @@ public:
         return false;
     }
 
-    bool exception(const std::string &name, Interrupt &intr) {
+    bool exception(const std::string &ename, Interrupt &intr) {
         for (auto *resource : resources) {
-            if (resource->exception(*this, name, intr)) {
+            if (resource->exception(*this, ename, intr)) {
                 return true;
             }
         }
         return false;
     }
 
-    void set_name(const std::string &name) {
-        this->name = name;
+    void set_name(const std::string &nname) {
+        this->name = nname;
     }
 };
 
