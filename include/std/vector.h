@@ -184,6 +184,9 @@ namespace std {
         }
 
         vector &operator =(const vector &cp) {
+            if (this == &cp) {
+                return *this;
+            }
             if (c._data != nullptr) {
                 for (size_type i = 0; i < c._size; i++) {
                     c._data[i].~vector_container_element<T>();
@@ -199,6 +202,9 @@ namespace std {
             return *this;
         }
         vector &operator =(vector &&mv) {
+            if (this == &mv) {
+                return *this;
+            }
             if (c._data != nullptr) {
                 for (size_type i = 0; i < c._size; i++) {
                     c._data[i].~vector_container_element<T>();

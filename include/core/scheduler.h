@@ -122,22 +122,25 @@ private:
     std::vector<std::function<void ()>> do_when_not_running;
     std::string name;
 public:
-    task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL), resources(), event_handlers(), name("[]") {
+    task() : cpu_frame(), cpu_state(), fpu_sse_state(), bits(PRIO_GROUP_NORMAL), resources(), event_handlers(), do_when_not_running(), name("[]") {
     }
     task(const InterruptCpuFrame &cpuFrame, const InterruptStackFrame &stackFrame, const x86_fpu_state &fpusse_state, const std::vector<task_resource *> resources)
-    : cpu_frame(cpuFrame), cpu_state(stackFrame), fpu_sse_state(fpusse_state), bits(PRIO_GROUP_NORMAL), resources(resources), event_handlers() {
+    : cpu_frame(cpuFrame), cpu_state(stackFrame), fpu_sse_state(fpusse_state), bits(PRIO_GROUP_NORMAL), resources(resources), event_handlers(), do_when_not_running(), name("[]") {
     }
 
     task(const task &) = delete;
 
     task(task &&mv) : cpu_frame(mv.cpu_frame), cpu_state(mv.cpu_state),
                       fpu_sse_state(mv.fpu_sse_state), bits(mv.bits),
-                      resources(std::move(mv.resources)), event_handlers(std::move(mv.event_handlers)) {
+                      resources(std::move(mv.resources)), event_handlers(std::move(mv.event_handlers)),
+                      do_when_not_running(std::move(mv.do_when_not_running)), name(std::move(name)) {
         mv.resources.clear();
         mv.event_handlers.clear();
     }
 
     task &operator =(const task &) = delete;
+
+    task &operator =(task &&) = delete;
 
     void set_running(bool running) {
         bits.running = running ? true : false;

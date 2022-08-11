@@ -54,14 +54,18 @@ namespace std {
         }
 
         function &operator = (const function &cp) {
+            auto *cop = cp._invoke->copy();
             if (_invoke != nullptr) {
                 delete _invoke;
             }
-            _invoke = cp._invoke->copy();
+            _invoke = cop;
             return *this;
         }
 
         function &operator = (function &&mv) {
+            if (this == &mv) {
+                return *this;
+            }
             if (_invoke != nullptr) {
                 delete _invoke;
             }
@@ -73,6 +77,7 @@ namespace std {
         ~function() {
             if (_invoke != nullptr) {
                 delete _invoke;
+                _invoke = nullptr;
             }
         }
 

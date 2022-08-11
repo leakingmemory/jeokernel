@@ -1265,7 +1265,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
 }
 
 ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
-    std::unique_ptr<std::lock_guard<hw_spinlock>> lock{new std::lock_guard(mtx)};
+    std::lock_guard lock{mtx};
     constexpr uint64_t highRelocationOffset = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9 + 12);
     uint32_t page;
     if (fault_addr < highRelocationOffset) {
