@@ -43,7 +43,7 @@ uint32_t tasklist::create_current_idle_task(uint8_t cpu) {
     task *t = new task();
     uint32_t pid = get_next_id();
     t->set_id(pid);
-    t->set_running(true);
+    t->set_running(nullptr, cpu);
     t->set_blocked(false);
     t->set_cpu(cpu);
     t->set_priority_group(PRIO_GROUP_IDLE);
@@ -168,10 +168,10 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
             current_task->save_state(interrupt);
         }
 
-        current_task->set_running(false);
+        current_task->set_not_running();
 
         win->restore_state(interrupt);
-        win->set_running(true);
+        win->set_running(&interrupt, multicpu ? cpu : 0);
         if (multicpu) {
             win->set_cpu(cpu);
         }

@@ -13,6 +13,7 @@ extern int errno;
 #define EBADF       9
 #define ENOMEM      12
 #define EFAULT      14 // Bad address
+#define EBUSY       16
 #define EINVAL      22 // Invalid argument
 #define ENOSYS      38 // Not a syscall
 #define EOPNOTSUPP  95

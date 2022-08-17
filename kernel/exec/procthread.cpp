@@ -4,7 +4,7 @@
 
 #include <exec/procthread.h>
 
-ProcThread::ProcThread() : process(new Process()), fsBase(0), tidAddress(0), robustListHead(0) {}
+ProcThread::ProcThread() : process(new Process()), rseq(), fsBase(0), tidAddress(0), robustListHead(0) {}
 
 phys_t ProcThread::phys_addr(uintptr_t addr) {
     return process->phys_addr(addr);
@@ -38,13 +38,17 @@ uint32_t ProcThread::FindFree(uint32_t pages) {
 void ProcThread::SetProgramBreak(uintptr_t pbrk) {
     process->SetProgramBreak(pbrk);
 }
-void ProcThread::task_enter() {
+void ProcThread::task_enter(task &t, Interrupt *intr, uint8_t cpu) {
     process->task_enter();
+
+    rseq.Notify(*this, t, intr, cpu);
 
     // MSR_FS_BASE -
     //asm("movl $0xC0000100, %%ecx; mov %0, %%rax; mov %%rax, %%rdx; shrq $32, %%rdx; wrmsr; " :: "r"(fsBase) : "%eax", "%rcx", "%rdx");
 }
 void ProcThread::task_leave() {
+    rseq.Preempted();
+
     process->task_leave();
 }
 bool ProcThread::page_fault(task &current_task, Interrupt &intr) {

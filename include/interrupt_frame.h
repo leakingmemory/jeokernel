@@ -137,7 +137,7 @@ public:
 
     void apply_error_code_correction();
 
-    const InterruptCpuFrame &get_cpu_frame() const {
+    InterruptCpuFrame &get_cpu_frame() const {
         return *_cpu_frame;
     }
     void set_cpu_frame(InterruptCpuFrame &frame) {

@@ -7,10 +7,12 @@
 
 #include <sys/types.h>
 #include <exec/process.h>
+#include <exec/rseq.h>
 
 class ProcThread : public task_resource {
 private:
     std::shared_ptr<Process> process;
+    ThreadRSeq rseq;
     uintptr_t fsBase;
     uintptr_t tidAddress;
     uintptr_t robustListHead;
@@ -25,7 +27,7 @@ public:
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
     uint32_t FindFree(uint32_t pages);
     void SetProgramBreak(uintptr_t pbrk);
-    void task_enter() override;
+    void task_enter(task &, Interrupt *intr, uint8_t cpu) override;
     void task_leave() override;
     bool page_fault(task &current_task, Interrupt &intr) override;
     bool exception(task &current_task, const std::string &name, Interrupt &intr) override;
@@ -42,6 +44,9 @@ public:
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
+    ThreadRSeq &RSeq() {
+        return this->rseq;
+    }
     void SetFsBase(uintptr_t ptr) {
         fsBase = ptr;
     }

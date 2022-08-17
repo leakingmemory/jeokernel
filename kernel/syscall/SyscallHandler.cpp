@@ -26,6 +26,7 @@
 #include "Mprotect.h"
 #include "Newfstatat.h"
 #include "ExitGroup.h"
+#include "Rseq.h"
 
 //#define SYSCALL_DEBUG
 
@@ -95,6 +96,7 @@ private:
     Mprotect mprotect{*this};
     Newfstatat newfstatat{*this};
     ExitGroup exitGroup{*this};
+    Rseq rseq{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

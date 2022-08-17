@@ -20,7 +20,7 @@
 #include "syscall/SyscallHandler.h"
 
 //#define PRINT_HANDLED_CPU_INTR
-//#define SYSCALL_NOT_FOUND_KILL
+#define SYSCALL_NOT_FOUND_KILL
 
 void Interrupt::print_debug(bool double_fault, bool stack_dump) const {
     get_klogger() << "Interrupt " << _interrupt << " at " << cs() << ":" << rip() << " rflags " << rflags() << " err " << error_code() << "\n"

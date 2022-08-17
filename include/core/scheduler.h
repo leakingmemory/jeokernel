@@ -65,7 +65,7 @@ public:
     virtual ~task_resource() {
     };
 
-    virtual void task_enter() {
+    virtual void task_enter(task &, Interrupt *intr, uint8_t cpu) {
     }
     virtual void task_leave() {
     }
@@ -145,20 +145,20 @@ public:
 
     task &operator =(task &&) = delete;
 
-    void set_running(bool running) {
-        bits.running = running ? true : false;
-        if (running) {
-            for (auto *resource : resources) {
-                resource->task_enter();
-            }
-        } else {
-            for (auto *resource : resources) {
-                resource->task_leave();
-            }
-            for (auto &func : do_when_not_running) {
-                func();
-            }
-            do_when_not_running.clear();
+    void set_not_running() {
+        bits.running = false;
+        for (auto *resource : resources) {
+            resource->task_leave();
+        }
+        for (auto &func : do_when_not_running) {
+            func();
+        }
+        do_when_not_running.clear();
+    }
+    void set_running(Interrupt *intr, uint8_t cpu) {
+        bits.running = true;
+        for (auto *resource : resources) {
+            resource->task_enter(*this, intr, cpu);
         }
     }
     bool is_running() {
