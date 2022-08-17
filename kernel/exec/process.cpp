@@ -1471,7 +1471,11 @@ void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::functio
         if (!success) {
             func(false, 0);
         } else {
-            auto paddr = phys_addr(addr);
+            auto page = addr >> 12;
+            auto pageaddr = page << 12;
+            auto offset = addr - pageaddr;
+            auto remaining = PAGESIZE - offset;
+            auto paddr = phys_addr(pageaddr);
             if (paddr == 0) {
                 func(false, 0);
                 return;
@@ -1480,7 +1484,8 @@ void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::functio
             vm.page(0).rmap(paddr);
             vm.reload();
             const char *str = (const char *) vm.pointer();
-            for (int i = 0; i < PAGESIZE; i++) {
+            str += offset;
+            for (int i = 0; i < remaining; i++) {
                 if (*str == 0) {
                     func(true, len + add_len);
                     return;
