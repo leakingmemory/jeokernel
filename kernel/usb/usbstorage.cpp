@@ -6,6 +6,7 @@
 #include "usbstorage.h"
 #include "usb_transfer.h"
 #include <sstream>
+#include <iostream>
 #include "ustorage_structs.h"
 #include "../scsi/scsidev.h"
 
@@ -151,6 +152,7 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
     chunkSize -= chunkSize % device.bulkInDesc.wMaxPacketSize;
     uint8_t *ptr = (uint8_t *) data;
     auto totalSize = size;
+    std::shared_ptr<uintptr_t> remainingCount = std::make_shared<uintptr_t>(0);
     while (size > 0) {
         std::size_t s = size;
         if (s > chunkSize) {
@@ -165,7 +167,8 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
         if ((s % device.bulkInDesc.wMaxPacketSize) != 0) {
             ++packets;
         }
-        *transferIndirect = device.bulkInEndpoint->CreateTransferWithLock(size == 0, s, usb_transfer_direction::IN, [this, ptr, s, size, transferIndirect, done, baseSize, packets] () {
+        ++(*remainingCount);
+        *transferIndirect = device.bulkInEndpoint->CreateTransferWithLock(size == 0, s, usb_transfer_direction::IN, [this, remainingCount, ptr, s, size, transferIndirect, done, baseSize, packets] () {
             auto transfer = *transferIndirect;
             std::shared_ptr<usb_buffer> buffer{};
             if (transfer) {
@@ -182,6 +185,7 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
             }
             if (buffer && transfer->GetStatus() == usb_transfer_status::NO_ERROR) {
                 memcpy((void *) ptr, buffer->Pointer(), s);
+                --(*remainingCount);
             } else {
                 std::stringstream str{};
                 str << "Error: Usbstorage bulk IN failed: " << transfer->GetStatusStr() << "\n";
@@ -189,7 +193,12 @@ void usbstorage_command_impl::InTransfer(void *data, std::size_t size, const std
             }
             // TODO - error in part transfer should fail the whole, and probably reset dev
             if (size == 0) {
-                (*done)(transfer->GetStatus(), baseSize + transfer->Length());
+                if (*remainingCount == 0) {
+                    (*done)(transfer->GetStatus(), baseSize + transfer->Length());
+                } else {
+                   std::cerr << "Error: Usbstorage: Partial bulk IN incomplete\n";
+                    (*done)(usb_transfer_status::NOT_ACCESSED, 0);
+                }
             }
         }, true, 0, device.bulkInToggle & 1);
         ptr += s;
