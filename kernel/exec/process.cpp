@@ -136,7 +136,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process() : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), program_brk(0), euid(0), egid(0), uid(0), gid(0) {
+Process::Process() : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -1833,4 +1833,34 @@ int Process::getrlimit(int resource, rlimit &result) {
             return -EINVAL;
     }
     return 0;
+}
+
+int Process::wake_all(uintptr_t addr) {
+    std::vector<uint32_t> unblock{};
+    {
+        std::lock_guard lock{mtx};
+        auto iterator = fwaits.begin();
+        while (iterator != fwaits.end()) {
+            auto &w = *iterator;
+            if (w->addr == addr) {
+                auto id = w->task_id;
+                fwaits.erase(iterator);
+                unblock.push_back(id);
+                continue;
+            }
+            ++iterator;
+        }
+    }
+    int count{0};
+    auto scheduler = get_scheduler();
+    scheduler->all_tasks([&unblock, &count] (task &t) {
+        for (auto id : unblock) {
+            if (id == t.get_id()) {
+                t.set_blocked(false);
+                ++count;
+                return;
+            }
+        }
+    });
+    return count;
 }

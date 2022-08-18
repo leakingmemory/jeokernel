@@ -44,6 +44,7 @@ public:
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
+    int wake_all(uintptr_t addr);
     ThreadRSeq &RSeq() {
         return this->rseq;
     }

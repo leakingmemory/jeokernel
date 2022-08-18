@@ -105,6 +105,11 @@ struct RLimits {
     rlimit Nproc{.rlim_cur = rlim_NPROC, .rlim_max = rlim_NPROC};
 };
 
+struct FutexWait {
+    uintptr_t addr;
+    uint32_t task_id;
+};
+
 class Process {
 private:
     hw_spinlock mtx;
@@ -115,6 +120,7 @@ private:
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
     std::vector<FileDescriptor> fileDescriptors;
+    std::vector<std::shared_ptr<FutexWait>> fwaits;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
@@ -179,6 +185,7 @@ private:
 public:
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
+    int wake_all(uintptr_t addr);
 };
 
 #endif //JEOKERNEL_PROCESS_H

@@ -27,6 +27,7 @@
 #include "Newfstatat.h"
 #include "ExitGroup.h"
 #include "Rseq.h"
+#include "Futex.h"
 
 //#define SYSCALL_DEBUG
 
@@ -97,6 +98,7 @@ private:
     Newfstatat newfstatat{*this};
     ExitGroup exitGroup{*this};
     Rseq rseq{*this};
+    Futex futex{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

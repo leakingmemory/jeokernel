@@ -105,3 +105,7 @@ int ProcThread::setrlimit(int resource, const rlimit &lim) {
 int ProcThread::getrlimit(int resource, rlimit &lim) {
     return process->getrlimit(resource, lim);
 }
+
+int ProcThread::wake_all(uintptr_t addr) {
+    return process->wake_all(addr);
+}
