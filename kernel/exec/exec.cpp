@@ -33,6 +33,7 @@ void Exec::Run() {
     uintptr_t tlsAlign{0};
     uintptr_t fsBase{0};
     {
+        std::string interpreter{};
         std::vector<std::shared_ptr<ELF64_program_entry>> loads{};
         uintptr_t start = (uintptr_t) ((intptr_t) -1);
         uintptr_t end = 0;
@@ -53,6 +54,34 @@ void Exec::Run() {
                 tlsStart = pe->p_vaddr;
                 tlsMemSize = pe->p_memsz;
                 tlsAlign = pe->p_align;
+            }
+            if (pe->p_type == PHT_INTERP) {
+                if (pe->p_filesz == 0) {
+                    std::cerr << "ELF: empty PHT_INTERP\n";
+                    return;
+                }
+                {
+                    char *rdbuf = (char *) malloc(pe->p_filesz + 1);
+                    if (rdbuf == nullptr) {
+                        std::cerr << "ELF: memory allocation failure, PHT_INTERP, " << std::dec << pe->p_filesz << "\n";
+                        return;
+                    }
+                    auto rd = binary->Read(pe->p_offset, rdbuf, pe->p_filesz);
+                    if (rd != pe->p_filesz) {
+                        free(rdbuf);
+                        std::cerr << "ELF: read error, PHT_INTERP, 0x" << std::hex << pe->p_offset << ", " << std::dec
+                                  << pe->p_filesz << "\n";
+                        return;
+                    }
+                    rdbuf[pe->p_filesz] = 0;
+                    interpreter.clear();
+                    interpreter.append(rdbuf);
+                    free(rdbuf);
+                }
+                if (interpreter.empty()) {
+                    std::cerr << "ELF: empty PHT_INTERP (null terminated)\n";
+                    return;
+                }
             }
         }
         fsBase = tlsStart + tlsMemSize;
@@ -259,7 +288,7 @@ void Exec::Run() {
             uint8_t random_data[16] = {13, 0xFE, 27, 59, 46, 33, 134, 201, 101, 178, 199, 3, 99, 8, 144, 177};
             memcpy(&(random->data[0]), &(random_data[0]), sizeof(random->data));
         }
-        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [process, random, environ, argv, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t randomAddr) {
+        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [interpreter, process, random, environ, argv, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t randomAddr) {
             if (!success) {
                 std::cerr << "Error: Failed to push random data to stack for new process\n";
                 delete process;
@@ -267,14 +296,14 @@ void Exec::Run() {
             }
             std::shared_ptr<std::vector<ELF64_auxv>> auxv{new std::vector<ELF64_auxv>};
             auxv->push_back({.type = AT_RANDOM, .uintptr = randomAddr});
-            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) {
+            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [interpreter, process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) {
                 if (!success) {
                     std::cerr << "Error: Failed to push environment to stack for new process\n";
                     delete process;
                     return;
                 }
                 std::vector<uintptr_t> environPtrs{ptrs};
-                process->push_strings(stackAddr, argv->begin(), argv->end(), std::vector<uintptr_t>(), [process, environPtrs, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
+                process->push_strings(stackAddr, argv->begin(), argv->end(), std::vector<uintptr_t>(), [interpreter, process, environPtrs, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
                     if (!success) {
                         std::cerr << "Error: Failed to push args to stack for new process\n";
                         delete process;
@@ -283,13 +312,13 @@ void Exec::Run() {
                     stackAddr = (stackAddr + 8) & ~((uintptr_t) 0xf);
                     stackAddr -= 8;
                     std::vector<uintptr_t> argvPtrs{ptrs};
-                    process->push_64(stackAddr, 0, [process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
+                    process->push_64(stackAddr, 0, [interpreter, process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
                         if (!success) {
                             std::cerr << "Error: Failed to push end of auxv to stack for new process\n";
                             delete process;
                             return;
                         }
-                        process->push_data(stackAddr, &(auxv->at(0)), sizeof(auxv->at(0)) * auxv->size(), [process, auxv, environPtrs, argvPtrs, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t auxvAddr) mutable {
+                        process->push_data(stackAddr, &(auxv->at(0)), sizeof(auxv->at(0)) * auxv->size(), [interpreter, process, auxv, environPtrs, argvPtrs, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t auxvAddr) mutable {
                             if (!success) {
                                 std::cerr << "Error: Failed to push auxv to stack for new process\n";
                                 delete process;
@@ -297,7 +326,7 @@ void Exec::Run() {
                             }
                             std::shared_ptr<std::vector<uintptr_t>> environ{new std::vector<uintptr_t>(environPtrs)};
                             environ->push_back(0);
-                            process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase] (bool success, uintptr_t environAddr) {
+                            process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [interpreter, process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase] (bool success, uintptr_t environAddr) {
                                 if (!success) {
                                     std::cerr << "Error: Failed to push environment to stack for new process\n";
                                     delete process;
@@ -305,15 +334,20 @@ void Exec::Run() {
                                 }
                                 std::shared_ptr<std::vector<uintptr_t>> argv{new std::vector<uintptr_t>(argvPtrs)};
                                 argv->push_back(0);
-                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
+                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [interpreter, process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
                                     if (!success) {
                                         std::cerr << "Error: Failed to push args to stack for new process\n";
                                         delete process;
                                         return;
                                     }
-                                    process->push_64(stackAddr, argc, [process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
+                                    process->push_64(stackAddr, argc, [interpreter, process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
                                         if (!success) {
                                             std::cerr << "Error: Failed to push args count to stack for new process\n";
+                                            delete process;
+                                            return;
+                                        }
+                                        if (!interpreter.empty()) {
+                                            std::cerr << "Error: ELF requires interpreter " << interpreter << "\n";
                                             delete process;
                                             return;
                                         }
