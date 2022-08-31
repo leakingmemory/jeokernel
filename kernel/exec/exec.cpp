@@ -19,6 +19,67 @@ struct exec_pageinfo {
     bool exec;
 };
 
+struct ELF_loads {
+    std::string interpreter{};
+    std::vector<std::shared_ptr<ELF64_program_entry>> loads{};
+    uintptr_t start{0};
+    uintptr_t end{0};
+    uintptr_t tlsStart{0};
+    uintptr_t tlsMemSize{0};
+    uintptr_t tlsAlign{0};
+};
+
+void Exec::LoadLoads(ELF_loads &loads, UserElf &userElf) {
+    loads.start = (uintptr_t) ((intptr_t) -1);
+    for (int i = 0; i < userElf.get_num_program_entries(); i++) {
+        auto pe = userElf.get_program_entry(i);
+        if (pe->p_type == PHT_LOAD) {
+            std::cout << "Load " << std::hex << pe->p_offset << " -> " << pe->p_vaddr << " file/mem "
+                      << pe->p_filesz << "/" << pe->p_memsz << "\n";
+            loads.loads.push_back(pe);
+            if (pe->p_vaddr < loads.start) {
+                loads.start = pe->p_vaddr;
+            }
+            if (loads.end < (pe->p_vaddr + pe->p_memsz)) {
+                loads.end = pe->p_vaddr + pe->p_memsz;
+            }
+        }
+        if (pe->p_type == PHT_TLS) {
+            loads.tlsStart = pe->p_vaddr;
+            loads.tlsMemSize = pe->p_memsz;
+            loads.tlsAlign = pe->p_align;
+        }
+        if (pe->p_type == PHT_INTERP) {
+            if (pe->p_filesz == 0) {
+                std::cerr << "ELF: empty PHT_INTERP\n";
+                return;
+            }
+            {
+                char *rdbuf = (char *) malloc(pe->p_filesz + 1);
+                if (rdbuf == nullptr) {
+                    std::cerr << "ELF: memory allocation failure, PHT_INTERP, " << std::dec << pe->p_filesz << "\n";
+                    return;
+                }
+                auto rd = binary->Read(pe->p_offset, rdbuf, pe->p_filesz);
+                if (rd != pe->p_filesz) {
+                    free(rdbuf);
+                    std::cerr << "ELF: read error, PHT_INTERP, 0x" << std::hex << pe->p_offset << ", " << std::dec
+                              << pe->p_filesz << "\n";
+                    return;
+                }
+                rdbuf[pe->p_filesz] = 0;
+                loads.interpreter.clear();
+                loads.interpreter.append(rdbuf);
+                free(rdbuf);
+            }
+            if (loads.interpreter.empty()) {
+                std::cerr << "ELF: empty PHT_INTERP (null terminated)\n";
+                return;
+            }
+        }
+    }
+}
+
 void Exec::Run() {
     std::string cmd_name = name;
     UserElf userElf{binary};
@@ -28,73 +89,21 @@ void Exec::Run() {
     }
     constexpr uint64_t lowerUserspaceEnd = ((uint64_t) USERSPACE_LOW_END) << (9+9+12);
     constexpr uint64_t upperUserspaceStart = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9+9+9+12);
-    uintptr_t tlsStart{0};
-    uintptr_t tlsMemSize{0};
-    uintptr_t tlsAlign{0};
+    ELF_loads loads{};
     uintptr_t fsBase{0};
     {
-        std::string interpreter{};
-        std::vector<std::shared_ptr<ELF64_program_entry>> loads{};
-        uintptr_t start = (uintptr_t) ((intptr_t) -1);
-        uintptr_t end = 0;
-        for (int i = 0; i < userElf.get_num_program_entries(); i++) {
-            auto pe = userElf.get_program_entry(i);
-            if (pe->p_type == PHT_LOAD) {
-                std::cout << "Load " << std::hex << pe->p_offset << " -> " << pe->p_vaddr << " file/mem "
-                          << pe->p_filesz << "/" << pe->p_memsz << "\n";
-                loads.push_back(pe);
-                if (pe->p_vaddr < start) {
-                    start = pe->p_vaddr;
-                }
-                if (end < (pe->p_vaddr + pe->p_memsz)) {
-                    end = pe->p_vaddr + pe->p_memsz;
-                }
-            }
-            if (pe->p_type == PHT_TLS) {
-                tlsStart = pe->p_vaddr;
-                tlsMemSize = pe->p_memsz;
-                tlsAlign = pe->p_align;
-            }
-            if (pe->p_type == PHT_INTERP) {
-                if (pe->p_filesz == 0) {
-                    std::cerr << "ELF: empty PHT_INTERP\n";
-                    return;
-                }
-                {
-                    char *rdbuf = (char *) malloc(pe->p_filesz + 1);
-                    if (rdbuf == nullptr) {
-                        std::cerr << "ELF: memory allocation failure, PHT_INTERP, " << std::dec << pe->p_filesz << "\n";
-                        return;
-                    }
-                    auto rd = binary->Read(pe->p_offset, rdbuf, pe->p_filesz);
-                    if (rd != pe->p_filesz) {
-                        free(rdbuf);
-                        std::cerr << "ELF: read error, PHT_INTERP, 0x" << std::hex << pe->p_offset << ", " << std::dec
-                                  << pe->p_filesz << "\n";
-                        return;
-                    }
-                    rdbuf[pe->p_filesz] = 0;
-                    interpreter.clear();
-                    interpreter.append(rdbuf);
-                    free(rdbuf);
-                }
-                if (interpreter.empty()) {
-                    std::cerr << "ELF: empty PHT_INTERP (null terminated)\n";
-                    return;
-                }
-            }
-        }
-        fsBase = tlsStart + tlsMemSize;
-        if (tlsAlign != 0) {
-            auto fsBaseOff = fsBase % tlsAlign;
+        LoadLoads(loads, userElf);
+        fsBase = loads.tlsStart + loads.tlsMemSize;
+        if (loads.tlsAlign != 0) {
+            auto fsBaseOff = fsBase % loads.tlsAlign;
             if (fsBaseOff != 0) {
-                fsBase += tlsAlign;
+                fsBase += loads.tlsAlign;
             }
             fsBase -= fsBaseOff;
         }
-        auto startpage = start >> 12;
-        auto endpage = end >> 12;
-        if ((end & (PAGESIZE - 1)) != 0) {
+        auto startpage = loads.start >> 12;
+        auto endpage = loads.end >> 12;
+        if ((loads.end & (PAGESIZE - 1)) != 0) {
             ++endpage;
         }
         uint64_t relocationOffset;
@@ -110,7 +119,7 @@ void Exec::Run() {
             pages.push_back({.filep = doNotLoad, .load = 0, .write = false, .exec = false});
         }
         uintptr_t program_brk{0};
-        for (auto &pe : loads) {
+        for (auto &pe : loads.loads) {
             auto vpageaddr = pe->p_vaddr >> 12;
             auto vpageoff = pe->p_vaddr & (PAGESIZE - 1);
             auto ppageaddr = pe->p_offset >> 12;
@@ -288,6 +297,9 @@ void Exec::Run() {
             uint8_t random_data[16] = {13, 0xFE, 27, 59, 46, 33, 134, 201, 101, 178, 199, 3, 99, 8, 144, 177};
             memcpy(&(random->data[0]), &(random_data[0]), sizeof(random->data));
         }
+
+        std::string interpreter{loads.interpreter};
+
         process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [interpreter, process, random, environ, argv, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t randomAddr) {
             if (!success) {
                 std::cerr << "Error: Failed to push random data to stack for new process\n";
