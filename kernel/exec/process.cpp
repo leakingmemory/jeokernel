@@ -807,6 +807,7 @@ uintptr_t Process::push_64(uintptr_t ptr, uint64_t val, const std::function<void
             ph = ph << 12;
             vm.page(i).rwmap(ph);
         }
+        vm.reload();
         void *ptr = (void *) ((uint8_t *) vm.pointer() + offset);
         *((uint64_t *) ptr) = val;
         f(true, dstptr);
@@ -837,6 +838,7 @@ uintptr_t Process::push_data(uintptr_t ptr, const void *data, uintptr_t length, 
             ph = ph << 12;
             vm.page(i).rwmap(ph);
         }
+        vm.reload();
         memcpy((uint8_t *) vm.pointer() + offset, data, length);
         f(true, dstptr);
     });
@@ -864,6 +866,7 @@ uintptr_t Process::push_string(uintptr_t ptr, const std::string &str, const std:
             ph = ph << 12;
             vm.page(i).rwmap(ph);
         }
+        vm.reload();
         memcpy((uint8_t *) vm.pointer() + offset, strcp.c_str(), length);
         f(true, dstptr);
     });

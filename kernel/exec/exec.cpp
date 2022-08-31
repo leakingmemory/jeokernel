@@ -267,7 +267,7 @@ void Exec::Run() {
             }
             std::shared_ptr<std::vector<ELF64_auxv>> auxv{new std::vector<ELF64_auxv>};
             auxv->push_back({.type = AT_RANDOM, .uintptr = randomAddr});
-            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> ptrs, uintptr_t stackAddr) {
+            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) {
                 if (!success) {
                     std::cerr << "Error: Failed to push environment to stack for new process\n";
                     delete process;
@@ -280,6 +280,8 @@ void Exec::Run() {
                         delete process;
                         return;
                     }
+                    stackAddr = (stackAddr + 8) & ~((uintptr_t) 0xf);
+                    stackAddr -= 8;
                     std::vector<uintptr_t> argvPtrs{ptrs};
                     process->push_64(stackAddr, 0, [process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
                         if (!success) {
@@ -302,42 +304,29 @@ void Exec::Run() {
                                     return;
                                 }
                                 std::shared_ptr<std::vector<uintptr_t>> argv{new std::vector<uintptr_t>(argvPtrs)};
-                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t argvAddr) {
+                                argv->push_back(0);
+                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
                                     if (!success) {
                                         std::cerr << "Error: Failed to push args to stack for new process\n";
                                         delete process;
                                         return;
                                     }
-                                    process->push_64(argvAddr, environAddr, [process, argvAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
+                                    process->push_64(stackAddr, argc, [process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
                                         if (!success) {
-                                            std::cerr << "Error: Failed to push environ ptr to stack for new process\n";
+                                            std::cerr << "Error: Failed to push args count to stack for new process\n";
                                             delete process;
                                             return;
                                         }
-                                        process->push_64(stackAddr, argvAddr, [process, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
-                                            if (!success) {
-                                                std::cerr << "Error: Failed to push args ptr to stack for new process\n";
-                                                delete process;
-                                                return;
-                                            }
-                                            process->push_64(stackAddr, argc, [process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
-                                                if (!success) {
-                                                    std::cerr << "Error: Failed to push args count to stack for new process\n";
-                                                    delete process;
-                                                    return;
-                                                }
-                                                std::vector<task_resource *> resources{};
-                                                auto *scheduler = get_scheduler();
-                                                resources.push_back(process);
-                                                auto pid = scheduler->new_task(
-                                                        entrypoint,
-                                                        0x18 | 3 /* ring3 / lowest*/,
-                                                        0x20 | 3, fsBase, 0, stackAddr, 0, 0, 0,
-                                                        0, 0, 0, resources);
-                                                std::cout << "Started task " << pid << "\n";
-                                                scheduler->set_name(pid, cmd_name);
-                                            });
-                                        });
+                                        std::vector<task_resource *> resources{};
+                                        auto *scheduler = get_scheduler();
+                                        resources.push_back(process);
+                                        auto pid = scheduler->new_task(
+                                                entrypoint,
+                                                0x18 | 3 /* ring3 / lowest*/,
+                                                0x20 | 3, fsBase, 0, stackAddr, 0, 0, 0,
+                                                0, 0, 0, resources);
+                                        std::cout << "Started task " << pid << "\n";
+                                        scheduler->set_name(pid, cmd_name);
                                     });
                                 });
                             });
