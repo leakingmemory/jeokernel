@@ -6,11 +6,13 @@
 #define JEOKERNEL_EXEC_H
 
 #include <memory>
+#include <vector>
 
 class kfile;
 
 class ELF_loads;
 class UserElf;
+class exec_pageinfo;
 
 class Exec {
 private:
@@ -19,7 +21,8 @@ private:
 public:
     Exec(std::shared_ptr<kfile> binary, const std::string &name) : binary(binary), name(name) {}
 private:
-    void LoadLoads(ELF_loads &loads, UserElf &userElf);
+    bool LoadLoads(ELF_loads &loads, UserElf &userElf);
+    void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);
 public:
     void Run();
 };

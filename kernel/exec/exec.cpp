@@ -27,9 +27,12 @@ struct ELF_loads {
     uintptr_t tlsStart{0};
     uintptr_t tlsMemSize{0};
     uintptr_t tlsAlign{0};
+    uintptr_t startpage{0};
+    uintptr_t endpage{0};
+    uintptr_t program_brk{0};
 };
 
-void Exec::LoadLoads(ELF_loads &loads, UserElf &userElf) {
+bool Exec::LoadLoads(ELF_loads &loads, UserElf &userElf) {
     loads.start = (uintptr_t) ((intptr_t) -1);
     for (int i = 0; i < userElf.get_num_program_entries(); i++) {
         auto pe = userElf.get_program_entry(i);
@@ -52,20 +55,20 @@ void Exec::LoadLoads(ELF_loads &loads, UserElf &userElf) {
         if (pe->p_type == PHT_INTERP) {
             if (pe->p_filesz == 0) {
                 std::cerr << "ELF: empty PHT_INTERP\n";
-                return;
+                return false;
             }
             {
                 char *rdbuf = (char *) malloc(pe->p_filesz + 1);
                 if (rdbuf == nullptr) {
                     std::cerr << "ELF: memory allocation failure, PHT_INTERP, " << std::dec << pe->p_filesz << "\n";
-                    return;
+                    return false;
                 }
                 auto rd = binary->Read(pe->p_offset, rdbuf, pe->p_filesz);
                 if (rd != pe->p_filesz) {
                     free(rdbuf);
                     std::cerr << "ELF: read error, PHT_INTERP, 0x" << std::hex << pe->p_offset << ", " << std::dec
                               << pe->p_filesz << "\n";
-                    return;
+                    return false;
                 }
                 rdbuf[pe->p_filesz] = 0;
                 loads.interpreter.clear();
@@ -74,7 +77,90 @@ void Exec::LoadLoads(ELF_loads &loads, UserElf &userElf) {
             }
             if (loads.interpreter.empty()) {
                 std::cerr << "ELF: empty PHT_INTERP (null terminated)\n";
-                return;
+                return false;
+            }
+        }
+    }
+
+    loads.startpage = loads.start >> 12;
+    loads.endpage = loads.end >> 12;
+    if ((loads.end & (PAGESIZE - 1)) != 0) {
+        ++loads.endpage;
+    }
+    return true;
+}
+
+constexpr uint32_t doNotLoad = -1;
+
+void Exec::Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf) {
+    pages.reserve(loads.endpage - loads.startpage);
+    for (auto i = loads.startpage; i < loads.endpage; i++) {
+        pages.push_back({.filep = doNotLoad, .load = 0, .write = false, .exec = false});
+    }
+    for (auto &pe : loads.loads) {
+        auto vpageaddr = pe->p_vaddr >> 12;
+        auto vpageoff = pe->p_vaddr & (PAGESIZE - 1);
+        auto ppageaddr = pe->p_offset >> 12;
+        auto ppageoff = pe->p_offset & (PAGESIZE - 1);
+        if (vpageoff != ppageoff) {
+            std::cerr << "Error: Misalignment in ELF file prevents loading by page\n";
+        }
+        auto vpageendaddr = pe->p_vaddr + pe->p_memsz;
+        if (vpageendaddr > loads.program_brk) {
+            loads.program_brk = vpageendaddr;
+        }
+        if ((vpageendaddr & (PAGESIZE - 1)) == 0) {
+            vpageendaddr = vpageendaddr >> 12;
+        } else {
+            vpageendaddr = (vpageendaddr >> 12) + 1;
+        }
+        auto vendaddr = vpageendaddr << 12;
+        auto pvendaddr = vendaddr;
+        if (pe->p_filesz < pe->p_memsz) {
+            std::cerr << "Warning: Less filesize than memsize "<<pe->p_filesz << "<" << pe->p_memsz
+                      << " may not be correctly implemented\n";
+            pvendaddr = pe->p_vaddr + pe->p_filesz;
+        }
+        for (auto i = vpageaddr; i < vpageendaddr; i++) {
+            auto rel = i - vpageaddr;
+            auto &page = pages[i - loads.startpage];
+            uintptr_t addr{i};
+            addr = addr << 12;
+            if (addr < pvendaddr) {
+                page.filep = ppageaddr + rel;
+                if ((pvendaddr - addr) < PAGESIZE) {
+                    page.load = pvendaddr - addr;
+                }
+            } else {
+                page.filep = doNotLoad;
+            }
+        }
+    }
+    for (int i = 0; i < userElf.get_num_section_entries(); i++) {
+        auto se = userElf.get_section_entry(i);
+        auto vaddr = se->sh_addr;
+        auto vsize = se->sh_size;
+        if (vaddr != 0 && vsize != 0) {
+            auto vend = vaddr + vsize;
+            vaddr = vaddr & ~(PAGESIZE - 1);
+            for (auto va = vaddr; va < vend; va += PAGESIZE) {
+                auto page = va >> 12;
+                if (page < loads.startpage) {
+                    std::cerr << "Error: ELF section pageaddr " << std::hex << page << std::dec << " out of bounds\n";
+                    continue;
+                }
+                if (page >= loads.endpage) {
+                    std::cerr << "Error: ELF section pageaddr " << std::hex << page << std::dec << " out of bounds\n";
+                    break;
+                }
+                if ((se->sh_flags & SHF_WRITE) != 0) {
+                    std::cout << "Set write on " << std::hex << page << std::dec << "\n";
+                    pages[page - loads.startpage].write = true;
+                }
+                if ((se->sh_flags & SHF_EXECINSTR) != 0) {
+                    std::cout << "Set exec on " << std::hex << page << std::dec << "\n";
+                    pages[page - loads.startpage].exec = true;
+                }
             }
         }
     }
@@ -101,91 +187,15 @@ void Exec::Run() {
             }
             fsBase -= fsBaseOff;
         }
-        auto startpage = loads.start >> 12;
-        auto endpage = loads.end >> 12;
-        if ((loads.end & (PAGESIZE - 1)) != 0) {
-            ++endpage;
-        }
         uint64_t relocationOffset;
-        if (endpage <= lowerUserspaceEnd) {
+        if (loads.endpage <= lowerUserspaceEnd) {
             relocationOffset = 0;
         } else {
             relocationOffset = upperUserspaceStart;
         }
         std::vector<exec_pageinfo> pages{};
-        pages.reserve(endpage - startpage);
-        constexpr uint32_t doNotLoad = -1;
-        for (auto i = startpage; i < endpage; i++) {
-            pages.push_back({.filep = doNotLoad, .load = 0, .write = false, .exec = false});
-        }
-        uintptr_t program_brk{0};
-        for (auto &pe : loads.loads) {
-            auto vpageaddr = pe->p_vaddr >> 12;
-            auto vpageoff = pe->p_vaddr & (PAGESIZE - 1);
-            auto ppageaddr = pe->p_offset >> 12;
-            auto ppageoff = pe->p_offset & (PAGESIZE - 1);
-            if (vpageoff != ppageoff) {
-                std::cerr << "Error: Misalignment in ELF file prevents loading by page\n";
-            }
-            auto vpageendaddr = pe->p_vaddr + pe->p_memsz;
-            if (vpageendaddr > program_brk) {
-                program_brk = vpageendaddr;
-            }
-            if ((vpageendaddr & (PAGESIZE - 1)) == 0) {
-                vpageendaddr = vpageendaddr >> 12;
-            } else {
-                vpageendaddr = (vpageendaddr >> 12) + 1;
-            }
-            auto vendaddr = vpageendaddr << 12;
-            auto pvendaddr = vendaddr;
-            if (pe->p_filesz < pe->p_memsz) {
-                std::cerr << "Warning: Less filesize than memsize "<<pe->p_filesz << "<" << pe->p_memsz
-                << " may not be correctly implemented\n";
-                pvendaddr = pe->p_vaddr + pe->p_filesz;
-            }
-            for (auto i = vpageaddr; i < vpageendaddr; i++) {
-                auto rel = i - vpageaddr;
-                auto &page = pages[i - startpage];
-                uintptr_t addr{i};
-                addr = addr << 12;
-                if (addr < pvendaddr) {
-                    page.filep = ppageaddr + rel;
-                    if ((pvendaddr - addr) < PAGESIZE) {
-                        page.load = pvendaddr - addr;
-                    }
-                } else {
-                    page.filep = doNotLoad;
-                }
-            }
-        }
-        for (int i = 0; i < userElf.get_num_section_entries(); i++) {
-            auto se = userElf.get_section_entry(i);
-            auto vaddr = se->sh_addr;
-            auto vsize = se->sh_size;
-            if (vaddr != 0 && vsize != 0) {
-                auto vend = vaddr + vsize;
-                vaddr = vaddr & ~(PAGESIZE - 1);
-                for (auto va = vaddr; va < vend; va += PAGESIZE) {
-                    auto page = va >> 12;
-                    if (page < startpage) {
-                        std::cerr << "Error: ELF section pageaddr " << std::hex << page << std::dec << " out of bounds\n";
-                        continue;
-                    }
-                    if (page >= endpage) {
-                        std::cerr << "Error: ELF section pageaddr " << std::hex << page << std::dec << " out of bounds\n";
-                        break;
-                    }
-                    if ((se->sh_flags & SHF_WRITE) != 0) {
-                        std::cout << "Set write on " << std::hex << page << std::dec << "\n";
-                        pages[page - startpage].write = true;
-                    }
-                    if ((se->sh_flags & SHF_EXECINSTR) != 0) {
-                        std::cout << "Set exec on " << std::hex << page << std::dec << "\n";
-                        pages[page - startpage].exec = true;
-                    }
-                }
-            }
-        }
+
+        Pages(pages, loads, userElf);
 
         constexpr uint16_t none = 0;
         constexpr uint16_t read = 1;
@@ -194,7 +204,7 @@ void Exec::Run() {
         constexpr uint16_t zero = 8;
 
         auto *process = new ProcThread();
-        process->SetProgramBreak(program_brk);
+        process->SetProgramBreak(loads.program_brk);
         {
             uint32_t index = 0;
             uint32_t start = 0;
@@ -219,10 +229,10 @@ void Exec::Run() {
                         }
                         bool success;
                         if ((flags & zero) == 0) {
-                            success = process->Map(binary, startpage + start, index - start, offset, load,
+                            success = process->Map(binary, loads.startpage + start, index - start, offset, load,
                                                         (flags & write) != 0, (flags & exec) != 0, true, true);
                         } else {
-                            success = process->Map(startpage + start, index - start, true);
+                            success = process->Map(loads.startpage + start, index - start, true);
                         }
                         if (!success) {
                             std::cerr << "Error: Map failed\n";
@@ -241,10 +251,10 @@ void Exec::Run() {
                     if (load != 0 && (index - start) != 1) {
                         wild_panic("Invalid load!=0 && len>1");
                     }
-                    success = process->Map(binary, startpage + start, index - start, offset, load, (flags & write) != 0,
+                    success = process->Map(binary, loads.startpage + start, index - start, offset, load, (flags & write) != 0,
                                                 (flags & exec) != 0, true, true);
                 } else {
-                    success = process->Map(startpage + start, index - start, true);
+                    success = process->Map(loads.startpage + start, index - start, true);
                 }
                 if (!success) {
                     std::cerr << "Error: Map failed\n";
@@ -265,7 +275,7 @@ void Exec::Run() {
         uint64_t entrypoint = userElf.get_entrypoint_addr();
 
         if (relocationOffset != 0) {
-            std::cout << "Relocation " <<std::hex<< (startpage) << "->" << (relocationOffset+startpage) <<std::dec<< "\n";
+            std::cout << "Relocation " <<std::hex<< (loads.startpage) << "->" << (relocationOffset+loads.startpage) <<std::dec<< "\n";
             entrypoint += relocationOffset;
         }
 
