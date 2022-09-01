@@ -13,6 +13,7 @@ class kfile;
 class ELF_loads;
 class UserElf;
 class exec_pageinfo;
+class ProcThread;
 
 class Exec {
 private:
@@ -23,6 +24,7 @@ public:
 private:
     bool LoadLoads(ELF_loads &loads, UserElf &userElf);
     void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);
+    void MapPages(ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads);
 public:
     void Run();
 };

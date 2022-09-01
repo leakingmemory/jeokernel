@@ -166,6 +166,69 @@ void Exec::Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &u
     }
 }
 
+void Exec::MapPages(ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads) {
+    constexpr uint16_t none = 0;
+    constexpr uint16_t read = 1;
+    constexpr uint16_t write = 2;
+    constexpr uint16_t exec = 4;
+    constexpr uint16_t zero = 8;
+
+    uint32_t index = 0;
+    uint32_t start = 0;
+    uint32_t flags = none;
+    uint32_t offset = 0;
+    uint16_t load = 0;
+    for (auto &page: pages) {
+        uint32_t currentFlags = read;
+        if (page.write) {
+            currentFlags |= write;
+        }
+        if (page.exec) {
+            currentFlags |= exec;
+        }
+        if (page.filep == doNotLoad) {
+            currentFlags |= zero;
+        }
+        if (currentFlags != flags || load != 0 || page.load != 0 || (page.filep != doNotLoad && page.filep != (offset + (index - start)))) {
+            if (flags != none) {
+                if (load != 0 && (index - start) != 1) {
+                    wild_panic("Invalid load!=0 && len>1");
+                }
+                bool success;
+                if ((flags & zero) == 0) {
+                    success = process->Map(binary, loads.startpage + start, index - start, offset, load,
+                                           (flags & write) != 0, (flags & exec) != 0, true, true);
+                } else {
+                    success = process->Map(loads.startpage + start, index - start, true);
+                }
+                if (!success) {
+                    std::cerr << "Error: Map failed\n";
+                }
+            }
+            start = index;
+            flags = currentFlags;
+            offset = page.filep;
+        }
+        load = page.load;
+        ++index;
+    }
+    if (flags != none) {
+        bool success;
+        if ((flags & zero) == 0) {
+            if (load != 0 && (index - start) != 1) {
+                wild_panic("Invalid load!=0 && len>1");
+            }
+            success = process->Map(binary, loads.startpage + start, index - start, offset, load, (flags & write) != 0,
+                                   (flags & exec) != 0, true, true);
+        } else {
+            success = process->Map(loads.startpage + start, index - start, true);
+        }
+        if (!success) {
+            std::cerr << "Error: Map failed\n";
+        }
+    }
+}
+
 void Exec::Run() {
     std::string cmd_name = name;
     UserElf userElf{binary};
@@ -199,70 +262,10 @@ void Exec::Run() {
 
         Pages(pages, loads, userElf);
 
-        constexpr uint16_t none = 0;
-        constexpr uint16_t read = 1;
-        constexpr uint16_t write = 2;
-        constexpr uint16_t exec = 4;
-        constexpr uint16_t zero = 8;
-
         auto *process = new ProcThread();
         process->SetProgramBreak(loads.program_brk);
-        {
-            uint32_t index = 0;
-            uint32_t start = 0;
-            uint32_t flags = none;
-            uint32_t offset = 0;
-            uint16_t load = 0;
-            for (auto &page: pages) {
-                uint32_t currentFlags = read;
-                if (page.write) {
-                    currentFlags |= write;
-                }
-                if (page.exec) {
-                    currentFlags |= exec;
-                }
-                if (page.filep == doNotLoad) {
-                    currentFlags |= zero;
-                }
-                if (currentFlags != flags || load != 0 || page.load != 0 || (page.filep != doNotLoad && page.filep != (offset + (index - start)))) {
-                    if (flags != none) {
-                        if (load != 0 && (index - start) != 1) {
-                            wild_panic("Invalid load!=0 && len>1");
-                        }
-                        bool success;
-                        if ((flags & zero) == 0) {
-                            success = process->Map(binary, loads.startpage + start, index - start, offset, load,
-                                                        (flags & write) != 0, (flags & exec) != 0, true, true);
-                        } else {
-                            success = process->Map(loads.startpage + start, index - start, true);
-                        }
-                        if (!success) {
-                            std::cerr << "Error: Map failed\n";
-                        }
-                    }
-                    start = index;
-                    flags = currentFlags;
-                    offset = page.filep;
-                }
-                load = page.load;
-                ++index;
-            }
-            if (flags != none) {
-                bool success;
-                if ((flags & zero) == 0) {
-                    if (load != 0 && (index - start) != 1) {
-                        wild_panic("Invalid load!=0 && len>1");
-                    }
-                    success = process->Map(binary, loads.startpage + start, index - start, offset, load, (flags & write) != 0,
-                                                (flags & exec) != 0, true, true);
-                } else {
-                    success = process->Map(loads.startpage + start, index - start, true);
-                }
-                if (!success) {
-                    std::cerr << "Error: Map failed\n";
-                }
-            }
-        }
+
+        MapPages(process, pages, loads);
 
 #ifdef DEBUG_USERSPACE_PAGELIST
         {
