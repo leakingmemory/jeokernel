@@ -178,7 +178,9 @@ void Exec::Run() {
     ELF_loads loads{};
     uintptr_t fsBase{0};
     {
-        LoadLoads(loads, userElf);
+        if (!LoadLoads(loads, userElf)) {
+            return;
+        }
         fsBase = loads.tlsStart + loads.tlsMemSize;
         if (loads.tlsAlign != 0) {
             auto fsBaseOff = fsBase % loads.tlsAlign;
