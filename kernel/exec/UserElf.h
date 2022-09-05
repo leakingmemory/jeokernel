@@ -22,6 +22,12 @@ public:
     bool is_valid() const {
         return valid;
     }
+    uintptr_t get_program_header_addr() const {
+        return elf64Header.e_phoff;
+    }
+    uint16_t get_size_of_program_entry() const {
+        return elf64Header.e_phentsize;
+    }
     uint16_t get_num_program_entries() const {
         return elf64Header.e_phnum;
     }

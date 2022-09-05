@@ -358,134 +358,176 @@ void Exec::Run() {
 
         std::shared_ptr<ExecState> execState{new ExecState(cwd_ref, cwd)};
 
-        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [execState, loads, interpreter, process, random, environ, argv, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t randomAddr) {
-            if (!success) {
-                std::cerr << "Error: Failed to push random data to stack for new process\n";
+        auto programHeaderAddr = userElf.get_program_header_addr();
+        programHeaderAddr += relocationOffset;
+        auto sizePhEnt = userElf.get_size_of_program_entry();
+        auto numPhEnt = userElf.get_num_program_entries();
+
+        size_t phTotSize = sizePhEnt;
+        phTotSize *= (size_t) numPhEnt;
+        void *phBuf = malloc(phTotSize);
+        if (phBuf == nullptr) {
+            std::cerr << "Error: Unable to allocate tmp program header\n";
+            delete process;
+            return;
+        }
+        {
+            auto rdPh = binary->Read(programHeaderAddr, phBuf, phTotSize);
+            if (rdPh != phTotSize) {
+                std::cerr << "Error: Unable to read program header\n";
+                free(phBuf);
                 delete process;
                 return;
             }
-            std::shared_ptr<std::vector<ELF64_auxv>> auxv{new std::vector<ELF64_auxv>};
-            auxv->push_back({.type = AT_RANDOM, .uintptr = randomAddr});
-            auxv->push_back({.type = AT_ENTRY, .uintptr = entrypoint});
-            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) {
+        }
+
+        process->push_data(stackAddr, phBuf, phTotSize, [phBuf, execState, loads, interpreter, process, random, environ, argv, argc, sizePhEnt, numPhEnt, entrypoint, cmd_name, fsBase] (bool success, uintptr_t programHeaderAddr) {
+            free(phBuf);
+            if (!success) {
+                std::cerr << "Error: Failed to push program header to stack for new process\n";
+                delete process;
+                return;
+            }
+            process->push_data(programHeaderAddr, &(random->data[0]), sizeof(random->data), [execState, loads, interpreter, process, random, environ, argv, argc, programHeaderAddr, sizePhEnt, numPhEnt, entrypoint, cmd_name, fsBase] (bool success, uintptr_t randomAddr) mutable {
                 if (!success) {
-                    std::cerr << "Error: Failed to push environment to stack for new process\n";
+                    std::cerr << "Error: Failed to push random data to stack for new process\n";
                     delete process;
                     return;
                 }
-                std::vector<uintptr_t> environPtrs{ptrs};
-                process->push_strings(stackAddr, argv->begin(), argv->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environPtrs, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
-                    if (!success) {
-                        std::cerr << "Error: Failed to push args to stack for new process\n";
+                std::shared_ptr<std::vector<ELF64_auxv>> auxv{new std::vector<ELF64_auxv>};
+                auxv->push_back({.type = AT_RANDOM, .uintptr = randomAddr});
+                auxv->push_back({.type = AT_ENTRY, .uintptr = entrypoint});
+                auxv->push_back({.type = AT_PAGESZ, .uintptr = PAGESIZE});
+                auxv->push_back({.type = AT_PHDR, .uintptr = programHeaderAddr});
+                auxv->push_back({.type = AT_PHENT, .uintptr = sizePhEnt});
+                auxv->push_back({.type = AT_PHNUM, .uintptr = numPhEnt});
+
+                if (!interpreter.empty()) {
+                    auto interpreterFile = execState->ResolveFile(interpreter);
+                    if (!interpreterFile) {
                         delete process;
                         return;
                     }
-                    stackAddr = (stackAddr + 8) & ~((uintptr_t) 0xf);
-                    stackAddr -= 8;
-                    std::vector<uintptr_t> argvPtrs{ptrs};
-                    process->push_64(stackAddr, 0, [execState, loads, interpreter, process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
-                        if (!success) {
-                            std::cerr << "Error: Failed to push end of auxv to stack for new process\n";
-                            delete process;
-                            return;
-                        }
-                        process->push_data(stackAddr, &(auxv->at(0)), sizeof(auxv->at(0)) * auxv->size(), [execState, loads, interpreter, process, auxv, environPtrs, argvPtrs, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t auxvAddr) mutable {
-                            if (!success) {
-                                std::cerr << "Error: Failed to push auxv to stack for new process\n";
+                    UserElf interpreterElf{interpreterFile};
+                    if (!interpreterElf.is_valid()) {
+                        std::cerr << "interpreter: " << interpreter << ": Not valid ELF64\n";
+                        delete process;
+                        return;
+                    }
+                    ELF_loads interpreterLoads{};
+                    if (!LoadLoads(*interpreterFile, interpreterLoads, interpreterElf)) {
+                        delete process;
+                        return;
+                    }
+
+                    std::vector<exec_pageinfo> interpreterPages{};
+
+                    Pages(interpreterPages, interpreterLoads, interpreterElf);
+
+                    uintptr_t interpreterRelocate{0};
+                    if (!process->IsFree(interpreterLoads.startpage, interpreterLoads.endpage - interpreterLoads.startpage)) {
+                        std::cout << "Interpreter " << std::hex << interpreterLoads.startpage
+                        << "-" << interpreterLoads.endpage << std::dec << " must be relocated\n";
+
+                        interpreterRelocate = loads.endpage + 1;
+
+                        if (process->IsFree(interpreterLoads.startpage + interpreterRelocate, interpreterLoads.endpage - interpreterLoads.startpage)) {
+                            std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
+                            << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                        } else {
+                            std::cerr << "(fail+fallback) Interpreter not relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
+                            << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                            auto startpage = process->FindFree(interpreterLoads.endpage - interpreterLoads.startpage);
+                            if (startpage == 0) {
+                                std::cerr << "Error: Could not allocate vspace for ELF interpreter\n";
                                 delete process;
                                 return;
                             }
-                            std::shared_ptr<std::vector<uintptr_t>> environ{new std::vector<uintptr_t>(environPtrs)};
-                            environ->push_back(0);
-                            process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [execState, loads, interpreter, process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase] (bool success, uintptr_t environAddr) {
+                            interpreterRelocate = interpreterLoads.startpage - startpage;
+                            std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
+                            << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                        }
+                    }
+
+                    uintptr_t pbrk = interpreterLoads.endpage + interpreterRelocate;
+                    pbrk = pbrk << 12;
+
+                    if (process->GetProgramBreak() < pbrk) {
+                        process->SetProgramBreak(pbrk);
+                    }
+
+                    MapPages(interpreterFile, process, interpreterPages, interpreterLoads, interpreterRelocate << 12);
+
+                    entrypoint = interpreterElf.get_entrypoint_addr();
+                    entrypoint += interpreterRelocate << 12;
+
+                    uintptr_t interpreterBase = interpreterLoads.startpage + interpreterRelocate;
+                    interpreterBase = interpreterBase << 12;
+
+                    auxv->push_back({.type = AT_BASE, .uintptr = interpreterBase});
+                }
+
+                process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) {
+                    if (!success) {
+                        std::cerr << "Error: Failed to push environment to stack for new process\n";
+                        delete process;
+                        return;
+                    }
+                    std::vector<uintptr_t> environPtrs{ptrs};
+                    process->push_strings(stackAddr, argv->begin(), argv->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environPtrs, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
+                        if (!success) {
+                            std::cerr << "Error: Failed to push args to stack for new process\n";
+                            delete process;
+                            return;
+                        }
+                        stackAddr = (stackAddr + 8) & ~((uintptr_t) 0xf);
+                        stackAddr -= 8;
+                        std::vector<uintptr_t> argvPtrs{ptrs};
+                        process->push_64(stackAddr, 0, [execState, loads, interpreter, process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
+                            if (!success) {
+                                std::cerr << "Error: Failed to push end of auxv to stack for new process\n";
+                                delete process;
+                                return;
+                            }
+                            process->push_data(stackAddr, &(auxv->at(0)), sizeof(auxv->at(0)) * auxv->size(), [execState, loads, interpreter, process, auxv, environPtrs, argvPtrs, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t auxvAddr) mutable {
                                 if (!success) {
-                                    std::cerr << "Error: Failed to push environment to stack for new process\n";
+                                    std::cerr << "Error: Failed to push auxv to stack for new process\n";
                                     delete process;
                                     return;
                                 }
-                                std::shared_ptr<std::vector<uintptr_t>> argv{new std::vector<uintptr_t>(argvPtrs)};
-                                argv->push_back(0);
-                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [execState, loads, interpreter, process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
+                                std::shared_ptr<std::vector<uintptr_t>> environ{new std::vector<uintptr_t>(environPtrs)};
+                                environ->push_back(0);
+                                process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [execState, loads, interpreter, process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase] (bool success, uintptr_t environAddr) {
                                     if (!success) {
-                                        std::cerr << "Error: Failed to push args to stack for new process\n";
+                                        std::cerr << "Error: Failed to push environment to stack for new process\n";
                                         delete process;
                                         return;
                                     }
-                                    process->push_64(stackAddr, argc, [execState, loads, interpreter, process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
+                                    std::shared_ptr<std::vector<uintptr_t>> argv{new std::vector<uintptr_t>(argvPtrs)};
+                                    argv->push_back(0);
+                                    process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [execState, loads, interpreter, process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
                                         if (!success) {
-                                            std::cerr << "Error: Failed to push args count to stack for new process\n";
+                                            std::cerr << "Error: Failed to push args to stack for new process\n";
                                             delete process;
                                             return;
                                         }
-                                        if (!interpreter.empty()) {
-                                            auto interpreterFile = execState->ResolveFile(interpreter);
-                                            if (!interpreterFile) {
+                                        process->push_64(stackAddr, argc, [execState, loads, interpreter, process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
+                                            if (!success) {
+                                                std::cerr << "Error: Failed to push args count to stack for new process\n";
                                                 delete process;
                                                 return;
                                             }
-                                            UserElf interpreterElf{interpreterFile};
-                                            if (!interpreterElf.is_valid()) {
-                                                std::cerr << "interpreter: " << interpreter << ": Not valid ELF64\n";
-                                                delete process;
-                                                return;
-                                            }
-                                            ELF_loads interpreterLoads{};
-                                            if (!LoadLoads(*interpreterFile, interpreterLoads, interpreterElf)) {
-                                                delete process;
-                                                return;
-                                            }
-
-                                            std::vector<exec_pageinfo> interpreterPages{};
-
-                                            Pages(interpreterPages, interpreterLoads, interpreterElf);
-
-                                            uintptr_t interpreterRelocate{0};
-                                            if (!process->IsFree(interpreterLoads.startpage, interpreterLoads.endpage - interpreterLoads.startpage)) {
-                                                std::cout << "Interpreter " << std::hex << interpreterLoads.startpage
-                                                << "-" << interpreterLoads.endpage << std::dec << " must be relocated\n";
-
-                                                interpreterRelocate = loads.endpage + 1;
-
-                                                if (process->IsFree(interpreterLoads.startpage + interpreterRelocate, interpreterLoads.endpage - interpreterLoads.startpage)) {
-                                                    std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
-                                                              << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
-                                                } else {
-                                                    std::cerr << "(fail+fallback) Interpreter not relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
-                                                              << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
-                                                    auto startpage = process->FindFree(interpreterLoads.endpage - interpreterLoads.startpage);
-                                                    if (startpage == 0) {
-                                                        std::cerr << "Error: Could not allocate vspace for ELF interpreter\n";
-                                                        delete process;
-                                                        return;
-                                                    }
-                                                    interpreterRelocate = interpreterLoads.startpage - startpage;
-                                                    std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
-                                                              << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
-                                                }
-                                            }
-
-                                            uintptr_t pbrk = interpreterLoads.endpage + interpreterRelocate;
-                                            pbrk = pbrk << 12;
-
-                                            if (process->GetProgramBreak() < pbrk) {
-                                                process->SetProgramBreak(pbrk);
-                                            }
-
-                                            MapPages(interpreterFile, process, interpreterPages, interpreterLoads, interpreterRelocate << 12);
-
-                                            entrypoint = interpreterElf.get_entrypoint_addr();
-                                            entrypoint += interpreterRelocate << 12;
-                                        }
-                                        std::vector<task_resource *> resources{};
-                                        auto *scheduler = get_scheduler();
-                                        resources.push_back(process);
-                                        auto pid = scheduler->new_task(
-                                                entrypoint,
-                                                0x18 | 3 /* ring3 / lowest*/,
-                                                0x20 | 3, fsBase, 0, stackAddr, 0, 0, 0,
-                                                0, 0, 0, resources);
-                                        std::cout << "Started task " << pid << "\n";
-                                        scheduler->set_name(pid, cmd_name);
+                                            std::vector<task_resource *> resources{};
+                                            auto *scheduler = get_scheduler();
+                                            resources.push_back(process);
+                                            auto pid = scheduler->new_task(
+                                                    entrypoint,
+                                                    0x18 | 3 /* ring3 / lowest*/,
+                                                    0x20 | 3, fsBase, 0, stackAddr, 0, 0, 0,
+                                                    0, 0, 0, resources);
+                                            std::cout << "Started task " << pid << "\n";
+                                            scheduler->set_name(pid, cmd_name);
+                                        });
                                     });
                                 });
                             });
