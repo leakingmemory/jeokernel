@@ -382,6 +382,8 @@ struct ELF64_auxv {
 };
 
 #define AT_NULL     0
+#define AT_BASE     7
+#define AT_ENTRY    9
 #define AT_RANDOM   25
 
 class ELF {

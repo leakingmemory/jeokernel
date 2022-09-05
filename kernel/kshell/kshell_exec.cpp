@@ -7,7 +7,7 @@
 #include "kshell_exec.h"
 
 void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
-    std::shared_ptr<kdirectory> dir_ref{};
+    std::shared_ptr<kfile> dir_ref{shell.CwdRef()};
     kdirectory *dir = &(shell.Cwd());
     auto iterator = cmd.begin();
     if (iterator != cmd.end()) {
@@ -36,7 +36,7 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             if (ldir != nullptr) {
                 std::cerr << "exec: is a directory: " << filename << "\n";
             } else {
-                class Exec exec{litem, filename};
+                class Exec exec{dir_ref, *dir, litem, filename};
                 exec.Run();
             }
         } else {
@@ -49,7 +49,7 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             if (ldir != nullptr) {
                 std::cerr << "exec: is a directory: " << filename << "\n";
             } else {
-                class Exec exec{litem, filename};
+                class Exec exec{dir_ref, *dir, litem, filename};
                 exec.Run();
             }
         } else {

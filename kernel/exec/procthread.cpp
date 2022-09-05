@@ -31,12 +31,21 @@ bool ProcThread::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
 int ProcThread::Protect(uint32_t pagenum, uint32_t pages, int prot) {
     return process->Protect(pagenum, pages, prot);
 }
+
+bool ProcThread::IsFree(uint32_t pagenum, uint32_t pages) {
+    return process->IsFree(pagenum, pages);
+}
+
 uint32_t ProcThread::FindFree(uint32_t pages) {
     return process->FindFree(pages);
 }
 
 void ProcThread::SetProgramBreak(uintptr_t pbrk) {
     process->SetProgramBreak(pbrk);
+}
+
+uintptr_t ProcThread::GetProgramBreak() {
+    return process->GetProgramBreak();
 }
 void ProcThread::task_enter(task &t, Interrupt *intr, uint8_t cpu) {
     process->task_enter();

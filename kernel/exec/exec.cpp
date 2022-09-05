@@ -32,7 +32,7 @@ struct ELF_loads {
     uintptr_t program_brk{0};
 };
 
-bool Exec::LoadLoads(ELF_loads &loads, UserElf &userElf) {
+bool Exec::LoadLoads(kfile &binary, ELF_loads &loads, UserElf &userElf) {
     loads.start = (uintptr_t) ((intptr_t) -1);
     for (int i = 0; i < userElf.get_num_program_entries(); i++) {
         auto pe = userElf.get_program_entry(i);
@@ -63,7 +63,7 @@ bool Exec::LoadLoads(ELF_loads &loads, UserElf &userElf) {
                     std::cerr << "ELF: memory allocation failure, PHT_INTERP, " << std::dec << pe->p_filesz << "\n";
                     return false;
                 }
-                auto rd = binary->Read(pe->p_offset, rdbuf, pe->p_filesz);
+                auto rd = binary.Read(pe->p_offset, rdbuf, pe->p_filesz);
                 if (rd != pe->p_filesz) {
                     free(rdbuf);
                     std::cerr << "ELF: read error, PHT_INTERP, 0x" << std::hex << pe->p_offset << ", " << std::dec
@@ -166,7 +166,12 @@ void Exec::Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &u
     }
 }
 
-void Exec::MapPages(ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads) {
+void Exec::MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset) {
+    if ((relocationOffset & (PAGESIZE-1)) != 0) {
+        wild_panic("Invalid relocation offset <-> not page aligned");
+    }
+    uintptr_t relocationPage = relocationOffset >> 12;
+
     constexpr uint16_t none = 0;
     constexpr uint16_t read = 1;
     constexpr uint16_t write = 2;
@@ -196,10 +201,10 @@ void Exec::MapPages(ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_
                 }
                 bool success;
                 if ((flags & zero) == 0) {
-                    success = process->Map(binary, loads.startpage + start, index - start, offset, load,
+                    success = process->Map(binary, loads.startpage + start + relocationPage, index - start, offset, load,
                                            (flags & write) != 0, (flags & exec) != 0, true, true);
                 } else {
-                    success = process->Map(loads.startpage + start, index - start, true);
+                    success = process->Map(loads.startpage + start + relocationPage, index - start, true);
                 }
                 if (!success) {
                     std::cerr << "Error: Map failed\n";
@@ -218,14 +223,50 @@ void Exec::MapPages(ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_
             if (load != 0 && (index - start) != 1) {
                 wild_panic("Invalid load!=0 && len>1");
             }
-            success = process->Map(binary, loads.startpage + start, index - start, offset, load, (flags & write) != 0,
+            success = process->Map(binary, loads.startpage + start + relocationPage, index - start, offset, load, (flags & write) != 0,
                                    (flags & exec) != 0, true, true);
         } else {
-            success = process->Map(loads.startpage + start, index - start, true);
+            success = process->Map(loads.startpage + start + relocationPage, index - start, true);
         }
         if (!success) {
             std::cerr << "Error: Map failed\n";
         }
+    }
+}
+
+std::shared_ptr<kfile> ExecState::ResolveFile(const std::string &filename) {
+    std::shared_ptr<kfile> litem{};
+    if (filename.starts_with("/")) {
+        std::string resname{};
+        resname.append(filename.c_str()+1);
+        while (resname.starts_with("/")) {
+            std::string trim{};
+            trim.append(resname.c_str()+1);
+            resname = trim;
+        }
+        if (!resname.empty()) {
+            litem = get_kernel_rootdir()->Resolve(resname);
+        } else {
+            litem = get_kernel_rootdir();
+        }
+    } else {
+        if (filename.empty()) {
+            std::cerr << "elfloader: not found: <empty>\n";
+            return {};
+        }
+        litem = cwd.Resolve(filename);
+    }
+    if (litem) {
+        kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
+        if (ldir != nullptr) {
+            std::cerr << "elfloader: is a directory: " << filename << "\n";
+            return {};
+        } else {
+            return litem;
+        }
+    } else {
+        std::cerr << "elfloader: not found: " << filename << "\n";
+        return {};
     }
 }
 
@@ -241,7 +282,7 @@ void Exec::Run() {
     ELF_loads loads{};
     uintptr_t fsBase{0};
     {
-        if (!LoadLoads(loads, userElf)) {
+        if (!LoadLoads(*binary, loads, userElf)) {
             return;
         }
         fsBase = loads.tlsStart + loads.tlsMemSize;
@@ -263,9 +304,9 @@ void Exec::Run() {
         Pages(pages, loads, userElf);
 
         auto *process = new ProcThread();
-        process->SetProgramBreak(loads.program_brk);
+        process->SetProgramBreak(loads.program_brk + relocationOffset);
 
-        MapPages(process, pages, loads);
+        MapPages(binary, process, pages, loads, relocationOffset);
 
 #ifdef DEBUG_USERSPACE_PAGELIST
         {
@@ -315,7 +356,9 @@ void Exec::Run() {
 
         std::string interpreter{loads.interpreter};
 
-        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [interpreter, process, random, environ, argv, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t randomAddr) {
+        std::shared_ptr<ExecState> execState{new ExecState(cwd_ref, cwd)};
+
+        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [execState, loads, interpreter, process, random, environ, argv, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t randomAddr) {
             if (!success) {
                 std::cerr << "Error: Failed to push random data to stack for new process\n";
                 delete process;
@@ -323,14 +366,15 @@ void Exec::Run() {
             }
             std::shared_ptr<std::vector<ELF64_auxv>> auxv{new std::vector<ELF64_auxv>};
             auxv->push_back({.type = AT_RANDOM, .uintptr = randomAddr});
-            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [interpreter, process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) {
+            auxv->push_back({.type = AT_ENTRY, .uintptr = entrypoint});
+            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) {
                 if (!success) {
                     std::cerr << "Error: Failed to push environment to stack for new process\n";
                     delete process;
                     return;
                 }
                 std::vector<uintptr_t> environPtrs{ptrs};
-                process->push_strings(stackAddr, argv->begin(), argv->end(), std::vector<uintptr_t>(), [interpreter, process, environPtrs, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
+                process->push_strings(stackAddr, argv->begin(), argv->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environPtrs, argv, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
                     if (!success) {
                         std::cerr << "Error: Failed to push args to stack for new process\n";
                         delete process;
@@ -339,13 +383,13 @@ void Exec::Run() {
                     stackAddr = (stackAddr + 8) & ~((uintptr_t) 0xf);
                     stackAddr -= 8;
                     std::vector<uintptr_t> argvPtrs{ptrs};
-                    process->push_64(stackAddr, 0, [interpreter, process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
+                    process->push_64(stackAddr, 0, [execState, loads, interpreter, process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
                         if (!success) {
                             std::cerr << "Error: Failed to push end of auxv to stack for new process\n";
                             delete process;
                             return;
                         }
-                        process->push_data(stackAddr, &(auxv->at(0)), sizeof(auxv->at(0)) * auxv->size(), [interpreter, process, auxv, environPtrs, argvPtrs, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t auxvAddr) mutable {
+                        process->push_data(stackAddr, &(auxv->at(0)), sizeof(auxv->at(0)) * auxv->size(), [execState, loads, interpreter, process, auxv, environPtrs, argvPtrs, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t auxvAddr) mutable {
                             if (!success) {
                                 std::cerr << "Error: Failed to push auxv to stack for new process\n";
                                 delete process;
@@ -353,7 +397,7 @@ void Exec::Run() {
                             }
                             std::shared_ptr<std::vector<uintptr_t>> environ{new std::vector<uintptr_t>(environPtrs)};
                             environ->push_back(0);
-                            process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [interpreter, process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase] (bool success, uintptr_t environAddr) {
+                            process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [execState, loads, interpreter, process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase] (bool success, uintptr_t environAddr) {
                                 if (!success) {
                                     std::cerr << "Error: Failed to push environment to stack for new process\n";
                                     delete process;
@@ -361,22 +405,76 @@ void Exec::Run() {
                                 }
                                 std::shared_ptr<std::vector<uintptr_t>> argv{new std::vector<uintptr_t>(argvPtrs)};
                                 argv->push_back(0);
-                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [interpreter, process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
+                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [execState, loads, interpreter, process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
                                     if (!success) {
                                         std::cerr << "Error: Failed to push args to stack for new process\n";
                                         delete process;
                                         return;
                                     }
-                                    process->push_64(stackAddr, argc, [interpreter, process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) {
+                                    process->push_64(stackAddr, argc, [execState, loads, interpreter, process, entrypoint, cmd_name, fsBase] (bool success, uintptr_t stackAddr) mutable {
                                         if (!success) {
                                             std::cerr << "Error: Failed to push args count to stack for new process\n";
                                             delete process;
                                             return;
                                         }
                                         if (!interpreter.empty()) {
-                                            std::cerr << "Error: ELF requires interpreter " << interpreter << "\n";
-                                            delete process;
-                                            return;
+                                            auto interpreterFile = execState->ResolveFile(interpreter);
+                                            if (!interpreterFile) {
+                                                delete process;
+                                                return;
+                                            }
+                                            UserElf interpreterElf{interpreterFile};
+                                            if (!interpreterElf.is_valid()) {
+                                                std::cerr << "interpreter: " << interpreter << ": Not valid ELF64\n";
+                                                delete process;
+                                                return;
+                                            }
+                                            ELF_loads interpreterLoads{};
+                                            if (!LoadLoads(*interpreterFile, interpreterLoads, interpreterElf)) {
+                                                delete process;
+                                                return;
+                                            }
+
+                                            std::vector<exec_pageinfo> interpreterPages{};
+
+                                            Pages(interpreterPages, interpreterLoads, interpreterElf);
+
+                                            uintptr_t interpreterRelocate{0};
+                                            if (!process->IsFree(interpreterLoads.startpage, interpreterLoads.endpage - interpreterLoads.startpage)) {
+                                                std::cout << "Interpreter " << std::hex << interpreterLoads.startpage
+                                                << "-" << interpreterLoads.endpage << std::dec << " must be relocated\n";
+
+                                                interpreterRelocate = loads.endpage + 1;
+
+                                                if (process->IsFree(interpreterLoads.startpage + interpreterRelocate, interpreterLoads.endpage - interpreterLoads.startpage)) {
+                                                    std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
+                                                              << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                                                } else {
+                                                    std::cerr << "(fail+fallback) Interpreter not relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
+                                                              << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                                                    auto startpage = process->FindFree(interpreterLoads.endpage - interpreterLoads.startpage);
+                                                    if (startpage == 0) {
+                                                        std::cerr << "Error: Could not allocate vspace for ELF interpreter\n";
+                                                        delete process;
+                                                        return;
+                                                    }
+                                                    interpreterRelocate = interpreterLoads.startpage - startpage;
+                                                    std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
+                                                              << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                                                }
+                                            }
+
+                                            uintptr_t pbrk = interpreterLoads.endpage + interpreterRelocate;
+                                            pbrk = pbrk << 12;
+
+                                            if (process->GetProgramBreak() < pbrk) {
+                                                process->SetProgramBreak(pbrk);
+                                            }
+
+                                            MapPages(interpreterFile, process, interpreterPages, interpreterLoads, interpreterRelocate << 12);
+
+                                            entrypoint = interpreterElf.get_entrypoint_addr();
+                                            entrypoint += interpreterRelocate << 12;
                                         }
                                         std::vector<task_resource *> resources{};
                                         auto *scheduler = get_scheduler();

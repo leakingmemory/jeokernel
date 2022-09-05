@@ -151,9 +151,13 @@ public:
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
+    bool IsFree(uint32_t pagenum, uint32_t pages);
     uint32_t FindFree(uint32_t pages);
     void SetProgramBreak(uintptr_t pbrk) {
         program_brk = pbrk;
+    }
+    uintptr_t GetProgramBreak() {
+        return program_brk;
     }
     void task_enter();
     void task_leave();

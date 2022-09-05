@@ -406,10 +406,10 @@ struct MemoryArea {
     uint32_t start;
     uint32_t end;
 
-    uint32_t Length() {
+    uint32_t Length() const {
         return end - start;
     }
-    MemoryArea Combine(const MemoryArea &other) {
+    MemoryArea Combine(const MemoryArea &other) const {
         MemoryArea area{other};
         if (area.start > start) {
             area.start = start;
@@ -419,10 +419,21 @@ struct MemoryArea {
         }
         return area;
     }
-    bool Overlaps(MemoryArea &other) {
+    bool Overlaps(const MemoryArea &other) const {
         return (Combine(other).Length() < (Length() + other.Length()));
     }
 };
+
+bool Process::IsFree(uint32_t pagenum, uint32_t pages) {
+    MemoryArea area{.start = pagenum, .end = (pagenum + pages)};
+    for (const auto &mapping : mappings) {
+        MemoryArea mappingArea{.start = mapping.pagenum, .end = (mapping.pagenum + mapping.pages)};
+        if (area.Overlaps(mappingArea)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 uint32_t Process::FindFree(uint32_t pages) {
     std::vector<MemoryArea> freemem{};
