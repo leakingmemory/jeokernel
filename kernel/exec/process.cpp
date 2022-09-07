@@ -136,7 +136,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process() : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
+Process::Process() : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -1413,7 +1413,9 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
         });
         return;
     }
-    std::cerr << "PID " << current_task.get_id() << ": Page fault at " << std::hex << ip << " addr " << fault_addr << std::dec << "\n";
+    auto relocation = GetRelocationFor(ip);
+    std::cerr << "PID " << current_task.get_id() << ": Page fault at " << std::hex << ip << " (" << relocation.filename
+              << "+" << (ip-relocation.offset) << ") addr " << fault_addr << std::dec << "\n";
     {
         auto &cpu = current_task.get_cpu_frame();
         auto &state = current_task.get_cpu_state();

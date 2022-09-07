@@ -47,6 +47,15 @@ void ProcThread::SetProgramBreak(uintptr_t pbrk) {
 uintptr_t ProcThread::GetProgramBreak() {
     return process->GetProgramBreak();
 }
+
+void ProcThread::AddRelocation(const std::string &filename, uintptr_t offset) {
+    process->AddRelocation(filename, offset);
+}
+
+BinaryRelocation ProcThread::GetRelocationFor(uintptr_t ptr) {
+    return process->GetRelocationFor(ptr);
+}
+
 void ProcThread::task_enter(task &t, Interrupt *intr, uint8_t cpu) {
     process->task_enter();
 

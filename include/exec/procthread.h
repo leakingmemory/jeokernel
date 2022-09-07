@@ -29,6 +29,8 @@ public:
     uint32_t FindFree(uint32_t pages);
     void SetProgramBreak(uintptr_t pbrk);
     uintptr_t GetProgramBreak();
+    void AddRelocation(const std::string &filename, uintptr_t offset);
+    BinaryRelocation GetRelocationFor(uintptr_t ptr);
     void task_enter(task &, Interrupt *intr, uint8_t cpu) override;
     void task_leave() override;
     bool page_fault(task &current_task, Interrupt &intr) override;

@@ -110,6 +110,15 @@ struct FutexWait {
     uint32_t task_id;
 };
 
+struct BinaryRelocation {
+    std::string filename;
+    uintptr_t offset;
+
+    BinaryRelocation() : filename(), offset(0) {}
+    BinaryRelocation(const BinaryRelocation &cp) : filename(cp.filename), offset(cp.offset) {}
+    BinaryRelocation(BinaryRelocation &&mv) : filename(std::move(mv.filename)), offset(mv.offset) {}
+};
+
 class Process {
 private:
     hw_spinlock mtx;
@@ -121,6 +130,7 @@ private:
     std::vector<MemMapping> mappings;
     std::vector<FileDescriptor> fileDescriptors;
     std::vector<std::shared_ptr<FutexWait>> fwaits;
+    std::vector<BinaryRelocation> relocations;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
@@ -158,6 +168,25 @@ public:
     }
     uintptr_t GetProgramBreak() {
         return program_brk;
+    }
+    void AddRelocation(const std::string &filename, uintptr_t offset) {
+        std::lock_guard lock{mtx};
+        BinaryRelocation reloc{};
+        reloc.filename = filename;
+        reloc.offset = offset;
+        relocations.push_back(reloc);
+    }
+    BinaryRelocation GetRelocationFor(uintptr_t ptr) {
+        BinaryRelocation relocation{};
+        relocation.filename = "<none>";
+        std::lock_guard lock{mtx};
+        for (const auto &cand : relocations) {
+            if (cand.offset <= ptr && cand.offset >= relocation.offset) {
+                relocation.filename = cand.filename;
+                relocation.offset = cand.offset;
+            }
+        }
+        return relocation;
     }
     void task_enter();
     void task_leave();
