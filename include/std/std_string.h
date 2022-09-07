@@ -440,6 +440,9 @@ namespace std {
         }
 
         basic_string &operator=(basic_string &&mv) {
+            if (this == &mv) {
+                return *this;
+            }
             if (!c.shrt.is_short()) {
                 get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
                 c.ptr = mv.c.ptr;
