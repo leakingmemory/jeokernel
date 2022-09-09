@@ -18,6 +18,14 @@ uint32_t kfile::Mode() {
     return file ? file->Mode() : 0040555;
 }
 
+int kfile::Gid() {
+    return 0;
+}
+
+int kfile::Uid() {
+    return 0;
+}
+
 std::size_t kfile::Size() {
     return file ? file->Size() : 0;
 }

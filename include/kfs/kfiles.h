@@ -25,6 +25,8 @@ public:
     kfile(const std::shared_ptr<fileitem> &file) : file(file) {}
     virtual ~kfile() = default;
     uint32_t Mode();
+    int Gid();
+    int Uid();
     std::size_t Size();
     std::size_t Read(uint64_t offset, void *ptr, std::size_t len);
     filepage_ref GetPage(std::size_t pagenum);

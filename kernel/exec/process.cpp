@@ -136,7 +136,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process() : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
+Process::Process(const std::shared_ptr<kfile> &cwd) : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -1569,6 +1569,37 @@ bool Process::resolve_write(uintptr_t addr, uintptr_t len) {
             return true;
         }
     }
+}
+
+std::shared_ptr<kfile> Process::ResolveFile(const std::string &filename) {
+    std::shared_ptr<kfile> cwd_ref{};
+    {
+        std::lock_guard lock{mtx};
+        cwd_ref = this->cwd;
+    }
+    kdirectory *cwd = cwd_ref ? dynamic_cast<kdirectory *>(&(*cwd_ref)) : nullptr;
+
+    std::shared_ptr<kfile> litem{};
+    if (filename.starts_with("/")) {
+        std::string resname{};
+        resname.append(filename.c_str()+1);
+        while (resname.starts_with("/")) {
+            std::string trim{};
+            trim.append(resname.c_str()+1);
+            resname = trim;
+        }
+        if (!resname.empty()) {
+            litem = get_kernel_rootdir()->Resolve(resname);
+        } else {
+            litem = get_kernel_rootdir();
+        }
+    } else {
+        if (filename.empty() || cwd == nullptr) {
+            return {};
+        }
+        litem = cwd->Resolve(filename);
+    }
+    return litem;
 }
 
 FileDescriptor Process::get_file_descriptor(int fd) {

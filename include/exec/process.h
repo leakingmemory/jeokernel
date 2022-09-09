@@ -131,10 +131,11 @@ private:
     std::vector<FileDescriptor> fileDescriptors;
     std::vector<std::shared_ptr<FutexWait>> fwaits;
     std::vector<BinaryRelocation> relocations;
+    std::shared_ptr<kfile> cwd;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
-    Process();
+    Process(const std::shared_ptr<kfile> &cwd);
     Process(const Process &) = delete;
     Process(Process &&) = delete;
     Process &operator =(const Process &) = delete;
@@ -195,6 +196,7 @@ public:
     uintptr_t push_data(uintptr_t ptr, const void *, uintptr_t length, const std::function<void (bool,uintptr_t)> &);
     uintptr_t push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
     void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
+    std::shared_ptr<kfile> ResolveFile(const std::string &filename);
     FileDescriptor get_file_descriptor(int);
     int32_t geteuid() {
         return euid;

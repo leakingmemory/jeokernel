@@ -73,6 +73,10 @@ private:
     std::vector<Syscall *> handlers;
     SyscallHandler() : handlers() {
     }
+    SyscallHandler(const SyscallHandler &) = delete;
+    SyscallHandler(SyscallHandler &&) = delete;
+    SyscallHandler &operator =(const SyscallHandler &) = delete;
+    SyscallHandler &operator =(SyscallHandler &&) = delete;
 public:
     SyscallResult Call(Interrupt &);
     static SyscallHandler &Instance();

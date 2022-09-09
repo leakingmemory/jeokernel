@@ -28,6 +28,7 @@
 #include "ExitGroup.h"
 #include "Rseq.h"
 #include "Futex.h"
+#include "Access.h"
 
 //#define SYSCALL_DEBUG
 
@@ -99,6 +100,7 @@ private:
     ExitGroup exitGroup{*this};
     Rseq rseq{*this};
     Futex futex{*this};
+    Access access{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

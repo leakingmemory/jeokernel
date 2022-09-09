@@ -4,7 +4,7 @@
 
 #include <exec/procthread.h>
 
-ProcThread::ProcThread() : process(new Process()), rseq(), fsBase(0), tidAddress(0), robustListHead(0) {}
+ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd) : process(new Process(cwd)), rseq(), fsBase(0), tidAddress(0), robustListHead(0) {}
 
 phys_t ProcThread::phys_addr(uintptr_t addr) {
     return process->phys_addr(addr);
@@ -89,6 +89,11 @@ void ProcThread::push_strings(uintptr_t ptr, const std::vector<std::string>::ite
                               const std::function<void(bool, const std::vector<uintptr_t> &, uintptr_t)> &func) {
     process->push_strings(ptr, begin, end, pointers, func);
 }
+
+std::shared_ptr<kfile> ProcThread::ResolveFile(const std::string &filename) {
+    return process->ResolveFile(filename);
+}
+
 FileDescriptor ProcThread::get_file_descriptor(int fd) {
     return process->get_file_descriptor(fd);
 }

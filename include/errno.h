@@ -12,6 +12,7 @@ extern int errno;
 #define EINTR       4
 #define EBADF       9
 #define ENOMEM      12
+#define EACCES      13
 #define EFAULT      14 // Bad address
 #define EBUSY       16
 #define EINVAL      22 // Invalid argument
