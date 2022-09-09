@@ -75,7 +75,7 @@ private:
     uint8_t flags;
 public:
     usbstorage_command_impl(usbstorage &device, uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd,
-                            uint8_t cmdLength, const std::function<void ()> &done)
+                            uint8_t cmdLength, const std::function<void (usbstorage_command &, size_t)> &done)
     : usbstorage_command(dataTransferLength, varlength, lun, cmd, cmdLength, true, done), device(device), buffer(nullptr),
       flags(USBSTORAGE_FLAG_IN) {
         if (dataTransferLength != 0) {
@@ -92,12 +92,14 @@ public:
     void InTransfer(void *data, std::size_t size, const std::function<void (usb_transfer_status, std::size_t)> &done);
     void Start();
     void DataStage();
-    void LookForStatusStage(std::size_t remaining);
-    void ClearStallAndThenStatusStage();
-    void StatusStage();
+    void LookForStatusStage(std::size_t transferredLength, std::size_t remaining);
+    void ClearStallAndThenStatusStage(size_t transferredLength);
+    void StatusStage(size_t transferredLength);
 
     const void *Buffer() const override;
     bool IsSuccessful() override;
+    std::size_t TransferredLength() const override;
+    void SetTruncatedTransfer(size_t truncatedSize) override;
 };
 
 void usbstorage_command_impl::Transfer(const void *data, std::size_t size, const std::function<void ()> &doneCallback) {
@@ -253,12 +255,12 @@ void usbstorage_command_impl::DataStage() {
 #else
                         if (remaining > 0) {
 #endif
-                            LookForStatusStage(remaining);
+                            LookForStatusStage(size, remaining);
                         } else {
-                            StatusStage();
+                            StatusStage(size);
                         }
                     } else {
-                        StatusStage();
+                        StatusStage(size);
                     }
                 });
                 return;
@@ -303,7 +305,29 @@ void usbstorage_command_impl::DataStage() {
                             }
 #endif
                         }
-                        InTransfer(((uint8_t *) buffer) + initialTransfer, remaining, [](usb_transfer_status transferStatus, std::size_t size) {});
+                        auto firstReadSize = size;
+                        auto firstReadRemaining = remaining;
+                        InTransfer(((uint8_t *) buffer) + initialTransfer, remaining, [this, firstReadSize, firstReadRemaining, remainingExpected] (usb_transfer_status transferStatus, std::size_t size) {
+                            size += firstReadSize;
+                            auto remaining = firstReadRemaining - size;
+                            if (remaining < remainingExpected) {
+                                auto fuzzyStage = remainingExpected - remaining;
+#ifdef USBSTORAGE_COMMAND_DEBUG
+                                std::stringstream str{};
+                        str << "Location of status stage searching between 0-"<<fuzzyStage << "\n";
+                        get_klogger() << str.str().c_str();
+#endif
+                                LookForStatusStage(size, fuzzyStage);
+                                return;
+                            }
+                            StatusStage(size);
+#ifdef USBSTORAGE_COMMAND_DEBUG
+                            std::stringstream str{};
+                    str << "Remaining transfer of " << remaining << " queued\n";
+                    get_klogger() << str.str().c_str();
+#endif
+                        });
+                        return;
                     }
                     auto totalSize = varlength->TotalSize(buffer, size, dataTransferLength);
 #ifdef USBSTORAGE_DEBUG_SHORT_READ
@@ -320,10 +344,10 @@ void usbstorage_command_impl::DataStage() {
                         str << "Location of status stage searching between 0-"<<fuzzyStage << "\n";
                         get_klogger() << str.str().c_str();
 #endif
-                        LookForStatusStage(fuzzyStage);
+                        LookForStatusStage(size, fuzzyStage);
                         return;
                     }
-                    StatusStage();
+                    StatusStage(size);
 #ifdef USBSTORAGE_COMMAND_DEBUG
                     std::stringstream str{};
                     str << "Remaining transfer of " << remaining << " queued\n";
@@ -338,10 +362,13 @@ void usbstorage_command_impl::DataStage() {
                 return;
             }
         } else {
-            Transfer(buffer, dataTransferLength, [] () {});
+            Transfer(buffer, dataTransferLength, [this] () {
+                StatusStage(dataTransferLength);
+            });
+            return;
         }
     }
-    StatusStage();
+    StatusStage(0);
 }
 
 struct TmpBuffer {
@@ -358,7 +385,7 @@ struct TmpBuffer {
     TmpBuffer &operator = (TmpBuffer &&) = delete;
 };
 
-void usbstorage_command_impl::LookForStatusStage(std::size_t remaining) {
+void usbstorage_command_impl::LookForStatusStage(std::size_t transferredLength, std::size_t remaining) {
     auto packetSize = device.bulkInDesc.wMaxPacketSize;
     std::shared_ptr<TmpBuffer> buffer{new TmpBuffer(packetSize > sizeof(status) ? packetSize : sizeof(status))};
     if (remaining > 0) {
@@ -373,9 +400,9 @@ void usbstorage_command_impl::LookForStatusStage(std::size_t remaining) {
         if (transfer > packetSize) {
             transfer = packetSize;
         }
-        InTransfer(buffer->ptr, transfer, [this, packetSize, transfer, buffer, remaining] (usb_transfer_status transferStatus, std::size_t sizeRead) {
+        InTransfer(buffer->ptr, transfer, [this, transferredLength, packetSize, transfer, buffer, remaining] (usb_transfer_status transferStatus, std::size_t sizeRead) {
             if (transferStatus == usb_transfer_status::STALL) {
-                ClearStallAndThenStatusStage();
+                ClearStallAndThenStatusStage(transferredLength);
                 return;
             }
             auto size = transfer;
@@ -394,19 +421,19 @@ void usbstorage_command_impl::LookForStatusStage(std::size_t remaining) {
 #endif
 
                 if (sizeof(status) < packetSize) {
-                    InTransfer(((uint8_t *) (buffer->ptr)) + packetSize, sizeof(status) - packetSize, [this, buffer] (usb_transfer_status transferStatus, std::size_t sizeRead) {
+                    InTransfer(((uint8_t *) (buffer->ptr)) + packetSize, sizeof(status) - packetSize, [this, transferredLength, buffer] (usb_transfer_status transferStatus, std::size_t sizeRead) {
                         memcpy(&status, buffer->ptr, sizeof(status));
 
-                        std::function<void ()> done = this->done;
+                        std::function<void (usbstorage_command &, size_t)> done = this->done;
                         device.ExecuteQueueItem();
-                        done();
+                        done(*this, transferredLength);
                     });
                     return;
                 }
 
-                std::function<void ()> done = this->done;
+                std::function<void (usbstorage_command &, size_t)> done = this->done;
                 device.ExecuteQueueItem();
-                done();
+                done(*this, transferredLength);
             } else {
 #ifdef USBSTORAGE_COMMAND_DEBUG
                 std::stringstream str{};
@@ -417,21 +444,21 @@ void usbstorage_command_impl::LookForStatusStage(std::size_t remaining) {
                     str << "Continue searching between 0-" << fuzzyStage << "\n";
                     get_klogger() << str.str().c_str();
 #endif
-                    LookForStatusStage(fuzzyStage);
+                    LookForStatusStage(transferredLength, fuzzyStage);
                 } else {
 #ifdef USBSTORAGE_COMMAND_DEBUG
                     str << "Full length search\n";
                     get_klogger() << str.str().c_str();
 #endif
-                    StatusStage();
+                    StatusStage(transferredLength);
                 }
             }
         });
     }
 }
 
-void usbstorage_command_impl::ClearStallAndThenStatusStage() {
-    device.QueueTask([this] () {
+void usbstorage_command_impl::ClearStallAndThenStatusStage(size_t transferredLength) {
+    device.QueueTask([this, transferredLength] () {
         {
             std::stringstream str{};
             str << device.DeviceType() << device.DeviceId() << ": Clearing IN endpoint stall\n";
@@ -454,15 +481,15 @@ void usbstorage_command_impl::ClearStallAndThenStatusStage() {
         }
         {
             std::lock_guard lock{device.devInfo.port.Hub().HcdSpinlock()};
-            StatusStage();
+            StatusStage(transferredLength);
         }
     });
 }
 
-void usbstorage_command_impl::StatusStage() {
-    InTransfer(&status, sizeof(status), [this] (usb_transfer_status transferStatus, std::size_t sizeRead) {
+void usbstorage_command_impl::StatusStage(size_t transferredLength) {
+    InTransfer(&status, sizeof(status), [this, transferredLength] (usb_transfer_status transferStatus, std::size_t sizeRead) {
         if (transferStatus == usb_transfer_status::STALL) {
-            device.QueueTask([this] () {
+            device.QueueTask([this, transferredLength] () {
                 {
                     std::stringstream str{};
                     str << device.DeviceType() << device.DeviceId() << ": Clearing IN endpoint status-stall\n";
@@ -485,17 +512,17 @@ void usbstorage_command_impl::StatusStage() {
                 }
                 {
                     std::lock_guard lock{device.devInfo.port.Hub().HcdSpinlock()};
-                    InTransfer(&status, sizeof(status), [this] (usb_transfer_status transferStatus, std::size_t sizeRead) {
-                        std::function<void()> done = this->done;
+                    InTransfer(&status, sizeof(status), [this, transferredLength] (usb_transfer_status transferStatus, std::size_t sizeRead) {
+                        std::function<void(usbstorage_command &, size_t)> done = this->done;
                         device.ExecuteQueueItem();
-                        done();
+                        done(*this, transferredLength);
                     });
                 }
             });
         } else {
-            std::function<void()> done = this->done;
+            std::function<void(usbstorage_command &, size_t)> done = this->done;
             device.ExecuteQueueItem();
-            done();
+            done(*this, transferredLength);
         }
     });
 }
@@ -526,6 +553,17 @@ bool usbstorage_command_impl::IsSuccessful() {
         return false;
     }
     return true;
+}
+
+std::size_t usbstorage_command_impl::TransferredLength() const {
+    if (status.IsValid() && status.IsSuccessful()) {
+        return dataTransferLength - status.dCSWDataResidue;
+    }
+    return 0;
+}
+
+void usbstorage_command_impl::SetTruncatedTransfer(size_t truncatedSize) {
+    status.dCSWDataResidue = dataTransferLength - truncatedSize;
 }
 
 class usbstorage_scsi_dev : public ScsiDevDeviceInformation {
@@ -582,7 +620,7 @@ const void *usbstorage_scsi_devcmd::Buffer() const {
 }
 
 std::size_t usbstorage_scsi_devcmd::Size() const {
-    return usbstoragecmd->DataTransferLength();
+    return usbstoragecmd->TransferredLength();
 }
 
 bool usbstorage_scsi_devcmd::IsSuccessful() {
@@ -598,8 +636,16 @@ const char *usbstorage_scsi_devcmd::NonSuccessfulStatusString() const {
 }
 
 std::shared_ptr<ScsiDevCommand> usbstorage_scsi_dev::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength, const std::function<void ()> &done) {
+    std::function<void ()> doneCallback{done};
     std::shared_ptr<usbstorage_scsi_devcmd> subcmd =
-            std::make_shared<usbstorage_scsi_devcmd>(device.QueueCommand(dataTransferLength, varlength, lun, cmd, cmdLength, done));
+            std::make_shared<usbstorage_scsi_devcmd>(device.QueueCommand(dataTransferLength, varlength, lun, cmd, cmdLength, [dataTransferLength, doneCallback] (usbstorage_command &usbcmd, size_t size) mutable {
+                auto reportedLength = usbcmd.TransferredLength();
+                if (reportedLength > size) {
+                    std::cerr << "usbstorage: truncated transfer " << std::dec << size << " vs " << reportedLength << "\n";
+
+                }
+                doneCallback();
+            }));
     std::shared_ptr<ScsiDevCommand> scsiDevCommand{subcmd};
     return scsiDevCommand;
 }
@@ -803,7 +849,7 @@ int usbstorage::GetMaxLun() {
 }
 
 std::shared_ptr<usbstorage_command>
-usbstorage::QueueCommand(uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd, uint8_t cmdLength, const std::function<void ()> &done) {
+usbstorage::QueueCommand(uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd, uint8_t cmdLength, const std::function<void (usbstorage_command &, size_t)> &done) {
     std::shared_ptr<usbstorage_command_impl> cmd_pt{new usbstorage_command_impl(*this, dataTransferLength, varlength, lun, cmd, cmdLength, done)};
 
     {

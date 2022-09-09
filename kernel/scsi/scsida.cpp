@@ -3,6 +3,7 @@
 //
 
 #include <sstream>
+#include <iostream>
 #include <blockdevs/blockdev_block.h>
 #include "scsida.h"
 #include "scsidev.h"
@@ -288,9 +289,9 @@ void scsida::ReportFailed(std::shared_ptr<ScsiDevCommand> command) {
 
 std::shared_ptr<ScsiDevCommand>
 scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength) {
-    std::shared_ptr<CallbackLatch> latch = std::make_shared<CallbackLatch>();
     int retry = 5;
     while (true) {
+        std::shared_ptr<CallbackLatch> latch = std::make_shared<CallbackLatch>();
         auto command = devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, varlength, [latch]() mutable {
             latch->open();
         });
@@ -309,7 +310,12 @@ scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataT
             }
             return {};
         }
-        if (command->IsSuccessful() || --retry == 0) {
+        auto isSuccessful = command->IsSuccessful();
+        auto successful = isSuccessful && command->Size() == dataTransferLength;
+        if (!successful && isSuccessful) {
+            std::cerr << DeviceType() << DeviceId() << ": transfer error: truncated transfer\n";
+        }
+        if (successful || --retry == 0) {
             return command;
         }
     }

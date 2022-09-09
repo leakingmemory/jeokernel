@@ -18,7 +18,7 @@ class usbstorage_command {
     friend usbstorage_command_impl;
 private:
     uint8_t cmd[16];
-    std::function<void ()> done;
+    std::function<void (usbstorage_command &, size_t transferredLength)> done;
     std::unique_ptr<scsivariabledata> varlength;
     uint32_t dataTransferLength;
     uint8_t lun;
@@ -29,7 +29,7 @@ private:
     const char *nonSuccessfulStatusString;
 public:
     usbstorage_command(uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd, uint8_t cmdLength, bool inbound,
-                       const std::function<void ()> &done)
+                       const std::function<void (usbstorage_command &, size_t)> &done)
     : cmd(), done(done), varlength(), dataTransferLength(dataTransferLength), lun(lun), cmdLength(cmdLength),
     inbound(inbound), hasStatus(false), nonSuccessfulStatus(ScsiCmdNonSuccessfulStatus::UNSPECIFIED),
     nonSuccessfulStatusString("UNSPECIFIED") {
@@ -44,6 +44,10 @@ public:
 
     virtual const void *Buffer() const = 0;
     virtual bool IsSuccessful() = 0;
+    virtual std::size_t TransferredLength() const {
+        return 0;
+    }
+    virtual void SetTruncatedTransfer(size_t truncatedSize) {}
     std::size_t DataTransferLength() const {
         return dataTransferLength;
     }
@@ -89,8 +93,8 @@ public:
     void init() override;
     void stop() override;
     void SetDevice(Device *device);
-    std::shared_ptr<usbstorage_command> QueueCommand(uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd, uint8_t cmdLength, const std::function<void ()> &done);
-    template <class T> std::shared_ptr<usbstorage_command> QueueCommand(uint32_t dataTransferLength, uint8_t lun, const T &cmd, const std::function<void ()> &done) {
+    std::shared_ptr<usbstorage_command> QueueCommand(uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd, uint8_t cmdLength, const std::function<void (usbstorage_command &, size_t)> &done);
+    template <class T> std::shared_ptr<usbstorage_command> QueueCommand(uint32_t dataTransferLength, uint8_t lun, const T &cmd, const std::function<void (size_t)> &done) {
         static_assert(sizeof(T) <= 16);
         return QueueCommand(dataTransferLength, scsivariabledata_fixed(), lun, (const void *) &cmd, sizeof(T), done);
     }
