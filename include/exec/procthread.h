@@ -40,6 +40,7 @@ public:
     void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
     std::shared_ptr<kfile> ResolveFile(const std::string &filename);
     FileDescriptor get_file_descriptor(int);
+    FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler);
     int32_t geteuid();
     int32_t getegid();
     int32_t getuid();

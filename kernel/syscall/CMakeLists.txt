@@ -8,6 +8,7 @@ add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h W
         Uname.cpp Uname.h Writev.cpp Writev.h Mmap.cpp Mmap.h Sigprocmask.cpp Sigprocmask.h
         PrLimit64.cpp PrLimit64.h Readlink.cpp Readlink.h Getrandom.cpp Getrandom.h
         ClockGettime.cpp ClockGettime.h Mprotect.cpp Mprotect.h Newfstatat.cpp Newfstatat.h
-        ExitGroup.cpp ExitGroup.h Rseq.cpp Rseq.h Futex.cpp Futex.h Access.cpp Access.h)
+        ExitGroup.cpp ExitGroup.h Rseq.cpp Rseq.h Futex.cpp Futex.h Access.cpp Access.h
+        SyscallAsyncThread.cpp SyscallAsyncThread.h OpenAt.cpp OpenAt.h)
 
 target_include_directories(syscall PRIVATE ../../include)

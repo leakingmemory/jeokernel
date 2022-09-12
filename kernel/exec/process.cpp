@@ -1602,13 +1602,27 @@ std::shared_ptr<kfile> Process::ResolveFile(const std::string &filename) {
     return litem;
 }
 
-FileDescriptor Process::get_file_descriptor(int fd) {
+FileDescriptor Process::get_file_descriptor_impl(int fd) {
     for (auto desc : fileDescriptors) {
         if (desc.FD() == fd) {
             return desc;
         }
     }
     return {};
+}
+
+FileDescriptor Process::get_file_descriptor(int fd) {
+    std::lock_guard lock{mtx};
+    return get_file_descriptor_impl(fd);
+}
+
+FileDescriptor Process::create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler) {
+    std::lock_guard lock{mtx};
+    int fd = 0;
+    while (get_file_descriptor_impl(fd).Valid()) { ++fd; }
+    FileDescriptor desc{handler, fd};
+    fileDescriptors.push_back(desc);
+    return desc;
 }
 
 bool Process::brk(intptr_t brk_addr, uintptr_t &result) {

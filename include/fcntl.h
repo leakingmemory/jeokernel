@@ -12,4 +12,10 @@
 #define AT_NO_AUTOMOUNT     0x800
 #define AT_EMPTY_PATH       0x1000
 
+#define O_RDONLY    0
+#define O_WRONLY    1
+#define O_RDWR      2
+
+#define O_CLOEXEC           0x80000
+
 #endif //JEOKERNEL_FCNTL_H

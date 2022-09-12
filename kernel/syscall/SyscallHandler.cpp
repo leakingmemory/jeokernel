@@ -29,6 +29,7 @@
 #include "Rseq.h"
 #include "Futex.h"
 #include "Access.h"
+#include "OpenAt.h"
 
 //#define SYSCALL_DEBUG
 
@@ -101,6 +102,7 @@ private:
     Rseq rseq{*this};
     Futex futex{*this};
     Access access{*this};
+    OpenAt openat{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

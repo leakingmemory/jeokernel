@@ -10,47 +10,6 @@
 #include <unistd.h>
 #include <iostream>
 
-Access::~Access() {
-    std::thread *t;
-    {
-        std::lock_guard lock{mtx};
-        stop = true;
-        t = thr;
-    }
-    if (t != nullptr) {
-        t->join();
-        delete t;
-    }
-}
-
-void Access::Queue(const std::function<void()> &f) {
-    std::lock_guard lock{mtx};
-    queue.push_back(f);
-    sema.release();
-    if (thr == nullptr && !stop) {
-        thr = new std::thread([this] () {
-            std::this_thread::set_name("[faccess]");
-            while (true) {
-                sema.acquire();
-                std::vector<std::function<void()>> q{};
-                {
-                    std::lock_guard lock{mtx};
-                    if (stop) {
-                        break;
-                    }
-                    for (const auto &qi : queue) {
-                        q.push_back(qi);
-                    }
-                    queue.clear();
-                }
-                for (auto qi : q) {
-                    qi();
-                }
-            }
-        });
-    }
-}
-
 int Access::DoAccess(ProcThread &proc, std::string filename, int mode) {
     constexpr int allAccess = F_OK | X_OK | W_OK | R_OK;
     if ((mode & allAccess) != mode) {

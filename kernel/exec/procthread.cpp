@@ -97,6 +97,9 @@ std::shared_ptr<kfile> ProcThread::ResolveFile(const std::string &filename) {
 FileDescriptor ProcThread::get_file_descriptor(int fd) {
     return process->get_file_descriptor(fd);
 }
+FileDescriptor ProcThread::create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler) {
+    return process->create_file_descriptor(handler);
+}
 int32_t ProcThread::geteuid() {
     return process->geteuid();
 }

@@ -26,7 +26,7 @@ private:
 public:
     FileDescriptor() : handler(), fd(0) {
     }
-    FileDescriptor(std::shared_ptr<FileDescriptorHandler> handler, int fd) : handler(handler), fd(fd) {
+    FileDescriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd) : handler(handler), fd(fd) {
     }
     virtual ~FileDescriptor() = default;
     int FD() {
