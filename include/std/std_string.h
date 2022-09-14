@@ -419,7 +419,7 @@ namespace std {
 
     private:
         void copy_from(const basic_string &cp) {
-            if (cp.c.shrt.is_short()) {
+            if (cp.c.shrt.is_short() && c.shrt.is_short()) {
                 this->c.shrt = cp.c.shrt;
             } else {
                 size_type s = cp.size();
@@ -454,9 +454,6 @@ namespace std {
         }
 
         basic_string &operator=(const basic_string &cp) {
-            if (!c.shrt.is_short()) {
-                get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
-            }
             copy_from(cp);
             return *this;
         }
