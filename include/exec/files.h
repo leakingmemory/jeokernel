@@ -9,6 +9,11 @@
 
 class kfile;
 
+class FsStat {
+public:
+    static void Stat(kfile &file, struct stat &st);
+};
+
 class FsFileDescriptorHandler : public FileDescriptorHandler {
 private:
     std::shared_ptr<kfile> file;

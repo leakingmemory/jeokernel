@@ -124,6 +124,7 @@ std::shared_ptr<kfile> kdirectory::Resolve(std::string filename) {
             if (filename.empty()) {
                 return {};
             }
+            component.clear();
             count = 0;
             {
                 auto iterator = filename.begin();
@@ -142,12 +143,13 @@ std::shared_ptr<kfile> kdirectory::Resolve(std::string filename) {
             filename = remaining;
         } while (component == "." && !filename.empty());
     }
-    for (auto entry : Entries()) {
+    for (const auto &entry : Entries()) {
         if (component == entry->Name()) {
             if (filename.empty()) {
                 return entry->File();
             } else {
-                kdirectory *dir = dynamic_cast<kdirectory *>(&(*(entry->File())));
+                std::shared_ptr<kfile> ref{entry->File()};
+                kdirectory *dir = dynamic_cast<kdirectory *>(&(*ref));
                 if (dir == nullptr) {
                     return {};
                 }
@@ -155,6 +157,7 @@ std::shared_ptr<kfile> kdirectory::Resolve(std::string filename) {
             }
         }
     }
+    std::cout << " not found.\n";
     return {};
 }
 
