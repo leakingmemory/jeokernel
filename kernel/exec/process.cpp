@@ -1640,6 +1640,19 @@ FileDescriptor Process::create_file_descriptor(const std::shared_ptr<FileDescrip
     return desc;
 }
 
+bool Process::close_file_descriptor(int fd) {
+    std::lock_guard lock{mtx};
+    auto iterator = fileDescriptors.begin();
+    while (iterator != fileDescriptors.end()) {
+        if (iterator->FD() == fd) {
+            fileDescriptors.erase(iterator);
+            return true;
+        }
+        ++iterator;
+    }
+    return false;
+}
+
 bool Process::brk(intptr_t brk_addr, uintptr_t &result) {
     constexpr uint64_t highEnd = ((uint64_t) PMLT4_USERSPACE_HIGH_END) << (9 + 9 + 9 + 12);
     std::lock_guard lock{mtx};

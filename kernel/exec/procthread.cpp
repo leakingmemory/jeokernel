@@ -100,6 +100,10 @@ FileDescriptor ProcThread::get_file_descriptor(int fd) {
 FileDescriptor ProcThread::create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler) {
     return process->create_file_descriptor(handler);
 }
+bool ProcThread::close_file_descriptor(int fd) {
+    return process->close_file_descriptor(fd);
+}
+
 int32_t ProcThread::geteuid() {
     return process->geteuid();
 }

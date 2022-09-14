@@ -202,6 +202,7 @@ private:
 public:
     FileDescriptor get_file_descriptor(int);
     FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler);
+    bool close_file_descriptor(int fd);
     int32_t geteuid() {
         return euid;
     }

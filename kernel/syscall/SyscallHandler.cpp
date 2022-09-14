@@ -30,6 +30,8 @@
 #include "Futex.h"
 #include "Access.h"
 #include "OpenAt.h"
+#include "Read.h"
+#include "Close.h"
 
 //#define SYSCALL_DEBUG
 
@@ -103,6 +105,8 @@ private:
     Futex futex{*this};
     Access access{*this};
     OpenAt openat{*this};
+    Read read{*this};
+    Close close{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
