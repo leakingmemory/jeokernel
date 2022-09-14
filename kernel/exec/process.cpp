@@ -17,6 +17,7 @@
 #include "StdoutDesc.h"
 
 //#define DEBUG_PROCESS_PAGEENTR
+//#define DEBUG_PAGE_FAULT_RESOLVE
 
 static hw_spinlock pidLock{};
 static std::vector<pid_t> pids{};
@@ -769,8 +770,10 @@ void Process::activate_pfault_thread() {
 }
 
 bool Process::page_fault(task &current_task, Interrupt &intr) {
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
     std::cout << "Page fault in user process with pagetable root " << std::hex << ((uintptr_t) get_root_pagetable())
     << " code " << intr.error_code() << std::dec << "\n";
+#endif
     current_task.set_blocked(true);
     uint64_t address{0};
     asm("mov %%cr2, %0" : "=r"(address));
@@ -1083,7 +1086,9 @@ bool Process::resolve_page(uintptr_t fault_addr) {
     vm.reload();
     auto &b3 = (*((pagetable *) vm.pointer()))[page & 511];
     if (b3.present == 0) {
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
         std::cout << "Loading page " << std::hex << page << " for addr " << fault_addr << " from " << physpage << std::dec << "\n";
+#endif
         lock = {};
         auto image = mapping->image;
         phys_t phys_page;
@@ -1178,7 +1183,9 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                 return false;
             }
             b2 = &((*(root->branches))[(page >> 9) & 511]);
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
             std::cout << "Low root branch " << std::hex << ((root->physpage << 12) + (((page >> (9+9)) & 511) * sizeof(*b2))) << std::dec << "\n";
+#endif
             if (b2->present == 0) {
                 std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
                 if (!loaded_page) {
@@ -1210,7 +1217,9 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                 return false;
             }
             auto &b1 = (*(root->branches))[(page >> (9+9)) & 511];
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
             std::cout << "Root branch " << std::hex << ((root->physpage << 12) + (((page >> (9+9)) & 511) * sizeof(b1))) << std::dec << "\n";
+#endif
             if (b1.present == 0) {
                 std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
                 if (!loaded_page) {
@@ -1234,9 +1243,11 @@ bool Process::resolve_page(uintptr_t fault_addr) {
         vm.reload();
         auto &b3 = (*((pagetable *) vm.pointer()))[page & 511];
         if (b3.present == 0) {
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
             std::cout << std::hex << ((b2phys) + (page & 511)) << " *" << (b3.user_access != 0 ? "u" : "k") << (b3.writeable != 0 ? "w" : "r")
                       << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
                       << "\n";
+#endif
             mapping->mappings.push_back({.data = loaded_page, .phys_page = phys_page, .page = page});
             b3.page_ppn = phys_page >> 12;
             b3.present = 1;
@@ -1255,7 +1266,9 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                     std::cerr << "Error: Unable to allocate phys page for copy on write\n";
                     return false;
                 }
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
                 std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+#endif
                 vmem vm{PAGESIZE * 2};
                 vm.page(0).rwmap(phys);
                 vm.page(1).rmap(pagemap.data.PhysAddr());
@@ -1382,7 +1395,9 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
                     std::cerr << "Error: Unable to allocate phys page for copy on write\n";
                     return ResolveWrite::ERROR;
                 }
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
                 std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+#endif
                 vmem vm{PAGESIZE * 2};
                 vm.page(0).rwmap(phys);
                 vm.page(1).rmap(pagemap.data.PhysAddr());
