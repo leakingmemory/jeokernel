@@ -32,6 +32,7 @@
 #include "OpenAt.h"
 #include "Read.h"
 #include "Close.h"
+#include "Pread64.h"
 
 //#define SYSCALL_DEBUG
 
@@ -107,6 +108,7 @@ private:
     OpenAt openat{*this};
     Read read{*this};
     Close close{*this};
+    Pread64 pread64{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

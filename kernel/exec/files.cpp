@@ -39,6 +39,10 @@ intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len) {
     return rd;
 }
 
+intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len, uintptr_t offset) {
+    return file->Read(offset, ptr, len);
+}
+
 intptr_t FsFileDescriptorHandler::write(const void *ptr, intptr_t len) {
     std::cerr << "File write: Not implemented\n";
     return -EIO;

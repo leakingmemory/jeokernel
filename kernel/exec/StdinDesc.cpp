@@ -15,6 +15,10 @@ intptr_t StdinDesc::read(void *ptr, intptr_t len) {
     return -EIO;
 }
 
+intptr_t StdinDesc::read(void *ptr, intptr_t len, uintptr_t offset) {
+    return -EIO;
+}
+
 intptr_t StdinDesc::write(const void *ptr, intptr_t len) {
     return 0;
 }

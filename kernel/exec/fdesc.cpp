@@ -15,6 +15,10 @@ int FileDescriptor::read(void *ptr, intptr_t len) {
     return handler->read(ptr, len);
 }
 
+int FileDescriptor::read(void *ptr, intptr_t len, uintptr_t offset) {
+    return handler->read(ptr, len, offset);
+}
+
 void FileDescriptor::write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func) {
     auto handler = this->handler;
     process->resolve_read(usersp_ptr, len, [process, handler, usersp_ptr, len, func] (bool success) mutable {

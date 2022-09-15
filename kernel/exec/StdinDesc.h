@@ -13,6 +13,7 @@ private:
 public:
     static FileDescriptor Descriptor();
     intptr_t read(void *ptr, intptr_t len) override;
+    intptr_t read(void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;
     bool stat(struct stat &st) override;
 };

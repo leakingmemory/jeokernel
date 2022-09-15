@@ -23,6 +23,10 @@ intptr_t StdoutDesc::read(void *ptr, intptr_t len) {
     return -EIO;
 }
 
+intptr_t StdoutDesc::read(void *ptr, intptr_t len, uintptr_t offset) {
+    return -EIO;
+}
+
 intptr_t StdoutDesc::write(const void *ptr, intptr_t len) {
     if (len > 0) {
         std::string str{(const char *) ptr, (std::size_t) len};
