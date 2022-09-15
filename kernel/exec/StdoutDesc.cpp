@@ -5,6 +5,7 @@
 #include "StdoutDesc.h"
 #include <string>
 #include <klogger.h>
+#include <errno.h>
 
 FileDescriptor StdoutDesc::StdoutDescriptor() {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
@@ -16,6 +17,10 @@ FileDescriptor StdoutDesc::StderrDescriptor() {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
     FileDescriptor fd{desc, 2};
     return fd;
+}
+
+intptr_t StdoutDesc::read(void *ptr, intptr_t len) {
+    return -EIO;
 }
 
 intptr_t StdoutDesc::write(const void *ptr, intptr_t len) {

@@ -6,10 +6,11 @@
 #define JEOKERNEL_READ_H
 
 #include "SyscallHandler.h"
+#include "SyscallAsyncThread.h"
 
-class Read : public Syscall {
+class Read : public Syscall, private SyscallAsyncThread {
 public:
-    Read(SyscallHandler &handler) : Syscall(handler, 0) {}
+    Read(SyscallHandler &handler) : Syscall(handler, 0), SyscallAsyncThread("[fread]") {}
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;
 };
 

@@ -3,11 +3,16 @@
 //
 
 #include "StdinDesc.h"
+#include <errno.h>
 
 FileDescriptor StdinDesc::Descriptor() {
     std::shared_ptr<StdinDesc> handler{new StdinDesc};
     FileDescriptor fd{handler, 0};
     return fd;
+}
+
+intptr_t StdinDesc::read(void *ptr, intptr_t len) {
+    return -EIO;
 }
 
 intptr_t StdinDesc::write(const void *ptr, intptr_t len) {

@@ -17,8 +17,10 @@ public:
 class FsFileDescriptorHandler : public FileDescriptorHandler {
 private:
     std::shared_ptr<kfile> file;
+    size_t offset;
 public:
-    FsFileDescriptorHandler(const std::shared_ptr<kfile> &file) : FileDescriptorHandler(), file(file) {}
+    FsFileDescriptorHandler(const std::shared_ptr<kfile> &file) : FileDescriptorHandler(), file(file), offset(0) {}
+    intptr_t read(void *ptr, intptr_t len) override;
     intptr_t write(const void *ptr, intptr_t len) override;
     bool stat(struct stat &st) override;
 };

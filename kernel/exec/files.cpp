@@ -31,6 +31,14 @@ void FsStat::Stat(kfile &file, struct stat &st) {
     st.st_rdev = 0;
 }
 
+intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len) {
+    auto rd = file->Read(offset, ptr, len);
+    if (rd > 0) {
+        offset += rd;
+    }
+    return rd;
+}
+
 intptr_t FsFileDescriptorHandler::write(const void *ptr, intptr_t len) {
     std::cerr << "File write: Not implemented\n";
     return -EIO;
