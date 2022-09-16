@@ -4,9 +4,9 @@
 
 #include <files/directory.h>
 
-std::shared_ptr<fileitem> directory::Resolve(std::string filename) {
+directory_resolve_result directory::Resolve(std::string filename) {
     if (filename.empty() || filename.starts_with("/")) {
-        return {};
+        return {.file = {}, .status = fileitem_status::SUCCESS};
     }
     std::string component{};
     {
@@ -27,18 +27,22 @@ std::shared_ptr<fileitem> directory::Resolve(std::string filename) {
         remaining.append(filename.c_str() + count);
         filename = remaining;
     }
-    for (auto entry : Entries()) {
+    auto entriesResult = Entries();
+    if (entriesResult.status != fileitem_status::SUCCESS) {
+        return {.file = {}, .status = entriesResult.status};
+    }
+    for (auto entry : entriesResult.entries) {
         if (component == entry->Name()) {
             if (filename.empty()) {
-                return entry->Item();
+                return {.file = entry->Item(), .status = fileitem_status::SUCCESS};
             } else {
                 directory *dir = dynamic_cast<directory *>(&(*(entry->Item())));
                 if (dir == nullptr) {
-                    return {};
+                    return {.file = {}, .status = fileitem_status::SUCCESS};
                 }
                 return dir->Resolve(filename);
             }
         }
     }
-    return {};
+    return {.file = {}, .status = fileitem_status::SUCCESS};
 }

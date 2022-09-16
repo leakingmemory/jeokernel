@@ -14,9 +14,14 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         std::cerr << "Failed to open filesystem " << fsname << "\n";
         return 1;
     }
-    std::shared_ptr<directory> rootdir = fs->GetRootDirectory(fs);
+    auto rootdirResult = fs->GetRootDirectory(fs);
+    auto rootdir = rootdirResult.node;
     if (!rootdir) {
-        std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
+        if (rootdirResult.status == filesystem_status::SUCCESS) {
+            std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
+        } else {
+            std::cerr << "Rootdir error on " << fsname << ": " << text(rootdirResult.status) << "\n";
+        }
         return 1;
     }
     if (args != args_end) {
@@ -31,12 +36,19 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
             return 1;
         }
     }
-    for (auto entry : rootdir->Entries()) {
-        auto item = entry->Item();
-        std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << entry->Name() << "\n";
+    auto entriesResult = rootdir->Entries();
+    if (entriesResult.status == fileitem_status::SUCCESS) {
+        for (auto entry: entriesResult.entries) {
+            auto item = entry->Item();
+            std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << entry->Name() << "\n";
+        }
+    } else {
+        std::cerr << "Root dir error: " << text(entriesResult.status) << "\n";
     }
     return 0;
 }
+
+static int sysDevIds = 1;
 
 int cppmain(std::vector<std::string> args) {
     auto iterator = args.begin();
@@ -57,11 +69,11 @@ int cppmain(std::vector<std::string> args) {
         char *endp;
         blocksize = strtol(blksz.c_str(), &endp, 10);
         if (*endp != '\0') {
-            std::cerr << "Invalud blocksize: " << blksz << "\n";
+            std::cerr << "Invalid blocksize: " << blksz << "\n";
             return 1;
         }
     }
-    std::shared_ptr<file_blockdev> fblockdev{new file_blockdev(blockdev_name, blocksize)};
+    std::shared_ptr<file_blockdev> fblockdev{new file_blockdev(blockdev_name, blocksize, 1)};
     std::cout << blockdev_name << " blocksize " << blocksize << " - partitions:\n";
     parttable_readers parttableReaders{};
     auto parttable = parttableReaders.ReadParttable(fblockdev);
@@ -87,7 +99,7 @@ int cppmain(std::vector<std::string> args) {
             return 0;
         }
         auto part_entry = parttable->GetEntries()[part_idx];
-        std::shared_ptr<blockdev> partdev{new offset_blockdev(fblockdev, part_entry->GetOffset(), part_entry->GetSize())};
+        std::shared_ptr<blockdev> partdev{new offset_blockdev(fblockdev, part_entry->GetOffset(), part_entry->GetSize(), ++sysDevIds)};
         fs_blockdev = partdev;
     }
     std::string fs_name = *iterator;
