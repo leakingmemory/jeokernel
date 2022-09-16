@@ -63,6 +63,11 @@ struct ext2fs_inode_with_id {
     std::shared_ptr<ext2fs_inode> inode;
 };
 
+struct ext2fs_get_inode_result {
+    std::shared_ptr<ext2fs_inode> inode;
+    filesystem_status status;
+};
+
 class ext2fs : public blockdev_filesystem {
     friend ext2fs_provider;
 private:
@@ -70,6 +75,7 @@ private:
     std::unique_ptr<ext2super> superblock;
     std::vector<ext2fs_group> groups;
     std::vector<ext2fs_inode_with_id> inodes;
+    uintptr_t sys_dev_id;
     uint32_t BlockSize;
 public:
     ext2fs(std::shared_ptr<blockdev> bdev);
@@ -87,16 +93,36 @@ private:
     uint64_t FsBlocksToPhysBlocks(uint64_t fs_block, uint64_t fs_len);
     bool ReadBlockGroups();
 private:
-    std::shared_ptr<ext2fs_inode> LoadInode(std::size_t inode_num);
+    ext2fs_get_inode_result LoadInode(std::size_t inode_num);
 public:
-    std::shared_ptr<ext2fs_inode> GetInode(std::size_t inode_num);
-    std::shared_ptr<directory> GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
-    std::shared_ptr<fileitem> GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
+    ext2fs_get_inode_result GetInode(std::size_t inode_num);
+    filesystem_get_node_result<directory> GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
+    filesystem_get_node_result<fileitem> GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
 public:
-    std::shared_ptr<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
+    filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
 };
 
 class ext2fs_file;
+
+struct inode_read_blocks_result {
+    std::shared_ptr<blockdev_block> block;
+    filesystem_status status;
+};
+
+struct inode_read_blocks_raw_result {
+    std::shared_ptr<filepage> page;
+    filesystem_status status;
+};
+
+struct inode_read_block_result {
+    std::shared_ptr<filepage_pointer> page;
+    filesystem_status status;
+};
+
+struct inode_read_bytes_result {
+    std::size_t size;
+    filesystem_status status;
+};
 
 class ext2fs_inode {
     friend ext2fs;
@@ -109,10 +135,12 @@ private:
     std::size_t blocksize;
     std::vector<uint32_t> blockRefs;
     std::vector<std::shared_ptr<filepage>> blockCache;
+    uintptr_t sys_dev_id;
+    uintptr_t inode;
     uint64_t filesize;
     uint16_t mode;
 public:
-    ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : mtx(), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), blockCache() {
+    ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : mtx(), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), blockCache(), inode(0), filesize(0), mode(0) {
         blocks[0] = blk;
         blk->ref++;
     }
@@ -120,13 +148,13 @@ public:
         blocks[1] = blk2;
         blk2->ref++;
     }
-    void Read(ext2inode &inode);
+    bool Read(ext2inode &inode);
 private:
-    std::shared_ptr<blockdev_block> ReadBlocks(uint32_t startingBlock, uint32_t startingOffset, uint32_t length);
-    std::shared_ptr<filepage> ReadBlockRaw(std::size_t blki);
+    inode_read_blocks_result ReadBlocks(uint32_t startingBlock, uint32_t startingOffset, uint32_t length);
+    inode_read_blocks_raw_result ReadBlockRaw(std::size_t blki);
 public:
-    std::shared_ptr<filepage_pointer> ReadBlock(std::size_t blki);
-    std::size_t ReadBytes(uint64_t offset, void *ptr, std::size_t length);
+    inode_read_block_result ReadBlock(std::size_t blki);
+    inode_read_bytes_result ReadBytes(uint64_t offset, void *ptr, std::size_t length);
 };
 
 class ext2fs_inode_reader {
@@ -136,7 +164,7 @@ private:
     std::size_t offset, blki;
 public:
     ext2fs_inode_reader(std::shared_ptr<ext2fs_inode> inode) : inode(inode), page(), offset(0), blki(0) {}
-    std::size_t read(void *ptr, std::size_t bytes);
+    inode_read_bytes_result read(void *ptr, std::size_t bytes);
 };
 
 class ext2fs_provider : public filesystem_provider {

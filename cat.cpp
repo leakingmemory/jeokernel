@@ -12,9 +12,14 @@ int cat(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &
         {
             std::string path = *args;
             ++args;
-            file = rootdir->Resolve(path);
+            auto result = rootdir->Resolve(path);
+            file = result.file;
             if (!file) {
-                std::cerr << "Path not found: " << path << "\n";
+                if (result.status == fileitem_status::SUCCESS) {
+                    std::cerr << "Path not found: " << path << "\n";
+                } else {
+                    std::cerr << "Path error: " << path << ": " << text(result.status) << "\n";
+                }
                 return 2;
             }
         }
@@ -28,12 +33,15 @@ int cat(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &
             void *ptr = malloc(256);
             while (true) {
                 auto rd = file->Read(offset, ptr, 256);
-                if (rd == 0) {
+                if (rd.size == 0) {
+                    if (rd.status != fileitem_status::SUCCESS) {
+                        std::cerr << "Read error: " << text(rd.status) << "\n";
+                    }
                     break;
                 }
-                offset += rd;
+                offset += rd.size;
                 output.clear();
-                output.append((const char *) ptr, rd);
+                output.append((const char *) ptr, rd.size);
                 std::cout << output;
             }
         }

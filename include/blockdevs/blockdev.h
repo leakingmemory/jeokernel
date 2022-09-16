@@ -11,6 +11,7 @@
 class blockdev {
 public:
     virtual ~blockdev() { }
+    virtual uintptr_t GetDevId() const = 0;
     virtual std::size_t GetBlocksize() const = 0;
     virtual std::size_t GetNumBlocks() const = 0;
     virtual std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const = 0;

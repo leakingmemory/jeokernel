@@ -24,12 +24,22 @@ public:
     }
 };
 
+struct entries_result {
+    std::vector<std::shared_ptr<directory_entry>> entries;
+    fileitem_status status;
+};
+
+struct directory_resolve_result {
+    std::shared_ptr<fileitem> file;
+    fileitem_status status;
+};
+
 class directory : public fileitem {
 public:
     virtual ~directory() = default;
     uint32_t Mode() override = 0;
-    virtual std::vector<std::shared_ptr<directory_entry>> Entries() = 0;
-    std::shared_ptr<fileitem> Resolve(std::string filename);
+    virtual entries_result Entries() = 0;
+    directory_resolve_result Resolve(std::string filename);
 };
 
 #endif //FSBITS_DIRECTORY_H

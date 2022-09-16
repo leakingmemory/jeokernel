@@ -4,6 +4,10 @@
 
 #include <blockdevs/offset_blockdev.h>
 
+uintptr_t offset_blockdev::GetDevId() const {
+    return sys_dev_id;
+}
+
 std::size_t offset_blockdev::GetBlocksize() const {
     return upstream->GetBlocksize();
 }

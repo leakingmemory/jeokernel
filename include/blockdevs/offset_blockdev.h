@@ -12,9 +12,11 @@ private:
     std::shared_ptr<blockdev> upstream;
     std::size_t offset;
     std::size_t size;
+    uintptr_t sys_dev_id;
 public:
-    offset_blockdev(std::shared_ptr<blockdev> upstream, std::size_t offset, std::size_t size) : upstream(upstream), offset(offset), size(size) {
+    offset_blockdev(std::shared_ptr<blockdev> upstream, std::size_t offset, std::size_t size, uintptr_t sys_dev_id) : upstream(upstream), offset(offset), size(size), sys_dev_id(sys_dev_id) {
     }
+    uintptr_t GetDevId() const override;
     std::size_t GetBlocksize() const override;
     std::size_t GetNumBlocks() const override;
     std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const override;
