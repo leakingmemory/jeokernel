@@ -600,6 +600,7 @@ std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock,
                 }
                 if (!rdBlock) {
                     std::cerr << "Read error file block " << blockNo << "\n";
+                    return {};
                 }
                 readBlocks.push_back(rdBlock);
             } else {
