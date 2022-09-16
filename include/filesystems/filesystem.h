@@ -11,9 +11,24 @@
 
 class blockdev;
 
+enum class filesystem_status {
+    SUCCESS,
+    IO_ERROR,
+    INTEGRITY_ERROR,
+    NOT_SUPPORTED_FS_FEATURE,
+    INVALID_REQUEST
+};
+
+std::string text(filesystem_status status);
+
+template <typename T> struct filesystem_get_node_result {
+    std::shared_ptr<T> node;
+    filesystem_status status;
+};
+
 class filesystem {
 public:
-    virtual std::shared_ptr<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) = 0;
+    virtual filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) = 0;
 };
 
 class blockdev_filesystem : public filesystem {
@@ -22,7 +37,7 @@ protected:
 public:
     blockdev_filesystem(std::shared_ptr<blockdev> bdev) : bdev(bdev) {
     }
-    std::shared_ptr<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override = 0;
+    filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override = 0;
 };
 
 class filesystem_provider {

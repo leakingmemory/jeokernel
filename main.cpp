@@ -14,9 +14,14 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         std::cerr << "Failed to open filesystem " << fsname << "\n";
         return 1;
     }
-    std::shared_ptr<directory> rootdir = fs->GetRootDirectory(fs);
+    auto rootdirResult = fs->GetRootDirectory(fs);
+    auto rootdir = rootdirResult.node;
     if (!rootdir) {
-        std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
+        if (rootdirResult.status == filesystem_status::SUCCESS) {
+            std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
+        } else {
+            std::cerr << "Rootdir error on " << fsname << ": " << text(rootdirResult.status) << "\n";
+        }
         return 1;
     }
     if (args != args_end) {
@@ -31,9 +36,14 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
             return 1;
         }
     }
-    for (auto entry : rootdir->Entries()) {
-        auto item = entry->Item();
-        std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << entry->Name() << "\n";
+    auto entriesResult = rootdir->Entries();
+    if (entriesResult.status == fileitem_status::SUCCESS) {
+        for (auto entry: entriesResult.entries) {
+            auto item = entry->Item();
+            std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << entry->Name() << "\n";
+        }
+    } else {
+        std::cerr << "Root dir error: " << text(entriesResult.status) << "\n";
     }
     return 0;
 }

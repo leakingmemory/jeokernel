@@ -6,6 +6,23 @@
 
 static std::vector<std::shared_ptr<filesystem_provider>> *providers = nullptr;
 
+std::string text(filesystem_status status) {
+    switch (status) {
+        case filesystem_status::SUCCESS:
+            return "Success";
+        case filesystem_status::IO_ERROR:
+            return "Input/output error";
+        case filesystem_status::INTEGRITY_ERROR:
+            return "Filesystem itegrity error";
+        case filesystem_status::NOT_SUPPORTED_FS_FEATURE:
+            return "Feature not supported";
+        case filesystem_status::INVALID_REQUEST:
+            return "Invalid request to filesystem";
+        default:
+            return "Invalid status code";
+    }
+}
+
 void init_filesystem_providers() {
     providers = new std::vector<std::shared_ptr<filesystem_provider>>();
 }
