@@ -9,6 +9,9 @@
 #include <iostream>
 #include "ext2fs/ext2struct.h"
 
+//#define DEBUG_INODE
+//#define DEBUG_DIR
+
 ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(), superblock(), groups(), inodes(), BlockSize(0) {
     sys_dev_id = bdev->GetDevId();
     auto blocksize = bdev->GetBlocksize();
@@ -193,8 +196,10 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
     auto block_num = offset / bdev->GetBlocksize();
     offset = offset % bdev->GetBlocksize();
     auto block_end = end / bdev->GetBlocksize();
+#ifdef DEBUG_INODE
     std::cout << "Inode " << (inode_num + 1) << " at " << block_num << " - " << block_end << " off "
     << offset << "\n";
+#endif
     if (!group.InodeTableBlocks[block_num]) {
         auto blocknum = block_num + group.InodeTableBlock;
         lock = {};
@@ -225,11 +230,15 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
     }
     ext2inode inode{};
     inode_obj->Read(inode);
+#ifdef DEBUG_INODE
     std::cout << "Inode " << inode_num << " " << std::oct << inode.mode << std::dec
               << " sz " << inode.size << " blks " << inode.blocks << ":";
+#endif
     for (int i = 0; i < EXT2_NUM_DIRECT_BLOCK_PTRS; i++) {
         if (inode.block[i]) {
+#ifdef DEBUG_INODE
             std::cout << " " << inode.block[i];
+#endif
             inode_obj->blockRefs.push_back(inode.block[i]);
         }
     }
@@ -237,7 +246,9 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
     {
         uint64_t indirect_block = inode.block[EXT2_NUM_DIRECT_BLOCK_PTRS];
         if (indirect_block != 0) {
+#ifdef DEBUG_INODE
             std::cout << " <" << indirect_block << ">";
+#endif
             indirect_block *= BlockSize;
             auto indirect_block_phys = indirect_block / bdev->GetBlocksize();
             auto indirect_block_offset = indirect_block % bdev->GetBlocksize();
@@ -249,7 +260,9 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
                 auto numIndirects = BlockSize / sizeof(*indirect_bptrs);
                 for (int i = 0; i < numIndirects; i++) {
                     if (indirect_bptrs[i]) {
+#ifdef DEBUG_INODE
                         std::cout << " " << indirect_bptrs[i];
+#endif
                         inode_obj->blockRefs.push_back(indirect_bptrs[i]);
                     }
                 }
@@ -259,7 +272,9 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
         }
         uint64_t double_indirect_block = inode.block[EXT2_NUM_DIRECT_BLOCK_PTRS + 1];
         if (double_indirect_block != 0) {
+#ifdef DEBUG_INODE
             std::cout << " <<" << double_indirect_block << ">>";
+#endif
             double_indirect_block *= BlockSize;
             auto double_indirect_block_phys = double_indirect_block / bdev->GetBlocksize();
             auto double_indirect_block_offset = double_indirect_block % bdev->GetBlocksize();
@@ -272,7 +287,9 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
                 for (int i = 0; i < numDblIndirects; i++) {
                     uint64_t indirect_block = double_indirect_bptrs[i];
                     if (indirect_block != 0) {
+#ifdef DEBUG_INODE
                         std::cout << " <" << indirect_block << ">";
+#endif
                         indirect_block *= BlockSize;
                         auto indirect_block_phys = indirect_block / bdev->GetBlocksize();
                         auto indirect_block_offset = indirect_block % bdev->GetBlocksize();
@@ -284,7 +301,9 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
                             auto numIndirects = BlockSize / sizeof(*indirect_bptrs);
                             for (int i = 0; i < numIndirects; i++) {
                                 if (indirect_bptrs[i]) {
+#ifdef DEBUG_INODE
                                     std::cout << " " << indirect_bptrs[i];
+#endif
                                     inode_obj->blockRefs.push_back(indirect_bptrs[i]);
                                 }
                             }
@@ -310,7 +329,9 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
     for (int i = 0; i < pages; i++) {
         inode_obj->blockCache.push_back({});
     }
+#ifdef DEBUG_INODE
     std::cout << "\n";
+#endif
     return inode_obj;
 }
 
@@ -424,8 +445,10 @@ std::vector<std::shared_ptr<directory_entry>> ext2fs_directory::Entries() {
                 if (reader.read(((uint8_t *) dirent) + sizeof(baseDirent), addLength) == addLength) {
                     if (dirent->inode != 0) {
                         std::string name{dirent->Name()};
+#ifdef DEBUG_DIR
                         std::cout << "Dir node " << dirent->inode << " type " << ((int) dirent->file_type) << " name "
                                   << name << "\n";
+#endif
                         if (dirent->file_type == 2) {
                             std::shared_ptr<directory> dir{Filesystem().GetDirectory(fs, dirent->inode)};
                             entries.emplace_back(new directory_entry(name, dir));
@@ -593,7 +616,9 @@ std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock,
                 if (((endingOffset - startingAddr) % bdev->GetBlocksize()) != 0) {
                     ++physBlocks;
                 }
+#ifdef DEBUG_INODE
                 std::cout << "Read file block " << blockNo << ": phys " << physBlock << " num " << physBlocks << "\n";
+#endif
                 auto rdBlock = bdev->ReadBlock(physBlock, physBlocks);
                 if (rdBlock && offset != 0) {
                     memcpy(rdBlock->Pointer(), ((uint8_t *) rdBlock->Pointer()) + offset, blocksize);
@@ -618,7 +643,9 @@ std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock,
             cp = length;
         }
         if (readBlocks[i]) {
+#ifdef DEBUG_INODE
             std::cout << "Assemble blocks 0 - " << cp << "\n";
+#endif
             memcpy(finalBlock->Pointer(), readBlocks[i]->Pointer(), cp);
         }
         offset = firstReadLength;
@@ -627,7 +654,9 @@ std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock,
     if (readBlocks.size() > 1) {
         while (i < (readBlocks.size() - 1)) {
             if (readBlocks[i]) {
+#ifdef DEBUG_INODE
                 std::cout << "Assemble blocks " << offset << " - " << (offset + blocksize) << "\n";
+#endif
                 memcpy(((uint8_t *) finalBlock->Pointer()) + offset, readBlocks[i]->Pointer(), blocksize);
             }
             offset += blocksize;
@@ -635,7 +664,9 @@ std::shared_ptr<blockdev_block> ext2fs_inode::ReadBlocks(uint32_t startingBlock,
         }
         if (i < readBlocks.size()) {
             if (readBlocks[i]) {
+#ifdef DEBUG_INODE
                 std::cout << "Assemble blocks " << offset << " - " << (offset + lastBlockLength) << "\n";
+#endif
                 memcpy(((uint8_t *) finalBlock->Pointer()) + offset, readBlocks[i]->Pointer(), lastBlockLength);
             }
         }
