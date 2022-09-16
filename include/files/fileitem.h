@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <files/filepage.h>
+#include <string>
 
 enum class fileitem_status {
     SUCCESS,
