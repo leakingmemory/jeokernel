@@ -29,7 +29,7 @@ std::size_t file_blockdev_block::Size() const {
     return size;
 }
 
-file_blockdev::file_blockdev(const std::string &filename, std::size_t blocksize) : blocksize(blocksize), blocks(0), fd(-1) {
+file_blockdev::file_blockdev(const std::string &filename, std::size_t blocksize, uintptr_t sys_dev_id) : blocksize(blocksize), blocks(0), sys_dev_id(sys_dev_id), fd(-1) {
     fd = open(filename.c_str(), O_RDONLY);
     if (fd < 0) {
         std::cerr << filename << ": " << strerror(errno) << "\n";
@@ -52,6 +52,10 @@ file_blockdev::~file_blockdev() {
     if (fd >= 0) {
         close(fd);
     }
+}
+
+uintptr_t file_blockdev::GetDevId() const {
+    return sys_dev_id;
 }
 
 std::size_t file_blockdev::GetBlocksize() const {

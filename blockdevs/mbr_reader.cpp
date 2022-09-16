@@ -126,7 +126,7 @@ void ReadExtendedPartition(const mbr_reader &reader, mbr_parttable &parttable, s
             continue;
         }
 
-        std::shared_ptr<blockdev> off_blockdev{new offset_blockdev(up_blockdev, offset, entry->GetSize())};
+        std::shared_ptr<blockdev> off_blockdev{new offset_blockdev(up_blockdev, offset, entry->GetSize(), 0)};
 
         auto ext_parttable = reader.ReadParttable(off_blockdev, true);
 

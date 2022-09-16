@@ -38,6 +38,8 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
     return 0;
 }
 
+static int sysDevIds = 1;
+
 int cppmain(std::vector<std::string> args) {
     auto iterator = args.begin();
     if (iterator == args.end()) {
@@ -57,11 +59,11 @@ int cppmain(std::vector<std::string> args) {
         char *endp;
         blocksize = strtol(blksz.c_str(), &endp, 10);
         if (*endp != '\0') {
-            std::cerr << "Invalud blocksize: " << blksz << "\n";
+            std::cerr << "Invalid blocksize: " << blksz << "\n";
             return 1;
         }
     }
-    std::shared_ptr<file_blockdev> fblockdev{new file_blockdev(blockdev_name, blocksize)};
+    std::shared_ptr<file_blockdev> fblockdev{new file_blockdev(blockdev_name, blocksize, 1)};
     std::cout << blockdev_name << " blocksize " << blocksize << " - partitions:\n";
     parttable_readers parttableReaders{};
     auto parttable = parttableReaders.ReadParttable(fblockdev);
@@ -87,7 +89,7 @@ int cppmain(std::vector<std::string> args) {
             return 0;
         }
         auto part_entry = parttable->GetEntries()[part_idx];
-        std::shared_ptr<blockdev> partdev{new offset_blockdev(fblockdev, part_entry->GetOffset(), part_entry->GetSize())};
+        std::shared_ptr<blockdev> partdev{new offset_blockdev(fblockdev, part_entry->GetOffset(), part_entry->GetSize(), ++sysDevIds)};
         fs_blockdev = partdev;
     }
     std::string fs_name = *iterator;

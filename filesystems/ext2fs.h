@@ -70,6 +70,7 @@ private:
     std::unique_ptr<ext2super> superblock;
     std::vector<ext2fs_group> groups;
     std::vector<ext2fs_inode_with_id> inodes;
+    uintptr_t sys_dev_id;
     uint32_t BlockSize;
 public:
     ext2fs(std::shared_ptr<blockdev> bdev);
@@ -109,10 +110,12 @@ private:
     std::size_t blocksize;
     std::vector<uint32_t> blockRefs;
     std::vector<std::shared_ptr<filepage>> blockCache;
+    uintptr_t sys_dev_id;
+    uintptr_t inode;
     uint64_t filesize;
     uint16_t mode;
 public:
-    ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : mtx(), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), blockCache() {
+    ext2fs_inode(std::shared_ptr<blockdev> bdev, std::shared_ptr<ext2fs_inode_table_block> blk, std::size_t offset, std::size_t blocksize) : mtx(), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), blockCache(), inode(0), filesize(0), mode(0) {
         blocks[0] = blk;
         blk->ref++;
     }

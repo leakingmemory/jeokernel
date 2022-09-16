@@ -10,6 +10,7 @@
 #include "ext2fs/ext2struct.h"
 
 ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(), superblock(), groups(), inodes(), BlockSize(0) {
+    sys_dev_id = bdev->GetDevId();
     auto blocksize = bdev->GetBlocksize();
     {
         std::shared_ptr<blockdev_block> blocks;
@@ -297,6 +298,8 @@ std::shared_ptr<ext2fs_inode> ext2fs::LoadInode(std::size_t inode_num) {
             }
         }
     }
+    inode_obj->sys_dev_id = sys_dev_id;
+    inode_obj->inode = inode_num + 1;
     inode_obj->filesize = inode.size;
     inode_obj->mode = inode.mode;
     auto pages = inode_obj->filesize / FILEPAGE_PAGE_SIZE;
@@ -343,6 +346,9 @@ public:
     ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode);
     uint32_t Mode() override;
     std::size_t Size() override;
+    uintptr_t InodeNum() override;
+    uint32_t BlockSize() override;
+    uintptr_t SysDevId() override;
     std::shared_ptr<filepage> GetPage(std::size_t pagenum) override;
     std::size_t Read(uint64_t offset, void *ptr, std::size_t length) override;
 };
@@ -356,6 +362,18 @@ uint32_t ext2fs_file::Mode() {
 
 std::size_t ext2fs_file::Size() {
     return inode->filesize;
+}
+
+uintptr_t ext2fs_file::InodeNum() {
+    return inode->inode;
+}
+
+uint32_t ext2fs_file::BlockSize() {
+    return inode->blocksize;
+}
+
+uintptr_t ext2fs_file::SysDevId() {
+    return inode->sys_dev_id;
 }
 
 std::shared_ptr<filepage> ext2fs_file::GetPage(std::size_t pagenum) {
@@ -380,6 +398,9 @@ private:
     }
     uint32_t Mode() override;
     std::size_t Size() override;
+    uintptr_t InodeNum() override;
+    uint32_t BlockSize() override;
+    uintptr_t SysDevId() override;
     std::shared_ptr<filepage> GetPage(std::size_t pagenum) override;
     std::size_t Read(uint64_t offset, void *ptr, std::size_t length) override;
 };
@@ -436,6 +457,18 @@ uint32_t ext2fs_directory::Mode() {
 
 std::size_t ext2fs_directory::Size() {
     return ext2fs_file::Size();
+}
+
+uintptr_t ext2fs_directory::InodeNum() {
+    return ext2fs_file::InodeNum();
+}
+
+uint32_t ext2fs_directory::BlockSize() {
+    return ext2fs_file::BlockSize();
+}
+
+uintptr_t ext2fs_directory::SysDevId() {
+    return ext2fs_file::SysDevId();
 }
 
 std::shared_ptr<filepage> ext2fs_directory::GetPage(std::size_t pagenum) {

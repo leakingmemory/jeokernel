@@ -23,11 +23,11 @@ int ls(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &a
         if (dir != nullptr) {
             for (auto entry : dir->Entries()) {
                 auto item = entry->Item();
-                std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << entry->Name() << "\n";
+                std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << item->SysDevId() << ":" << item->InodeNum() << " " << entry->Name() << "\n";
             }
         } else {
             auto item = file;
-            std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << final_filename << "\n";
+            std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << item->SysDevId() << ":" << item->InodeNum() << " " << final_filename << "\n";
         }
     }
     return 0;
