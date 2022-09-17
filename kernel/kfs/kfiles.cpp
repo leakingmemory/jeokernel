@@ -6,6 +6,19 @@
 #include <kfs/kfiles.h>
 #include <files/directory.h>
 
+std::string text(kfile_status status) {
+    switch (status) {
+        case kfile_status::SUCCESS:
+            return "Success";
+        case kfile_status::IO_ERROR:
+            return "Input/output error";
+        case kfile_status::NOT_DIRECTORY:
+            return "Not a directory";
+        default:
+            return "Unknown error";
+    }
+}
+
 struct kmount {
     std::string name;
     std::shared_ptr<directory> rootdir;
@@ -30,22 +43,34 @@ std::size_t kfile::Size() {
     return file ? file->Size() : 0;
 }
 
-std::size_t kfile::Read(uint64_t offset, void *ptr, std::size_t len) {
-    return file ? file->Read(offset, ptr, len) : 0;
-}
-
-filepage_ref kfile::GetPage(std::size_t pagenum) {
-    if (file == nullptr) {
-        return {};
+kfile_result<std::size_t> kfile::Read(uint64_t offset, void *ptr, std::size_t len) {
+    if (!file) {
+        return {.result = 0, .status = kfile_status::IO_ERROR};
     }
-    auto page = file->GetPage(pagenum);
-    auto data = page->Raw();
-    filepage_ref ref{data};
-    data->initDone();
-    return ref;
+    auto result = file->Read(offset, ptr, len);
+    if (result.size > 0 || result.status == fileitem_status::SUCCESS) {
+        return {.result = result.size, .status = kfile_status::SUCCESS};
+    } else {
+        return {.result = 0, .status = kfile_status::IO_ERROR};
+    }
 }
 
-std::vector<std::shared_ptr<kdirent>> kdirectory_impl::Entries(std::shared_ptr<kfile> this_ref) {
+kfile_result<filepage_ref> kfile::GetPage(std::size_t pagenum) {
+    if (file == nullptr) {
+        return {.result = {}, .status = kfile_status::IO_ERROR};
+    }
+    auto pageResult = file->GetPage(pagenum);
+    if (pageResult.page) {
+        auto page = pageResult.page;
+        auto data = page->Raw();
+        filepage_ref ref{data};
+        data->initDone();
+        return {.result = ref, .status = kfile_status::SUCCESS};
+    }
+    return {.result = {}, .status = kfile_status::IO_ERROR};
+}
+
+kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std::shared_ptr<kfile> this_ref) {
     std::shared_ptr<fileitem> listing_ref{file};
     directory *listing;
     if (listing_ref) {
@@ -67,7 +92,11 @@ std::vector<std::shared_ptr<kdirent>> kdirectory_impl::Entries(std::shared_ptr<k
         items.push_back(std::make_shared<kdirent>("..", this_ref));
     }
     if (listing != nullptr) {
-        for (auto fsent : listing->Entries()) {
+        auto entriesResult = listing->Entries();
+        if (entriesResult.status != fileitem_status::SUCCESS) {
+            return {.result = {}, .status = kfile_status::IO_ERROR};
+        }
+        for (auto fsent : entriesResult.entries) {
             std::string name = fsent->Name();
             std::shared_ptr<fileitem> fsfile = fsent->Item();
             directory *fsdir = dynamic_cast<directory *> (&(*fsfile));
@@ -85,7 +114,7 @@ std::vector<std::shared_ptr<kdirent>> kdirectory_impl::Entries(std::shared_ptr<k
             }
         }
     }
-    return items;
+    return {.result = items, .status = kfile_status::SUCCESS};
 }
 
 void kdirectory_impl::Mount(const std::shared_ptr<directory> &fsroot) {
@@ -96,12 +125,15 @@ std::string kdirectory_impl::Kpath() {
     return kpath;
 }
 
-std::vector<std::shared_ptr<kdirent>> kdirectory::Entries() {
+kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
     kfile *cwd_file = &(*impl);
     kdirectory_impl *dir = dynamic_cast<kdirectory_impl *>(cwd_file);
     auto impl_entries = dir->Entries(impl);
+    if (impl_entries.status != kfile_status::SUCCESS) {
+        return {.result = {}, .status = impl_entries.status};
+    }
     std::vector<std::shared_ptr<kdirent>> entries{};
-    for (auto impl_entry : impl_entries) {
+    for (auto impl_entry : impl_entries.result) {
         if (dynamic_cast<kdirectory_impl *>(&(*(impl_entry->File()))) == nullptr) {
             entries.push_back(impl_entry);
         } else {
@@ -110,19 +142,19 @@ std::vector<std::shared_ptr<kdirent>> kdirectory::Entries() {
             entries.push_back(entry);
         }
     }
-    return entries;
+    return {.result = entries, .status = kfile_status::SUCCESS};
 }
 
-std::shared_ptr<kfile> kdirectory::Resolve(std::string filename) {
+kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(std::string filename) {
     if (filename.empty() || filename.starts_with("/")) {
-        return {};
+        return {.result = {}, .status = kfile_status::SUCCESS};
     }
     std::string component{};
     {
         std::size_t count;
         do {
             if (filename.empty()) {
-                return {};
+                return {.result = {}, .status = kfile_status::SUCCESS};
             }
             component.clear();
             count = 0;
@@ -143,22 +175,26 @@ std::shared_ptr<kfile> kdirectory::Resolve(std::string filename) {
             filename = remaining;
         } while (component == "." && !filename.empty());
     }
-    for (const auto &entry : Entries()) {
+    auto entriesResult = Entries();
+    if (entriesResult.status != kfile_status::SUCCESS) {
+        return {.result = {}, .status = kfile_status::IO_ERROR};
+    }
+    for (const auto &entry : entriesResult.result) {
         if (component == entry->Name()) {
             if (filename.empty()) {
-                return entry->File();
+                return {.result = entry->File(), .status = kfile_status::SUCCESS};
             } else {
                 std::shared_ptr<kfile> ref{entry->File()};
                 kdirectory *dir = dynamic_cast<kdirectory *>(&(*ref));
                 if (dir == nullptr) {
-                    return {};
+                    return {.result = {}, .status = kfile_status::NOT_DIRECTORY};
                 }
                 return dir->Resolve(filename);
             }
         }
     }
     std::cout << " not found.\n";
-    return {};
+    return {.result = {}, .status = kfile_status::SUCCESS};
 }
 
 void kdirectory::Mount(const std::shared_ptr<directory> &fsroot) {

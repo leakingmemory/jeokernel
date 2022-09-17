@@ -6,6 +6,7 @@
 #define JEOKERNEL_FILES_H
 
 #include <exec/fdesc.h>
+#include "concurrency/hw_spinlock.h"
 
 class kfile;
 
@@ -16,10 +17,11 @@ public:
 
 class FsFileDescriptorHandler : public FileDescriptorHandler {
 private:
+    hw_spinlock mtx;
     std::shared_ptr<kfile> file;
     size_t offset;
 public:
-    FsFileDescriptorHandler(const std::shared_ptr<kfile> &file) : FileDescriptorHandler(), file(file), offset(0) {}
+    FsFileDescriptorHandler(const std::shared_ptr<kfile> &file) : FileDescriptorHandler(), mtx(), file(file), offset(0) {}
     intptr_t read(void *ptr, intptr_t len) override;
     intptr_t read(void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;

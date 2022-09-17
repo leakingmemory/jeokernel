@@ -15,7 +15,18 @@ int Access::DoAccess(ProcThread &proc, std::string filename, int mode) {
     if ((mode & allAccess) != mode) {
         return -EINVAL;
     }
-    auto file = proc.ResolveFile(filename);
+    auto fileResolve = proc.ResolveFile(filename);
+    if (fileResolve.status != kfile_status::SUCCESS) {
+        switch (fileResolve.status) {
+            case kfile_status::IO_ERROR:
+                return -EIO;
+            case kfile_status::NOT_DIRECTORY:
+                return -ENOTDIR;
+            default:
+                return -EIO;
+        }
+    }
+    auto file = fileResolve.result;
     if (!file) {
         return -ENOENT;
     }

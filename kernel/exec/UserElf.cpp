@@ -10,9 +10,12 @@ UserElf::UserElf(const std::shared_ptr<kfile> &file) : file(file), elf64Header()
     if (file->Size() < sizeof(elf64Header)) {
         return;
     }
-    if (file->Read(0, (void *) &elf64Header, sizeof(elf64Header)) != sizeof(elf64Header)) {
-        std::cerr << "ELF: Error reading elf header\n";
-        return;
+    {
+        auto readResult = file->Read(0, (void *) &elf64Header, sizeof(elf64Header));
+        if (readResult.result != sizeof(elf64Header)) {
+            std::cerr << "ELF: Error reading elf header\n";
+            return;
+        }
     }
     if (elf64Header.start.e_magic != 0x464C457F) {
         return;
@@ -44,7 +47,7 @@ std::shared_ptr<ELF64_program_entry> UserElf::get_program_entry(uint16_t index) 
     std::shared_ptr<ELF64_program_entry> pe{new ELF64_program_entry};
     auto offset = elf64Header.get_program_entry_offset(index);
     auto rd = file->Read(offset, (void *) &(*pe), sizeof(*pe));
-    if (rd == sizeof(*pe)) {
+    if (rd.result == sizeof(*pe)) {
         return pe;
     }
     return {};
@@ -54,7 +57,7 @@ std::shared_ptr<ELF64_section_entry> UserElf::get_section_entry(uint16_t index) 
     std::shared_ptr<ELF64_section_entry> se{new ELF64_section_entry};
     auto offset = elf64Header.get_section_entry_offset(index);
     auto rd = file->Read(offset, (void *) &(*se), sizeof(*se));
-    if (rd == sizeof(*se)) {
+    if (rd.result == sizeof(*se)) {
         return se;
     }
     return {};

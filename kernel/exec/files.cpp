@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <exec/files.h>
 #include <kfs/kfiles.h>
+#include <mutex>
 
 void FsStat::Stat(kfile &file, struct stat &st) {
     st.st_mode = file.Mode();
@@ -32,15 +33,50 @@ void FsStat::Stat(kfile &file, struct stat &st) {
 }
 
 intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len) {
-    auto rd = file->Read(offset, ptr, len);
-    if (rd > 0) {
-        offset += rd;
+    size_t offset{0};
+    {
+        std::lock_guard lock{mtx};
+        offset = this->offset;
     }
-    return rd;
+    auto result = file->Read(offset, ptr, len);
+    if (result.status == kfile_status::SUCCESS || result.result > 0) {
+        auto rd = result.result;
+        std::unique_lock lock{mtx};
+        if (offset == this->offset) {
+            if (rd > 0) {
+                this->offset += rd;
+            }
+            return rd;
+        } else {
+            lock.release();
+            return read(ptr, len);
+        }
+    } else {
+        switch (result.status) {
+            case kfile_status::IO_ERROR:
+                return -EIO;
+            case kfile_status::NOT_DIRECTORY:
+                return -ENOTDIR;
+            default:
+                return -EIO;
+        }
+    }
 }
 
 intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len, uintptr_t offset) {
-    return file->Read(offset, ptr, len);
+    auto result = file->Read(offset, ptr, len);
+    if (result.status == kfile_status::SUCCESS || result.result > 0) {
+        return result.result;
+    } else {
+        switch (result.status) {
+            case kfile_status::IO_ERROR:
+                return -EIO;
+            case kfile_status::NOT_DIRECTORY:
+                return -ENOTDIR;
+            default:
+                return -EIO;
+        }
+    }
 }
 
 intptr_t FsFileDescriptorHandler::write(const void *ptr, intptr_t len) {

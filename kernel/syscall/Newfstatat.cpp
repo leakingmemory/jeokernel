@@ -68,7 +68,25 @@ int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbu
                     // TODO
                     std::cout << "newfstatat(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
                               << uptr_statbuf << ", " << flag << std::dec << ")\n";
-                    auto file = process->ResolveFile(filename);
+                    auto fileResolve = process->ResolveFile(filename);
+                    if (fileResolve.status != kfile_status::SUCCESS) {
+                        int err{-EIO};
+                        switch (fileResolve.status) {
+                            case kfile_status::IO_ERROR:
+                                err = -EIO;
+                                break;
+                            case kfile_status::NOT_DIRECTORY:
+                                err = -ENOTDIR;
+                                break;
+                            default:
+                                err = -EIO;
+                        }
+                        scheduler->when_not_running(*current_task, [current_task, err]() {
+                            current_task->get_cpu_state().rax = (uint64_t) err;
+                            current_task->set_blocked(false);
+                        });
+                    }
+                    auto file = fileResolve.result;
                     if (!file) {
                         scheduler->when_not_running(*current_task, [current_task]() {
                             current_task->get_cpu_state().rax = (uint64_t) -ENOENT;

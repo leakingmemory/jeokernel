@@ -11,10 +11,23 @@
 #include <vector>
 #include "filepage_data.h"
 
+enum class kfile_status {
+    SUCCESS,
+    IO_ERROR,
+    NOT_DIRECTORY
+};
+
+std::string text(kfile_status status);
+
 class fileitem;
 class directory;
 class kdirectory;
 class kdirectory_impl;
+
+template <typename T> struct kfile_result {
+    T result;
+    kfile_status status;
+};
 
 class kfile {
     friend kdirectory;
@@ -28,8 +41,8 @@ public:
     int Gid();
     int Uid();
     std::size_t Size();
-    std::size_t Read(uint64_t offset, void *ptr, std::size_t len);
-    filepage_ref GetPage(std::size_t pagenum);
+    kfile_result<std::size_t> Read(uint64_t offset, void *ptr, std::size_t len);
+    kfile_result<filepage_ref> GetPage(std::size_t pagenum);
 };
 
 class kdirent {
@@ -52,7 +65,7 @@ private:
     std::string kpath;
 public:
     kdirectory_impl(const std::shared_ptr<kfile> &parent, const std::string &kpath, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem), parent(parent), kpath(kpath) {}
-    std::vector<std::shared_ptr<kdirent>> Entries(std::shared_ptr<kfile> this_impl);
+    kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries(std::shared_ptr<kfile> this_impl);
     void Mount(const std::shared_ptr<directory> &fsroot);
     std::string Kpath();
 };
@@ -62,8 +75,8 @@ private:
     std::shared_ptr<kfile> impl;
 public:
     kdirectory(const std::shared_ptr<kfile> &impl) : kfile(impl->file), impl(impl) {}
-    std::vector<std::shared_ptr<kdirent>> Entries();
-    std::shared_ptr<kfile> Resolve(std::string filename);
+    kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries();
+    kfile_result<std::shared_ptr<kfile>> Resolve(std::string filename);
     void Mount(const std::shared_ptr<directory> &fsroot);
     std::string Kpath();
 };

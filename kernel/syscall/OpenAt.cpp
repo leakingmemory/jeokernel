@@ -34,7 +34,18 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
         }
     }
 
-    auto file = proc.ResolveFile(filename);
+    auto fileResolve = proc.ResolveFile(filename);
+    if (fileResolve.status != kfile_status::SUCCESS) {
+        switch (fileResolve.status) {
+            case kfile_status::IO_ERROR:
+                return -EIO;
+            case kfile_status::NOT_DIRECTORY:
+                return -ENOTDIR;
+            default:
+                return -EIO;
+        }
+    }
+    auto file = fileResolve.result;
     if (!file) {
         std::cout << "openat: not found: " << filename << "\n";
         return -ENOENT;

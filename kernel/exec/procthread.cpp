@@ -90,7 +90,7 @@ void ProcThread::push_strings(uintptr_t ptr, const std::vector<std::string>::ite
     process->push_strings(ptr, begin, end, pointers, func);
 }
 
-std::shared_ptr<kfile> ProcThread::ResolveFile(const std::string &filename) {
+kfile_result<std::shared_ptr<kfile>> ProcThread::ResolveFile(const std::string &filename) {
     return process->ResolveFile(filename);
 }
 

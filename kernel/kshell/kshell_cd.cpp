@@ -21,17 +21,22 @@ void kshell_cd::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         std::cerr << "cd: Too many arguments\n";
         return;
     }
-    std::shared_ptr<kfile> newDir{};
+    kfile_result<std::shared_ptr<kfile>> newDirRes{};
     if (dir.starts_with("/")) {
         while (dir.starts_with("/")) {
             std::string trim{};
             trim.append(dir.c_str() + 1);
             dir = trim;
         }
-        newDir = get_kernel_rootdir()->Resolve(dir);
+        newDirRes = get_kernel_rootdir()->Resolve(dir);
     } else {
-        newDir = cwd.Resolve(dir);
+        newDirRes = cwd.Resolve(dir);
     }
+    if (newDirRes.status != kfile_status::SUCCESS) {
+        std::cerr << "Error: " << text(newDirRes.status) << "\n";
+        return;
+    }
+    auto newDir = newDirRes.result;
     if (!newDir) {
         std::cerr << "cd: Not found\n";
         return;

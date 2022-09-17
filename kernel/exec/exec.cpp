@@ -47,11 +47,17 @@ bool Exec::LoadLoads(kfile &binary, ELF_loads &loads, UserElf &userElf) {
                     std::cerr << "ELF: memory allocation failure, PHT_INTERP, " << std::dec << pe->p_filesz << "\n";
                     return false;
                 }
-                auto rd = binary.Read(pe->p_offset, rdbuf, pe->p_filesz);
+                auto readResult = binary.Read(pe->p_offset, rdbuf, pe->p_filesz);
+                auto rd = readResult.result;
                 if (rd != pe->p_filesz) {
                     free(rdbuf);
-                    std::cerr << "ELF: read error, PHT_INTERP, 0x" << std::hex << pe->p_offset << ", " << std::dec
-                              << pe->p_filesz << "\n";
+                    if (readResult.status != kfile_status::SUCCESS) {
+                        std::cerr << "ELF: read error, PHT_INTERP, 0x" << std::hex << pe->p_offset << ", " << std::dec
+                                  << pe->p_filesz << ": " << text(readResult.status) << "\n";
+                    } else {
+                        std::cerr << "ELF: read error, PHT_INTERP, 0x" << std::hex << pe->p_offset << ", " << std::dec
+                                  << pe->p_filesz << "\n";
+                    }
                     return false;
                 }
                 rdbuf[pe->p_filesz] = 0;
@@ -248,7 +254,12 @@ std::shared_ptr<kfile> ExecState::ResolveFile(const std::string &filename) {
             resname = trim;
         }
         if (!resname.empty()) {
-            litem = get_kernel_rootdir()->Resolve(resname);
+            auto resolveResult = get_kernel_rootdir()->Resolve(resname);
+            if (resolveResult.status != kfile_status::SUCCESS) {
+                std::cerr << "elfloader: error: " << text(resolveResult.status) << "\n";
+                return {};
+            }
+            litem = resolveResult.result;
         } else {
             litem = get_kernel_rootdir();
         }
@@ -257,7 +268,12 @@ std::shared_ptr<kfile> ExecState::ResolveFile(const std::string &filename) {
             std::cerr << "elfloader: not found: <empty>\n";
             return {};
         }
-        litem = cwd.Resolve(filename);
+        auto resolveResult = cwd.Resolve(filename);
+        if (resolveResult.status != kfile_status::SUCCESS) {
+            std::cerr << "elfloader: error: " << text(resolveResult.status) << "\n";
+            return {};
+        }
+        litem = resolveResult.result;
     }
     if (litem) {
         kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));

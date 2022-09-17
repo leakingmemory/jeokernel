@@ -25,7 +25,12 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             }
             std::shared_ptr<kfile> litem;
             if (!resname.empty()) {
-                litem = get_kernel_rootdir()->Resolve(resname);
+                auto resolveResult = get_kernel_rootdir()->Resolve(resname);
+                if (resolveResult.status != kfile_status::SUCCESS) {
+                    std::cerr << "Error: " << text(resolveResult.status) << "\n";
+                    return;
+                }
+                litem = resolveResult.result;
             } else {
                 litem = get_kernel_rootdir();
             }
@@ -35,7 +40,12 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             } else {
                 uint64_t offset{0};
                 while (true) {
-                    auto rd = litem->Read(offset, &(buf[0]), sizeof(buf));
+                    auto readResult = litem->Read(offset, &(buf[0]), sizeof(buf));
+                    auto rd = readResult.result;
+                    if (rd == 0 && readResult.status != kfile_status::SUCCESS) {
+                        std::cerr << "Error: " << text(readResult.status) << "\n";
+                        return;
+                    }
                     if (rd == 0) {
                         break;
                     }
@@ -46,14 +56,24 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                 }
             }
         } else {
-            auto litem = dir->Resolve(filename);
+            auto resolveResult = dir->Resolve(filename);
+            if (resolveResult.status != kfile_status::SUCCESS) {
+                std::cerr << "Error: " << text(resolveResult.status) << "\n";
+                return;
+            }
+            auto litem = resolveResult.result;
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {
                 std::cerr << "cat: is a directory: " << filename << "\n";
             } else {
                 uint64_t offset{0};
                 while (true) {
-                    auto rd = litem->Read(offset, &(buf[0]), sizeof(buf));
+                    auto readResult = litem->Read(offset, &(buf[0]), sizeof(buf));
+                    auto rd = readResult.result;
+                    if (rd == 0 && readResult.status != kfile_status::SUCCESS) {
+                        std::cerr << "Error: " << text(readResult.status) << "\n";
+                        return;
+                    }
                     if (rd == 0) {
                         break;
                     }

@@ -74,7 +74,12 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             std::cerr << "Mountpoint not found " << mountpoint_orig << "\n";
             return;
         }
-        mountfile = dir->Resolve(mountpoint);
+        auto resolveResult = dir->Resolve(mountpoint);
+        if (resolveResult.status != kfile_status::SUCCESS) {
+            std::cerr << "Error: " << text(resolveResult.status) << "\n";
+            return;
+        }
+        mountfile = resolveResult.result;
         if (!mountfile) {
             std::cerr << "Mountpoint not found " << mountpoint_orig << "\n";
             return;
@@ -101,5 +106,11 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         return;
     }
 
-    dir->Mount(fs->GetRootDirectory(fs));
+    auto result = fs->GetRootDirectory(fs);
+    if (result.node) {
+        dir->Mount(result.node);
+    } else {
+        std::cerr << "Failed to mount filesystem " << fstype << " on device " << deviceName << ": "
+                  << text(result.status) << "\n";
+    }
 }

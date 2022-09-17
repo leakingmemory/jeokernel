@@ -29,6 +29,7 @@ public:
     }
     virtual blockdev_interface *GetBlockdevInterface() const = 0;
     virtual void DetachBlockdevInterface() = 0;
+    uintptr_t GetDevId() const override = 0;
     std::size_t GetBlocksize() const override = 0;
     std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const override = 0;
 };
@@ -39,14 +40,16 @@ class hw_blockdev : public blockdev_container {
 private:
     hw_spinlock &_lock;
     blockdev_interface *bdev;
+    uintptr_t sys_dev_id;
 public:
-    hw_blockdev(hw_spinlock &_lock, blockdev_interface *bdev);
+    hw_blockdev(hw_spinlock &_lock, blockdev_interface *bdev, uintptr_t sys_dev_id);
     ~hw_blockdev() override;
     blockdev_interface *GetBlockdevInterface() const override;
     void DetachBlockdevInterface() override;
-    virtual std::size_t GetBlocksize() const;
-    virtual std::size_t GetNumBlocks() const;
-    virtual std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const;
+    uintptr_t GetDevId() const override;
+    std::size_t GetBlocksize() const override;
+    std::size_t GetNumBlocks() const override;
+    std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const override;
 };
 
 class blockdevsystem_impl;
@@ -68,6 +71,7 @@ private:
     hw_spinlock _lock;
     std::vector<std::shared_ptr<blockdev_container>> blockdevs;
     std::vector<std::tuple<std::string,std::shared_ptr<blockdev_with_partitions>>> availBlockdevs;
+    uintptr_t sysDevIds;
 public:
     blockdevsystem_impl();
     std::shared_ptr<blockdev_interface> CreateInterface() override;
@@ -94,7 +98,8 @@ void blockdev_with_partitions::FindSubs(const std::string &parent_name, blockdev
         << " and signature " << std::hex << parttable->GetSignature() << "\n" << std::dec;
     int index = 0;
     for (auto part : parttable->GetEntries()) {
-        std::shared_ptr<blockdev> partdev = std::make_shared<offset_blockdev>(bdev, part->GetOffset(), part->GetSize());
+        auto dev_id = (bdev->GetDevId() << 12) + index;
+        std::shared_ptr<blockdev> partdev = std::make_shared<offset_blockdev>(bdev, part->GetOffset(), part->GetSize(), dev_id);
         std::shared_ptr<blockdev_with_partitions> partwp = std::make_shared<blockdev_with_partitions>(partdev);
         std::stringstream name{};
         name << parent_name << "p" << ++index;
@@ -124,7 +129,7 @@ void blockdev_with_partitions::RemoveSubs(blockdevsystem_impl &system) {
     }
 }
 
-hw_blockdev::hw_blockdev(hw_spinlock &_lock, blockdev_interface *bdev) : _lock(_lock), bdev(bdev) {}
+hw_blockdev::hw_blockdev(hw_spinlock &_lock, blockdev_interface *bdev, uintptr_t sys_dev_id) : _lock(_lock), bdev(bdev), sys_dev_id(sys_dev_id) {}
 
 hw_blockdev::~hw_blockdev() {}
 
@@ -134,6 +139,10 @@ blockdev_interface *hw_blockdev::GetBlockdevInterface() const {
 
 void hw_blockdev::DetachBlockdevInterface() {
     bdev = nullptr;
+}
+
+uintptr_t hw_blockdev::GetDevId() const {
+    return sys_dev_id;
 }
 
 std::size_t hw_blockdev::GetBlocksize() const {
@@ -153,7 +162,7 @@ std::shared_ptr<blockdev_block> hw_blockdev::ReadBlock(size_t blocknum, size_t b
     return command->Await();
 }
 
-blockdevsystem_impl::blockdevsystem_impl() : _lock(), blockdevs() {}
+blockdevsystem_impl::blockdevsystem_impl() : _lock(), blockdevs(), sysDevIds(0) {}
 
 std::shared_ptr<blockdev_interface> blockdevsystem_impl::CreateInterface() {
     return std::make_shared<blockdev_interface>(_lock);
@@ -163,7 +172,7 @@ void blockdevsystem_impl::Add(const std::string &name, blockdev_interface *bdev)
     std::shared_ptr<blockdev_with_partitions> partitions{};
     {
         std::lock_guard lock{_lock};
-        std::shared_ptr<hw_blockdev> hwbdev = std::make_shared<hw_blockdev>(_lock, bdev);
+        std::shared_ptr<hw_blockdev> hwbdev = std::make_shared<hw_blockdev>(_lock, bdev, ++sysDevIds);
         blockdevs.push_back(hwbdev);
         std::shared_ptr<blockdev_with_partitions> bdevwpart = std::make_shared<blockdev_with_partitions>(hwbdev);
         std::tuple<std::string,std::shared_ptr<blockdev_with_partitions>> t

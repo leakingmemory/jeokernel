@@ -27,7 +27,12 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         }
         std::shared_ptr<kfile> litem;
         if (!resname.empty()) {
-            litem = get_kernel_rootdir()->Resolve(resname);
+            auto resolveResult = get_kernel_rootdir()->Resolve(resname);
+            if (resolveResult.status != kfile_status::SUCCESS) {
+                std::cerr << "Error: " << text(resolveResult.status) << "\n";
+                return;
+            }
+            litem = resolveResult.result;
         } else {
             litem = get_kernel_rootdir();
         }
@@ -43,7 +48,12 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             std::cerr << "exec: not found: " << filename << "\n";
         }
     } else {
-        auto litem = dir->Resolve(filename);
+        auto resolveResult = dir->Resolve(filename);
+        if (resolveResult.status != kfile_status::SUCCESS) {
+            std::cerr << "Error: " << text(resolveResult.status) << "\n";
+            return;
+        }
+        auto litem = resolveResult.result;
         if (litem) {
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {

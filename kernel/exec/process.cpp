@@ -1094,7 +1094,12 @@ bool Process::resolve_page(uintptr_t fault_addr) {
         phys_t phys_page;
         filepage_ref loaded_page{};
         if (image) {
-            loaded_page = image->GetPage(physpage);
+            auto getPageResult = image->GetPage(physpage);
+            if (getPageResult.status != kfile_status::SUCCESS) {
+                std::cerr << "Load page failed: " << text(getPageResult.status) << "\n";
+                return false;
+            }
+            loaded_page = getPageResult.result;
             phys_page = loaded_page.PhysAddr();
             if (mapping->load != 0) {
                 vmem vm{PAGESIZE*2};
@@ -1586,7 +1591,7 @@ bool Process::resolve_write(uintptr_t addr, uintptr_t len) {
     }
 }
 
-std::shared_ptr<kfile> Process::ResolveFile(const std::string &filename) {
+kfile_result<std::shared_ptr<kfile>> Process::ResolveFile(const std::string &filename) {
     std::shared_ptr<kfile> cwd_ref{};
     {
         std::lock_guard lock{mtx};
@@ -1604,7 +1609,11 @@ std::shared_ptr<kfile> Process::ResolveFile(const std::string &filename) {
             resname = trim;
         }
         if (!resname.empty()) {
-            litem = get_kernel_rootdir()->Resolve(resname);
+            auto result = get_kernel_rootdir()->Resolve(resname);
+            if (result.status != kfile_status::SUCCESS) {
+                return {.result = {}, .status = result.status};
+            }
+            litem = result.result;
         } else {
             litem = get_kernel_rootdir();
         }
@@ -1612,9 +1621,13 @@ std::shared_ptr<kfile> Process::ResolveFile(const std::string &filename) {
         if (filename.empty() || cwd == nullptr) {
             return {};
         }
-        litem = cwd->Resolve(filename);
+        auto result = cwd->Resolve(filename);
+        if (result.status != kfile_status::SUCCESS) {
+            return {.result = {}, .status = result.status};
+        }
+        litem = result.result;
     }
-    return litem;
+    return {.result = litem, .status = kfile_status::SUCCESS};
 }
 
 FileDescriptor Process::get_file_descriptor_impl(int fd) {

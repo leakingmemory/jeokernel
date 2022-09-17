@@ -16,10 +16,10 @@
 #include <kfs/filepage_data.h>
 #include <exec/fdesc.h>
 #include <sys/resource.h>
+#include <kfs/kfiles.h>
 
 #define PAGESIZE 4096
 
-class kfile;
 class Process;
 
 enum class ResolveWrite {
@@ -196,7 +196,7 @@ public:
     uintptr_t push_data(uintptr_t ptr, const void *, uintptr_t length, const std::function<void (bool,uintptr_t)> &);
     uintptr_t push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
     void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
-    std::shared_ptr<kfile> ResolveFile(const std::string &filename);
+    kfile_result<std::shared_ptr<kfile>> ResolveFile(const std::string &filename);
 private:
     FileDescriptor get_file_descriptor_impl(int);
 public:
