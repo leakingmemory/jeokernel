@@ -13,6 +13,9 @@ void FsStat::Stat(kfile &file, struct stat &st) {
     st.st_size = file.Size();
     st.st_gid = file.Gid();
     st.st_uid = file.Uid();
+    st.st_blksize = file.BlockSize();
+    st.st_dev = file.SysDevId();
+    st.st_ino = file.InodeNum();
 
     if (dynamic_cast<kdirectory *>(&file) != nullptr) {
         st.st_mode |= S_IFDIR;
@@ -21,13 +24,10 @@ void FsStat::Stat(kfile &file, struct stat &st) {
     }
 
     // TODO
-    st.st_blksize = 0;
     st.st_blocks = 0;
     st.st_atim = {};
     st.st_ctim = {};
     st.st_mtim = {};
-    st.st_dev = 0;
-    st.st_ino = 0;
     st.st_nlink = 0;
     st.st_rdev = 0;
 }

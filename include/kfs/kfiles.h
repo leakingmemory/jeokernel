@@ -41,6 +41,9 @@ public:
     int Gid();
     int Uid();
     std::size_t Size();
+    uintptr_t InodeNum();
+    uint32_t BlockSize();
+    uintptr_t SysDevId();
     kfile_result<std::size_t> Read(uint64_t offset, void *ptr, std::size_t len);
     kfile_result<filepage_ref> GetPage(std::size_t pagenum);
 };

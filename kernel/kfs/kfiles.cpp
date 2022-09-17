@@ -43,6 +43,18 @@ std::size_t kfile::Size() {
     return file ? file->Size() : 0;
 }
 
+uintptr_t kfile::InodeNum() {
+    return file ? file->InodeNum() : 0;
+}
+
+uint32_t kfile::BlockSize() {
+    return file ? file->BlockSize() : 0;
+}
+
+uintptr_t kfile::SysDevId() {
+    return file ? file->SysDevId() : 0;
+}
+
 kfile_result<std::size_t> kfile::Read(uint64_t offset, void *ptr, std::size_t len) {
     if (!file) {
         return {.result = 0, .status = kfile_status::IO_ERROR};
