@@ -32,6 +32,10 @@ void FsStat::Stat(kfile &file, struct stat &st) {
     st.st_rdev = 0;
 }
 
+std::shared_ptr<kfile> FsFileDescriptorHandler::get_file() {
+    return file;
+}
+
 intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len) {
     size_t offset{0};
     {

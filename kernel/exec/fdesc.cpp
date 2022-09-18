@@ -11,6 +11,10 @@
 
 //#define WRITEV_DEBUG
 
+std::shared_ptr<kfile> FileDescriptor::get_file() {
+    return handler->get_file();
+}
+
 int FileDescriptor::read(void *ptr, intptr_t len) {
     return handler->read(ptr, len);
 }

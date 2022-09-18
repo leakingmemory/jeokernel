@@ -163,6 +163,8 @@ public:
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
     bool IsFree(uint32_t pagenum, uint32_t pages);
+    bool IsInRange(uint32_t pagenum, uint32_t pages);
+    void ClearRange(uint32_t pagenum, uint32_t pages);
     uint32_t FindFree(uint32_t pages);
     void SetProgramBreak(uintptr_t pbrk) {
         program_brk = pbrk;

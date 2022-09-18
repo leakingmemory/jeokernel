@@ -11,6 +11,10 @@ FileDescriptor StdinDesc::Descriptor() {
     return fd;
 }
 
+std::shared_ptr<kfile> StdinDesc::get_file() {
+    return {};
+}
+
 intptr_t StdinDesc::read(void *ptr, intptr_t len) {
     return -EIO;
 }

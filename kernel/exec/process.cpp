@@ -436,6 +436,108 @@ bool Process::IsFree(uint32_t pagenum, uint32_t pages) {
     return true;
 }
 
+constexpr uint32_t lowLim = ((uintptr_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9);
+constexpr uintptr_t highLimBase = ((uintptr_t) PMLT4_USERSPACE_HIGH_END) << (9 + 9 + 9);
+constexpr uint32_t highLim = highLimBase < 0x100000000 ? highLimBase : 0xFFFFFFFF;
+
+bool Process::IsInRange(uint32_t pagenum, uint32_t pages) {
+    uintptr_t start{pagenum};
+    uintptr_t end{pagenum};
+    end += pages;
+    if (start < lowLim) {
+        // TODO - low address space
+        return false;
+    }
+    return (start >= lowLim) && (end <= highLim);
+}
+
+void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
+    std::lock_guard lock{mtx};
+    auto iterator = mappings.begin();
+    std::vector<MemMapping> newMappings{};
+    while (iterator != mappings.end()) {
+        auto &mapping = *iterator;
+        {
+            auto overlap_page = mapping.pagenum > pagenum ? mapping.pagenum : pagenum;
+            auto overlap_end = mapping.pagenum + mapping.pages;
+            {
+                auto other_end = pagenum + pages;
+                if (other_end < overlap_end) {
+                    overlap_end = other_end;
+                }
+            }
+            if (overlap_page < overlap_end) {
+                if (mapping.pagenum < overlap_page) {
+                    auto mapping_end = mapping.pagenum + mapping.pages;
+                    if (mapping_end > overlap_end) {
+                        auto &newMapping = newMappings.emplace_back(mapping);
+                        std::cout << "Map split " << std::hex << mapping.pagenum << "/" << mapping.pages;
+                        mapping.pages = overlap_page - mapping.pagenum;
+                        std::cout << " -> " << std::hex << mapping.pagenum << "/" << mapping.pages << ", ";
+                        newMapping.pages -= overlap_end - mapping.pagenum;
+                        newMapping.pagenum = overlap_end;
+                        std::cout << newMapping.pagenum << "/" << newMapping.pages << "\n";
+                        {
+                            auto dropIterator = mapping.mappings.begin();
+                            while (dropIterator != mapping.mappings.end()) {
+                                auto &check = *dropIterator;
+                                if (check.page >= overlap_page) {
+                                    if (check.page < overlap_end) {
+                                        if (check.phys_page != 0) {
+                                            phys_t addr{check.phys_page};
+                                            addr = addr << 12;
+                                            ppagefree(addr, PAGESIZE);
+                                        }
+                                    }
+                                    mapping.mappings.erase(dropIterator);
+                                } else {
+                                    ++dropIterator;
+                                }
+                            }
+                        }
+                        {
+                            auto dropIterator = newMapping.mappings.begin();
+                            while (dropIterator != newMapping.mappings.end()) {
+                                auto &check = *dropIterator;
+                                if (check.page >= overlap_page) {
+                                    newMapping.mappings.erase(dropIterator);
+                                } else {
+                                    ++dropIterator;
+                                }
+                            }
+                        }
+                    } else {
+                        mapping.pages = overlap_page - mapping.pagenum;
+                        {
+                            auto dropIterator = mapping.mappings.begin();
+                            while (dropIterator != mapping.mappings.end()) {
+                                auto &check = *dropIterator;
+                                if (check.page >= overlap_page) {
+                                    if (check.phys_page != 0) {
+                                        phys_t addr{check.phys_page};
+                                        addr = addr << 12;
+                                        ppagefree(addr, PAGESIZE);
+                                    }
+                                    mapping.mappings.erase(dropIterator);
+                                } else {
+                                    ++dropIterator;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    mappings.erase(iterator);
+                    continue;
+                }
+            }
+        }
+        ++iterator;
+    }
+    for (const auto &mapping : newMappings) {
+        mappings.emplace_back(mapping);
+    }
+}
+
 uint32_t Process::FindFree(uint32_t pages) {
     std::vector<MemoryArea> freemem{};
     {
@@ -472,10 +574,6 @@ uint32_t Process::FindFree(uint32_t pages) {
                 }
             }
         }
-
-        constexpr uint32_t lowLim = ((uintptr_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9);
-        constexpr uintptr_t highLimBase = ((uintptr_t) PMLT4_USERSPACE_HIGH_END) << (9 + 9 + 9);
-        constexpr uint32_t highLim = highLimBase < 0x100000000 ? highLimBase : 0xFFFFFFFF;
 
         auto start = lowLim;
         auto iterator = mappings.begin();
@@ -519,6 +617,7 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
     }
     std::lock_guard lock{mtx};
     if (!CheckMapOverlap(pagenum, pages)) {
+        std::cerr << "Map error: overlapping existing mapping\n";
         return false;
     }
     mappings.emplace_back(image, pagenum, pages, image_skip_pages, load, write && copyOnWrite, binaryMap);

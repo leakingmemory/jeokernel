@@ -40,6 +40,14 @@ uint32_t ProcThread::FindFree(uint32_t pages) {
     return process->FindFree(pages);
 }
 
+bool ProcThread::IsInRange(uint32_t pagenum, uint32_t pages) {
+    return process->IsInRange(pagenum, pages);
+}
+
+void ProcThread::ClearRange(uint32_t pagenum, uint32_t pages) {
+    process->ClearRange(pagenum, pages);
+}
+
 void ProcThread::SetProgramBreak(uintptr_t pbrk) {
     process->SetProgramBreak(pbrk);
 }

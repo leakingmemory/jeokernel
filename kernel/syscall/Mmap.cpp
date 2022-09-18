@@ -46,27 +46,60 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
     task *current_task = &(scheduler->get_current_task());
     auto *process = scheduler->get_resource<ProcThread>(*current_task);
 
-    if ((flags & MAP_FIXED) != 0) {
-        std::cerr << "mmap: error: fixed map is not impl\n";
-        return -EOPNOTSUPP; // TODO
-    }
-
-    if (prot != (PROT_READ | PROT_WRITE)) {
-        std::cerr << "mmap: error: prot setting " << prot << " not implemented\n";
-        return -EOPNOTSUPP;
-    }
-
     auto pages = len >> 12;
     if ((pages << 12) != len) {
         pages++;
     }
 
-    uintptr_t vpageaddr = process->FindFree(pages);
-    if (vpageaddr == 0) {
-        return -ENOMEM;
+    uintptr_t vpageaddr;
+    if ((flags & MAP_FIXED) == 0) {
+        vpageaddr = process->FindFree(pages);
+        if (vpageaddr == 0) {
+            return -ENOMEM;
+        }
+    } else {
+        vpageaddr = addr;
+        if ((vpageaddr & (PAGESIZE-1)) != 0) {
+            std::cerr << "mmap: address is not page aligned\n";
+            return -EINVAL;
+        }
+        vpageaddr = vpageaddr >> 12;
+        if (!process->IsInRange(vpageaddr, pages)) {
+            std::cerr << "mmap: address is not in the allowed range for fixed mappings\n";
+            return -ENOMEM;
+        }
+        process->ClearRange(vpageaddr, pages);
     }
-    if (!process->Map(vpageaddr, pages, false)) {
-        return -ENOMEM;
+    if ((flags & MAP_ANONYMOUS) != 0) {
+        if (!process->Map(vpageaddr, pages, false)) {
+            return -ENOMEM;
+        }
+    } else {
+        auto desc = process->get_file_descriptor(fd);
+        if (!desc.Valid()) {
+            return -EBADF;
+        }
+        auto file = desc.get_file();
+        if (!file || (flags & MAP_PRIVATE) == 0) {
+            return -EOPNOTSUPP;
+        }
+        if ((off & (PAGESIZE-1)) != 0) {
+            return -EINVAL;
+        }
+        uintptr_t file_offset = off;
+        file_offset = file_offset >> 12;
+        auto full_pages = len >> 12;
+        if (!process->Map(file, vpageaddr, full_pages, file_offset, 0, (prot & PROT_WRITE) != 0, (prot & PROT_EXEC) != 0, (flags & MAP_PRIVATE) != 0, false)) {
+            return -ENOMEM;
+        }
+        if (full_pages != pages) {
+            file_offset += full_pages;
+            auto load = len & (PAGESIZE - 1);
+            if (!process->Map(file, vpageaddr + full_pages, 1, file_offset, load, (prot & PROT_WRITE) != 0, (prot & PROT_EXEC) != 0, (flags & MAP_PRIVATE) != 0, false)) {
+                // TODO - unmap above
+                return -ENOMEM;
+            }
+        }
     }
     return vpageaddr << 12;
 }
