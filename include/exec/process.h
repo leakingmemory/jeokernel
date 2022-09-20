@@ -55,6 +55,7 @@ private:
     uint32_t pages;
     uint32_t image_skip_pages;
     uint16_t load;
+    bool read;
     bool cow;
     bool binary_mapping;
     std::vector<PhysMapping> mappings;

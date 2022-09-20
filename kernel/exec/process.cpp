@@ -61,9 +61,9 @@ PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std
 }
 
 MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping)
-: image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), load(load), cow(cow), binary_mapping(binaryMapping), mappings() {}
+: image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), load(load), read(true), cow(cow), binary_mapping(binaryMapping), mappings() {}
 
-MemMapping::MemMapping(MemMapping &&mv) : image(mv.image), pagenum(mv.pagenum), pages(mv.pages), image_skip_pages(mv.image_skip_pages), load(mv.load), cow(mv.cow), binary_mapping(mv.binary_mapping), mappings(mv.mappings) {
+MemMapping::MemMapping(MemMapping &&mv) : image(mv.image), pagenum(mv.pagenum), pages(mv.pages), image_skip_pages(mv.image_skip_pages), load(mv.load), read(mv.read), cow(mv.cow), binary_mapping(mv.binary_mapping), mappings(mv.mappings) {
     mv.mappings.clear();
 }
 
@@ -76,6 +76,7 @@ MemMapping &MemMapping::operator =(MemMapping &&mv) {
     pages = mv.pages;
     image_skip_pages = mv.image_skip_pages;
     load = mv.load;
+    read = mv.read;
     cow = mv.cow;
     binary_mapping = mv.binary_mapping;
     mappings = mv.mappings;
@@ -755,11 +756,23 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
         if (prot == PROT_READ) {
             auto end = pmapping.mapping->pagenum + pmapping.mapping->pages;
             for (auto p = pmapping.mapping->pagenum; p < end; p++) {
-                Pageentry(p, [] (pageentr &pe) {
+                Pageentry(p, [](pageentr &pe) {
                     pe.execution_disabled = 1;
                     pe.writeable = 0;
                 });
             }
+            pmapping.mapping->read = true;
+            pmapping.mapping->cow = false;
+        } else if (prot == PROT_NONE) {
+            auto end = pmapping.mapping->pagenum + pmapping.mapping->pages;
+            for (auto p = pmapping.mapping->pagenum; p < end; p++) {
+                Pageentry(p, [](pageentr &pe) {
+                    pe.execution_disabled = 1;
+                    pe.writeable = 0;
+                    pe.present = 0;
+                });
+            }
+            pmapping.mapping->read = false;
             pmapping.mapping->cow = false;
         } else {
             std::cerr << "mprotect: invalid prot let through\n";
@@ -1126,6 +1139,10 @@ bool Process::resolve_page(uintptr_t fault_addr) {
         std::cerr << "User process page resolve: No mapping for page " << std::hex << page << std::dec << "\n";
         return false;
     }
+    if (!mapping->read) {
+        std::cerr << "User process page resolve: No read mapping for page " << std::hex << page << std::dec << "\n";
+        return false;
+    }
     phys_t physpage = mapping->image_skip_pages + (page - mapping->pagenum);
     uint16_t rootAddr;
     vmem vm{PAGESIZE};
@@ -1188,46 +1205,57 @@ bool Process::resolve_page(uintptr_t fault_addr) {
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
         std::cout << "Loading page " << std::hex << page << " for addr " << fault_addr << " from " << physpage << std::dec << "\n";
 #endif
-        lock = {};
         auto image = mapping->image;
-        phys_t phys_page;
+        bool pre_existing{true};
+        phys_t phys_page{0};
         filepage_ref loaded_page{};
-        if (image) {
-            auto getPageResult = image->GetPage(physpage);
-            if (getPageResult.status != kfile_status::SUCCESS) {
-                std::cerr << "Load page failed: " << text(getPageResult.status) << "\n";
-                return false;
-            }
-            loaded_page = getPageResult.result;
-            phys_page = loaded_page.PhysAddr();
-            if (mapping->load != 0) {
-                vmem vm{PAGESIZE*2};
-                vm.page(0).rmap(phys_page);
-                phys_page = ppagealloc(PAGESIZE);
-                if (phys_page != 0) {
-                    vm.page(1).rwmap(phys_page);
-                    vm.reload();
-                    memcpy((void *) ((uintptr_t) vm.pointer() + PAGESIZE), vm.pointer(), PAGESIZE);
-                    bzero((void *) ((uintptr_t) vm.pointer() + PAGESIZE + mapping->load), PAGESIZE - mapping->load);
-                    loaded_page = {};
-                } else {
-                    loaded_page = {};
-                }
-            }
-        } else {
-            phys_page = ppagealloc(PAGESIZE);
-            if (phys_page != 0) {
-                vmem vm{PAGESIZE};
-                vm.page(0).rwmap(phys_page);
-                vm.reload();
-                bzero(vm.pointer(), PAGESIZE);
+        for (auto &mapped_page : mapping->mappings) {
+            if (mapped_page.page == page) {
+                phys_page = mapped_page.phys_page;
+                loaded_page = mapped_page.data;
+                break;
             }
         }
         if (phys_page == 0) {
-            std::cerr << "User process page resolve: Failed to allocate phys page\n";
-            return false;
+            lock = {};
+            pre_existing = false;
+            if (image) {
+                auto getPageResult = image->GetPage(physpage);
+                if (getPageResult.status != kfile_status::SUCCESS) {
+                    std::cerr << "Load page failed: " << text(getPageResult.status) << "\n";
+                    return false;
+                }
+                loaded_page = getPageResult.result;
+                phys_page = loaded_page.PhysAddr();
+                if (mapping->load != 0) {
+                    vmem vm{PAGESIZE * 2};
+                    vm.page(0).rmap(phys_page);
+                    phys_page = ppagealloc(PAGESIZE);
+                    if (phys_page != 0) {
+                        vm.page(1).rwmap(phys_page);
+                        vm.reload();
+                        memcpy((void *) ((uintptr_t) vm.pointer() + PAGESIZE), vm.pointer(), PAGESIZE);
+                        bzero((void *) ((uintptr_t) vm.pointer() + PAGESIZE + mapping->load), PAGESIZE - mapping->load);
+                        loaded_page = {};
+                    } else {
+                        loaded_page = {};
+                    }
+                }
+            } else {
+                phys_page = ppagealloc(PAGESIZE);
+                if (phys_page != 0) {
+                    vmem vm{PAGESIZE};
+                    vm.page(0).rwmap(phys_page);
+                    vm.reload();
+                    bzero(vm.pointer(), PAGESIZE);
+                }
+            }
+            if (phys_page == 0) {
+                std::cerr << "User process page resolve: Failed to allocate phys page\n";
+                return false;
+            }
+            lock = std::make_unique<std::lock_guard<hw_spinlock>>(mtx);
         }
-        lock = std::make_unique<std::lock_guard<hw_spinlock>>(mtx);
         bool ok{false};
         for (auto &m : mappings) {
             if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
@@ -1235,7 +1263,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                     if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
                         std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page
                                   << std::dec << "\n";
-                        if (!loaded_page) {
+                        if (!loaded_page && !pre_existing) {
                             ppagefree(phys_page, PAGESIZE);
                         }
                         return false;
@@ -1244,7 +1272,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                     if (mapping != &m || loaded_page) {
                         std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page
                                   << std::dec << "\n";
-                        if (!loaded_page) {
+                        if (!loaded_page && !pre_existing) {
                             ppagefree(phys_page, PAGESIZE);
                         }
                         return false;
@@ -1256,7 +1284,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
         }
         if (!ok) {
             std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page << std::dec << "\n";
-            if (!loaded_page) {
+            if (!loaded_page && !pre_existing) {
                 ppagefree(phys_page, PAGESIZE);
             }
             return false;
@@ -1269,7 +1297,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                     if (root != &r) {
                         std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex
                                   << page << std::dec << "\n";
-                        if (!loaded_page) {
+                        if (!loaded_page && !pre_existing) {
                             ppagefree(phys_page, PAGESIZE);
                         }
                         return false;
@@ -1281,7 +1309,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
             if (!ok) {
                 std::cerr << "User process page resolve: Pagetable low root was removed for page " << std::hex << page
                           << std::dec << "\n";
-                if (!loaded_page) {
+                if (!loaded_page && !pre_existing) {
                     ppagefree(phys_page, PAGESIZE);
                 }
                 return false;
@@ -1292,7 +1320,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
 #endif
             if (b2->present == 0) {
                 std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
-                if (!loaded_page) {
+                if (!loaded_page && !pre_existing) {
                     ppagefree(phys_page, PAGESIZE);
                 }
                 return false;
@@ -1303,7 +1331,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                     if (root != &r) {
                         std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex
                                   << page << std::dec << "\n";
-                        if (!loaded_page) {
+                        if (!loaded_page && !pre_existing) {
                             ppagefree(phys_page, PAGESIZE);
                         }
                         return false;
@@ -1315,7 +1343,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
             if (!ok) {
                 std::cerr << "User process page resolve: Pagetable root was removed for page " << std::hex << page
                           << std::dec << "\n";
-                if (!loaded_page) {
+                if (!loaded_page && !pre_existing) {
                     ppagefree(phys_page, PAGESIZE);
                 }
                 return false;
@@ -1326,7 +1354,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
 #endif
             if (b1.present == 0) {
                 std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
-                if (!loaded_page) {
+                if (!loaded_page && !pre_existing) {
                     ppagefree(phys_page, PAGESIZE);
                 }
                 return false;
@@ -1336,7 +1364,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
             b2 = &((*((pagetable *) vm.pointer()))[(page >> 9) & 511]);
             if (b2->present == 0) {
                 std::cerr << "User process page resolve: Pagetable directory present bit was cleared for page " << std::hex << page << std::dec << "\n";
-                if (!loaded_page) {
+                if (!loaded_page && !pre_existing) {
                     ppagefree(phys_page, PAGESIZE);
                 }
                 return false;
@@ -1352,7 +1380,9 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                       << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
                       << "\n";
 #endif
-            mapping->mappings.push_back({.data = loaded_page, .phys_page = phys_page, .page = page});
+            if (!pre_existing) {
+                mapping->mappings.push_back({.data = loaded_page, .phys_page = phys_page, .page = page});
+            }
             b3.page_ppn = phys_page >> 12;
             b3.present = 1;
             b3.user_access = 1;
