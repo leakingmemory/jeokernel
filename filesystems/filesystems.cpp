@@ -36,10 +36,26 @@ std::vector<std::string> get_filesystem_providers() {
     }
     return provider_names;
 }
+
+std::shared_ptr<filesystem> open_filesystem(std::string provider_name) {
+    for (auto provider : *providers) {
+        if (provider_name == provider->name()) {
+            auto *special_fs = dynamic_cast<special_filesystem_provider *>(&(*provider));
+            if (special_fs != nullptr) {
+                return special_fs->open();
+            }
+        }
+    }
+    return {};
+}
+
 std::shared_ptr<blockdev_filesystem> open_filesystem(std::string provider_name, std::shared_ptr<blockdev> bdev) {
     for (auto provider : *providers) {
         if (provider_name == provider->name()) {
-            return provider->open(bdev);
+            auto *blockdev_fs = dynamic_cast<blockdev_filesystem_provider *>(&(*provider));
+            if (blockdev_fs != nullptr) {
+                return blockdev_fs->open(bdev);
+            }
         }
     }
     return {};
