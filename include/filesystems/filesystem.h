@@ -43,12 +43,22 @@ public:
 class filesystem_provider {
 public:
     virtual std::string name() const = 0;
+};
+
+class special_filesystem_provider : public filesystem_provider {
+public:
+    virtual std::shared_ptr<filesystem> open() const = 0;
+};
+
+class blockdev_filesystem_provider : public filesystem_provider {
+public:
     virtual std::shared_ptr<blockdev_filesystem> open(std::shared_ptr<blockdev> bdev) const = 0;
 };
 
 void init_filesystem_providers();
 void add_filesystem_provider(std::shared_ptr<filesystem_provider> provider);
 std::vector<std::string> get_filesystem_providers();
+std::shared_ptr<filesystem> open_filesystem(std::string provider);
 std::shared_ptr<blockdev_filesystem> open_filesystem(std::string provider, std::shared_ptr<blockdev> bdev);
 
 void register_filesystem_providers();

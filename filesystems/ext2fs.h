@@ -167,7 +167,7 @@ public:
     inode_read_bytes_result read(void *ptr, std::size_t bytes);
 };
 
-class ext2fs_provider : public filesystem_provider {
+class ext2fs_provider : public blockdev_filesystem_provider {
 public:
     ext2fs_provider();
     std::string name() const override;
