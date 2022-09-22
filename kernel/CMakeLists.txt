@@ -37,6 +37,7 @@ add_subdirectory(sha2)
 add_subdirectory(random)
 add_subdirectory(clock)
 add_subdirectory(devfs)
+add_subdirectory(tty)
 
 add_library(bootstrap bootstrap.S)
 
@@ -76,3 +77,5 @@ target_link_libraries(kernel PRIVATE sha2)
 target_link_libraries(kernel PRIVATE random)
 target_link_libraries(kernel PRIVATE clock)
 target_link_libraries(kernel PRIVATE devfs)
+target_link_libraries(kernel PRIVATE ttydev)
+target_link_libraries(kernel PRIVATE tty)
