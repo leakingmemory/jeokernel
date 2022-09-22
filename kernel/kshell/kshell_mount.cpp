@@ -95,12 +95,19 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     auto &system = get_blockdevsystem();
     auto blockdev = system.GetBlockdevice(deviceName);
 
+    std::shared_ptr<filesystem> fs{};
+
     if (!blockdev) {
-        std::cerr << "Device not found " << deviceName << "\n";
-        return;
+        fs = open_filesystem(fstype);
+        if (!fs) {
+            std::cerr << "Device not found " << deviceName << "\n";
+            return;
+        }
     }
 
-    auto fs = open_filesystem(fstype, blockdev);
+    if (!fs) {
+        fs = open_filesystem(fstype, blockdev);
+    }
     if (!fs) {
         std::cerr << "Failed to mount filesystem " << fstype << " on device " << deviceName << "\n";
         return;
