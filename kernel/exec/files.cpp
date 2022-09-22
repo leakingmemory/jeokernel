@@ -36,7 +36,14 @@ std::shared_ptr<kfile> FsFileDescriptorHandler::get_file() {
     return file;
 }
 
+bool FsFileDescriptorHandler::can_read() {
+    return openRead;
+}
+
 intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len) {
+    if (!openRead) {
+        return -EINVAL;
+    }
     size_t offset{0};
     {
         std::lock_guard lock{mtx};
@@ -68,6 +75,9 @@ intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len) {
 }
 
 intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len, uintptr_t offset) {
+    if (!openRead) {
+        return -EINVAL;
+    }
     auto result = file->Read(offset, ptr, len);
     if (result.status == kfile_status::SUCCESS || result.result > 0) {
         return result.result;
@@ -84,6 +94,9 @@ intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len, uintptr_t offset
 }
 
 intptr_t FsFileDescriptorHandler::write(const void *ptr, intptr_t len) {
+    if (!openWrite) {
+        return -EINVAL;
+    }
     std::cerr << "File write: Not implemented\n";
     return -EIO;
 }

@@ -23,6 +23,10 @@ std::shared_ptr<kfile> StdoutDesc::get_file() {
     return {};
 }
 
+bool StdoutDesc::can_read() {
+    return false;
+}
+
 intptr_t StdoutDesc::read(void *ptr, intptr_t len) {
     return -EIO;
 }

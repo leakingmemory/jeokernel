@@ -15,6 +15,10 @@ std::shared_ptr<kfile> StdinDesc::get_file() {
     return {};
 }
 
+bool StdinDesc::can_read() {
+    return true;
+}
+
 intptr_t StdinDesc::read(void *ptr, intptr_t len) {
     return -EIO;
 }

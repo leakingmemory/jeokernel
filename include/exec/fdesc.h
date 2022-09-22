@@ -17,6 +17,7 @@ class FileDescriptorHandler {
 public:
     virtual ~FileDescriptorHandler() = default;
     virtual std::shared_ptr<kfile> get_file() = 0;
+    virtual bool can_read() = 0;
     virtual intptr_t read(void *ptr, intptr_t len) = 0;
     virtual intptr_t read(void *ptr, intptr_t len, uintptr_t offset) = 0;
     virtual intptr_t write(const void *ptr, intptr_t len) = 0;
@@ -44,6 +45,7 @@ public:
         }
     }
     std::shared_ptr<kfile> get_file();
+    bool can_read();
     int read(void *, intptr_t len);
     int read(void *, intptr_t len, uintptr_t offset);
     void write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);

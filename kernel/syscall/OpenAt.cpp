@@ -12,7 +12,7 @@
 #include <kfs/kfiles.h>
 #include <exec/files.h>
 
-constexpr int supportedOpenFlags = (3 | O_CLOEXEC);
+constexpr int supportedOpenFlags = (3 | O_CLOEXEC | O_NONBLOCK);
 constexpr int notSupportedOpenFlags = ~supportedOpenFlags;
 
 int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int flags, int mode) {
@@ -27,7 +27,7 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
     }
 
     {
-        int notSupportedFlags = flags & notSupportedFlags;
+        int notSupportedFlags = flags & notSupportedOpenFlags;
         if (notSupportedFlags != 0) {
             std::cerr << "not implemented: open flags << " << std::hex << notSupportedFlags << std::dec << "\n";
             return -EIO;
@@ -61,20 +61,40 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
         fileMode |= (fileMode >> 6) & 7;
     }
 
-    if ((fileMode & R_OK) != R_OK) {
-        return -EPERM;
+    bool openRead;
+    bool openWrite;
+    {
+        auto modeFlags = flags & 3;
+        switch (modeFlags) {
+            case O_RDONLY:
+                openRead = true;
+                openWrite = false;
+                break;
+            case O_WRONLY:
+                openRead = false;
+                openWrite = true;
+                break;
+            case O_RDWR:
+                openRead = true;
+                openWrite = true;
+                break;
+            default:
+                return -EINVAL;
+        }
     }
 
-    if ((flags & 3) != 0 && (fileMode & W_OK) != W_OK) {
-        return -EPERM;
+    if (openRead) {
+        if ((fileMode & R_OK) != R_OK) {
+            return -EPERM;
+        }
+    }
+    if (openWrite) {
+        if ((fileMode & W_OK) != W_OK) {
+            return -EPERM;
+        }
     }
 
-    if ((flags & 3) != 0) {
-        std::cerr << "openat: write not implemented\n";
-        return -EIO;
-    }
-
-    std::shared_ptr<FileDescriptorHandler> handler{new FsFileDescriptorHandler(file)};
+    std::shared_ptr<FileDescriptorHandler> handler{new FsFileDescriptorHandler(file, openRead, openWrite, (flags & O_NONBLOCK) != 0)};
     FileDescriptor desc = proc.create_file_descriptor(handler);
     std::cout << "openat -> " << std::dec << desc.FD() << "\n";
     return desc.FD();

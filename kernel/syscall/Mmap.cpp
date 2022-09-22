@@ -80,6 +80,9 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
             return -EBADF;
         }
         auto file = desc.get_file();
+        if (!desc.can_read()) {
+            return -EPERM;
+        }
         if (!file || (flags & MAP_PRIVATE) == 0) {
             return -EOPNOTSUPP;
         }

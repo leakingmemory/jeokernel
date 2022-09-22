@@ -16,6 +16,7 @@
 #define O_WRONLY    1
 #define O_RDWR      2
 
+#define O_NONBLOCK          0x800
 #define O_CLOEXEC           0x80000
 
 #endif //JEOKERNEL_FCNTL_H

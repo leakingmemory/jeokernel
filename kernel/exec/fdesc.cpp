@@ -15,6 +15,10 @@ std::shared_ptr<kfile> FileDescriptor::get_file() {
     return handler->get_file();
 }
 
+bool FileDescriptor::can_read() {
+    return handler->can_read();
+}
+
 int FileDescriptor::read(void *ptr, intptr_t len) {
     return handler->read(ptr, len);
 }
