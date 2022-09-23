@@ -164,3 +164,7 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
 bool FileDescriptor::stat(struct stat &st) {
     return handler->stat(st);
 }
+
+int FileDescriptor::ioctl(intptr_t cmd, intptr_t arg) {
+    return handler->ioctl(cmd, arg);
+}

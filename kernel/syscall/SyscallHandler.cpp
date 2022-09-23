@@ -34,6 +34,7 @@
 #include "Close.h"
 #include "Pread64.h"
 #include "Gettimeofday.h"
+#include "Ioctl.h"
 
 //#define SYSCALL_DEBUG
 
@@ -111,6 +112,7 @@ private:
     Close close{*this};
     Pread64 pread64{*this};
     Gettimeofday gettimeofday{*this};
+    Ioctl ioctl{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

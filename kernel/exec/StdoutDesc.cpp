@@ -6,6 +6,7 @@
 #include <string>
 #include <klogger.h>
 #include <errno.h>
+#include <iostream>
 
 FileDescriptor StdoutDesc::StdoutDescriptor() {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
@@ -48,4 +49,9 @@ bool StdoutDesc::stat(struct stat &st) {
     struct stat s{.st_mode = S_IFCHR | 00666, .st_blksize = 1024};
     st = s;
     return true;
+}
+
+int StdoutDesc::ioctl(intptr_t cmd, intptr_t arg) {
+    std::cout << "stdout->ioctl(0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
+    return -EOPNOTSUPP;
 }

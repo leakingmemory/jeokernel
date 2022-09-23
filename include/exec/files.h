@@ -31,6 +31,7 @@ public:
     intptr_t read(void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;
     bool stat(struct stat &st) override;
+    int ioctl(intptr_t cmd, intptr_t arg) override;
 };
 
 #endif //JEOKERNEL_FILES_H
