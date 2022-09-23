@@ -33,6 +33,7 @@
 #include "Read.h"
 #include "Close.h"
 #include "Pread64.h"
+#include "Gettimeofday.h"
 
 //#define SYSCALL_DEBUG
 
@@ -109,6 +110,7 @@ private:
     Read read{*this};
     Close close{*this};
     Pread64 pread64{*this};
+    Gettimeofday gettimeofday{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
