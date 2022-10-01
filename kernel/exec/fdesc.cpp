@@ -27,20 +27,20 @@ int FileDescriptor::read(void *ptr, intptr_t len, uintptr_t offset) {
     return handler->read(ptr, len, offset);
 }
 
-void FileDescriptor::write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func) {
+file_descriptor_result FileDescriptor::write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func) {
     auto handler = this->handler;
-    process->resolve_read(usersp_ptr, len, [process, handler, usersp_ptr, len, func] (bool success) mutable {
+    auto result = process->resolve_read(usersp_ptr, len, false, func, [process, handler, usersp_ptr, len, func] (bool success, bool, std::function<void (intptr_t)>) mutable {
         if (success) {
             UserMemory umem{*process, usersp_ptr, (uintptr_t) len};
             if (!umem) {
-                func(-EFAULT);
-                return;
+                return resolve_return_value::Return(-EFAULT);
             }
-            func(handler->write((const void *) umem.Pointer(), len));
+            return resolve_return_value::Return(handler->write((const void *) umem.Pointer(), len));
         } else {
-            func(-EFAULT);
+            return resolve_return_value::Return(-EFAULT);
         }
     });
+    return {.result = result.result, .async = result.async};
 }
 
 constexpr uintptr_t offset(uintptr_t ptr) {
@@ -62,7 +62,7 @@ struct writev_state {
     int remaining;
 };
 
-void
+file_descriptor_result
 FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void(intptr_t)> func) {
     auto handler = this->handler;
     std::shared_ptr<writev_state> state{new writev_state};
@@ -70,13 +70,12 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
 #ifdef WRITEV_DEBUG
     std::cout << "writev: remaining=" << state->remaining << "\n";
 #endif
-    process->resolve_read(usersp_iov_ptr, sizeof(iovec), [process, handler, usersp_iov_ptr, iovcnt, state, func] (bool success) mutable {
+    auto result = process->resolve_read(usersp_iov_ptr, sizeof(iovec), false, [func] (uintptr_t returnv) mutable {func(returnv);}, [process, handler, usersp_iov_ptr, iovcnt, state, func] (bool success, bool async, std::function<void (intptr_t)> asyncFunc) mutable {
         if (success) {
             auto iov_len = sizeof(iovec) * iovcnt;
             UserMemory umem{*process, usersp_iov_ptr, iov_len};
             if (!umem) {
-                func(-EFAULT);
-                return;
+                return resolve_return_value::Return(-EFAULT);
             }
             iovec *iov = (iovec *) umem.Pointer();
             for (int i = 0; i < iovcnt; i++) {
@@ -90,20 +89,20 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
                 }
             }
             if (state->remaining == 0) {
-                func(0);
-                return;
+                return resolve_return_value::Return(0);
             }
 #ifdef WRITEV_DEBUG
             std::cout << "writev: resolve buffers, remaining=" << state->remaining << "\n";
 #endif
+            auto nestedAsync = async;
             for (int i = 0; i < iovcnt; i++) {
                 if (iov[i].iov_len == 0) {
                     continue;
                 }
-                process->resolve_read((uintptr_t) iov[i].iov_base, iov[i].iov_len, [handler, process, umem, iov, iovcnt, i, state, func] (bool success) mutable {
+                auto nestedResult = process->resolve_read((uintptr_t) iov[i].iov_base, iov[i].iov_len, async, asyncFunc, [handler, process, umem, iov, iovcnt, i, state, func] (bool success, bool, std::function<void (uintptr_t)>) mutable {
                     std::unique_lock lock{state->lock};
                     if (state->failed) {
-                        return;
+                        return resolve_return_value::NoReturn();
                     }
                     if (!success) {
 #ifdef WRITEV_DEBUG
@@ -111,8 +110,7 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
 #endif
                         state->failed = true;
                         lock.release();
-                        func(-EFAULT);
-                        return;
+                        return resolve_return_value::Return(-EFAULT);
                     }
                     state->remaining--;
                     auto &vm = state->iovecs[i]->vm;
@@ -128,8 +126,7 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
 #endif
                             state->failed = true;
                             lock.release();
-                            func(-EFAULT);
-                            return;
+                            return resolve_return_value::Return(-EFAULT);
                         }
                         vm.page(p).rmap(paddr);
                         vaddr += PAGESIZE;
@@ -151,14 +148,29 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
                             handler->write(state->iovecs[i]->iov_base, (intptr_t) state->iovecs[i]->iov_len);
                             totlen += state->iovecs[i]->iov_len;
                         }
-                        func(totlen);
+                        return resolve_return_value::Return(totlen);
                     }
+                    return resolve_return_value::NoReturn();
                 });
+                if (nestedResult.hasValue && !nestedResult.async && nestedAsync) {
+                    if (async) {
+                        asyncFunc(nestedResult.result);
+                        return resolve_return_value::AsyncReturn();
+                    } else {
+                        return resolve_return_value::Return(nestedResult.result);
+                    }
+                }
             }
+            if (nestedAsync) {
+                return resolve_return_value::AsyncReturn();
+            }
+            std::cerr << "Not reach: Fell through (fdesc write)\n";
+            return resolve_return_value::Return(-ENOMEM);
         } else {
-            func(-EFAULT);
+            return resolve_return_value::Return(-EFAULT);
         }
     });
+    return {.result = result.result, .async = result.async};
 }
 
 bool FileDescriptor::stat(struct stat &st) {

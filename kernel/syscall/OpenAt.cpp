@@ -104,28 +104,32 @@ int64_t OpenAt::Call(int64_t dfd, int64_t uptr_filename, int64_t flags, int64_t 
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
     auto *process = scheduler->get_resource<ProcThread>(*current_task);
-    current_task->set_blocked(true);
-    params.DoContextSwitch(true);
-    process->resolve_read_nullterm(uptr_filename, [this, scheduler, current_task, process, uptr_filename, dfd, flags, mode] (bool success, size_t slen) {
+    auto result = process->resolve_read_nullterm(uptr_filename, false, [scheduler, current_task] (intptr_t result) {
+        scheduler->when_not_running(*current_task, [current_task, result]() {
+            current_task->get_cpu_state().rax = (uint64_t) result;
+            current_task->set_blocked(false);
+        });
+    },
+    [this, process, uptr_filename, dfd, flags, mode] (bool success, bool, size_t slen, std::function<void (intptr_t)> asyncFunc) {
         if (!success) {
-            scheduler->when_not_running(*current_task, [current_task]() {
-                current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                current_task->set_blocked(false);
-            });
-            return;
+            return resolve_return_value::Return(-EFAULT);
         }
         std::string filename{};
         {
             UserMemory filename_mem{*process, (uintptr_t) uptr_filename, slen};
             filename.append((const char *) filename_mem.Pointer(), slen);
         }
-        Queue([this, scheduler, current_task, process, filename, dfd, flags, mode] () {
+        Queue([this, process, filename, dfd, flags, mode, asyncFunc] () mutable {
             auto res = DoOpenAt(*process, dfd, filename, flags, mode);
-            scheduler->when_not_running(*current_task, [current_task, res]() {
-                current_task->get_cpu_state().rax = (uint64_t) res;
-                current_task->set_blocked(false);
-            });
+            asyncFunc(res);
         });
+        return resolve_return_value::AsyncReturn();
     });
-    return 0;
+    if (result.async) {
+        current_task->set_blocked(true);
+        params.DoContextSwitch(true);
+        return 0;
+    } else {
+        return result.result;
+    }
 }

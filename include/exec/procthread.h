@@ -9,6 +9,8 @@
 #include <exec/process.h>
 #include <exec/rseq.h>
 
+#define DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+
 class ProcThread : public task_resource {
 private:
     std::shared_ptr<Process> process;
@@ -16,12 +18,18 @@ private:
     uintptr_t fsBase;
     uintptr_t tidAddress;
     uintptr_t robustListHead;
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+    bool threadFaulted;
+#endif
 public:
     ProcThread(const std::shared_ptr<kfile> &cwd);
+    std::shared_ptr<Process> GetProcess() {
+        return process;
+    }
     phys_t phys_addr(uintptr_t addr);
-    void resolve_read_nullterm(uintptr_t addr, std::function<void (bool, size_t)> func);
-    void resolve_read(uintptr_t addr, uintptr_t len, std::function<void (bool)> func);
-    bool resolve_write(uintptr_t addr, uintptr_t len);;
+    resolve_and_run resolve_read_nullterm(uintptr_t addr, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, size_t, std::function<void (intptr_t)>)> func);
+    resolve_and_run resolve_read(uintptr_t addr, uintptr_t len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, std::function<void (intptr_t)>)> func);
+    bool resolve_write(uintptr_t addr, uintptr_t len);
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
@@ -66,6 +74,15 @@ public:
     void SetRobustListHead(uintptr_t addr) {
         robustListHead = addr;
     }
+
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+    void SetThreadFaulted(bool faulted) {
+        threadFaulted = faulted;
+    }
+    bool IsThreadFaulted() {
+        return threadFaulted;
+    }
+#endif
 };
 
 #endif //JEOKERNEL_PROCTHREAD_H

@@ -4,18 +4,23 @@
 
 #include <exec/procthread.h>
 
-ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd) : process(new Process(cwd)), rseq(), fsBase(0), tidAddress(0), robustListHead(0) {}
+ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd) :
+process(new Process(cwd)), rseq(), fsBase(0), tidAddress(0), robustListHead(0)
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+, threadFaulted(false)
+#endif
+{}
 
 phys_t ProcThread::phys_addr(uintptr_t addr) {
     return process->phys_addr(addr);
 }
 
-void ProcThread::resolve_read_nullterm(uintptr_t addr, std::function<void(bool, size_t)> func) {
-    process->resolve_read_nullterm(addr, func);
+resolve_and_run ProcThread::resolve_read_nullterm(uintptr_t addr, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, size_t, std::function<void (intptr_t)>)> func) {
+    return process->resolve_read_nullterm(*this, addr, async, asyncReturn, func);
 }
 
-void ProcThread::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(bool)> func) {
-    process->resolve_read(addr, len, func);
+resolve_and_run ProcThread::resolve_read(uintptr_t addr, uintptr_t len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, std::function<void (intptr_t)>)> func) {
+    return process->resolve_read(*this, addr, len, async, asyncReturn, func);
 }
 
 bool ProcThread::resolve_write(uintptr_t addr, uintptr_t len) {
@@ -78,7 +83,7 @@ void ProcThread::task_leave() {
     process->task_leave();
 }
 bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
-    return process->page_fault(current_task, intr);
+    return process->page_fault(*this, current_task, intr);
 }
 bool ProcThread::exception(task &current_task, const std::string &name, Interrupt &intr) {
     return process->exception(current_task, name, intr);
@@ -86,16 +91,16 @@ bool ProcThread::exception(task &current_task, const std::string &name, Interrup
 
 uintptr_t
 ProcThread::push_data(uintptr_t ptr, const void *data, uintptr_t length, const std::function<void(bool, uintptr_t)> &func) {
-    return process->push_data(ptr, data, length, func);
+    return process->push_data(*this, ptr, data, length, func);
 }
 uintptr_t ProcThread::push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &func) {
-    return process->push_64(ptr, val, func);
+    return process->push_64(*this, ptr, val, func);
 }
 
 void ProcThread::push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &begin,
                               const std::vector<std::string>::iterator &end, const std::vector<uintptr_t> &pointers,
                               const std::function<void(bool, const std::vector<uintptr_t> &, uintptr_t)> &func) {
-    process->push_strings(ptr, begin, end, pointers, func);
+    process->push_strings(*this, ptr, begin, end, pointers, func);
 }
 
 kfile_result<std::shared_ptr<kfile>> ProcThread::ResolveFile(const std::string &filename) {

@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 #include <iostream>
 #include <exec/process.h>
+#include <exec/procthread.h>
 #include <pagealloc.h>
 #include <strings.h>
 #include <mutex>
@@ -843,7 +844,7 @@ void Process::task_leave() {
 
 struct process_pfault {
     task *pfaultTask;
-    Process *process;
+    ProcThread *process;
     uintptr_t ip;
     uintptr_t address;
     std::function<void (bool)> func;
@@ -851,8 +852,16 @@ struct process_pfault {
 
 static hw_spinlock pfault_lck{};
 static raw_semaphore pfault_sema{-1};
-static std::vector<process_pfault> faults{};
+static std::vector<process_pfault> p_faults{};
 static std::thread *pfault_thread{nullptr};
+
+static void activate_fault(const process_pfault &fault)
+{
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+    fault.process->SetThreadFaulted(true);
+#endif
+    p_faults.push_back(fault);
+}
 
 void Process::activate_pfault_thread() {
     pfault_sema.release();
@@ -864,24 +873,24 @@ void Process::activate_pfault_thread() {
                 process_pfault pfault{};
                 {
                     std::lock_guard lock{pfault_lck};
-                    auto iterator = faults.begin();
-                    if (iterator == faults.end()) {
+                    auto iterator = p_faults.begin();
+                    if (iterator == p_faults.end()) {
                         continue;
                     }
                     pfault = *iterator;
-                    faults.erase(iterator);
+                    p_faults.erase(iterator);
                 }
                 if (pfault.pfaultTask != nullptr) {
-                    pfault.process->resolve_page_fault(*(pfault.pfaultTask), pfault.ip, pfault.address);
+                    pfault.process->GetProcess()->resolve_page_fault(*(pfault.process), *(pfault.pfaultTask), pfault.ip, pfault.address);
                 } else {
-                    pfault.process->resolve_read_page(pfault.address, pfault.func);
+                    pfault.process->GetProcess()->resolve_read_page(*(pfault.process), pfault.address, pfault.func);
                 }
             }
         });
     }
 }
 
-bool Process::page_fault(task &current_task, Interrupt &intr) {
+bool Process::page_fault(ProcThread &thread, task &current_task, Interrupt &intr) {
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
     std::cout << "Page fault in user process with pagetable root " << std::hex << ((uintptr_t) get_root_pagetable())
     << " code " << intr.error_code() << std::dec << "\n";
@@ -890,8 +899,8 @@ bool Process::page_fault(task &current_task, Interrupt &intr) {
     uint64_t address{0};
     asm("mov %%cr2, %0" : "=r"(address));
     std::lock_guard lock{pfault_lck};
-    process_pfault pf{.pfaultTask = &current_task, .process = this, .ip = intr.rip(), .address = address, .func = [] (bool) {}};
-    faults.push_back(pf);
+    process_pfault pf{.pfaultTask = &current_task, .process = &thread, .ip = intr.rip(), .address = address, .func = [] (bool) {}};
+    activate_fault(pf);
     activate_pfault_thread();
     return true;
 }
@@ -913,14 +922,14 @@ bool Process::exception(task &current_task, const std::string &name, Interrupt &
     return true;
 }
 
-uintptr_t Process::push_64(uintptr_t ptr, uint64_t val, const std::function<void(bool, uintptr_t)> &func) {
+uintptr_t Process::push_64(ProcThread &thread, uintptr_t ptr, uint64_t val, const std::function<void(bool, uintptr_t)> &func) {
     constexpr auto length = sizeof(val);
     uintptr_t dstptr{ptr - length};
     std::function<void (bool, uintptr_t)> f{func};
-    resolve_read(dstptr, length, [this, dstptr, val, length, f] (bool success) mutable {
+    resolve_read(thread, dstptr, length, true, [] (intptr_t) {}, [this, dstptr, val, length, f] (bool success, bool, const std::function<void (intptr_t)> &) mutable {
         if (!success) {
             f(false, 0);
-            return;
+            return resolve_return_value::AsyncReturn();
         }
         auto offset = dstptr & ((uintptr_t) PAGESIZE-1);
         auto pageaddr = dstptr - offset;
@@ -937,21 +946,22 @@ uintptr_t Process::push_64(uintptr_t ptr, uint64_t val, const std::function<void
         void *ptr = (void *) ((uint8_t *) vm.pointer() + offset);
         *((uint64_t *) ptr) = val;
         f(true, dstptr);
+        return resolve_return_value::AsyncReturn();
     });
     return dstptr;
 }
 
-uintptr_t Process::push_data(uintptr_t ptr, const void *data, uintptr_t length, const std::function<void(bool, uintptr_t)> &func) {
+uintptr_t Process::push_data(ProcThread &thread, uintptr_t ptr, const void *data, uintptr_t length, const std::function<void(bool, uintptr_t)> &func) {
     std::function<void (bool, uintptr_t)> f{func};
     if (length == 0) {
         f(true, ptr);
         return ptr;
     }
     uintptr_t dstptr{ptr - length};
-    resolve_read(dstptr, length, [this, dstptr, data, length, f] (bool success) mutable {
+    resolve_read(thread, dstptr, length, true, [] (intptr_t) {}, [this, dstptr, data, length, f] (bool success, bool, const std::function<void (intptr_t)> &) mutable {
         if (!success) {
             f(false, 0);
-            return;
+            return resolve_return_value::AsyncReturn();
         }
         auto offset = dstptr & ((uintptr_t) PAGESIZE-1);
         auto pageaddr = dstptr - offset;
@@ -967,19 +977,20 @@ uintptr_t Process::push_data(uintptr_t ptr, const void *data, uintptr_t length, 
         vm.reload();
         memcpy((uint8_t *) vm.pointer() + offset, data, length);
         f(true, dstptr);
+        return resolve_return_value::AsyncReturn();
     });
     return dstptr;
 }
 
-uintptr_t Process::push_string(uintptr_t ptr, const std::string &str, const std::function<void (bool, uintptr_t)> &func) {
+uintptr_t Process::push_string(ProcThread &thread, uintptr_t ptr, const std::string &str, const std::function<void (bool, uintptr_t)> &func) {
     auto length = str.size() + 1;
     uintptr_t dstptr{ptr - length};
     std::string strcp{str};
     std::function<void (bool, uintptr_t)> f{func};
-    resolve_read(dstptr, length, [this, dstptr, strcp, length, f] (bool success) mutable {
+    resolve_read(thread, dstptr, length, true, [] (intptr_t) {}, [this, dstptr, strcp, length, f] (bool success, bool, const std::function<void (intptr_t)> &) mutable {
         if (!success) {
             f(false, 0);
-            return;
+            return resolve_return_value::AsyncReturn();
         }
         auto offset = dstptr & ((uintptr_t) PAGESIZE-1);
         auto pageaddr = dstptr - offset;
@@ -995,11 +1006,12 @@ uintptr_t Process::push_string(uintptr_t ptr, const std::string &str, const std:
         vm.reload();
         memcpy((uint8_t *) vm.pointer() + offset, strcp.c_str(), length);
         f(true, dstptr);
+        return resolve_return_value::AsyncReturn();
     });
     return dstptr;
 }
 
-void Process::push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &begin,
+void Process::push_strings(ProcThread &thread, uintptr_t ptr, const std::vector<std::string>::iterator &begin,
                            const std::vector<std::string>::iterator &end, const std::vector<uintptr_t> &strptrs,
                            const std::function<void(bool, const std::vector<uintptr_t> &, uintptr_t)> &func) {
     std::function<void(bool, const std::vector<uintptr_t> &, uintptr_t)> f{func};
@@ -1007,14 +1019,14 @@ void Process::push_strings(uintptr_t ptr, const std::vector<std::string>::iterat
         std::vector<std::string>::iterator b{begin};
         std::vector<std::string>::iterator e{end};
         std::vector<uintptr_t> strp{strptrs};
-        push_string(ptr, *b, [this, b, e, f, strp] (bool success, uintptr_t ptr) mutable {
+        push_string(thread, ptr, *b, [this, &thread, b, e, f, strp] (bool success, uintptr_t ptr) mutable {
             if (!success) {
                 f(false, strp, ptr);
                 return;
             }
             strp.push_back(ptr);
             ++b;
-            push_strings(ptr, b, e, strp, f);
+            push_strings(thread, ptr, b, e, strp, f);
         });
     } else {
         f(true, strptrs, ptr);
@@ -1555,13 +1567,19 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
     return ResolveWrite::ERROR;
 }
 
-void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr) {
+void Process::resolve_page_fault(ProcThread &process, task &current_task, uintptr_t ip, uintptr_t fault_addr) {
     if (resolve_page(fault_addr)) {
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+        process.SetThreadFaulted(false);
+#endif
         get_scheduler()->when_not_running(current_task, [&current_task] () {
             current_task.set_blocked(false);
         });
         return;
     }
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+    process.SetThreadFaulted(false);
+#endif
     auto relocation = GetRelocationFor(ip);
     std::cerr << "PID " << current_task.get_id() << ": Page fault at " << std::hex << ip << " (" << relocation.filename
               << "+" << (ip-relocation.offset) << ") addr " << fault_addr << std::dec << "\n";
@@ -1579,10 +1597,16 @@ void Process::resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fau
     get_scheduler()->terminate_blocked(&current_task);
 }
 
-void Process::resolve_read_page(uintptr_t addr, std::function<void(bool)> func) {
+void Process::resolve_read_page(ProcThread &process, uintptr_t addr, std::function<void(bool)> func) {
     if (resolve_page(addr)) {
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+        process.SetThreadFaulted(false);
+#endif
         func(true);
     } else {
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+        process.SetThreadFaulted(false);
+#endif
         func(false);
     }
 }
@@ -1602,7 +1626,7 @@ phys_t Process::phys_addr(uintptr_t addr) {
     return paddr;
 }
 
-void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::function<void(bool, size_t)> func) {
+resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uintptr_t addr, size_t add_len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, size_t, std::function<void (intptr_t)>)> func) {
     auto len = 0;
     while (readable(addr)) {
         auto page = addr >> 12;
@@ -1611,8 +1635,12 @@ void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::functio
         auto remaining = PAGESIZE - offset;
         auto ppageaddr = phys_addr(pageaddr);
         if (ppageaddr == 0) {
-            func(false, 0);
-            return;
+            auto result = func(false, async, 0, asyncReturn);
+            if (async && !result.async) {
+                asyncReturn(result.result);
+                return resolve_return_value::AsyncReturn();
+            }
+            return result;
         }
         vmem vm{PAGESIZE};
         vm.page(0).rmap(ppageaddr);
@@ -1622,8 +1650,12 @@ void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::functio
         int i = 0;
         while (i < remaining) {
             if (*str == 0) {
-                func(true, len + add_len);
-                return;
+                auto result = func(true, async, len + add_len, asyncReturn);
+                if (async && !result.async) {
+                    asyncReturn(result.result);
+                    return resolve_return_value::AsyncReturn();
+                }
+                return result;
             }
             ++str;
             ++i;
@@ -1632,9 +1664,12 @@ void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::functio
         addr += remaining;
     }
     std::lock_guard lock{pfault_lck};
-    faults.push_back({.pfaultTask = nullptr, .process = this, .ip = 0, .address = addr, .func = [this, addr, func, len, add_len] (bool success) mutable {
+    activate_fault({.pfaultTask = nullptr, .process = &thread, .ip = 0, .address = addr, .func = [this, &thread, addr, func, len, add_len, asyncReturn] (bool success) mutable {
         if (!success) {
-            func(false, 0);
+            auto result = func(false, true, 0, asyncReturn);
+            if (!result.async) {
+                asyncReturn(result.result);
+            }
         } else {
             auto page = addr >> 12;
             auto pageaddr = page << 12;
@@ -1642,7 +1677,10 @@ void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::functio
             auto remaining = PAGESIZE - offset;
             auto paddr = phys_addr(pageaddr);
             if (paddr == 0) {
-                func(false, 0);
+                auto result = func(false, true, 0, asyncReturn);
+                if (!result.async) {
+                    asyncReturn(result.result);
+                }
                 return;
             }
             vmem vm{PAGESIZE};
@@ -1652,54 +1690,77 @@ void Process::resolve_read_nullterm(uintptr_t addr, size_t add_len, std::functio
             str += offset;
             for (int i = 0; i < remaining; i++) {
                 if (*str == 0) {
-                    func(true, len + add_len);
+                    auto result = func(true, true, len + add_len, asyncReturn);
+                    if (!result.async) {
+                        asyncReturn(result.result);
+                    }
                     return;
                 }
                 ++len;
                 ++str;
             }
             addr += 4096;
-            resolve_read_nullterm(addr, len + add_len, func);
+            resolve_read_nullterm_impl(thread, addr, len + add_len, true, asyncReturn, func);
         }
     }});
     activate_pfault_thread();
+    return resolve_return_value::AsyncReturn();
 }
 
-void Process::resolve_read_nullterm(uintptr_t addr, std::function<void(bool, size_t)> func) {
-    resolve_read_nullterm(addr, 0, func);
+resolve_and_run Process::resolve_read_nullterm(ProcThread &thread, uintptr_t addr, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, size_t, std::function<void (intptr_t)>)> func) {
+    auto result = resolve_read_nullterm_impl(thread, addr, 0, async, asyncReturn, func);
+    return {.result = result.result, .async = result.async, .hasValue = result.hasValue};
 }
 
-void Process::resolve_read(uintptr_t addr, uintptr_t len, std::function<void(bool)> func) {
+resolve_and_run Process::resolve_read(ProcThread &thread, uintptr_t addr, uintptr_t len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, std::function<void (intptr_t)>)> func) {
     uintptr_t end = addr + len;
     if (addr == end) {
-        func(true);
-        return;
+        auto result = func(true, async, asyncReturn);
+        if (async && !result.async) {
+            asyncReturn(result.result);
+            return {.result = 0, .async = true, .hasValue = false};
+        }
+        return {.result = result.result, .async = result.async, .hasValue = result.hasValue};
     }
     while (readable(addr)) {
         addr += 4096;
         len -= 4096;
         uintptr_t next_addr = addr & ~((uintptr_t) 4095);
         if (next_addr >= end) {
-            func(true);
-            return;
+            auto result = func(true, async, asyncReturn);
+            if (async && !result.async) {
+                asyncReturn(result.result);
+                return {.result = 0, .async = true, .hasValue = false};
+            }
+            return {.result = result.result, .async = result.async, .hasValue = result.hasValue};
         }
     }
     std::lock_guard lock{pfault_lck};
-    faults.push_back({.pfaultTask = nullptr, .process = this, .ip = 0, .address = addr, .func = [this, addr, len, end, func] (bool success) mutable {
+    activate_fault({.pfaultTask = nullptr, .process = &thread, .ip = 0, .address = addr, .func = [this, &thread, addr, len, end, func, asyncReturn] (bool success) mutable {
         if (!success) {
-            func(false);
+            auto result = func(false, true, asyncReturn);
+            if (!result.async) {
+                asyncReturn(result.result);
+            }
         } else {
             addr += 4096;
             len -= 4096;
             uintptr_t next_addr = addr & ~((uintptr_t) 4095);
             if (next_addr < end) {
-                resolve_read(addr, len, func);
+                auto result = resolve_read(thread, addr, len, true, asyncReturn, func);
+                if (!result.async) {
+                    asyncReturn(result.result);
+                }
             } else {
-                func(true);
+                auto result = func(true, true, asyncReturn);
+                if (!result.async) {
+                    asyncReturn(result.result);
+                }
             }
         }
     }});
     activate_pfault_thread();
+    return {.result = 0, .async = true, .hasValue = false};
 }
 
 bool Process::resolve_write(uintptr_t addr, uintptr_t len) {

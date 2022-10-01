@@ -27,39 +27,31 @@ int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbu
         return -EINVAL;
     }
 
-    current_task->set_blocked(true);
-    params.DoContextSwitch(true);
-    process->resolve_read_nullterm(uptr_filename, [this, process, scheduler, current_task, dfd, uptr_filename, uptr_statbuf, flag] (bool success, size_t length) {
+    auto result = process->resolve_read_nullterm(uptr_filename, false, [current_task, scheduler] (intptr_t result) {
+        scheduler->when_not_running(*current_task, [current_task, result] () {
+            current_task->get_cpu_state().rax = (uint64_t) result;
+            current_task->set_blocked(false);
+        });
+    }, [this, process, scheduler, current_task, dfd, uptr_filename, uptr_statbuf, flag] (bool success, bool async, size_t length, std::function<void (intptr_t)> asyncFunc) {
         if (!success) {
-            scheduler->when_not_running(*current_task, [current_task] () {
-                current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                current_task->set_blocked(false);
-            });
-            return;
+            return resolve_return_value::Return(-EFAULT);
         }
         std::string filename{};
         {
             UserMemory userMemory{*process, (uintptr_t) uptr_filename, length};
             filename.append((const char *) userMemory.Pointer(), length);
         }
-        process->resolve_read(uptr_statbuf, sizeof(struct stat), [this, process, scheduler, current_task, dfd, filename, uptr_statbuf, flag] (bool success) {
+        auto result = process->resolve_read(uptr_statbuf, sizeof(struct stat), async, asyncFunc, [this, process, scheduler, current_task, dfd, filename, uptr_statbuf, flag] (bool success, bool, std::function<void (intptr_t)> asyncFunc) {
             if (success && !process->resolve_write(uptr_statbuf, sizeof(struct stat))) {
                 success = false;
             }
             if (!success) {
-                scheduler->when_not_running(*current_task, [current_task] () {
-                    current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                    current_task->set_blocked(false);
-                });
-                return;
+                return resolve_return_value::Return(-EFAULT);
             }
-            Queue([process, uptr_statbuf, scheduler, current_task, filename, dfd, flag] () {
+            Queue([process, asyncFunc, uptr_statbuf, filename, dfd, flag] () mutable {
                 UserMemory stat_mem{*process, (uintptr_t) uptr_statbuf, sizeof(struct stat), true};
                 if (!stat_mem) {
-                    scheduler->when_not_running(*current_task, [current_task]() {
-                        current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                        current_task->set_blocked(false);
-                    });
+                    asyncFunc(-EFAULT);
                     return;
                 }
                 struct stat st{};
@@ -81,49 +73,32 @@ int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbu
                             default:
                                 err = -EIO;
                         }
-                        scheduler->when_not_running(*current_task, [current_task, err]() {
-                            current_task->get_cpu_state().rax = (uint64_t) err;
-                            current_task->set_blocked(false);
-                        });
+                        asyncFunc(err);
+                        return;
                     }
                     auto file = fileResolve.result;
                     if (!file) {
-                        scheduler->when_not_running(*current_task, [current_task]() {
-                            current_task->get_cpu_state().rax = (uint64_t) -ENOENT;
-                            current_task->set_blocked(false);
-                        });
+                        asyncFunc(-ENOENT);
                         return;
                     }
                     FsStat::Stat(*file, st);
                 } else {
                     FileDescriptor fd{process->get_file_descriptor(dfd)};
                     if (!fd.Valid()) {
-                        scheduler->when_not_running(*current_task, [current_task]() {
-                            current_task->get_cpu_state().rax = (uint64_t) -EBADF;
-                            current_task->set_blocked(false);
-                        });
+                        asyncFunc(-EBADF);
                         return;
                     }
                     if (filename.empty()) {
                         if ((flag & AT_EMPTY_PATH) != AT_EMPTY_PATH) {
-                            scheduler->when_not_running(*current_task, [current_task]() {
-                                current_task->get_cpu_state().rax = (uint64_t) -EINVAL;
-                                current_task->set_blocked(false);
-                            });
+                            asyncFunc(-EINVAL);
                             return;
                         }
                         if (!fd.stat(st)) {
-                            scheduler->when_not_running(*current_task, [current_task]() {
-                                current_task->get_cpu_state().rax = (uint64_t) -EBADF;
-                                current_task->set_blocked(false);
-                            });
+                            asyncFunc(-EBADF);
                             return;
                         }
                         memcpy(stat_mem.Pointer(), &st, sizeof(st));
-                        scheduler->when_not_running(*current_task, [current_task]() {
-                            current_task->get_cpu_state().rax = (uint64_t) 0;
-                            current_task->set_blocked(false);
-                        });
+                        asyncFunc(0);
                         return;
                     }
                     // TODO
@@ -132,12 +107,17 @@ int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbu
                     asm("ud2");
                 }
                 memcpy(stat_mem.Pointer(), &st, sizeof(st));
-                scheduler->when_not_running(*current_task, [current_task]() {
-                    current_task->get_cpu_state().rax = (uint64_t) 0;
-                    current_task->set_blocked(false);
-                });
+                asyncFunc(0);
             });
+            return resolve_return_value::AsyncReturn();
         });
+        return result.async ? resolve_return_value::AsyncReturn() : resolve_return_value::Return(result.result);
     });
-    return 0;
+    if (result.async) {
+        current_task->set_blocked(true);
+        params.DoContextSwitch(true);
+        return 0;
+    } else {
+        return result.result;
+    }
 }

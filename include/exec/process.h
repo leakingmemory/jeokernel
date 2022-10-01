@@ -120,6 +120,35 @@ struct BinaryRelocation {
     BinaryRelocation(BinaryRelocation &&mv) : filename(std::move(mv.filename)), offset(mv.offset) {}
 };
 
+struct resolve_and_run {
+    intptr_t result;
+    bool async;
+    bool hasValue;
+};
+
+struct resolve_return_value {
+private:
+    resolve_return_value(bool async) : result(0), async(async), hasValue(false) {}
+    resolve_return_value(intptr_t result) : result(result), async(false), hasValue(true) {}
+public:
+    intptr_t result;
+    bool async;
+    bool hasValue;
+
+    static resolve_return_value AsyncReturn() {
+        return resolve_return_value(true);
+    }
+    static resolve_return_value Return(intptr_t result) {
+        return resolve_return_value(result);
+    }
+    static resolve_return_value NoReturn() {
+        return resolve_return_value(false);
+    }
+
+};
+
+class ProcThread;
+
 class Process {
 private:
     hw_spinlock mtx;
@@ -146,19 +175,18 @@ private:
     bool Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func);
     bool CheckMapOverlap(uint32_t pagenum, uint32_t pages);
     void activate_pfault_thread();
-    uintptr_t push_string(uintptr_t ptr, const std::string &, const std::function<void (bool,uintptr_t)> &);
     bool readable(uintptr_t addr);
     bool resolve_page(uintptr_t fault_addr);
-    void resolve_page_fault(task &current_task, uintptr_t ip, uintptr_t fault_addr);
-    void resolve_read_page(uintptr_t addr, std::function<void (bool)> func);
+    void resolve_page_fault(ProcThread &process, task &current_task, uintptr_t ip, uintptr_t fault_addr);
+    void resolve_read_page(ProcThread &process, uintptr_t addr, std::function<void (bool)> func);
     ResolveWrite resolve_write_page(uintptr_t addr);
 public:
     phys_t phys_addr(uintptr_t addr);
 private:
-    void resolve_read_nullterm(uintptr_t addr, size_t add_len, std::function<void (bool, size_t)> func);
+    resolve_return_value resolve_read_nullterm_impl(ProcThread &thread, uintptr_t addr, size_t add_len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, size_t, std::function<void (intptr_t)>)> func);
 public:
-    void resolve_read_nullterm(uintptr_t addr, std::function<void (bool, size_t)> func);
-    void resolve_read(uintptr_t addr, uintptr_t len, std::function<void (bool)> func);
+    resolve_and_run resolve_read_nullterm(ProcThread &thread, uintptr_t addr, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, size_t, std::function<void (intptr_t)>)> func);
+    resolve_and_run resolve_read(ProcThread &thread, uintptr_t addr, uintptr_t len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, std::function<void (intptr_t)>)> func);
     bool resolve_write(uintptr_t addr, uintptr_t len);
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
@@ -194,11 +222,14 @@ public:
     }
     void task_enter();
     void task_leave();
-    bool page_fault(task &current_task, Interrupt &intr);
+    bool page_fault(ProcThread &, task &current_task, Interrupt &intr);
     bool exception(task &current_task, const std::string &name, Interrupt &intr);
-    uintptr_t push_data(uintptr_t ptr, const void *, uintptr_t length, const std::function<void (bool,uintptr_t)> &);
-    uintptr_t push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
-    void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
+    uintptr_t push_data(ProcThread &, uintptr_t ptr, const void *, uintptr_t length, const std::function<void (bool,uintptr_t)> &);
+private:
+    uintptr_t push_string(ProcThread &, uintptr_t ptr, const std::string &, const std::function<void (bool,uintptr_t)> &);
+public:
+    void push_strings(ProcThread &, uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
+    uintptr_t push_64(ProcThread &, uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
     kfile_result<std::shared_ptr<kfile>> ResolveFile(const std::string &filename);
 private:
     FileDescriptor get_file_descriptor_impl(int);

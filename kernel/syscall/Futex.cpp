@@ -35,15 +35,14 @@ int64_t Futex::Call(int64_t uptr_addr, int64_t futex_op, int64_t val, int64_t up
             }
             break;
     }
-    params.DoContextSwitch(true);
-    current_task->set_blocked(true);
-    process->resolve_read(uptr_addr, sizeof(uint32_t), [scheduler, current_task, process, uptr_addr, futex_op, val, uptr_timeout_or_val2, uptr_addr2, val3, op] (bool success) {
+    auto result = process->resolve_read(uptr_addr, sizeof(uint32_t), false, [scheduler, current_task] (intptr_t result) {
+        scheduler->when_not_running(*current_task, [current_task, result] () {
+            current_task->get_cpu_state().rax = result;
+            current_task->set_blocked(false);
+        });
+    }, [process, uptr_addr, futex_op, val, uptr_timeout_or_val2, uptr_addr2, val3, op] (bool success, bool, const std::function<void (intptr_t)>&) {
         if (!success) {
-            scheduler->when_not_running(*current_task, [current_task] () {
-                current_task->get_cpu_state().rax = -EFAULT;
-                current_task->set_blocked(false);
-            });
-            return;
+            return resolve_return_value::Return(-EFAULT);
         }
         switch (op) {
             case FUTEX_WAIT:
@@ -51,11 +50,7 @@ int64_t Futex::Call(int64_t uptr_addr, int64_t futex_op, int64_t val, int64_t up
                 {
                     UserMemory mem{*process, (uintptr_t) uptr_addr, sizeof(uint32_t), true};
                     if (!mem) {
-                        scheduler->when_not_running(*current_task, [current_task] () {
-                            current_task->get_cpu_state().rax = -EFAULT;
-                            current_task->set_blocked(false);
-                        });
-                        return;
+                        return resolve_return_value::Return(-EFAULT);
                     }
                     uintptr_t addr = (uintptr_t) mem.Pointer();
                     uint32_t current = val;
@@ -80,4 +75,11 @@ int64_t Futex::Call(int64_t uptr_addr, int64_t futex_op, int64_t val, int64_t up
             asm("hlt");
         }
     });
+    if (result.async) {
+        params.DoContextSwitch(true);
+        current_task->set_blocked(true);
+        return 0;
+    } else {
+        return result.result;
+    }
 }

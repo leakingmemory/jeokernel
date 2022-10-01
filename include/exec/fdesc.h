@@ -25,6 +25,11 @@ public:
     virtual int ioctl(intptr_t cmd, intptr_t arg) = 0;
 };
 
+struct file_descriptor_result {
+    intptr_t result;
+    bool async;
+};
+
 class FileDescriptor {
 private:
     std::shared_ptr<FileDescriptorHandler> handler;
@@ -49,8 +54,8 @@ public:
     bool can_read();
     int read(void *, intptr_t len);
     int read(void *, intptr_t len, uintptr_t offset);
-    void write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
-    void writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void (intptr_t)> func);
+    file_descriptor_result write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
+    file_descriptor_result writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void (intptr_t)> func);
     bool stat(struct stat &st);
     int ioctl(intptr_t cmd, intptr_t arg);
 };

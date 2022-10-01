@@ -16,34 +16,35 @@ int64_t Read::Call(int64_t fd, int64_t uptr_buf, int64_t count, int64_t, Syscall
     if (!desc.Valid()) {
         return -EBADF;
     }
-    current_task->set_blocked(true);
-    additionalParams.DoContextSwitch(true);
-    process->resolve_read(uptr_buf, count, [this, process, scheduler, current_task, desc, uptr_buf, count] (bool success) mutable {
+    auto result = process->resolve_read(uptr_buf, count, false, [scheduler, current_task] (intptr_t result) {
+        scheduler->when_not_running(*current_task, [current_task, result] () {
+            current_task->get_cpu_state().rax = (uint64_t) result;
+            current_task->set_blocked(false);
+        });
+    }, [this, process, desc, uptr_buf, count] (bool success, bool, std::function<void (intptr_t)> asyncFunc) mutable {
         if (success) {
             success = process->resolve_write(uptr_buf, count);
         }
         if (success) {
-            Queue([process, scheduler, current_task, uptr_buf, count, desc] () mutable {
+            Queue([process, asyncFunc, uptr_buf, count, desc] () mutable {
                 UserMemory umem{*process, (uintptr_t) uptr_buf, (uintptr_t) count, true};
                 if (!umem) {
-                    scheduler->when_not_running(*current_task, [current_task] () {
-                        current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                        current_task->set_blocked(false);
-                    });
+                    asyncFunc(-EFAULT);
                     return;
                 }
                 auto result = desc.read(umem.Pointer(), count);
-                scheduler->when_not_running(*current_task, [current_task, result]() {
-                    current_task->get_cpu_state().rax = (uint64_t) result;
-                    current_task->set_blocked(false);
-                });
+                asyncFunc(result);
             });
+            return resolve_return_value::AsyncReturn();
         } else {
-            scheduler->when_not_running(*current_task, [current_task] () {
-                current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                current_task->set_blocked(false);
-            });
+            return resolve_return_value::Return(-EFAULT);
         }
     });
-    return 0;
+    if (result.async) {
+        current_task->set_blocked(true);
+        additionalParams.DoContextSwitch(true);
+        return 0;
+    } else {
+        return result.result;
+    }
 }

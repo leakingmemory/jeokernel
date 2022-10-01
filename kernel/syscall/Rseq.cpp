@@ -39,27 +39,27 @@ int64_t Rseq::Call(int64_t uptr_rseq, int64_t rseq_len32, int64_t i_flags, int64
         }
         return -EBUSY;
     }
-    current_task->set_blocked(true);
-    params.DoContextSwitch(true);
-    process->resolve_read(uptr_rseq, rseq_len, [scheduler, process, current_task, uptr_rseq, rseq_len, sig] (bool success) {
-        if (!success || !process->resolve_write(uptr_rseq, rseq_len)) {
-            scheduler->when_not_running(*current_task, [current_task] () {
-                current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                current_task->set_blocked(false);
-            });
-        }
-        UserMemory kmem{*process, (uintptr_t) uptr_rseq, rseq_len, true};
-        if (!kmem) {
-            scheduler->when_not_running(*current_task, [current_task] () {
-                current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                current_task->set_blocked(false);
-            });
-        }
-        auto result = process->RSeq().Register(uptr_rseq, *((rseq *) kmem.Pointer()), sig);
+    auto result = process->resolve_read(uptr_rseq, rseq_len, false, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;
             current_task->set_blocked(false);
         });
+    }, [process, uptr_rseq, rseq_len, sig] (bool success, bool, const std::function<void (intptr_t)> &) {
+        if (!success || !process->resolve_write(uptr_rseq, rseq_len)) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        UserMemory kmem{*process, (uintptr_t) uptr_rseq, rseq_len, true};
+        if (!kmem) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        auto result = process->RSeq().Register(uptr_rseq, *((rseq *) kmem.Pointer()), sig);
+        return resolve_return_value::Return(result);
     });
-    return 0;
+    if (result.async) {
+        current_task->set_blocked(true);
+        params.DoContextSwitch(true);
+        return 0;
+    } else {
+        return result.result;
+    }
 }

@@ -15,13 +15,17 @@ int64_t Writev::Call(int64_t fd, int64_t user_iov_ptr, int64_t iovcnt, int64_t, 
     if (!desc.Valid()) {
         return -EBADF;
     }
-    current_task->set_blocked(true);
-    params.DoContextSwitch(true);
-    desc.writev(process, user_iov_ptr, iovcnt, [scheduler, current_task] (intptr_t result) {
+    auto result = desc.writev(process, user_iov_ptr, iovcnt, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;
             current_task->set_blocked(false);
         });
     });
-    return 0;
+    if (result.async) {
+        current_task->set_blocked(true);
+        params.DoContextSwitch(true);
+        return 0;
+    } else {
+        return result.result;
+    }
 }

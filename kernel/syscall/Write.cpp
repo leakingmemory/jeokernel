@@ -15,13 +15,17 @@ int64_t Write::Call(int64_t fd, int64_t ptr, int64_t len, int64_t, SyscallAdditi
     if (!desc.Valid()) {
         return -EBADF;
     }
-    current_task->set_blocked(true);
-    additionalParams.DoContextSwitch(true);
-    desc.write(process, ptr, len, [scheduler, current_task] (intptr_t result) {
+    auto result = desc.write(process, ptr, len, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;
             current_task->set_blocked(false);
         });
     });
-    return 0;
+    if (result.async) {
+        current_task->set_blocked(true);
+        additionalParams.DoContextSwitch(true);
+        return 0;
+    } else {
+        return result.result;
+    }
 }

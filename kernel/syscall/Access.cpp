@@ -63,29 +63,32 @@ int64_t Access::Call(int64_t uptr_filename, int64_t mode, int64_t, int64_t, Sysc
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());
     auto *process = scheduler->get_resource<ProcThread>(*current_task);
-    current_task->set_blocked(true);
-    params.DoContextSwitch(true);
-    process->resolve_read_nullterm(uptr_filename, [this, scheduler, current_task, process, uptr_filename, mode] (bool success, size_t slen) {
+    auto result = process->resolve_read_nullterm(uptr_filename, false, [scheduler, current_task] (intptr_t result) {
+        scheduler->when_not_running(*current_task, [current_task, result] () {
+            current_task->get_cpu_state().rax = (uint64_t) result;
+            current_task->set_blocked(false);
+        });
+    }, [this, process, uptr_filename, mode] (bool success, bool, size_t slen, std::function<void (intptr_t)> asyncFunc) {
         if (!success) {
-            scheduler->when_not_running(*current_task, [current_task] () {
-                current_task->get_cpu_state().rax = (uint64_t) -EFAULT;
-                current_task->set_blocked(false);
-            });
-            return;
+            return resolve_return_value::Return(-EFAULT);
         }
         std::string filename{};
         {
             UserMemory filename_mem{*process, (uintptr_t) uptr_filename, slen};
             filename.append((const char *) filename_mem.Pointer(), slen);
         }
-        Queue([this, filename, mode, process, scheduler, current_task] () {
+        Queue([this, filename, mode, process, asyncFunc] () mutable {
             auto res = DoAccess(*process, filename, mode);
             std::cout << "access(" << filename << ", " << std::hex << mode << std::dec << ") => " << res << "\n";
-            scheduler->when_not_running(*current_task, [current_task, res] () {
-                current_task->get_cpu_state().rax = (uint64_t) res;
-                current_task->set_blocked(false);
-            });
+            asyncFunc(res);
         });
+        return resolve_return_value::AsyncReturn();
     });
-    return 0;
+    if (result.async) {
+        current_task->set_blocked(true);
+        params.DoContextSwitch(true);
+        return 0;
+    } else {
+        return result.result;
+    }
 }

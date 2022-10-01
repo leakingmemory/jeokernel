@@ -36,6 +36,9 @@
 #include "Gettimeofday.h"
 #include "Ioctl.h"
 
+#include <exec/procthread.h>
+#include <iostream>
+
 //#define SYSCALL_DEBUG
 
 #ifdef SYSCALL_DEBUG
@@ -70,6 +73,16 @@ SyscallResult SyscallHandler::Call(Interrupt &intr) {
 #endif
                 return SyscallResult::CONTEXT_SWITCH;
             } else {
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+                auto *scheduler = get_scheduler();
+                task *current_task = &(scheduler->get_current_task());
+                auto *process = scheduler->get_resource<ProcThread>(*current_task);
+                if (process->IsThreadFaulted()) {
+                    std::cerr << "Error: Syscall " << std::dec << number << " returns with unresolved fault\n";
+                    current_task->set_blocked(true);
+                    return SyscallResult::CONTEXT_SWITCH;
+                }
+#endif
 #ifdef SYSCALL_DEBUG
                 std::cout << "Syscall fast returns\n";
 #endif
