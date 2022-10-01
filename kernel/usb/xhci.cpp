@@ -392,6 +392,9 @@ bool xhci::irq() {
             HcEvent();
         }
         if (clear == 0) {
+            if (handled) {
+                HcEvent();
+            }
             break;
         }
         opregs->usbStatus = clear;
