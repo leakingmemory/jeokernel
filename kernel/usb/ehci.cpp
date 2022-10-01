@@ -614,40 +614,45 @@ std::shared_ptr<usb_buffer> ehci::Alloc(size_t size) {
     }
 }
 
+constexpr uint32_t irqFlags = EHCI_STATUS_ASYNC_ADVANCE | EHCI_STATUS_HOST_SYSTEM_ERROR |
+                              EHCI_STATUS_FRAME_LIST_ROLLOVER | EHCI_STATUS_PORT_CHANGE |
+                              EHCI_STATUS_USB_ERROR | EHCI_STATUS_USBINT;
+
 bool ehci::irq() {
     bool handled{false};
     std::lock_guard lock{ehcilock};
+    uint32_t prev_status{0};
     while (true) {
-        uint32_t clear{0};
-        uint32_t status{regs->usbStatus};
+        uint32_t status{(regs->usbStatus) & irqFlags};
+        if (status != 0) {
+            regs->usbStatus = status;
+        }
+        {
+            uint32_t combine{status | prev_status};
+            prev_status = status;
+            status = combine;
+        }
         if ((status & EHCI_STATUS_ASYNC_ADVANCE) != 0) {
-            clear |= EHCI_STATUS_ASYNC_ADVANCE;
             asyncAdvance();
         }
         if ((status & EHCI_STATUS_HOST_SYSTEM_ERROR) != 0) {
-            clear |= EHCI_STATUS_HOST_SYSTEM_ERROR;
             get_klogger() << "EHCI host system error\n";
         }
         if ((status & EHCI_STATUS_FRAME_LIST_ROLLOVER) != 0) {
-            clear |= EHCI_STATUS_FRAME_LIST_ROLLOVER;
             frameListRollover();
         }
         if ((status & EHCI_STATUS_PORT_CHANGE) != 0) {
-            clear |= EHCI_STATUS_PORT_CHANGE;
             RootHubStatusChange();
         }
         if ((status & EHCI_STATUS_USB_ERROR) != 0) {
-            clear |= EHCI_STATUS_USB_ERROR;
             get_klogger() << "EHCI USB error\n";
             usbint();
         }
         if ((status & EHCI_STATUS_USBINT) != 0) {
-            clear |= EHCI_STATUS_USBINT;
             usbint();
         }
-        if (clear != 0) {
+        if (status != 0) {
             handled = true;
-            regs->usbStatus = clear;
         } else {
             break;
         }
