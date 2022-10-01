@@ -183,17 +183,23 @@ void uhci::init() {
 }
 
 bool uhci::irq() {
-    uint16_t status{inportw(iobase + REG_STATUS)};
-    uint16_t clear{0};
-    if ((status & UHCI_STATUS_USBINT) != 0) {
-        clear |= UHCI_STATUS_USBINT;
-        usbint();
+    bool handled{false};
+    while (true) {
+        uint16_t status = inportw(iobase + REG_STATUS) & UHCI_STATUS_USBINT;
+        if (status != 0) {
+            outportw(iobase + REG_STATUS, status);
+        }
+        if (status  != 0) {
+            usbint();
+            handled = true;
+        } else {
+            if (handled) {
+                usbint();
+            }
+            break;
+        }
     }
-    if (clear != 0) {
-        outportw(iobase + REG_STATUS, clear);
-        return true;
-    }
-    return false;
+    return handled;
 }
 
 void uhci::dumpregs() {
