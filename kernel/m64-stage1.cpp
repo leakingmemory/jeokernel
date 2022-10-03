@@ -59,6 +59,7 @@
 #include <stage1.h>
 #include <iostream>
 #include <core/blockdevsystem.h>
+#include <tty/tty.h>
 #include <tty/ttyinit.h>
 
 //#define THREADING_TESTS // Master switch
@@ -984,7 +985,8 @@ done_with_mem_extension:
                     }
                 }
 
-                kshell_commands shell{*(new kshell())};
+                std::shared_ptr<tty> term = std::make_shared<tty>();
+                kshell_commands shell{*(new kshell(term))};
             }};
             pci_scan_thread.detach();
         }

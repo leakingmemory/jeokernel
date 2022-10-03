@@ -5,6 +5,7 @@
 #include "StdinDesc.h"
 #include <errno.h>
 #include <iostream>
+#include <exec/procthread.h>
 
 FileDescriptor StdinDesc::Descriptor() {
     std::shared_ptr<StdinDesc> handler{new StdinDesc};
@@ -38,7 +39,17 @@ bool StdinDesc::stat(struct stat &st) {
     return true;
 }
 
-int StdinDesc::ioctl(intptr_t cmd, intptr_t arg) {
-    std::cout << "stdin->ioctl(0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
-    return -EOPNOTSUPP;
+file_descriptor_result StdinDesc::ioctl(intptr_t cmd, intptr_t arg, std::function<void (intptr_t)> func) {
+    auto *scheduler = get_scheduler();
+    task *current_task = &(scheduler->get_current_task());
+    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+    if (process == nullptr) {
+        return {.result = -EOPNOTSUPP, .async = false};
+    }
+    auto tty = process->GetProcess()->GetTty();
+    if (tty) {
+        auto result = tty->ioctl(cmd, arg, func);
+        return {.result = result.result, .async = result.async};
+    }
+    return {.result = -EOPNOTSUPP, .async = false};
 }

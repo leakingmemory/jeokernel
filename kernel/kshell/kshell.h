@@ -25,9 +25,10 @@ private:
     std::vector<std::shared_ptr<kshell_command>> commands;
     std::shared_ptr<kfile> cwd_ref;
     kdirectory *cwd;
+    std::shared_ptr<class tty> tty;
     std::thread shell;
 public:
-    kshell();
+    kshell(const std::shared_ptr<class tty> tty);
     ~kshell();
     void Cwd(const std::shared_ptr<kfile> &cwd) {
         this->cwd_ref = cwd;
@@ -38,6 +39,9 @@ public:
     }
     std::shared_ptr<kfile> CwdRef() {
         return cwd_ref;
+    }
+    std::shared_ptr<class tty> Tty() {
+        return tty;
     }
     constexpr bool is_white(int ch) const {
         return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';

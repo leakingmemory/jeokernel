@@ -17,6 +17,7 @@
 #include <exec/fdesc.h>
 #include <sys/resource.h>
 #include <kfs/kfiles.h>
+#include <tty/tty.h>
 
 #define PAGESIZE 4096
 
@@ -162,10 +163,11 @@ private:
     std::vector<std::shared_ptr<FutexWait>> fwaits;
     std::vector<BinaryRelocation> relocations;
     std::shared_ptr<kfile> cwd;
+    std::shared_ptr<tty> tty;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
-    Process(const std::shared_ptr<kfile> &cwd);
+    Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty);
     Process(const Process &) = delete;
     Process(Process &&) = delete;
     Process &operator =(const Process &) = delete;
@@ -237,6 +239,9 @@ public:
     FileDescriptor get_file_descriptor(int);
     FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler);
     bool close_file_descriptor(int fd);
+    std::shared_ptr<class tty> GetTty() {
+        return tty;
+    }
     int32_t geteuid() {
         return euid;
     }

@@ -22,7 +22,7 @@ private:
     bool threadFaulted;
 #endif
 public:
-    ProcThread(const std::shared_ptr<kfile> &cwd);
+    ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty);
     std::shared_ptr<Process> GetProcess() {
         return process;
     }

@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 
+class tty;
 class kfile;
 class kdirectory;
 
@@ -28,12 +29,13 @@ public:
 
 class Exec {
 private:
+    std::shared_ptr<class tty> tty;
     std::shared_ptr<kfile> cwd_ref;
     kdirectory &cwd;
     std::shared_ptr<kfile> binary;
     std::string name;
 public:
-    Exec(const std::shared_ptr<kfile> &cwd_ref, kdirectory &cwd, std::shared_ptr<kfile> binary, const std::string &name) : cwd_ref(cwd_ref), cwd(cwd), binary(binary), name(name) {}
+    Exec(const std::shared_ptr<class tty> tty, const std::shared_ptr<kfile> &cwd_ref, kdirectory &cwd, std::shared_ptr<kfile> binary, const std::string &name) : tty(tty), cwd_ref(cwd_ref), cwd(cwd), binary(binary), name(name) {}
 private:
     static bool LoadLoads(kfile &binary, ELF_loads &loads, UserElf &userElf);
     static void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);
