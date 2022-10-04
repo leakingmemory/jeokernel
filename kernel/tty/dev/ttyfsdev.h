@@ -7,13 +7,15 @@
 
 #include <devfs/devfs.h>
 #include "ttydev.h"
+#include <kfs/kfiles.h>
 #include <memory>
 
-class ttyfsdev : public devfs_node {
+class ttyfsdev : public devfs_node, public kstatable {
 private:
     std::shared_ptr<ttydev> ttyd;
 public:
     ttyfsdev(std::shared_ptr<ttydev> ttyd) : devfs_node(00666), ttyd(ttyd) {}
+    void stat(struct stat &st) override;
 };
 
 

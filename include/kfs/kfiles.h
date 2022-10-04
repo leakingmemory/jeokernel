@@ -48,6 +48,11 @@ public:
     kfile_result<filepage_ref> GetPage(std::size_t pagenum);
 };
 
+class kstatable {
+public:
+    virtual void stat(struct stat &st) = 0;
+};
+
 class kdirent {
 private:
     std::string name;

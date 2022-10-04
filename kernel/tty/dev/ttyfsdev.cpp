@@ -3,3 +3,8 @@
 //
 
 #include "ttyfsdev.h"
+#include <sys/stat.h>
+
+void ttyfsdev::stat(struct stat &st) {
+    st.st_mode |= S_IFCHR;
+}

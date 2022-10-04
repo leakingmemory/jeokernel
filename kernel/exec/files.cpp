@@ -17,12 +17,6 @@ void FsStat::Stat(kfile &file, struct stat &st) {
     st.st_dev = file.SysDevId();
     st.st_ino = file.InodeNum();
 
-    if (dynamic_cast<kdirectory *>(&file) != nullptr) {
-        st.st_mode |= S_IFDIR;
-    } else {
-        st.st_mode |= S_IFREG;
-    }
-
     // TODO
     st.st_blocks = 0;
     st.st_atim = {};
@@ -30,6 +24,15 @@ void FsStat::Stat(kfile &file, struct stat &st) {
     st.st_mtim = {};
     st.st_nlink = 0;
     st.st_rdev = 0;
+
+    auto *statable = dynamic_cast<kstatable *>(&file);
+    if (statable != nullptr) {
+        statable->stat(st);
+    } else if (dynamic_cast<kdirectory *>(&file) != nullptr) {
+        st.st_mode |= S_IFDIR;
+    } else {
+        st.st_mode |= S_IFREG;
+    }
 }
 
 std::shared_ptr<kfile> FsFileDescriptorHandler::get_file() {
