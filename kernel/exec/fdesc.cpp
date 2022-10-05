@@ -177,6 +177,6 @@ bool FileDescriptor::stat(struct stat &st) {
     return handler->stat(st);
 }
 
-file_descriptor_result FileDescriptor::ioctl(intptr_t cmd, intptr_t arg, std::function<void (intptr_t)> func) {
-    return handler->ioctl(cmd, arg, func);
+intptr_t FileDescriptor::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
+    return handler->ioctl(ctx, cmd, arg);
 }

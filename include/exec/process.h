@@ -18,6 +18,7 @@
 #include <sys/resource.h>
 #include <kfs/kfiles.h>
 #include <tty/tty.h>
+#include <exec/resolve_return.h>
 
 #define PAGESIZE 4096
 
@@ -125,27 +126,6 @@ struct resolve_and_run {
     intptr_t result;
     bool async;
     bool hasValue;
-};
-
-struct resolve_return_value {
-private:
-    resolve_return_value(bool async) : result(0), async(async), hasValue(false) {}
-    resolve_return_value(intptr_t result) : result(result), async(false), hasValue(true) {}
-public:
-    intptr_t result;
-    bool async;
-    bool hasValue;
-
-    static resolve_return_value AsyncReturn() {
-        return resolve_return_value(true);
-    }
-    static resolve_return_value Return(intptr_t result) {
-        return resolve_return_value(result);
-    }
-    static resolve_return_value NoReturn() {
-        return resolve_return_value(false);
-    }
-
 };
 
 class ProcThread;

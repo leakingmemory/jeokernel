@@ -10,6 +10,7 @@
 #include <functional>
 #include <sys/stat.h>
 
+class callctx;
 class ProcThread;
 class kfile;
 
@@ -27,7 +28,7 @@ public:
     virtual intptr_t read(void *ptr, intptr_t len, uintptr_t offset) = 0;
     virtual intptr_t write(const void *ptr, intptr_t len) = 0;
     virtual bool stat(struct stat &st) = 0;
-    virtual file_descriptor_result ioctl(intptr_t cmd, intptr_t arg, std::function<void (intptr_t)> func) = 0;
+    virtual intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) = 0;
 };
 
 class FileDescriptor {
@@ -57,7 +58,7 @@ public:
     file_descriptor_result write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
     file_descriptor_result writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void (intptr_t)> func);
     bool stat(struct stat &st);
-    file_descriptor_result ioctl(intptr_t cmd, intptr_t arg, std::function<void (intptr_t)> func);
+    intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg);
 };
 
 #endif //JEOKERNEL_FDESC_H

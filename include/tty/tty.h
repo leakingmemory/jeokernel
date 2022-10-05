@@ -7,16 +7,12 @@
 
 #include <cstdint>
 #include <functional>
-
-struct tty_ioctl_response {
-    intptr_t result;
-    bool async;
-};
+#include <exec/callctx.h>
 
 class tty {
 public:
     tty();
-    tty_ioctl_response ioctl(intptr_t cmd, intptr_t arg, std::function<void (intptr_t)> func);
+    intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg);
 };
 
 #endif //JEOKERNEL_TTY_H

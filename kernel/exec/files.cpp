@@ -109,7 +109,7 @@ bool FsFileDescriptorHandler::stat(struct stat &st) {
     return true;
 }
 
-file_descriptor_result FsFileDescriptorHandler::ioctl(intptr_t cmd, intptr_t arg, std::function<void (intptr_t)> func) {
+intptr_t FsFileDescriptorHandler::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     std::cout << "fsfile->ioctl(0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
-    return {.result = -EOPNOTSUPP, .async = false};
+    return -EOPNOTSUPP;
 }
