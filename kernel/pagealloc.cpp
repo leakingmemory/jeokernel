@@ -12,6 +12,7 @@
 #include <stats/statistics_root.h>
 #include <physpagemap.h>
 #include "ApStartup.h"
+#include <sys/sysinfo.h>
 
 #define DEBUG_PALLOC_FAILURE
 
@@ -1062,4 +1063,12 @@ void setup_pvpage_stats() {
         }
     }
     GetStatisticsRoot().Add("pagealloc", std::make_shared<pvpages_stats_factory>());
+}
+
+void physmem_stats(sysinfo &info) {
+    info.mem_unit = PAGESIZE;
+    info.totalram = total_ppages;
+    info.totalhigh = total_ppages;
+    info.freeram = total_ppages - allocated_ppages;
+    info.freehigh = total_ppages - allocated_ppages;
 }

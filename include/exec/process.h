@@ -20,8 +20,6 @@
 #include <tty/tty.h>
 #include <exec/resolve_return.h>
 
-#define PAGESIZE 4096
-
 class Process;
 
 enum class ResolveWrite {

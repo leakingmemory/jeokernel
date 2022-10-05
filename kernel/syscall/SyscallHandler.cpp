@@ -35,6 +35,7 @@
 #include "Pread64.h"
 #include "Gettimeofday.h"
 #include "Ioctl.h"
+#include "Sysinfo.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -126,6 +127,7 @@ private:
     Pread64 pread64{*this};
     Gettimeofday gettimeofday{*this};
     Ioctl ioctl{*this};
+    Sysinfo sysinfo{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

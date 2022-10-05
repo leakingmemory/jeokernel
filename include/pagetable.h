@@ -11,6 +11,8 @@
 #include <std/compilerwarnings.h>
 #endif
 
+#define PAGESIZE 4096
+
 uintptr_t get_pagetable_virt_offset();
 void set_pagetable_virt_offset(uintptr_t offset);
 
