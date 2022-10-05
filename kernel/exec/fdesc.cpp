@@ -99,7 +99,7 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
                 if (iov[i].iov_len == 0) {
                     continue;
                 }
-                auto nestedResult = process->resolve_read((uintptr_t) iov[i].iov_base, iov[i].iov_len, async, asyncFunc, [handler, process, umem, iov, iovcnt, i, state, func] (bool success, bool, std::function<void (uintptr_t)>) mutable {
+                auto nestedResult = process->resolve_read((uintptr_t) iov[i].iov_base, iov[i].iov_len, async, asyncFunc, [handler, process, umem, iov, iovcnt, i, state, func] (bool success, bool, const std::function<void (uintptr_t)> &) mutable {
                     std::unique_lock lock{state->lock};
                     if (state->failed) {
                         return resolve_return_value::NoReturn();
@@ -152,14 +152,14 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
                     }
                     return resolve_return_value::NoReturn();
                 });
-                if (nestedResult.hasValue && !nestedResult.async && nestedAsync) {
-                    if (async) {
+                if (nestedResult.hasValue) {
+                    if (nestedAsync) {
                         asyncFunc(nestedResult.result);
                         return resolve_return_value::AsyncReturn();
-                    } else {
-                        return resolve_return_value::Return(nestedResult.result);
                     }
+                    return resolve_return_value::Return(nestedResult.result);
                 }
+                nestedAsync |= nestedResult.async;
             }
             if (nestedAsync) {
                 return resolve_return_value::AsyncReturn();
