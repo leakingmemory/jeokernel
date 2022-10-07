@@ -16,14 +16,22 @@ private:
     bool is_async;
 public:
     callctx_impl(std::shared_ptr<callctx_async> async);
+    ProcThread &GetProcess() const;
     static intptr_t Resolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value ()>);
+    static resolve_return_value NestedResolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value ()>);
     static intptr_t Read(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
     static intptr_t Write(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
+    static resolve_return_value NestedRead(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
+    static resolve_return_value NestedWrite(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
 };
 
 callctx_impl::callctx_impl(std::shared_ptr<callctx_async> async) :
 async(async), scheduler(get_scheduler()), current_task(&(scheduler->get_current_task())),
 process(scheduler->get_resource<ProcThread>(*current_task)) {
+}
+
+ProcThread &callctx_impl::GetProcess() const {
+    return *process;
 }
 
 intptr_t callctx_impl::Resolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value()> func) {
@@ -36,10 +44,30 @@ intptr_t callctx_impl::Resolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, 
         return func();
     });
     if (result.async) {
+        ref->is_async = true;
         ref->async->async();
         return 0;
     } else {
         return result.result;
+    }
+}
+
+resolve_return_value callctx_impl::NestedResolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value()> func) {
+    auto result = ref->process->resolve_read(ptr, len, ref->is_async, [ref] (intptr_t result) {
+        ref->async->returnAsync(result);
+    }, [ref, func] (bool success, bool, const std::function<void (uintptr_t)> &) mutable {
+        if (!success) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        return func();
+    });
+    if (result.hasValue) {
+        return resolve_return_value::Return(result.result);
+    } else if (result.async) {
+        ref->is_async = true;
+        return resolve_return_value::AsyncReturn();
+    } else {
+        return resolve_return_value::NoReturn();
     }
 }
 
@@ -66,13 +94,48 @@ intptr_t callctx_impl::Write(std::shared_ptr<callctx_impl> ref, intptr_t ptr, in
     });
 }
 
+resolve_return_value callctx_impl::NestedRead(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) {
+    return NestedResolve(ref, ptr, len, [ref, ptr, len, func] () mutable {
+        UserMemory usermem{*(ref->process), (uintptr_t) ptr, (uintptr_t) len};
+        if (!usermem) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        return func(usermem.Pointer());
+    });
+}
+
+resolve_return_value callctx_impl::NestedWrite(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) {
+    return NestedResolve(ref, ptr, len, [ref, ptr, len, func] () mutable {
+        if (!ref->process->resolve_write(ptr, len)) {
+            return resolve_return_value::Return(-EFAULT);;
+        }
+        UserMemory usermem{*(ref->process), (uintptr_t) ptr, (uintptr_t) len, true};
+        if (!usermem) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        return func(usermem.Pointer());
+    });
+}
+
 callctx::callctx(std::shared_ptr<callctx_async> async) : impl(new callctx_impl(async)) {
 }
 
-intptr_t callctx::Read(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) {
+ProcThread &callctx::GetProcess() const {
+    return impl->GetProcess();
+}
+
+intptr_t callctx::Read(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {
     return callctx_impl::Read(impl, ptr, len, func);
 }
 
-intptr_t callctx::Write(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) {
+intptr_t callctx::Write(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {
     return callctx_impl::Write(impl, ptr, len, func);
+}
+
+resolve_return_value callctx::NestedRead(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {
+    return callctx_impl::NestedRead(impl, ptr, len, func);
+}
+
+resolve_return_value callctx::NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {
+    return callctx_impl::NestedWrite(impl, ptr, len, func);
 }

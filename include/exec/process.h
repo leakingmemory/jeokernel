@@ -126,6 +126,11 @@ struct resolve_and_run {
     bool hasValue;
 };
 
+struct sigaction_record {
+    int signal;
+    sigaction sigaction;
+};
+
 class ProcThread;
 
 class Process {
@@ -142,6 +147,7 @@ private:
     std::vector<BinaryRelocation> relocations;
     std::shared_ptr<kfile> cwd;
     std::shared_ptr<tty> tty;
+    std::vector<sigaction_record> sigactions;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
@@ -237,6 +243,7 @@ public:
         return pid;
     }
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
+    int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
 private:
     int setrlimit(rlimit &lim, const rlimit &val);
 public:

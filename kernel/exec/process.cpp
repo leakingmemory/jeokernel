@@ -139,7 +139,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty) : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), tty(tty), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
+Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty) : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), tty(tty), sigactions(), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -2010,6 +2010,30 @@ int Process::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t 
                 break;
             default:
                 return -EINVAL;
+        }
+    }
+    return 0;
+}
+
+int Process::sigaction(int signal, const struct sigaction *act, struct sigaction *oact) {
+    {
+        std::lock_guard lock{mtx};
+        for (auto &rec: sigactions) {
+            if (rec.signal == signal) {
+                if (oact != nullptr) {
+                    memcpy(oact, &(rec.sigaction), sizeof(rec.sigaction));
+                }
+                if (act != nullptr) {
+                    memcpy(&(rec.sigaction), act, sizeof(rec.sigaction));
+                }
+                return 0;
+            }
+        }
+        if (act != nullptr) {
+            sigactions.push_back({.signal = signal, .sigaction = *act});
+        }
+        if (oact) {
+            bzero(oact, sizeof(*oact));
         }
     }
     return 0;

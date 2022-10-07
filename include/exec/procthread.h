@@ -59,6 +59,7 @@ public:
     bool brk(intptr_t delta_addr, uintptr_t &result);
     pid_t getpid();
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
+    int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
     int wake_all(uintptr_t addr);

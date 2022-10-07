@@ -36,6 +36,7 @@
 #include "Gettimeofday.h"
 #include "Ioctl.h"
 #include "Sysinfo.h"
+#include "RtSigaction.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -128,6 +129,7 @@ private:
     Gettimeofday gettimeofday{*this};
     Ioctl ioctl{*this};
     Sysinfo sysinfo{*this};
+    RtSigaction rtSigaction{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

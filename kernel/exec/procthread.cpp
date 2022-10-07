@@ -141,6 +141,10 @@ int ProcThread::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size
     return process->sigprocmask(how, set, oldset, sigsetsize);
 }
 
+int ProcThread::sigaction(int signal, const struct sigaction *act, struct sigaction *oact) {
+    return process->sigaction(signal, act, oact);
+}
+
 int ProcThread::setrlimit(int resource, const rlimit &lim) {
     return process->setrlimit(resource, lim);
 }

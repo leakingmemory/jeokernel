@@ -18,15 +18,19 @@ public:
 
 
 class callctx_impl;
+class ProcThread;
 
 class callctx {
 private:
     std::shared_ptr<callctx_impl> impl;
 public:
     callctx(std::shared_ptr<callctx_async> async);
-    intptr_t Read(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
-    intptr_t Write(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
-    resolve_return_value Return(intptr_t result) {
+    ProcThread &GetProcess() const;
+    intptr_t Read(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
+    intptr_t Write(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
+    resolve_return_value NestedRead(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
+    resolve_return_value NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
+    resolve_return_value Return(intptr_t result) const {
         return resolve_return_value::Return(result);
     }
 };
