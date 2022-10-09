@@ -38,6 +38,7 @@
 #include "Sysinfo.h"
 #include "RtSigaction.h"
 #include "Getcwd.h"
+#include "Getpid.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -132,6 +133,7 @@ private:
     Sysinfo sysinfo{*this};
     RtSigaction rtSigaction{*this};
     Getcwd getcwd{*this};
+    Getpid getpid{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
