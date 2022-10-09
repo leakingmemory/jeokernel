@@ -117,23 +117,23 @@ bool ProcThread::close_file_descriptor(int fd) {
     return process->close_file_descriptor(fd);
 }
 
-int32_t ProcThread::geteuid() {
+int32_t ProcThread::geteuid() const {
     return process->geteuid();
 }
-int32_t ProcThread::getegid() {
+int32_t ProcThread::getegid() const {
     return process->getegid();
 }
-int32_t ProcThread::getuid() {
+int32_t ProcThread::getuid() const {
     return process->getuid();
 }
-int32_t ProcThread::getgid() {
+int32_t ProcThread::getgid() const {
     return process->getgid();
 }
 bool ProcThread::brk(intptr_t addr, uintptr_t &result) {
     return process->brk(addr, result);
 }
 
-pid_t ProcThread::getpid() {
+pid_t ProcThread::getpid() const {
     return process->getpid();
 }
 

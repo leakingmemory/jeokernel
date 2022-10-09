@@ -19,6 +19,7 @@
 
 //#define DEBUG_PROCESS_PAGEENTR
 //#define DEBUG_PAGE_FAULT_RESOLVE
+//#define DEBUG_MAP_CLEAR_FREE
 
 static hw_spinlock pidLock{};
 static std::vector<pid_t> pids{};
@@ -59,6 +60,19 @@ PagetableRoot::~PagetableRoot() {
 }
 
 PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std::move(mv.vm)), branches(mv.branches), addr(mv.addr) {
+}
+
+MemMapping::MemMapping() : image(), pagenum(0), pages(0), image_skip_pages(0), load(0), read(false), cow(false), binary_mapping(false), mappings() {}
+
+void MemMapping::CopyAttributes(MemMapping &dst, const MemMapping &src) {
+    dst.image = src.image;
+    dst.pagenum = src.pagenum;
+    dst.pages = src.pages;
+    dst.image_skip_pages = src.image_skip_pages;
+    dst.load = src.load;
+    dst.read = src.read;
+    dst.cow = src.cow;
+    dst.binary_mapping = src.binary_mapping;
 }
 
 MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping)
@@ -469,10 +483,11 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
                 }
             }
             if (overlap_page < overlap_end) {
+                auto mapping_end = mapping.pagenum + mapping.pages;
                 if (mapping.pagenum < overlap_page) {
-                    auto mapping_end = mapping.pagenum + mapping.pages;
                     if (mapping_end > overlap_end) {
-                        auto &newMapping = newMappings.emplace_back(mapping);
+                        auto &newMapping = newMappings.emplace_back();
+                        MemMapping::CopyAttributes(newMapping, mapping);
                         std::cout << "Map split " << std::hex << mapping.pagenum << "/" << mapping.pages;
                         mapping.pages = overlap_page - mapping.pagenum;
                         std::cout << " -> " << std::hex << mapping.pagenum << "/" << mapping.pages << ", ";
@@ -480,42 +495,54 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
                         newMapping.pagenum = overlap_end;
                         std::cout << newMapping.pagenum << "/" << newMapping.pages << "\n";
                         {
+#ifdef DEBUG_MAP_CLEAR_FREE
+                            std::cout << "Free pages: ";
+#endif
                             auto dropIterator = mapping.mappings.begin();
                             while (dropIterator != mapping.mappings.end()) {
-                                auto &check = *dropIterator;
+                                const auto &check = *dropIterator;
                                 if (check.page >= overlap_page) {
                                     if (check.page < overlap_end) {
-                                        if (check.phys_page != 0) {
+                                        if (!check.data && check.phys_page != 0) {
+#ifdef DEBUG_MAP_CLEAR_FREE
+                                            std::cout << " -" << std::hex << check.page << std::dec;
+#endif
                                             phys_t addr{check.phys_page};
                                             addr = addr << 12;
                                             ppagefree(addr, PAGESIZE);
                                         }
+                                    } else {
+#ifdef DEBUG_MAP_CLEAR_FREE
+                                        if (!check.data && check.phys_page != 0) {
+                                            std::cout << " *" << std::hex << check.page << std::dec;
+                                        }
+#endif
+                                        newMapping.mappings.push_back(check);
                                     }
                                     mapping.mappings.erase(dropIterator);
                                 } else {
                                     ++dropIterator;
                                 }
                             }
-                        }
-                        {
-                            auto dropIterator = newMapping.mappings.begin();
-                            while (dropIterator != newMapping.mappings.end()) {
-                                auto &check = *dropIterator;
-                                if (check.page >= overlap_page) {
-                                    newMapping.mappings.erase(dropIterator);
-                                } else {
-                                    ++dropIterator;
-                                }
-                            }
+#ifdef DEBUG_MAP_CLEAR_FREE
+                            std::cout << ".\n";
+#endif
                         }
                     } else {
+                        std::cout << "Map slit/2 type-reduce keep:" << std::hex << mapping.pagenum << "-" << overlap_page << " drop:-" << overlap_end << std::dec << "\n";
                         mapping.pages = overlap_page - mapping.pagenum;
                         {
                             auto dropIterator = mapping.mappings.begin();
+#ifdef DEBUG_MAP_CLEAR_FREE
+                            std::cout << "Free pages: ";
+#endif
                             while (dropIterator != mapping.mappings.end()) {
                                 auto &check = *dropIterator;
                                 if (check.page >= overlap_page) {
-                                    if (check.phys_page != 0) {
+                                    if (!check.data && check.phys_page != 0) {
+#ifdef DEBUG_MAP_CLEAR_FREE
+                                        std::cout << " " << std::hex << check.page << std::dec;
+#endif
                                         phys_t addr{check.phys_page};
                                         addr = addr << 12;
                                         ppagefree(addr, PAGESIZE);
@@ -525,9 +552,42 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
                                     ++dropIterator;
                                 }
                             }
+#ifdef DEBUG_MAP_CLEAR_FREE
+                            std::cout << ".\n";
+#endif
                         }
                     }
+                } else if (mapping_end > overlap_end) {
+                    std::cout << "Map slit/3 type-reduce drop:" << std::hex << mapping.pagenum << "- keep:" << overlap_end << "-" << mapping_end << std::dec << "\n";
+                    mapping.pages = mapping_end - overlap_end;
+                    mapping.pagenum = overlap_end;
+                    {
+#ifdef DEBUG_MAP_CLEAR_FREE
+                        std::cout << "Free pages: ";
+#endif
+                        auto dropIterator = mapping.mappings.begin();
+                        while (dropIterator != mapping.mappings.end()) {
+                            auto &check = *dropIterator;
+                            if (check.page < overlap_end) {
+                                if (!check.data && check.phys_page != 0) {
+#ifdef DEBUG_MAP_CLEAR_FREE
+                                    std::cout << " " << std::hex << check.page << std::dec;
+#endif
+                                    phys_t addr{check.phys_page};
+                                    addr = addr << 12;
+                                    ppagefree(addr, PAGESIZE);
+                                }
+                                mapping.mappings.erase(dropIterator);
+                            } else {
+                                ++dropIterator;
+                            }
+                        }
+#ifdef DEBUG_MAP_CLEAR_FREE
+                        std::cout << ".\n";
+#endif
+                    }
                 } else {
+                    std::cout << "Map slit/4 type-drop drop:" << std::hex << mapping.pagenum << " num:" << mapping.pages << std::dec << "\n";
                     mappings.erase(iterator);
                     continue;
                 }
@@ -535,8 +595,14 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
         }
         ++iterator;
     }
-    for (const auto &mapping : newMappings) {
-        mappings.emplace_back(mapping);
+    for (auto &mapping : newMappings) {
+        auto &map = mappings.emplace_back();
+        MemMapping::CopyAttributes(map, mapping);
+        map.mappings.reserve(mapping.mappings.size());
+        for (const auto &m : mapping.mappings) {
+            map.mappings.push_back(m);
+        }
+        mapping.mappings.clear();
     }
 }
 
@@ -714,14 +780,20 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
     std::vector<MemMapping> new_mappings{};
     std::function<void ()> apply_new_mappings = [this, &new_mappings] () {
         for (auto &mapping : new_mappings) {
-            mappings.push_back(mapping);
+            auto &map = mappings.emplace_back();
+            MemMapping::CopyAttributes(map, mapping);
+            for (const auto &m : mapping.mappings) {
+                map.mappings.push_back(m);
+            }
             mapping.mappings.clear();
         }
     };
     for (auto &pmapping : prot_mappings) {
         if (pmapping.start > pmapping.mapping->pagenum) {
             auto size_pages = pmapping.start - pmapping.mapping->pagenum;
-            auto &map = new_mappings.emplace_back(pmapping.mapping->image, pmapping.mapping->pagenum, size_pages, pmapping.mapping->image_skip_pages, 0, pmapping.mapping->cow, pmapping.mapping->binary_mapping);
+            auto &map = new_mappings.emplace_back();
+            MemMapping::CopyAttributes(map, *(pmapping.mapping));
+            map.pages = size_pages;
             pmapping.mapping->pagenum = pmapping.start;
             pmapping.mapping->pages -= size_pages;
             if (pmapping.mapping->image) {

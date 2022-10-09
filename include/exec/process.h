@@ -60,11 +60,13 @@ private:
     bool binary_mapping;
     std::vector<PhysMapping> mappings;
 public:
+    MemMapping();
+    static void CopyAttributes(MemMapping &, const MemMapping &);
     MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping);
     MemMapping(MemMapping &&mv);
-    MemMapping(const MemMapping &) = default;
+    MemMapping(const MemMapping &) = delete;
     MemMapping &operator =(MemMapping &&mv);
-    MemMapping &operator =(const MemMapping &) = default;
+    MemMapping &operator =(const MemMapping &) = delete;
     ~MemMapping();
 };
 
@@ -223,23 +225,23 @@ public:
     FileDescriptor get_file_descriptor(int);
     FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler);
     bool close_file_descriptor(int fd);
-    std::shared_ptr<class tty> GetTty() {
+    std::shared_ptr<class tty> GetTty() const {
         return tty;
     }
-    int32_t geteuid() {
+    int32_t geteuid() const {
         return euid;
     }
-    int32_t getegid() {
+    int32_t getegid() const {
         return egid;
     }
-    int32_t getuid() {
+    int32_t getuid() const {
         return uid;
     }
-    int32_t getgid() {
+    int32_t getgid() const {
         return gid;
     }
     bool brk(intptr_t delta_addr, uintptr_t &result);
-    pid_t getpid() {
+    pid_t getpid() const {
         return pid;
     }
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
