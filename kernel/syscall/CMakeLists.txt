@@ -11,6 +11,6 @@ add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h W
         ExitGroup.cpp ExitGroup.h Rseq.cpp Rseq.h Futex.cpp Futex.h Access.cpp Access.h
         SyscallAsyncThread.cpp SyscallAsyncThread.h OpenAt.cpp OpenAt.h Read.cpp Read.h Close.cpp Close.h
         Pread64.cpp Pread64.h Gettimeofday.cpp Gettimeofday.h Ioctl.cpp Ioctl.h SyscallCtx.cpp SyscallCtx.h
-        Sysinfo.cpp Sysinfo.h RtSigaction.cpp RtSigaction.h)
+        Sysinfo.cpp Sysinfo.h RtSigaction.cpp RtSigaction.h Getcwd.cpp Getcwd.h)
 
 target_include_directories(syscall PRIVATE ../../include)
