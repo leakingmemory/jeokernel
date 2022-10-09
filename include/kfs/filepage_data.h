@@ -72,9 +72,13 @@ public:
         return *this;
     }
     filepage_ref &operator =(filepage_ref &&mv) {
+        auto olddata = this->data;
         this->data = mv.data;
         if (this != &mv) {
             mv.data = {};
+            if (olddata) {
+                olddata->down();
+            }
         }
         return *this;
     }
