@@ -20,6 +20,7 @@
 //#define DEBUG_PROCESS_PAGEENTR
 //#define DEBUG_PAGE_FAULT_RESOLVE
 //#define DEBUG_MAP_CLEAR_FREE
+//#define DEBUG_MEMMAPPING_DESTRUCTION_FREEPAGE
 
 static hw_spinlock pidLock{};
 static std::vector<pid_t> pids{};
@@ -100,12 +101,27 @@ MemMapping &MemMapping::operator =(MemMapping &&mv) {
 }
 
 MemMapping::~MemMapping() {
+#ifdef DEBUG_MEMMAPPING_DESTRUCTION_FREEPAGE
+    bool freePages{false};
+#endif
     for (const auto &ppage : mappings) {
         if (!ppage.data) {
+#ifdef DEBUG_MEMMAPPING_DESTRUCTION_FREEPAGE
+            if (!freePages) {
+                std::cout << "Free pages: ";
+                freePages = true;
+            }
+            std::cout << " " << std::hex << ppage.phys_page << std::dec;
+#endif
             phys_t addr = ppage.phys_page;
             ppagefree(addr, PAGESIZE);
         }
     }
+#ifdef DEBUG_MEMMAPPING_DESTRUCTION_FREEPAGE
+    if (freePages) {
+        std::cout << "\n";
+    }
+#endif
 }
 
 static pid_t FindNextPid() {
