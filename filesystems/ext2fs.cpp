@@ -755,7 +755,7 @@ inode_read_blocks_raw_result ext2fs_inode::ReadBlockRaw(std::size_t blki) {
                 return {.page = blockCache[blki], .status = filesystem_status::SUCCESS};
             } else {
                 std::cerr << "Read error for inode block " << startingBlock << "\n";
-                return {};
+                return {.page = {}, .status = filesystem_status::IO_ERROR};
             }
         }
         return {.page = blockCache[blki], .status = filesystem_status::SUCCESS};
