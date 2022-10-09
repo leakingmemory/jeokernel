@@ -37,14 +37,14 @@ ProcThread &callctx_impl::GetProcess() const {
 intptr_t callctx_impl::Resolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value()> func) {
     auto result = ref->process->resolve_read(ptr, len, ref->is_async, [ref] (intptr_t result) {
         ref->async->returnAsync(result);
-    }, [ref, func] (bool success, bool, const std::function<void (uintptr_t)> &) mutable {
+    }, [ref, func] (bool success, bool async, const std::function<void (uintptr_t)> &) mutable {
+        ref->is_async = async;
         if (!success) {
             return resolve_return_value::Return(-EFAULT);
         }
         return func();
     });
     if (result.async) {
-        ref->is_async = true;
         ref->async->async();
         return 0;
     } else {
@@ -55,7 +55,8 @@ intptr_t callctx_impl::Resolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, 
 resolve_return_value callctx_impl::NestedResolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value()> func) {
     auto result = ref->process->resolve_read(ptr, len, ref->is_async, [ref] (intptr_t result) {
         ref->async->returnAsync(result);
-    }, [ref, func] (bool success, bool, const std::function<void (uintptr_t)> &) mutable {
+    }, [ref, func] (bool success, bool async, const std::function<void (uintptr_t)> &) mutable {
+        ref->is_async |= async;
         if (!success) {
             return resolve_return_value::Return(-EFAULT);
         }
@@ -64,7 +65,6 @@ resolve_return_value callctx_impl::NestedResolve(std::shared_ptr<callctx_impl> r
     if (result.hasValue) {
         return resolve_return_value::Return(result.result);
     } else if (result.async) {
-        ref->is_async = true;
         return resolve_return_value::AsyncReturn();
     } else {
         return resolve_return_value::NoReturn();
