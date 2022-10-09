@@ -37,6 +37,7 @@
 #include "Ioctl.h"
 #include "Sysinfo.h"
 #include "RtSigaction.h"
+#include "Getcwd.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -130,6 +131,7 @@ private:
     Ioctl ioctl{*this};
     Sysinfo sysinfo{*this};
     RtSigaction rtSigaction{*this};
+    Getcwd getcwd{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

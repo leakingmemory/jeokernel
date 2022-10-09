@@ -9,7 +9,7 @@
 #include <exec/process.h>
 #include <exec/rseq.h>
 
-#define DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+//#define DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
 
 class ProcThread : public task_resource {
 private:
@@ -23,7 +23,7 @@ private:
 #endif
 public:
     ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty);
-    std::shared_ptr<Process> GetProcess() {
+    std::shared_ptr<Process> GetProcess() const {
         return process;
     }
     phys_t phys_addr(uintptr_t addr);
@@ -52,17 +52,18 @@ public:
     FileDescriptor get_file_descriptor(int);
     FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler);
     bool close_file_descriptor(int fd);
-    int32_t geteuid();
-    int32_t getegid();
-    int32_t getuid();
-    int32_t getgid();
+    int32_t geteuid() const;
+    int32_t getegid() const;
+    int32_t getuid() const;
+    int32_t getgid() const;
     bool brk(intptr_t delta_addr, uintptr_t &result);
-    pid_t getpid();
+    pid_t getpid() const;
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
     int wake_all(uintptr_t addr);
+    std::shared_ptr<kfile> GetCwd() const;
     ThreadRSeq &RSeq() {
         return this->rseq;
     }

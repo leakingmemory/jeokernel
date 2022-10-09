@@ -244,6 +244,9 @@ public:
     pid_t getpid() const {
         return pid;
     }
+    std::shared_ptr<kfile> GetCwd() const {
+        return cwd;
+    }
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
 private:

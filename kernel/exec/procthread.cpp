@@ -156,3 +156,7 @@ int ProcThread::getrlimit(int resource, rlimit &lim) {
 int ProcThread::wake_all(uintptr_t addr) {
     return process->wake_all(addr);
 }
+
+std::shared_ptr<kfile> ProcThread::GetCwd() const {
+    return process->GetCwd();
+}
