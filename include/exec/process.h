@@ -141,6 +141,7 @@ private:
     sigset_t sigmask;
     RLimits rlimits;
     pid_t pid;
+    pid_t parent_pid;
     std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
@@ -153,7 +154,7 @@ private:
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
-    Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty);
+    Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid);
     Process(const Process &) = delete;
     Process(Process &&) = delete;
     Process &operator =(const Process &) = delete;
@@ -243,6 +244,9 @@ public:
     bool brk(intptr_t delta_addr, uintptr_t &result);
     pid_t getpid() const {
         return pid;
+    }
+    pid_t getppid() const {
+        return parent_pid;
     }
     std::shared_ptr<kfile> GetCwd() const {
         return cwd;

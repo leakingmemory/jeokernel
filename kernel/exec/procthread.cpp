@@ -4,8 +4,8 @@
 
 #include <exec/procthread.h>
 
-ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty) :
-process(new Process(cwd, tty)), rseq(), fsBase(0), tidAddress(0), robustListHead(0)
+ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid) :
+process(new Process(cwd, tty, parent_pid)), rseq(), fsBase(0), tidAddress(0), robustListHead(0)
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
 , threadFaulted(false)
 #endif
@@ -135,6 +135,10 @@ bool ProcThread::brk(intptr_t addr, uintptr_t &result) {
 
 pid_t ProcThread::getpid() const {
     return process->getpid();
+}
+
+pid_t ProcThread::getppid() const {
+    return process->getppid();
 }
 
 int ProcThread::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize) {

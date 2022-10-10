@@ -169,7 +169,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty) : sigmask(), rlimits(), pid(0), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), tty(tty), sigactions(), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
+Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid) : sigmask(), rlimits(), pid(0), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), tty(tty), sigactions(), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());

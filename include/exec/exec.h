@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <sys/types.h>
 
 class tty;
 class kfile;
@@ -34,8 +35,9 @@ private:
     kdirectory &cwd;
     std::shared_ptr<kfile> binary;
     std::string name;
+    pid_t parent_pid;
 public:
-    Exec(const std::shared_ptr<class tty> tty, const std::shared_ptr<kfile> &cwd_ref, kdirectory &cwd, std::shared_ptr<kfile> binary, const std::string &name) : tty(tty), cwd_ref(cwd_ref), cwd(cwd), binary(binary), name(name) {}
+    Exec(const std::shared_ptr<class tty> tty, const std::shared_ptr<kfile> &cwd_ref, kdirectory &cwd, std::shared_ptr<kfile> binary, const std::string &name, pid_t parent_pid) : tty(tty), cwd_ref(cwd_ref), cwd(cwd), binary(binary), name(name), parent_pid(parent_pid) {}
 private:
     static bool LoadLoads(kfile &binary, ELF_loads &loads, UserElf &userElf);
     static void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);

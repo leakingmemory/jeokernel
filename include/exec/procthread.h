@@ -22,7 +22,7 @@ private:
     bool threadFaulted;
 #endif
 public:
-    ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty);
+    ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid);
     std::shared_ptr<Process> GetProcess() const {
         return process;
     }
@@ -58,6 +58,7 @@ public:
     int32_t getgid() const;
     bool brk(intptr_t delta_addr, uintptr_t &result);
     pid_t getpid() const;
+    pid_t getppid() const;
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
     int setrlimit(int resource, const rlimit &lim);

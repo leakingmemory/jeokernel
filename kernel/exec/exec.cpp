@@ -329,7 +329,7 @@ void Exec::Run() {
 
         Pages(pages, loads, userElf);
 
-        auto *process = new ProcThread(cwd_ref, tty);
+        auto *process = new ProcThread(cwd_ref, tty, parent_pid);
         process->SetProgramBreak(loads.program_brk + relocationOffset);
 
         MapPages(binary, process, pages, loads, relocationOffset);
