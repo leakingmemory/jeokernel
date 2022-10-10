@@ -18,6 +18,7 @@ extern int errno;
 #define EBUSY       16
 #define ENOTDIR     20
 #define EINVAL      22 // Invalid argument
+#define EMFILE      24
 #define ERANGE      34
 #define ENOSYS      38 // Not a syscall
 #define EOPNOTSUPP  95

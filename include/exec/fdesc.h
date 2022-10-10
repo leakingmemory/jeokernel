@@ -51,6 +51,9 @@ public:
             return false;
         }
     }
+    std::shared_ptr<FileDescriptorHandler> GetHandler() {
+        return handler;
+    }
     std::shared_ptr<kfile> get_file();
     bool can_read();
     int read(void *, intptr_t len);
