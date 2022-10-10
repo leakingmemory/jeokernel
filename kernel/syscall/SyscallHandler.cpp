@@ -40,6 +40,7 @@
 #include "Getcwd.h"
 #include "Getpid.h"
 #include "Getppid.h"
+#include "Getpgrp.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -136,6 +137,7 @@ private:
     Getcwd getcwd{*this};
     Getpid getpid{*this};
     Getppid getppid{*this};
+    Getpgrp getpgrp{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

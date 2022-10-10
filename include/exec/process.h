@@ -141,6 +141,7 @@ private:
     sigset_t sigmask;
     RLimits rlimits;
     pid_t pid;
+    pid_t pgrp;
     pid_t parent_pid;
     std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
@@ -244,6 +245,9 @@ public:
     bool brk(intptr_t delta_addr, uintptr_t &result);
     pid_t getpid() const {
         return pid;
+    }
+    pid_t getpgrp() const {
+        return pgrp;
     }
     pid_t getppid() const {
         return parent_pid;

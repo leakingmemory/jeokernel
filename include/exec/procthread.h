@@ -58,6 +58,7 @@ public:
     int32_t getgid() const;
     bool brk(intptr_t delta_addr, uintptr_t &result);
     pid_t getpid() const;
+    pid_t getpgrp() const;
     pid_t getppid() const;
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);

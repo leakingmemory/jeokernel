@@ -137,6 +137,10 @@ pid_t ProcThread::getpid() const {
     return process->getpid();
 }
 
+pid_t ProcThread::getpgrp() const {
+    return process->getpgrp();
+}
+
 pid_t ProcThread::getppid() const {
     return process->getppid();
 }
