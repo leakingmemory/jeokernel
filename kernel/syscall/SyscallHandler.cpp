@@ -42,6 +42,7 @@
 #include "Getppid.h"
 #include "Getpgrp.h"
 #include "Dup.h"
+#include "Fcntl.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -140,6 +141,7 @@ private:
     Getppid getppid{*this};
     Getpgrp getpgrp{*this};
     Dup dup{*this};
+    Fcntl fcntl{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
