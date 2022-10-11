@@ -35,6 +35,19 @@ void FsStat::Stat(kfile &file, struct stat &st) {
     }
 }
 
+FsFileDescriptorHandler::FsFileDescriptorHandler(const FsFileDescriptorHandler &cp) : mtx() {
+    std::lock_guard lock{*((hw_spinlock *) &(cp.mtx))};
+    this->file = cp.file;
+    this->offset = cp.offset;
+    this->openRead = cp.openRead;
+    this->openWrite = cp.openWrite;
+    this->nonblock = cp.nonblock;
+}
+
+std::shared_ptr<FileDescriptorHandler> FsFileDescriptorHandler::clone() {
+    return std::make_shared<FsFileDescriptorHandler>((const FsFileDescriptorHandler &) *this);
+}
+
 std::shared_ptr<kfile> FsFileDescriptorHandler::get_file() {
     return file;
 }

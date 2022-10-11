@@ -13,6 +13,10 @@ FileDescriptor StdinDesc::Descriptor() {
     return fd;
 }
 
+std::shared_ptr<FileDescriptorHandler> StdinDesc::clone() {
+    return std::make_shared<StdinDesc>((const StdinDesc &) *this);
+}
+
 std::shared_ptr<kfile> StdinDesc::get_file() {
     return {};
 }

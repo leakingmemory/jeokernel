@@ -25,6 +25,8 @@ private:
     bool nonblock;
 public:
     FsFileDescriptorHandler(const std::shared_ptr<kfile> &file, bool openRead, bool openWrite, bool nonblock) : FileDescriptorHandler(), mtx(), file(file), offset(0), openRead(openRead), openWrite(openWrite), nonblock(nonblock) {}
+    FsFileDescriptorHandler(const FsFileDescriptorHandler &cp);
+    std::shared_ptr<FileDescriptorHandler> clone() override;
     std::shared_ptr<kfile> get_file() override;
     bool can_read() override;
     intptr_t read(void *ptr, intptr_t len) override;

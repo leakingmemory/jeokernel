@@ -14,7 +14,7 @@ int64_t Dup::Call(int64_t oldfd, int64_t, int64_t, int64_t, SyscallAdditionalPar
     if (!old.Valid()) {
         return -EBADF;
     }
-    auto newf = process->create_file_descriptor(old.GetHandler());
+    auto newf = process->create_file_descriptor(old.GetHandler()->clone());
     if (!newf.Valid()) {
         return -EMFILE;
     }

@@ -22,6 +22,7 @@ struct file_descriptor_result {
 class FileDescriptorHandler {
 public:
     virtual ~FileDescriptorHandler() = default;
+    virtual std::shared_ptr<FileDescriptorHandler> clone() = 0;
     virtual std::shared_ptr<kfile> get_file() = 0;
     virtual bool can_read() = 0;
     virtual intptr_t read(void *ptr, intptr_t len) = 0;

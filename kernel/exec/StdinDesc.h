@@ -12,6 +12,7 @@ private:
     StdinDesc() = default;
 public:
     static FileDescriptor Descriptor();
+    std::shared_ptr<FileDescriptorHandler> clone() override;
     std::shared_ptr<kfile> get_file() override;
     bool can_read() override;
     intptr_t read(void *ptr, intptr_t len) override;
