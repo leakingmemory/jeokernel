@@ -43,6 +43,7 @@
 #include "Getpgrp.h"
 #include "Dup.h"
 #include "Fcntl.h"
+#include "Dup2.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -142,6 +143,7 @@ private:
     Getpgrp getpgrp{*this};
     Dup dup{*this};
     Fcntl fcntl{*this};
+    Dup2 dup2{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

@@ -51,6 +51,7 @@ public:
     kfile_result<std::shared_ptr<kfile>> ResolveFile(const std::string &filename);
     FileDescriptor get_file_descriptor(int);
     FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler);
+    FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd);;
     bool close_file_descriptor(int fd);
     int32_t geteuid() const;
     int32_t getegid() const;

@@ -113,6 +113,9 @@ FileDescriptor ProcThread::get_file_descriptor(int fd) {
 FileDescriptor ProcThread::create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler) {
     return process->create_file_descriptor(handler);
 }
+FileDescriptor ProcThread::create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
+    return process->create_file_descriptor(handler, fd);
+}
 bool ProcThread::close_file_descriptor(int fd) {
     return process->close_file_descriptor(fd);
 }

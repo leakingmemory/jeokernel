@@ -1932,6 +1932,16 @@ FileDescriptor Process::create_file_descriptor(const std::shared_ptr<FileDescrip
     return desc;
 }
 
+FileDescriptor Process::create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
+    std::lock_guard lock{mtx};
+    if (get_file_descriptor_impl(fd).Valid()) {
+        return {};
+    }
+    FileDescriptor desc{handler, fd};
+    fileDescriptors.push_back(desc);
+    return desc;
+}
+
 bool Process::close_file_descriptor(int fd) {
     std::lock_guard lock{mtx};
     auto iterator = fileDescriptors.begin();

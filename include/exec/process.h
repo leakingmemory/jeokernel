@@ -226,6 +226,7 @@ private:
 public:
     FileDescriptor get_file_descriptor(int);
     FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler);
+    FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd);
     bool close_file_descriptor(int fd);
     std::shared_ptr<class tty> GetTty() const {
         return tty;
