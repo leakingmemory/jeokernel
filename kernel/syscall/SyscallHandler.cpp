@@ -44,6 +44,7 @@
 #include "Dup.h"
 #include "Fcntl.h"
 #include "Dup2.h"
+#include "Time.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -144,6 +145,7 @@ private:
     Dup dup{*this};
     Fcntl fcntl{*this};
     Dup2 dup2{*this};
+    Time time{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
