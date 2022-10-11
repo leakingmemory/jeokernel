@@ -932,13 +932,9 @@ public:
     }
     std::tuple<uint64_t,xhci_trb *> NextCommand();
     void CommitCommand(xhci_trb *trb) {
-        dumpregs();
         trb->Command = (trb->Command & 0xFFFE) | (commandCycle & 1);
         doorbellregs->doorbells[0] = 0; /* Ring the bell */
         std::stringstream str{};
-        str << "Added command " << std::hex << trb->Command << " vaddr=" << ((uint64_t) trb) << "\n";
-        get_klogger() << str.str().c_str();
-        dumpregs();
     }
     std::shared_ptr<xhci_command> EnableSlot(uint8_t SlotType) {
         std::lock_guard lock{xhcilock};
