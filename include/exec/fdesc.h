@@ -9,6 +9,9 @@
 #include <memory>
 #include <functional>
 #include <sys/stat.h>
+#include <exec/fdselect.h>
+#include <concurrency/hw_spinlock.h>
+#include <vector>
 
 class callctx;
 class ProcThread;
@@ -19,9 +22,24 @@ struct file_descriptor_result {
     bool async;
 };
 
+struct FdSubscription {
+    Select impl;
+    int fd;
+};
+
 class FileDescriptorHandler {
+private:
+    hw_spinlock mtx;
+    std::vector<FdSubscription> subscriptions;
+    bool readyRead;
 public:
+    FileDescriptorHandler();
     virtual ~FileDescriptorHandler() = default;
+protected:
+    FileDescriptorHandler(const FileDescriptorHandler &cp);
+public:
+    void Subscribe(int fd, Select select);
+    void SetReadyRead(bool ready);
     virtual std::shared_ptr<FileDescriptorHandler> clone() = 0;
     virtual std::shared_ptr<kfile> get_file() = 0;
     virtual bool can_read() = 0;

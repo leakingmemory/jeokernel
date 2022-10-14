@@ -12,6 +12,7 @@ add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h W
         SyscallAsyncThread.cpp SyscallAsyncThread.h OpenAt.cpp OpenAt.h Read.cpp Read.h Close.cpp Close.h
         Pread64.cpp Pread64.h Gettimeofday.cpp Gettimeofday.h Ioctl.cpp Ioctl.h SyscallCtx.cpp SyscallCtx.h
         Sysinfo.cpp Sysinfo.h RtSigaction.cpp RtSigaction.h Getcwd.cpp Getcwd.h Getpid.cpp Getpid.h
-        Getppid.cpp Getppid.h Getpgrp.cpp Getpgrp.h Dup.cpp Dup.h Fcntl.cpp Fcntl.h Dup2.cpp Dup2.h Time.cpp Time.h)
+        Getppid.cpp Getppid.h Getpgrp.cpp Getpgrp.h Dup.cpp Dup.h Fcntl.cpp Fcntl.h Dup2.cpp Dup2.h Time.cpp Time.h
+        Pselect6.cpp Pselect6.h)
 
 target_include_directories(syscall PRIVATE ../../include)

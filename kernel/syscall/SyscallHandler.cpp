@@ -45,6 +45,7 @@
 #include "Fcntl.h"
 #include "Dup2.h"
 #include "Time.h"
+#include "Pselect6.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -146,6 +147,7 @@ private:
     Fcntl fcntl{*this};
     Dup2 dup2{*this};
     Time time{*this};
+    Pselect6 pselect6{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

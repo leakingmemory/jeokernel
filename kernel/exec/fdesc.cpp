@@ -11,6 +11,42 @@
 
 //#define WRITEV_DEBUG
 
+FileDescriptorHandler::FileDescriptorHandler() : mtx(), subscriptions(), readyRead(false) {
+}
+
+FileDescriptorHandler::FileDescriptorHandler(const FileDescriptorHandler &cp) : mtx(), subscriptions(), readyRead(cp.readyRead) {
+}
+
+void FileDescriptorHandler::Subscribe(int fd, Select select) {
+    std::lock_guard lock{mtx};
+    if (readyRead) {
+        select.NotifyRead(fd);
+    }
+    if (select.KeepSubscription(fd)) {
+        subscriptions.push_back({.impl = select, .fd = fd});
+    }
+}
+
+void FileDescriptorHandler::SetReadyRead(bool ready) {
+    std::lock_guard lock{mtx};
+    if (this->readyRead != ready) {
+        this->readyRead = ready;
+        if (this->readyRead) {
+            auto iterator = this->subscriptions.begin();
+            while (iterator != this->subscriptions.end()) {
+                auto subscription = *iterator;
+                subscription.impl.NotifyRead(subscription.fd);
+                if (subscription.impl.KeepSubscription(subscription.fd)) {
+                    ++iterator;
+                } else {
+                    std::cout << "Drop subscription " << std::dec << subscription.fd << "\n";
+                    this->subscriptions.erase(iterator);
+                }
+            }
+        }
+    }
+}
+
 std::shared_ptr<kfile> FileDescriptor::get_file() {
     return handler->get_file();
 }

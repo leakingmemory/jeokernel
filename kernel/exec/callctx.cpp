@@ -10,6 +10,7 @@
 class callctx_impl {
 private:
     std::shared_ptr<callctx_async> async;
+    std::vector<std::shared_ptr<UserMemory>> memRefs;
     tasklist *scheduler;
     task *current_task;
     ProcThread *process;
@@ -17,6 +18,7 @@ private:
 public:
     callctx_impl(std::shared_ptr<callctx_async> async);
     ProcThread &GetProcess() const;
+    static intptr_t Await(std::shared_ptr<callctx_impl> ref, resolve_return_value returnValue);
     static intptr_t Resolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value ()>);
     static resolve_return_value NestedResolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value ()>);
     static intptr_t Read(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
@@ -26,12 +28,21 @@ public:
 };
 
 callctx_impl::callctx_impl(std::shared_ptr<callctx_async> async) :
-async(async), scheduler(get_scheduler()), current_task(&(scheduler->get_current_task())),
+async(async), memRefs(), scheduler(get_scheduler()), current_task(&(scheduler->get_current_task())),
 process(scheduler->get_resource<ProcThread>(*current_task)) {
 }
 
 ProcThread &callctx_impl::GetProcess() const {
     return *process;
+}
+
+intptr_t callctx_impl::Await(std::shared_ptr<callctx_impl> ref, resolve_return_value returnValue) {
+    if (returnValue.async) {
+        ref->async->async();
+        return 0;
+    } else {
+        return returnValue.result;
+    }
 }
 
 intptr_t callctx_impl::Resolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value()> func) {
@@ -73,11 +84,12 @@ resolve_return_value callctx_impl::NestedResolve(std::shared_ptr<callctx_impl> r
 
 intptr_t callctx_impl::Read(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) {
     return Resolve(ref, ptr, len, [ref, ptr, len, func] () mutable {
-        UserMemory usermem{*(ref->process), (uintptr_t) ptr, (uintptr_t) len};
-        if (!usermem) {
+        std::shared_ptr<UserMemory> usermem{new UserMemory(*(ref->process), (uintptr_t) ptr, (uintptr_t) len)};
+        ref->memRefs.push_back(usermem);
+        if (!(*usermem)) {
             return resolve_return_value::Return(-EFAULT);
         }
-        return func(usermem.Pointer());
+        return func(usermem->Pointer());
     });
 }
 
@@ -86,21 +98,23 @@ intptr_t callctx_impl::Write(std::shared_ptr<callctx_impl> ref, intptr_t ptr, in
         if (!ref->process->resolve_write(ptr, len)) {
             return resolve_return_value::Return(-EFAULT);;
         }
-        UserMemory usermem{*(ref->process), (uintptr_t) ptr, (uintptr_t) len, true};
-        if (!usermem) {
+        std::shared_ptr<UserMemory> usermem{new UserMemory(*(ref->process), (uintptr_t) ptr, (uintptr_t) len, true)};
+        ref->memRefs.push_back(usermem);
+        if (!(*usermem)) {
             return resolve_return_value::Return(-EFAULT);
         }
-        return func(usermem.Pointer());
+        return func(usermem->Pointer());
     });
 }
 
 resolve_return_value callctx_impl::NestedRead(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) {
     return NestedResolve(ref, ptr, len, [ref, ptr, len, func] () mutable {
-        UserMemory usermem{*(ref->process), (uintptr_t) ptr, (uintptr_t) len};
-        if (!usermem) {
+        std::shared_ptr<UserMemory> usermem{new UserMemory(*(ref->process), (uintptr_t) ptr, (uintptr_t) len)};
+        ref->memRefs.push_back(usermem);
+        if (!(*usermem)) {
             return resolve_return_value::Return(-EFAULT);
         }
-        return func(usermem.Pointer());
+        return func(usermem->Pointer());
     });
 }
 
@@ -109,11 +123,12 @@ resolve_return_value callctx_impl::NestedWrite(std::shared_ptr<callctx_impl> ref
         if (!ref->process->resolve_write(ptr, len)) {
             return resolve_return_value::Return(-EFAULT);;
         }
-        UserMemory usermem{*(ref->process), (uintptr_t) ptr, (uintptr_t) len, true};
-        if (!usermem) {
+        std::shared_ptr<UserMemory> usermem{new UserMemory(*(ref->process), (uintptr_t) ptr, (uintptr_t) len, true)};
+        ref->memRefs.push_back(usermem);
+        if (!(*usermem)) {
             return resolve_return_value::Return(-EFAULT);
         }
-        return func(usermem.Pointer());
+        return func(usermem->Pointer());
     });
 }
 
@@ -122,6 +137,14 @@ callctx::callctx(std::shared_ptr<callctx_async> async) : impl(new callctx_impl(a
 
 ProcThread &callctx::GetProcess() const {
     return impl->GetProcess();
+}
+
+resolve_return_value callctx::Async() const {
+    return resolve_return_value::AsyncReturn();
+}
+
+intptr_t callctx::Await(resolve_return_value returnValue) const {
+    return callctx_impl::Await(impl, returnValue);
 }
 
 intptr_t callctx::Read(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {

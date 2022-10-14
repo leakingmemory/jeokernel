@@ -26,6 +26,8 @@ private:
 public:
     callctx(std::shared_ptr<callctx_async> async);
     ProcThread &GetProcess() const;
+    resolve_return_value Async() const;
+    intptr_t Await(resolve_return_value returnValue) const;
     intptr_t Read(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
     intptr_t Write(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
     resolve_return_value NestedRead(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
