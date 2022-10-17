@@ -26,9 +26,11 @@ static hw_spinlock pidLock{};
 static std::vector<pid_t> pids{};
 static pid_t next = 1;
 
-PagetableRoot::PagetableRoot(uint16_t addr) : physpage(ppagealloc(PAGESIZE)), vm(PAGESIZE), branches((pagetable *) vm.pointer()), addr(addr) {
-    vm.page(0).rwmap(physpage);
-    bzero(branches, sizeof(*branches));
+PagetableRoot::PagetableRoot(uint16_t addr, bool twolevel) : physpage(ppagealloc(PAGESIZE)), vm(PAGESIZE), branches((pagetable *) vm.pointer()), addr(addr), twolevel(twolevel) {
+    if (physpage != 0) {
+        vm.page(0).rwmap(physpage);
+        bzero(branches, sizeof(*branches));
+    }
 }
 
 PagetableRoot::~PagetableRoot() {
@@ -45,10 +47,12 @@ PagetableRoot::~PagetableRoot() {
                 }
                 vm.page(0).rwmap((b1.page_ppn << 12));
                 vm.reload();
-                for (int j = 0; j < 512; j++) {
-                    auto &b2 = (*table)[j];
-                    if (b2.page_ppn != 0) {
-                        ppagefree((b2.page_ppn << 12), sizeof(*table));
+                if (twolevel) {
+                    for (int j = 0; j < 512; j++) {
+                        auto &b2 = (*table)[j];
+                        if (b2.page_ppn != 0) {
+                            ppagefree((b2.page_ppn << 12), sizeof(*table));
+                        }
                     }
                 }
                 ppagefree((b1.page_ppn << 12), sizeof(*table));
@@ -61,6 +65,9 @@ PagetableRoot::~PagetableRoot() {
 }
 
 PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std::move(mv.vm)), branches(mv.branches), addr(mv.addr) {
+    if (this != &mv) {
+        mv.physpage = 0;
+    }
 }
 
 MemMapping::MemMapping() : image(), pagenum(0), pages(0), image_skip_pages(0), load(0), read(false), cow(false), binary_mapping(false), mappings() {}
@@ -285,7 +292,7 @@ bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func)
             }
         }
         if (root == nullptr) {
-            root = &(pagetableLow.emplace_back(lowRoot));
+            root = &(pagetableLow.emplace_back(lowRoot, false));
         }
         uint32_t pageoff;
         uint32_t index;
@@ -347,7 +354,7 @@ bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func)
             }
         }
         if (root == nullptr) {
-            root = &(pagetableRoots.emplace_back(index));
+            root = &(pagetableRoots.emplace_back(index, true));
         }
         {
             constexpr uint32_t mask = 0x7FFFFFF;

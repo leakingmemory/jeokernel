@@ -47,6 +47,9 @@ public:
         mv.base = 0;
     }
     vmem &operator =(vmem &&mv) {
+        if (this == &mv) {
+            return *this;
+        }
         if (base != 0) {
             release();
         }
@@ -57,8 +60,8 @@ public:
     }
 
     // No copies
-    vmem(vmem &) = delete;
-    vmem &operator =(vmem &) = delete;
+    vmem(const vmem &) = delete;
+    vmem &operator =(const vmem &) = delete;
 };
 
 

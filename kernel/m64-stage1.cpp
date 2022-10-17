@@ -787,6 +787,16 @@ done_with_mem_extension:
             scheduler->create_current_idle_task(0);
         }
 
+        {
+            std::thread thread_reaper{[] () {
+                std::this_thread::set_name("[thrreaper]");
+                while (true) {
+                    scheduler->thread_reaper();
+                }
+            }};
+            thread_reaper.detach();
+        }
+
 #ifndef VGA_TEXT_CONSOLE
 #ifndef SYNC_FB_CONSOLE
         if (fb_kcons_locked != nullptr) {

@@ -8,10 +8,12 @@
 #include <interrupt_frame.h>
 #include <klogger.h>
 #include <concurrency/hw_spinlock.h>
+#include <concurrency/raw_semaphore.h>
 #include <string>
 #include <mutex>
 
 #define PREALLOC_TASK_SLOTS         8192
+#define PREALLOC_REAPER_SLOTS       256
 #define PREALLOC_EVENT_LOOP         64
 #define PREALLIC_SWITCH_TASK_TMP    256
 
@@ -144,6 +146,13 @@ public:
     task &operator =(const task &) = delete;
 
     task &operator =(task &&) = delete;
+
+    ~task() {
+        for (auto resource : resources) {
+            delete resource;
+        }
+        resources.clear();
+    }
 
     void set_not_running() {
         bits.running = false;
@@ -338,10 +347,13 @@ class tasklist {
     friend task_timeout100hz_handler_ref;
 private:
     hw_spinlock _lock;
+    raw_semaphore _reaper_sema;
     uint64_t tick_counter;
     uint32_t serial;
     bool multicpu;
     std::vector<task *> tasks;
+    std::vector<task *> task_delete_prequeue;
+    std::vector<task *> task_delete_queue;
     std::vector<task_event_handler *> event_handler_loop;
     std::vector<event_call> events_in_event;
     /* switch task tmps: */
@@ -353,8 +365,10 @@ private:
     void ticks_millisleep(uint64_t ms);
     void tsc_nanosleep(uint64_t nanos);
 public:
-    tasklist() : _lock(), tick_counter(0), serial(0), multicpu(false), tasks(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool() {
+    tasklist() : _lock(), _reaper_sema(-1), tick_counter(0), serial(0), multicpu(false), tasks(), task_delete_prequeue(), task_delete_queue(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool() {
         tasks.reserve(PREALLOC_TASK_SLOTS);
+        task_delete_prequeue.reserve(PREALLOC_REAPER_SLOTS);
+        task_delete_queue.reserve(PREALLOC_REAPER_SLOTS);
         event_handler_loop.reserve(PREALLOC_EVENT_LOOP);
         task_pool.reserve(PREALLIC_SWITCH_TASK_TMP);
         next_task_pool.reserve(PREALLIC_SWITCH_TASK_TMP);
@@ -363,6 +377,7 @@ public:
     uint32_t create_current_idle_task(uint8_t cpu);
     void start_multi_cpu(uint8_t cpu);
     void switch_tasks(Interrupt &interrupt, uint8_t cpu);
+    void thread_reaper();
 
     bool page_fault(Interrupt &interrupt);
     bool exception(const std::string &name, Interrupt &interrupt);

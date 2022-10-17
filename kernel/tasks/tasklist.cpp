@@ -66,7 +66,27 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     task *current_task;
 
     critical_section cli{};
-    std::lock_guard lock{_lock};
+    std::unique_lock lock{_lock};
+
+    {
+        bool activate_grim_reaper{false};
+        auto delete_iterator = task_delete_prequeue.begin();
+        while (delete_iterator != task_delete_prequeue.end()) {
+            auto *t = *delete_iterator;
+            if (t->get_cpu() == cpu) {
+                task_delete_prequeue.erase(delete_iterator);
+                task_delete_queue.push_back(t);
+                activate_grim_reaper = true;
+            } else {
+                ++delete_iterator;
+            }
+        }
+        if (activate_grim_reaper) {
+            lock.release();
+            _reaper_sema.release();
+            lock = std::unique_lock(_lock);
+        }
+    }
 
     task_pool.clear();
     next_task_pool.clear();
@@ -181,7 +201,7 @@ void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
                 task *t = *iterator;
                 if (t == current_task) {
                     tasks.erase(iterator);
-                    delete t;
+                    task_delete_prequeue.push_back(t);
                     goto evicted_task;
                 }
                 ++iterator;
@@ -194,6 +214,35 @@ evicted_task:
         wild_panic("No task is current");
     } else if (current_task->is_end()) {
         wild_panic("Current task has requested stop, but can't be");
+    }
+}
+
+void tasklist::thread_reaper() {
+    _reaper_sema.acquire();
+    std::vector<task *> reaplist{};
+    size_t reaplist_length;
+    {
+        critical_section cli{};
+        std::lock_guard lock{_lock};
+        reaplist_length = task_delete_queue.size();
+    }
+    if (reaplist_length == 0) {
+        return;
+    }
+    reaplist.reserve(reaplist_length);
+    {
+        critical_section cli{};
+        std::lock_guard lock{_lock};
+        for (auto *t : task_delete_queue) {
+            reaplist.push_back(t);
+            if (reaplist.size() >= reaplist_length) {
+                break;
+            }
+        }
+        task_delete_queue.clear();
+    }
+    for (auto *t : reaplist) {
+        delete t;
     }
 }
 

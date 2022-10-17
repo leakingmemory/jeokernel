@@ -33,11 +33,13 @@ private:
     vmem vm;
     pagetable *branches;
     uint16_t addr;
+    bool twolevel;
 public:
-    PagetableRoot(uint16_t addr);
+    PagetableRoot(uint16_t addr, bool twolevel);
     ~PagetableRoot();
     PagetableRoot(const PagetableRoot &cp) = delete;
     PagetableRoot & operator =(const PagetableRoot &) = delete;
+    PagetableRoot & operator =(PagetableRoot &&) = delete;
     PagetableRoot(PagetableRoot &&mv);
 };
 
