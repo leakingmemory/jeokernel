@@ -79,6 +79,7 @@ public:
     void SetRobustListHead(uintptr_t addr) {
         robustListHead = addr;
     }
+    void SetExitCode(intptr_t code);
 
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
     void SetThreadFaulted(bool faulted) {

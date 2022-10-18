@@ -171,3 +171,7 @@ int ProcThread::wake_all(uintptr_t addr) {
 std::shared_ptr<kfile> ProcThread::GetCwd() const {
     return process->GetCwd();
 }
+
+void ProcThread::SetExitCode(intptr_t code) {
+    process->SetExitCode(code);
+}

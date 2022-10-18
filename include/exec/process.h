@@ -154,6 +154,8 @@ private:
     std::shared_ptr<kfile> cwd;
     std::shared_ptr<tty> tty;
     std::vector<sigaction_record> sigactions;
+    std::vector<std::function<void (intptr_t)>> exitNotifications;
+    intptr_t exitCode;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
@@ -162,6 +164,7 @@ public:
     Process(Process &&) = delete;
     Process &operator =(const Process &) = delete;
     Process &operator =(Process &&) = delete;
+    ~Process();
 private:
     std::optional<pageentr> Pageentry(uint32_t pagenum);
     bool Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func);
@@ -266,6 +269,8 @@ public:
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
     int wake_all(uintptr_t addr);
+    void RegisterExitNotification(const std::function<void (intptr_t)> &func);
+    void SetExitCode(intptr_t code);
 };
 
 #endif //JEOKERNEL_PROCESS_H

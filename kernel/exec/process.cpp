@@ -176,12 +176,26 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid) : sigmask(), rlimits(), pid(0), pgrp(0), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), tty(tty), sigactions(), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
+Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid) : sigmask(), rlimits(), pid(0), pgrp(0), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), tty(tty), sigactions(), exitNotifications(), exitCode(-1), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
     fileDescriptors.push_back(StdinDesc::Descriptor());
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
     pid = AllocPid();
     pgrp = pid;
+}
+
+Process::~Process() {
+    std::vector<std::function<void (intptr_t)>> calls{};
+    {
+        std::lock_guard lock{mtx};
+        for (auto en: exitNotifications) {
+            calls.push_back(en);
+        }
+        exitNotifications.clear();
+    }
+    for (auto en : calls) {
+        en(exitCode);
+    }
 }
 
 std::optional<pageentr> Process::Pageentry(uint32_t pagenum) {
@@ -2285,4 +2299,14 @@ int Process::wake_all(uintptr_t addr) {
         }
     });
     return count;
+}
+
+void Process::RegisterExitNotification(const std::function<void(intptr_t)> &func) {
+    std::lock_guard lock{mtx};
+    exitNotifications.push_back(func);
+}
+
+void Process::SetExitCode(intptr_t code) {
+    std::lock_guard lock{mtx};
+    exitCode = code;
 }
