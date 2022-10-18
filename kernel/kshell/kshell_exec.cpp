@@ -4,6 +4,8 @@
 
 #include <iostream>
 #include <exec/exec.h>
+#include <concurrency/raw_semaphore.h>
+#include <exec/process.h>
 #include "kshell_exec.h"
 
 void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
@@ -60,7 +62,16 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                 std::cerr << "exec: is a directory: " << filename << "\n";
             } else {
                 class Exec exec{shell.Tty(), dir_ref, *dir, litem, filename, 0};
-                exec.Run();
+                auto process = exec.Run();
+                if (process) {
+                    raw_semaphore latch{-1};
+                    process->RegisterExitNotification([&latch] (intptr_t exitCode) {
+                        std::cout << "Exited with code " << std::dec << exitCode << "\n";
+                        latch.release();
+                    });
+                    process = {};
+                    latch.acquire();
+                }
             }
         } else {
             std::cerr << "exec: not found: " << filename << "\n";

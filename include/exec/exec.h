@@ -28,6 +28,8 @@ public:
     std::shared_ptr<kfile> ResolveFile(const std::string &filename);
 };
 
+class Process;
+
 class Exec {
 private:
     std::shared_ptr<class tty> tty;
@@ -43,7 +45,7 @@ private:
     static void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);
     static void MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset);
 public:
-    void Run();
+    std::shared_ptr<Process> Run();
 };
 
 #endif //JEOKERNEL_EXEC_H
