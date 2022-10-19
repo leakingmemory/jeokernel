@@ -179,34 +179,49 @@ namespace std {
         typedef T *pointer;
     private:
         impl::shared_ptr_container_typeerasure *container;
+        pointer ptr;
     public:
-        shared_ptr() : container(nullptr) {}
-        explicit shared_ptr(pointer p) : container(new impl::shared_ptr_container<T,Deleter>(p)) {}
+        shared_ptr() : container(nullptr), ptr(nullptr) {}
+        explicit shared_ptr(pointer p) : container(new impl::shared_ptr_container<T,Deleter>(p)), ptr(p) {}
         ~shared_ptr() {
             if (container != nullptr) {
                 if (container->release() == 0) {
                     delete container;
                 }
                 container = nullptr;
+                ptr = nullptr;
             }
         }
 
-        template <class P,class PDeleter> shared_ptr(shared_ptr<T,Deleter> &&mv) : container(mv.container) {
-            static_assert(is_assignable<T*,P*>::value);
-            mv.container = nullptr;
+        template <class P,class PDeleter> shared_ptr(shared_ptr<P,Deleter> &&mv) : container(mv.container), ptr(dynamic_cast<T*>(mv.ptr)) {
+            static_assert(is_assignable<T*,P*>::value || is_assignable<P*,T*>::value);
+            if (ptr != nullptr) {
+                mv.container = nullptr;
+                mv.ptr = nullptr;
+            } else {
+                container = nullptr;
+            }
         }
-        shared_ptr(shared_ptr<T,Deleter> &&mv) : container(mv.container) {
+        shared_ptr(shared_ptr<T,Deleter> &&mv) : container(mv.container), ptr(mv.ptr) {
             mv.container = nullptr;
+            mv.ptr = nullptr;
         }
-        shared_ptr(const shared_ptr<T,Deleter> &cp) : container(cp.container) {
+        shared_ptr(const shared_ptr<T,Deleter> &cp) : container(cp.container), ptr(cp.ptr) {
             if (container != nullptr) {
                 container->acquire();
             }
         }
-        template <class P,class PDeleter> shared_ptr(const shared_ptr<P,PDeleter> &cp) : container(cp.Container()) {
-            static_assert(is_assignable<T*,P*>::value);
-            if (container != nullptr) {
+        template <class P,class PDeleter> shared_ptr(const shared_ptr<P,PDeleter> &cp) : container(cp.Container()), ptr((T *) cp.ptr) {
+            if constexpr(is_polymorphic<P>::value) {
+                ptr = dynamic_cast<T*>(cp.ptr);
+            } else {
+                ptr = cp.ptr;
+            }
+            if (container != nullptr && ptr != nullptr) {
                 container->acquire();
+            } else {
+                container = nullptr;
+                ptr = nullptr;
             }
         };
 
@@ -215,24 +230,47 @@ namespace std {
         }
 
         template <class P,class PDeleter> shared_ptr &operator = (shared_ptr<P,PDeleter> &&mv) {
-            static_assert(is_assignable<T*,P*>::value);
+            static_assert(is_assignable<T*,P*>::value || is_assignable<P*,T*>::value);
             if (((void *) this) == ((void *) &mv)) {
                 return *this;
             }
+            ptr = dynamic_cast<T*>(mv.ptr);
             if (container != nullptr) {
                 if (container->release() == 0) {
                     delete container;
                 }
             }
-            container = mv.container;
-            mv.container = nullptr;
+            if (ptr != nullptr) {
+                container = mv.container;
+                mv.container = nullptr;
+            } else {
+                container = nullptr;
+                ptr = nullptr;
+            }
             return *this;
         }
 
+        constexpr bool is_self(const std::shared_ptr<T> &other) {
+            return this == &other;
+        }
+        template<class P> constexpr bool is_self(const std::shared_ptr<P> &other) {
+            return false;
+        }
+
         template <class P,class PDeleter> shared_ptr &operator = (const shared_ptr<P,PDeleter> &cp) {
-            static_assert(is_assignable<T*,P*>::value);
+            if (is_self(cp)) {
+                return *this;
+            }
             auto *prevContainer = container;
             container = cp.container;
+            if constexpr(is_polymorphic<P>::value) {
+                ptr = dynamic_cast<T *>(cp.ptr);
+            } else {
+                ptr = cp.ptr;
+            }
+            if (ptr == nullptr) {
+                container = nullptr;
+            }
             if (container != nullptr) {
                 container->acquire();
             }
@@ -245,7 +283,7 @@ namespace std {
         }
 
         shared_ptr &operator = (shared_ptr &&mv) {
-            if (this == &mv) {
+            if (is_self(mv)) {
                 return *this;
             }
             if (container != nullptr) {
@@ -253,13 +291,18 @@ namespace std {
                     delete container;
                 }
             }
+            ptr = mv.ptr;
             container = mv.container;
             mv.container = nullptr;
             return *this;
         }
 
         shared_ptr &operator = (const shared_ptr &cp) {
+            if (is_self(cp)) {
+                return *this;
+            }
             auto *prevContainer = container;
+            ptr = cp.ptr;
             container = cp.container;
             if (container != nullptr) {
                 container->acquire();
@@ -278,6 +321,7 @@ namespace std {
                     delete container;
                 }
             }
+            this->ptr = ptr;
             if (ptr != nullptr) {
                 container = new impl::shared_ptr_container<T, Deleter>(ptr);
             } else {
@@ -287,11 +331,11 @@ namespace std {
         }
 
         T &operator * () const {
-            return *((T *) container->Ptr());
+            return *ptr;
         }
 
         pointer operator->() const noexcept {
-            return (pointer) container->Ptr();
+            return (pointer) ptr;
         }
 
         explicit operator bool () const {
@@ -306,12 +350,7 @@ namespace std {
             return false;
         }
         bool operator == (T *ptr) const {
-            if (container != nullptr) {
-                T *obj = (T *) container->Ptr();
-                return obj == ptr;
-            } else {
-                return ptr == nullptr;
-            }
+            return this->ptr == ptr;
         }
     };
 

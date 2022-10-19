@@ -101,6 +101,9 @@ namespace std {
 
         template<typename T>
         auto assignable_f() noexcept -> assignable_struct<T> &;
+
+        template<typename T>
+        auto polymorphic_f() noexcept -> decltype(dynamic_cast<const void *>(static_cast<T *>(nullptr)));
     }
 
     template <typename T, typename V, typename = void> struct is_assignable {
@@ -115,6 +118,13 @@ namespace std {
     static_assert(is_assignable<long,int>::value);
     static_assert(is_assignable<void *,int *>::value);
     static_assert(!is_assignable<char *,int *>::value);
+
+    template <typename T, typename = void> struct is_polymorphic {
+        static constexpr bool value = false;
+    };
+    template <typename T> struct is_polymorphic<T, decltype(impl::polymorphic_f<T>(), void())> {
+        static constexpr bool value = true;
+    };
 }
 
 #endif //JEOKERNEL_TYPE_TRAITS_H

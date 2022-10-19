@@ -5,20 +5,41 @@
 #include "tests.h"
 #include "../include/std/memory.h"
 
-class destruction {
-private:
+class dirparent {
+protected:
     bool &flag;
 public:
-    destruction(bool &flag) : flag(flag) {
+    explicit dirparent(bool &flag) : flag(flag) {}
+    virtual ~dirparent() = default;
+};
+
+class otherparent {
+private:
+    int sig;
+public:
+    otherparent() : sig(1234) {}
+    [[nodiscard]] int Sig() const {return sig;}
+};
+
+class destruction : public dirparent, public otherparent {
+private:
+    int magic_v;
+public:
+    explicit destruction(bool &flag) : dirparent(flag), magic_v(1337) {
         assert(!flag);
     }
-    ~destruction() {
+    ~destruction() override {
         assert(!flag);
         flag = true;
     }
-    int magic() {
-        return 1337;
+    [[nodiscard]] int magic() const {
+        return magic_v;
     }
+};
+
+class grandch : public destruction {
+public:
+    explicit grandch(bool &flag) : destruction(flag) {}
 };
 
 std::shared_ptr<destruction> create_shared(bool &flag) {
@@ -35,6 +56,26 @@ int main() {
             assert(!flag);
         }
         assert(flag);
+    }
+    {
+        bool flag{false};
+        std::shared_ptr<destruction> shared = create_shared(flag);
+        std::shared_ptr<otherparent> other{shared};
+        assert(other);
+        assert(other->Sig() == 1234);
+        std::shared_ptr<grandch> gr{shared};
+        assert(!gr);
+    }
+    {
+        bool flag{false};
+        std::shared_ptr<destruction> shared = create_shared(flag);
+        std::shared_ptr<otherparent> other{};
+        assert(!other);
+        other = shared;
+        assert(other);
+        assert(other->Sig() == 1234);
+        std::shared_ptr<grandch> gr{shared};
+        assert(!gr);
     }
     {
         bool flag{false};
@@ -55,8 +96,8 @@ int main() {
     }
     {
         bool flag{false};
-        std::shared_ptr<destruction> *ptr{nullptr};
-        std::shared_ptr<destruction> *ptr2{nullptr};
+        std::shared_ptr<destruction> *ptr;
+        std::shared_ptr<destruction> *ptr2;
         ptr = (std::shared_ptr<destruction> *) malloc(sizeof(*ptr));
         ptr2 = (std::shared_ptr<destruction> *) malloc(sizeof(*ptr2));
         {
