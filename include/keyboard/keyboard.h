@@ -78,6 +78,7 @@ public:
     keyboard() : lock(), consumer(), consumers() {}
     void keycode(uint32_t code);
     void consume(std::shared_ptr<keycode_consumer> consumer);
+    void unconsume(std::shared_ptr<keycode_consumer> consumer);
 };
 
 keyboard &Keyboard();

@@ -40,6 +40,7 @@ protected:
 public:
     void Subscribe(int fd, Select select);
     void SetReadyRead(bool ready);
+    virtual void Notify();
     virtual std::shared_ptr<FileDescriptorHandler> clone() = 0;
     virtual std::shared_ptr<kfile> get_file() = 0;
     virtual bool can_read() = 0;

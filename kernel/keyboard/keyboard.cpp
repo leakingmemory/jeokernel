@@ -548,6 +548,19 @@ void keyboard::consume(std::shared_ptr<keycode_consumer> consumer) {
     consumers.push_back(consumer);
 }
 
+void keyboard::unconsume(std::shared_ptr<keycode_consumer> consumer) {
+    critical_section cli{};
+    std::lock_guard lck{lock};
+    auto iterator = consumers.begin();
+    while (iterator != consumers.end()) {
+        if (consumer == *iterator) {
+            consumers.erase(iterator);
+            return;
+        }
+        ++iterator;
+    }
+}
+
 bool keyboard_line_consumer::Consume(uint32_t keycode) {
     if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
         uint32_t specificKeycode = keycode & KEYBOARD_CODE_MASK;

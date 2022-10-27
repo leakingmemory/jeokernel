@@ -47,6 +47,9 @@ void FileDescriptorHandler::SetReadyRead(bool ready) {
     }
 }
 
+void FileDescriptorHandler::Notify() {
+}
+
 std::shared_ptr<kfile> FileDescriptor::get_file() {
     return handler->get_file();
 }
