@@ -3,6 +3,14 @@
 //
 
 #include "tests.h"
+
+class critical_section {
+public:
+    critical_section() = default;
+};
+
+#define WEAK_PTR_CRITICAL_SECTION critical_section
+
 #include "../include/std/memory.h"
 
 class dirparent {

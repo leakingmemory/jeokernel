@@ -12,6 +12,13 @@
 #include <utility>
 
 #endif
+#ifndef WEAK_PTR_CRITICAL_SECTION
+
+#include <concurrency/critical_section.h>
+
+#define WEAK_PTR_CRITICAL_SECTION critical_section
+
+#endif
 
 namespace std {
 #ifndef UNIT_TESTING
@@ -98,27 +105,19 @@ namespace std {
         return unique_ptr<T>(new T(args...));
     }
 
+    template <class T, class Deleter> class weak_ptr;
+
     namespace impl {
-        class shared_ptr_container_typeerasure {
+        class weak_ptr_dir {
         private:
-            void *ptr;
             uint32_t ref;
+            uint32_t xref;
         public:
-            constexpr shared_ptr_container_typeerasure() noexcept: ptr(nullptr), ref(1) {
-            }
-
-            explicit shared_ptr_container_typeerasure(void *ptr) noexcept: ptr(ptr), ref(1) {
-            }
-
-            shared_ptr_container_typeerasure(shared_ptr_container_typeerasure &&mv) = delete;
-
-            shared_ptr_container_typeerasure(const shared_ptr_container_typeerasure &cp) = delete;
-
-            shared_ptr_container_typeerasure &operator=(shared_ptr_container_typeerasure &&mv) = delete;
-
-            shared_ptr_container_typeerasure &operator=(const shared_ptr_container_typeerasure &cp) = delete;
-
-            virtual ~shared_ptr_container_typeerasure() {}
+            weak_ptr_dir() : ref(1), xref(1) {}
+            weak_ptr_dir(const weak_ptr_dir &) = delete;
+            weak_ptr_dir(weak_ptr_dir &&) = delete;
+            weak_ptr_dir &operator =(const weak_ptr_dir &) = delete;
+            weak_ptr_dir &operator =(weak_ptr_dir &&) = delete;
 
             void acquire() {
                 asm("lock incl %0;" : "+m"(ref));
@@ -131,10 +130,128 @@ namespace std {
                 return xref;
             }
 
-            uint32_t refcount() {
+            bool xacquire() {
+                while (true) {
+                    uint8_t ret;
+                    {
+                        uint32_t xref = this->xref;
+                        if (xref == 0) {
+                            return false;
+                        }
+                        uint32_t cmp = xref;
+                        ++xref;
+                        asm("lock cmpxchgl %[newv], %[atom]; sete %[retv]" : [retv] "=q"(ret), [atom] "+m"(
+                                this->xref), [cmpv] "+a"(cmp) : [newv] "r"(xref));
+                    }
+                    if ((ret & 1) == 1) {
+                        return true;
+                    }
+                }
+            }
+
+            bool xrelease_or_take_ownership() {
+                while (true) {
+                    uint8_t ret;
+                    {
+                        uint32_t xref = this->xref;
+                        if (xref <= 1) {
+                            return false;
+                        }
+                        uint32_t cmp = xref;
+                        --xref;
+                        asm("lock cmpxchgl %[newv], %[atom]; sete %[retv]" : [retv] "=q"(ret), [atom] "+m"(
+                                this->xref), [cmpv] "+a"(cmp) : [newv] "r"(xref));
+                    }
+                    if ((ret & 1) == 1) {
+                        return true;
+                    }
+                }
+            }
+
+            uint32_t xrelease() {
                 uint32_t xref;
-                asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ref), "=rm"(xref)::"%rax");
+                asm("xor %%rax, %%rax; dec %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(this->xref), "=rm"(xref)::"%rax");
+                --xref;
                 return xref;
+            }
+
+            uint32_t xrefcount() {
+                uint32_t xref;
+                asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(this->xref), "=rm"(xref)::"%rax");
+                return xref;
+            }
+        };
+
+        class shared_ptr_container_typeerasure {
+        private:
+            void *ptr;
+            uint32_t ref;
+            uint32_t ticketgen;
+            uint32_t currentticket;
+            weak_ptr_dir *weak;
+        public:
+            constexpr shared_ptr_container_typeerasure() noexcept: ptr(nullptr), ref(1), ticketgen(0), currentticket(0), weak(nullptr) {
+            }
+
+            explicit shared_ptr_container_typeerasure(void *ptr) noexcept: ptr(ptr), ref(1), ticketgen(0), currentticket(0), weak(nullptr) {
+            }
+
+            shared_ptr_container_typeerasure(shared_ptr_container_typeerasure &&mv) = delete;
+
+            shared_ptr_container_typeerasure(const shared_ptr_container_typeerasure &cp) = delete;
+
+            shared_ptr_container_typeerasure &operator=(shared_ptr_container_typeerasure &&mv) = delete;
+
+            shared_ptr_container_typeerasure &operator=(const shared_ptr_container_typeerasure &cp) = delete;
+
+            virtual ~shared_ptr_container_typeerasure() {}
+
+            void Weak(weak_ptr_dir *weak) {
+                this->weak = weak;
+            }
+            weak_ptr_dir *Weak() {
+                return weak;
+            }
+
+            void acquire() {
+                asm("lock incl %0;" : "+m"(ref));
+            }
+
+            uint32_t release() {
+                uint32_t xref;
+                asm("xor %%rax, %%rax; dec %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ref), "=rm"(xref)::"%rax");
+                --xref;
+                if (xref == 0 && weak != nullptr) {
+                    if (weak->xrelease() != 0) {
+                        return 1;
+                    }
+                    if (weak->release() == 0) {
+                        delete weak;
+                    }
+                    weak = nullptr;
+                }
+                return xref;
+            }
+
+            uint32_t create_ticket() noexcept {
+                uint32_t ticket;
+                asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ticketgen), "=rm"(ticket) :: "%rax");
+                return ticket;
+            }
+
+            void release_ticket() noexcept {
+                asm("lock incl %0" : "+m"(currentticket));
+            }
+
+            void lock() noexcept {
+                uint32_t ticket = create_ticket();
+                while (ticket != currentticket) {
+                    asm("pause");
+                }
+            }
+
+            void unlock() noexcept {
+                release_ticket();
             }
 
             void *Ptr() {
@@ -175,11 +292,13 @@ namespace std {
     template <class T, class Deleter = std::default_delete<T>> class shared_ptr {
         friend shared_ptr;
         template <class W, class X> friend class shared_ptr;
+        friend class weak_ptr<T,Deleter>;
     public:
         typedef T *pointer;
     private:
         impl::shared_ptr_container_typeerasure *container;
         pointer ptr;
+        shared_ptr(impl::shared_ptr_container_typeerasure *container, pointer ptr) : container(container), ptr(ptr) {}
     public:
         shared_ptr() : container(nullptr), ptr(nullptr) {}
         explicit shared_ptr(pointer p) : container(new impl::shared_ptr_container<T,Deleter>(p)), ptr(p) {}
@@ -202,7 +321,7 @@ namespace std {
                 container = nullptr;
             }
         }
-        shared_ptr(shared_ptr<T,Deleter> &&mv) : container(mv.container), ptr(mv.ptr) {
+        shared_ptr(shared_ptr<T,Deleter> &&mv) noexcept : container(mv.container), ptr(mv.ptr) {
             mv.container = nullptr;
             mv.ptr = nullptr;
         }
@@ -357,6 +476,99 @@ namespace std {
     template<class T, class... Args> shared_ptr<T> make_shared(Args&&... args) {
         return shared_ptr<T>(new T(args...));
     }
+
+    template <class T, class Deleter = std::default_delete<T>> class weak_ptr {
+    public:
+        typedef T *pointer;
+    private:
+        impl::weak_ptr_dir *weak;
+        impl::shared_ptr_container_typeerasure *container;
+        pointer ptr;
+    public:
+        weak_ptr() : weak(nullptr), container(nullptr), ptr(nullptr) {}
+        weak_ptr(shared_ptr<T,Deleter> shared) : weak(nullptr), container(nullptr), ptr(nullptr) {
+            if (shared) {
+                container = shared.container;
+                ptr = shared.ptr;
+                WEAK_PTR_CRITICAL_SECTION cli{};
+                container->lock();
+                if (container->Weak() != nullptr) {
+                    container->unlock();
+                    weak = container->Weak();
+                } else {
+                    container->Weak(new impl::weak_ptr_dir());
+                    container->unlock();
+                    weak = container->Weak();
+                }
+                weak->acquire();
+            }
+        }
+        ~weak_ptr() {
+            if (weak != nullptr && weak->release() == 0) {
+                delete weak;
+            }
+            weak = nullptr;
+        }
+        weak_ptr(const weak_ptr &cp) : weak(cp.weak), container(cp.container), ptr(cp.ptr) {
+            if (this == &cp) {
+                return;
+            }
+            if (weak != nullptr) {
+                weak->acquire();
+            }
+        }
+        weak_ptr(weak_ptr &&mv) : weak(mv.weak), container(mv.container), ptr(mv.ptr) {
+            if (this == &mv) {
+                return;
+            }
+            mv.weak = nullptr;
+            mv.container = nullptr;
+            mv.ptr = nullptr;
+        }
+        weak_ptr &operator =(const weak_ptr &cp) {
+            if (this == &cp) {
+                return *this;
+            }
+            if (weak != nullptr) {
+                if (weak->release() == 0) {
+                    delete weak;
+                }
+            }
+            weak = cp.weak;
+            container = cp.container;
+            ptr = cp.ptr;
+            if (weak != nullptr) {
+                weak->acquire();
+            }
+            return *this;
+        }
+        weak_ptr &operator =(weak_ptr &&mv) {
+            if (this == &mv) {
+                return *this;
+            }
+            if (weak != nullptr) {
+                if (weak->release() == 0) {
+                    delete weak;
+                }
+            }
+            weak = mv.weak;
+            container = mv.container;
+            ptr = mv.container;
+            return *this;
+        }
+        shared_ptr<T,Deleter> lock() {
+            if (weak == nullptr) {
+                return {};
+            }
+            if (!weak->xacquire()) {
+                return {};
+            }
+            container->acquire();
+            shared_ptr<T,Deleter> shared{container, ptr};
+            weak->xrelease_or_take_ownership();
+            return shared;
+        }
+    };
 }
 
 #endif //JEOKERNEL_MEMORY_H
