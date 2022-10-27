@@ -28,21 +28,42 @@ void FileDescriptorHandler::Subscribe(int fd, Select select) {
 }
 
 void FileDescriptorHandler::SetReadyRead(bool ready) {
-    std::lock_guard lock{mtx};
-    if (this->readyRead != ready) {
-        this->readyRead = ready;
-        if (this->readyRead) {
-            auto iterator = this->subscriptions.begin();
-            while (iterator != this->subscriptions.end()) {
-                auto subscription = *iterator;
-                subscription.impl.NotifyRead(subscription.fd);
-                if (subscription.impl.KeepSubscription(subscription.fd)) {
+    std::vector<FdSubscription> notify{};
+    {
+        std::lock_guard lock{mtx};
+        if (this->readyRead != ready) {
+            this->readyRead = ready;
+            if (this->readyRead) {
+                auto iterator = this->subscriptions.begin();
+                while (iterator != this->subscriptions.end()) {
+                    notify.push_back(*iterator);
                     ++iterator;
-                } else {
-                    std::cout << "Drop subscription " << std::dec << subscription.fd << "\n";
-                    this->subscriptions.erase(iterator);
                 }
             }
+        }
+    }
+    std::vector<FdSubscription> remove{};
+    for (auto &subscription : notify) {
+        subscription.impl.NotifyRead(subscription.fd);
+        if (!subscription.impl.KeepSubscription(subscription.fd)) {
+            remove.push_back(subscription);
+        }
+    }
+    std::lock_guard lock{mtx};
+    auto iterator = this->subscriptions.begin();
+    while (iterator != this->subscriptions.end()) {
+        bool found{false};
+        for (auto &rem : remove) {
+            if (rem.impl == iterator->impl && rem.fd == iterator->fd) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            std::cout << "Drop subscription " << std::dec << iterator->fd << "\n";
+            this->subscriptions.erase(iterator);
+        } else {
+            ++iterator;
         }
     }
 }

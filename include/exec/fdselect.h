@@ -19,6 +19,9 @@ public:
     }
     bool KeepSubscription(int fd);
     void NotifyRead(int fd);
+    bool operator ==(const Select &other) const {
+        return impl == other.impl;
+    }
 };
 
 #endif //JEOKERNEL_FDSELECT_H
