@@ -35,6 +35,7 @@ public:
     resolve_return_value Return(intptr_t result) const {
         return resolve_return_value::Return(result);
     }
+    void ReturnWhenNotRunning(intptr_t value) const;
 };
 
 #endif //JEOKERNEL_CALLCTX_H

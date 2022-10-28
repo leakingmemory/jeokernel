@@ -10,6 +10,7 @@
 #include <iostream>
 
 //#define WRITEV_DEBUG
+//#define SUBSCRIPTION_DEBUG
 
 FileDescriptorHandler::FileDescriptorHandler() : mtx(), subscriptions(), readyRead(false) {
 }
@@ -60,7 +61,9 @@ void FileDescriptorHandler::SetReadyRead(bool ready) {
             }
         }
         if (found) {
+#ifdef SUBSCRIPTION_DEBUG
             std::cout << "Drop subscription " << std::dec << iterator->fd << "\n";
+#endif
             this->subscriptions.erase(iterator);
         } else {
             ++iterator;

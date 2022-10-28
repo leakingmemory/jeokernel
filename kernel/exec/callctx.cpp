@@ -25,6 +25,7 @@ public:
     static intptr_t Write(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
     static resolve_return_value NestedRead(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
     static resolve_return_value NestedWrite(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
+    static void ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intptr_t value);
 };
 
 callctx_impl::callctx_impl(std::shared_ptr<callctx_async> async) :
@@ -132,6 +133,13 @@ resolve_return_value callctx_impl::NestedWrite(std::shared_ptr<callctx_impl> ref
     });
 }
 
+void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intptr_t value) {
+    ref->scheduler->when_not_running(*(ref->current_task), [ref, value] {
+        ref->current_task->get_cpu_state().rax = value;
+        ref->current_task->set_blocked(false);
+    });
+}
+
 callctx::callctx(std::shared_ptr<callctx_async> async) : impl(new callctx_impl(async)) {
 }
 
@@ -161,4 +169,8 @@ resolve_return_value callctx::NestedRead(intptr_t ptr, intptr_t len, std::functi
 
 resolve_return_value callctx::NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {
     return callctx_impl::NestedWrite(impl, ptr, len, func);
+}
+
+void callctx::ReturnWhenNotRunning(intptr_t value) const {
+    callctx_impl::ReturnWhenNotRunning(impl, value);
 }

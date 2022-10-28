@@ -10,6 +10,9 @@
 #include <strings.h>
 #include <exec/procthread.h>
 
+//#define SELECT_DEBUG
+//#define FDSET_DEBUG
+
 struct fdset {
     int32_t data[];
 
@@ -30,7 +33,14 @@ public:
         auto mask = ((typeof(data[0])) 1) << bit;
         data[pos] |= mask;
     }
+    void Unset(int n) {
+        auto pos = n / (8 * sizeof(data[0]));
+        auto bit = n % (8 * sizeof(data[0]));
+        auto mask = ((typeof(data[0])) 1) << bit;
+        data[pos] &= ~mask;
+    }
     void ForEach(int, const std::function<void (int)> &);
+    bool AnySet(int);
 };
 
 void fdset::ForEach(int n, const std::function<void(int)> &f) {
@@ -40,7 +50,9 @@ void fdset::ForEach(int n, const std::function<void(int)> &f) {
         ++maxPos;
     }
     for (int i = 0; i < maxPos; i++) {
+#ifdef FDSET_DEBUG
         std::cout << "fdset " << std::dec << i << ": 0x" << std::hex << data[i] << std::dec << "\n";
+#endif
         if (data[i] != 0) {
             for (auto bit = StartOfPos(i); bit < n && bit < StartOfPos(i + 1); bit++) {
                 if (IsSet(bit % (8 * sizeof(data[0])))) {
@@ -51,17 +63,68 @@ void fdset::ForEach(int n, const std::function<void(int)> &f) {
     }
 }
 
+bool fdset::AnySet(int n) {
+    auto maxPos = n / (8 * sizeof(data[0]));
+    if ((n % (8 * sizeof(data[0]))) != 0) {
+        ++maxPos;
+    }
+    for (int i = 0; i < maxPos; i++) {
+        if (data[i] != 0) {
+            if (i < (maxPos - 1)) {
+                return true;
+            }
+            for (auto bit = StartOfPos(i); bit < n && bit < StartOfPos(i + 1); bit++) {
+                if (IsSet(bit % (8 * sizeof(data[0])))) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 class SelectImpl {
 private:
     SyscallCtx ctx;
+    hw_spinlock mtx;
+    int n, sig_n;
+    fdset *u_inp, *u_outp, *u_exc;
+    fdset *inp_sel;
+    fdset *inp_sig;
+    std::function<void (const std::function<void ()> &)> submitAsync;
+    bool wake;
 public:
-    explicit SelectImpl(const SyscallCtx &ctx);
+    explicit SelectImpl(const SyscallCtx &ctx, const std::function<void (const std::function<void ()> &)> &submitAsync);
+    ~SelectImpl();
+    SelectImpl(const SelectImpl &) = delete;
+    SelectImpl(SelectImpl &&) = delete;
+    SelectImpl &operator =(const SelectImpl &) = delete;
+    SelectImpl &operator =(SelectImpl &&) = delete;
+private:
+    void Clear();
+public:
     static void Select(std::shared_ptr<SelectImpl> ref, int n, fdset *inp, fdset *outp, fdset *exc);
     static bool KeepSubscription(std::shared_ptr<SelectImpl> ref, int fd);
+    static void CopyBack(std::shared_ptr<SelectImpl> ref);
     static void NotifyRead(std::shared_ptr<SelectImpl> ref, int fd);
 };
 
-SelectImpl::SelectImpl(const SyscallCtx &ctx) : ctx(ctx) {}
+SelectImpl::SelectImpl(const SyscallCtx &ctx, const std::function<void (const std::function<void ()> &)> &submitAsync) : ctx(ctx), mtx(), n(0), sig_n(0), u_inp(nullptr), u_outp(nullptr), u_exc(nullptr), inp_sel(nullptr), inp_sig(nullptr), submitAsync(submitAsync), wake(true) {}
+
+SelectImpl::~SelectImpl() {
+    Clear();
+}
+
+void SelectImpl::Clear() {
+    if (inp_sel != nullptr) {
+        free(inp_sel);
+        inp_sel = nullptr;
+    }
+    if (inp_sig != nullptr) {
+        free(inp_sig);
+        inp_sig = nullptr;
+    }
+}
 
 constexpr intptr_t SizeOfFdSet(intptr_t n) {
     auto sizeofBitm = n >> 3;
@@ -75,8 +138,26 @@ constexpr intptr_t SizeOfFdSet(intptr_t n) {
 }
 
 void SelectImpl::Select(std::shared_ptr<SelectImpl> ref, int n, fdset *inp, fdset *outp, fdset *exc) {
+#ifdef SELECT_DEBUG
     std::cout << "DoSelect(" << std::dec << n << std::hex << ", 0x" << (uintptr_t) inp << ", 0x" << (uintptr_t) outp
               << ", 0x" << (uintptr_t) exc << std::dec << ")\n";
+#endif
+    std::unique_lock lock{ref->mtx};
+    ref->Clear();
+    ref->n = n;
+    ref->sig_n = 0;
+    ref->u_inp = inp;
+    ref->u_outp = outp;
+    ref->u_exc = exc;
+    if (n > 0) {
+        auto size = SizeOfFdSet(n);
+        if (inp != nullptr) {
+            ref->inp_sel = (fdset *) malloc(size);
+            ref->inp_sig = (fdset *) malloc(size);
+            bzero(ref->inp_sel, size);
+            bzero(ref->inp_sig, size);
+        }
+    }
     {
         std::shared_ptr<fdset> subscribeTo{};
         {
@@ -85,27 +166,37 @@ void SelectImpl::Select(std::shared_ptr<SelectImpl> ref, int n, fdset *inp, fdse
             bzero(&(*subscribeTo), size);
         }
         if (inp != nullptr) {
-            inp->ForEach(n, [&subscribeTo](int fd) {
+            inp->ForEach(n, [&subscribeTo, ref](int fd) {
+#ifdef SELECT_DEBUG
                 std::cout << "Select read " << std::dec << fd << "\n";
+#endif
+                ref->inp_sel->Set(fd);
                 subscribeTo->Set(fd);
             });
         }
         if (outp != nullptr) {
             outp->ForEach(n, [&subscribeTo](int fd) {
+#ifdef SELECT_DEBUG
                 std::cout << "Select write " << std::dec << fd << "\n";
+#endif
                 subscribeTo->Set(fd);
             });
         }
         if (exc != nullptr) {
             exc->ForEach(n, [&subscribeTo](int fd) {
+#ifdef SELECT_DEBUG
                 std::cout << "Select exc " << std::dec << fd << "\n";
+#endif
                 subscribeTo->Set(fd);
             });
         }
+        lock.release();
         subscribeTo->ForEach(n, [ref] (int fd) {
             auto fdesc = ref->ctx.GetProcess().get_file_descriptor(fd);
             if (fdesc.Valid()) {
+#ifdef SELECT_DEBUG
                 std::cout << "Subscribe " << std::dec << fd << "\n";
+#endif
                 class Select sel{ref};
                 fdesc.GetHandler()->Subscribe(fd, sel);
             }
@@ -114,14 +205,60 @@ void SelectImpl::Select(std::shared_ptr<SelectImpl> ref, int n, fdset *inp, fdse
 }
 
 bool SelectImpl::KeepSubscription(std::shared_ptr<SelectImpl> ref, int fd) {
+    std::lock_guard lock{ref->mtx};
+    if (ref->inp_sel != nullptr) {
+        if (ref->inp_sel->AnySet(ref->n)) {
+            return true;
+        }
+    }
     return false;
 }
 
-void SelectImpl::NotifyRead(std::shared_ptr<SelectImpl> ref, int fd) {
-    std::cout << "Notified read " << std::dec << fd << "\n";
+void SelectImpl::CopyBack(std::shared_ptr<SelectImpl> ref) {
+    auto size = SizeOfFdSet(ref->n);
+    if (ref->u_inp != nullptr) {
+        memcpy(ref->u_inp, ref->inp_sig, size);
+    }
+    if (ref->u_outp != nullptr) {
+        bzero(ref->u_outp, size);
+    }
+    if (ref->u_exc != nullptr) {
+        bzero(ref->u_exc, size);
+    }
 }
 
-Select::Select(const SyscallCtx &ctx, int n, fdset *inp, fdset *outp, fdset *exc) : impl(new SelectImpl(ctx)) {
+void SelectImpl::NotifyRead(std::shared_ptr<SelectImpl> ref, int fd) {
+    bool wake;
+    {
+#ifdef SELECT_DEBUG
+        std::cout << "Notified read " << std::dec << fd << "\n";
+#endif
+        std::lock_guard lock{ref->mtx};
+        wake = ref->wake;
+        ref->wake = false;
+        if (fd < ref->n) {
+            ref->inp_sel->Unset(fd);
+            ref->inp_sig->Set(fd);
+            ++(ref->sig_n);
+        }
+    }
+    if (wake) {
+        ref->submitAsync([ref] () {
+            int retv;
+            {
+                std::lock_guard lock{ref->mtx};
+                SelectImpl::CopyBack(ref);
+                retv = ref->sig_n;
+            }
+#ifdef SELECT_DEBUG
+            std::cout << "Pselect6 return " << retv << "\n";
+#endif
+            ref->ctx.ReturnWhenNotRunning(retv);
+        });
+    }
+}
+
+Select::Select(const SyscallCtx &ctx, const std::function<void (const std::function<void ()> &)> &submitAsync, int n, fdset *inp, fdset *outp, fdset *exc) : impl(new SelectImpl(ctx, submitAsync)) {
     SelectImpl::Select(impl, n, inp, outp, exc);
 }
 
@@ -136,7 +273,7 @@ void Select::NotifyRead(int fd) {
 resolve_return_value
 Pselect6::DoSelect(SyscallCtx ctx, int n, fdset *inp, fdset *outp, fdset *exc, const timespec *timeout,
                    const sigset_t *sigset) {
-    Select select{ctx, n, inp, outp, exc};
+    Select select{ctx, [this] (const std::function<void ()> &func) { Queue(func); }, n, inp, outp, exc};
     return ctx.Async();
 }
 
@@ -147,8 +284,10 @@ int64_t Pselect6::Call(int64_t n, int64_t uptr_inp, int64_t uptr_outp, int64_t u
     if (n < 0) {
         return -EINVAL;
     }
+#ifdef SELECT_DEBUG
     std::cout << "select(" << std::dec << n << ", 0x" << std::hex << uptr_inp << ", 0x" << uptr_outp << ", 0x"
               << uptr_excp << ", 0x" << uptr_timespec << ", 0x" << uptr_sig << ")\n";
+#endif
     auto sizeofBitm = SizeOfFdSet(n);
     if (uptr_timespec != 0) {
         return ctx.Read(uptr_timespec, sizeof(timespec), [this, ctx, sizeofBitm, n, uptr_inp, uptr_outp, uptr_excp] (const void *ptr_timespec) {

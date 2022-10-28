@@ -14,7 +14,7 @@ class SyscallCtx;
 class Select {
     std::shared_ptr<SelectImpl> impl;
 public:
-    Select(const SyscallCtx &ctx, int n, fdset *inp, fdset *outp, fdset *exc);
+    Select(const SyscallCtx &ctx, const std::function<void (const std::function<void ()> &)> &submitAsync, int n, fdset *inp, fdset *outp, fdset *exc);
     explicit Select(const std::shared_ptr<SelectImpl> &impl) : impl(impl) {
     }
     bool KeepSubscription(int fd);
