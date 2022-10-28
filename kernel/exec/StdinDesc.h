@@ -6,14 +6,18 @@
 #define JEOKERNEL_STDINDESC_H
 
 #include <exec/fdesc.h>
+#include <tty/tty.h>
 
 class StdinDesc : public FileDescriptorHandler {
 private:
-    StdinDesc() = default;
+    std::shared_ptr<class tty> tty;
+    explicit StdinDesc(std::shared_ptr<class tty> tty);
 public:
-    static FileDescriptor Descriptor();
+    ~StdinDesc();
+    static FileDescriptor Descriptor(std::shared_ptr<class tty> tty);
     std::shared_ptr<FileDescriptorHandler> clone() override;
     std::shared_ptr<kfile> get_file() override;
+    void Notify() override;
     bool can_read() override;
     intptr_t read(void *ptr, intptr_t len) override;
     intptr_t read(void *ptr, intptr_t len, uintptr_t offset) override;

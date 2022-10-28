@@ -7,8 +7,19 @@
 #include <iostream>
 #include <exec/procthread.h>
 
-FileDescriptor StdinDesc::Descriptor() {
-    std::shared_ptr<StdinDesc> handler{new StdinDesc};
+StdinDesc::StdinDesc(std::shared_ptr<class tty> tty) : tty(tty) {
+}
+
+StdinDesc::~StdinDesc() noexcept {
+    tty->Unsubscribe(this);
+}
+
+FileDescriptor StdinDesc::Descriptor(std::shared_ptr<class tty> tty) {
+    std::shared_ptr<StdinDesc> handler{new StdinDesc(tty)};
+    {
+        std::shared_ptr<FileDescriptorHandler> fdhandler{handler};
+        tty->Subscribe(fdhandler);
+    }
     FileDescriptor fd{handler, 0};
     return fd;
 }
@@ -19,6 +30,10 @@ std::shared_ptr<FileDescriptorHandler> StdinDesc::clone() {
 
 std::shared_ptr<kfile> StdinDesc::get_file() {
     return {};
+}
+
+void StdinDesc::Notify() {
+    SetReadyRead(tty->HasInput());
 }
 
 bool StdinDesc::can_read() {
