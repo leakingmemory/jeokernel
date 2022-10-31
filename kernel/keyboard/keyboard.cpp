@@ -551,6 +551,10 @@ void keyboard::consume(std::shared_ptr<keycode_consumer> consumer) {
 void keyboard::unconsume(std::shared_ptr<keycode_consumer> consumer) {
     critical_section cli{};
     std::lock_guard lck{lock};
+    if (consumer == this->consumer) {
+        this->consumer = {};
+        return;
+    }
     auto iterator = consumers.begin();
     while (iterator != consumers.end()) {
         if (consumer == *iterator) {
