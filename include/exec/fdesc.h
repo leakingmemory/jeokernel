@@ -55,10 +55,11 @@ class FileDescriptor {
 private:
     std::shared_ptr<FileDescriptorHandler> handler;
     int fd;
+    int openFlags;
 public:
-    FileDescriptor() : handler(), fd(0) {
+    FileDescriptor() : handler(), fd(0), openFlags(0) {
     }
-    FileDescriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd) : handler(handler), fd(fd) {
+    FileDescriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags) : handler(handler), fd(fd), openFlags(openFlags) {
     }
     virtual ~FileDescriptor() = default;
     int FD() {
@@ -82,6 +83,12 @@ public:
     file_descriptor_result writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void (intptr_t)> func);
     bool stat(struct stat &st);
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg);
+    int get_open_flags() {
+        return openFlags;
+    }
+    void set_open_flags(int flags) {
+        openFlags = flags;
+    }
 };
 
 #endif //JEOKERNEL_FDESC_H

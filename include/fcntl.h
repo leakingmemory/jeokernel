@@ -19,4 +19,6 @@
 #define O_NONBLOCK          0x800
 #define O_CLOEXEC           0x80000
 
+#define F_GETFL     3
+
 #endif //JEOKERNEL_FCNTL_H

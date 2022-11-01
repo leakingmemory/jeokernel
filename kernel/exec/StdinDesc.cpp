@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <iostream>
 #include <exec/procthread.h>
+#include <fcntl.h>
 
 StdinDesc::StdinDesc(std::shared_ptr<class tty> tty) : tty(tty) {
 }
@@ -20,7 +21,7 @@ FileDescriptor StdinDesc::Descriptor(std::shared_ptr<class tty> tty) {
         std::shared_ptr<FileDescriptorHandler> fdhandler{handler};
         tty->Subscribe(fdhandler);
     }
-    FileDescriptor fd{handler, 0};
+    FileDescriptor fd{handler, 0, O_RDONLY};
     return fd;
 }
 

@@ -1944,21 +1944,21 @@ FileDescriptor Process::get_file_descriptor(int fd) {
     return get_file_descriptor_impl(fd);
 }
 
-FileDescriptor Process::create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler) {
+FileDescriptor Process::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler) {
     std::lock_guard lock{mtx};
     int fd = 0;
     while (get_file_descriptor_impl(fd).Valid()) { ++fd; }
-    FileDescriptor desc{handler, fd};
+    FileDescriptor desc{handler, fd, openFlags};
     fileDescriptors.push_back(desc);
     return desc;
 }
 
-FileDescriptor Process::create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
+FileDescriptor Process::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
     std::lock_guard lock{mtx};
     if (get_file_descriptor_impl(fd).Valid()) {
         return {};
     }
-    FileDescriptor desc{handler, fd};
+    FileDescriptor desc{handler, fd, openFlags};
     fileDescriptors.push_back(desc);
     return desc;
 }

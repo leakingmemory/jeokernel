@@ -14,7 +14,7 @@ int64_t Dup2::Call(int64_t oldfd, int64_t newfd, int64_t, int64_t, SyscallAdditi
     if (!old.Valid()) {
         return -EBADF;
     }
-    auto newf = process->create_file_descriptor(old.GetHandler()->clone(), newfd);
+    auto newf = process->create_file_descriptor(old.get_open_flags(), old.GetHandler()->clone(), newfd);
     if (!newf.Valid()) {
         return -EBUSY;
     }

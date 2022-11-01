@@ -6,6 +6,7 @@
 #include <exec/procthread.h>
 #include <errno.h>
 #include <iostream>
+#include <fcntl.h>
 
 int64_t Fcntl::Call(int64_t fd, int64_t cmd, int64_t arg, int64_t, SyscallAdditionalParams &) {
     auto *scheduler = get_scheduler();
@@ -15,6 +16,9 @@ int64_t Fcntl::Call(int64_t fd, int64_t cmd, int64_t arg, int64_t, SyscallAdditi
     if (!fdesc.Valid()) {
         return -EBADF;
     }
-    std::cout << "fcntl(fd, 0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
+    if (cmd == F_GETFL) {
+        return fdesc.get_open_flags();
+    }
+    std::cout << "fcntl("<<std::dec<<fd<<", 0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
     return -EOPNOTSUPP;
 }

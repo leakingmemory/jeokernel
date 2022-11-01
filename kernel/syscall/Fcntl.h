@@ -2,8 +2,8 @@
 // Created by sigsegv on 10/11/22.
 //
 
-#ifndef JEOKERNEL_FCNTL_H
-#define JEOKERNEL_FCNTL_H
+#ifndef JEOKERNEL_SYSCALL_FCNTL_H
+#define JEOKERNEL_SYSCALL_FCNTL_H
 
 #include "SyscallHandler.h"
 
@@ -14,4 +14,4 @@ public:
 };
 
 
-#endif //JEOKERNEL_FCNTL_H
+#endif //JEOKERNEL_SYSCALL_FCNTL_H

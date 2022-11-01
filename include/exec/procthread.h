@@ -50,8 +50,8 @@ public:
     void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
     kfile_result<std::shared_ptr<kfile>> ResolveFile(const std::string &filename);
     FileDescriptor get_file_descriptor(int);
-    FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler);
-    FileDescriptor create_file_descriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd);;
+    FileDescriptor create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler);
+    FileDescriptor create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd);;
     bool close_file_descriptor(int fd);
     int32_t geteuid() const;
     int32_t getegid() const;
