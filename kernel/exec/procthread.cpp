@@ -144,6 +144,10 @@ pid_t ProcThread::getpgrp() const {
     return process->getpgrp();
 }
 
+int ProcThread::setpgid(pid_t pid, pid_t pgid) {
+    return process->setpgid(pid, pgid);
+}
+
 pid_t ProcThread::getppid() const {
     return process->getppid();
 }

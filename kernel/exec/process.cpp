@@ -2096,6 +2096,26 @@ bool Process::brk(intptr_t brk_addr, uintptr_t &result) {
     return true;
 }
 
+pid_t Process::getpgrp() {
+    std::lock_guard lock{mtx};
+    return pgrp;
+}
+
+int Process::setpgid(pid_t pid, pid_t pgid) {
+    std::unique_lock lock{mtx};
+    if (pid == 0 || pid == this->pid) {
+        if (pgid == 0 || pgid == this->pid) {
+            this->pgrp = this->pid;
+            return 0;
+        }
+        lock.release();
+        std::cerr << "setpgid: self("<<std::dec<<pid<<"), " << pgid << "\n";
+        return -EINVAL;
+    }
+    std::cerr << "setpgid: "<<std::dec<<pid<<", " << pgid << "\n";
+    return -EPERM;
+}
+
 int Process::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize) {
     if (sigsetsize < 0 || sigsetsize > sizeof(sigmask)) {
         return -EINVAL;

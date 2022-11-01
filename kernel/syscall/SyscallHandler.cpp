@@ -46,6 +46,7 @@
 #include "Dup2.h"
 #include "Time.h"
 #include "Pselect6.h"
+#include "Setpgid.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -148,6 +149,7 @@ private:
     Dup2 dup2{*this};
     Time time{*this};
     Pselect6 pselect6{*this};
+    Setpgid setpgid{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

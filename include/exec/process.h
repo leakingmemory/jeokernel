@@ -252,9 +252,8 @@ public:
     pid_t getpid() const {
         return pid;
     }
-    pid_t getpgrp() const {
-        return pgrp;
-    }
+    pid_t getpgrp();
+    int setpgid(pid_t pid, pid_t pgid);
     pid_t getppid() const {
         return parent_pid;
     }
