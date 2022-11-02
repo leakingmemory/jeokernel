@@ -12,6 +12,7 @@
 #include <exec/fdselect.h>
 #include <concurrency/hw_spinlock.h>
 #include <vector>
+#include <exec/resolve_return.h>
 
 class callctx;
 class ProcThread;
@@ -26,6 +27,8 @@ struct FdSubscription {
     Select impl;
     int fd;
 };
+
+class SyscallCtx;
 
 class FileDescriptorHandler {
 private:
@@ -44,8 +47,8 @@ public:
     virtual std::shared_ptr<FileDescriptorHandler> clone() = 0;
     virtual std::shared_ptr<kfile> get_file() = 0;
     virtual bool can_read() = 0;
-    virtual intptr_t read(void *ptr, intptr_t len) = 0;
-    virtual intptr_t read(void *ptr, intptr_t len, uintptr_t offset) = 0;
+    virtual resolve_return_value read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len) = 0;
+    virtual resolve_return_value read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len, uintptr_t offset) = 0;
     virtual intptr_t write(const void *ptr, intptr_t len) = 0;
     virtual bool stat(struct stat &st) = 0;
     virtual intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) = 0;
@@ -77,8 +80,8 @@ public:
     }
     std::shared_ptr<kfile> get_file();
     bool can_read();
-    int read(void *, intptr_t len);
-    int read(void *, intptr_t len, uintptr_t offset);
+    resolve_return_value read(std::shared_ptr<SyscallCtx> ctx, void *, intptr_t len);
+    resolve_return_value read(std::shared_ptr<SyscallCtx> ctx, void *, intptr_t len, uintptr_t offset);
     file_descriptor_result write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
     file_descriptor_result writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void (intptr_t)> func);
     bool stat(struct stat &st);

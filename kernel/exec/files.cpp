@@ -56,9 +56,9 @@ bool FsFileDescriptorHandler::can_read() {
     return openRead;
 }
 
-intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len) {
+resolve_return_value FsFileDescriptorHandler::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len) {
     if (!openRead) {
-        return -EINVAL;
+        return resolve_return_value::Return(-EINVAL);
     }
     size_t offset{0};
     {
@@ -73,38 +73,38 @@ intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len) {
             if (rd > 0) {
                 this->offset += rd;
             }
-            return rd;
+            return resolve_return_value::Return(rd);
         } else {
             lock.release();
-            return read(ptr, len);
+            return read(ctx, ptr, len);
         }
     } else {
         switch (result.status) {
             case kfile_status::IO_ERROR:
-                return -EIO;
+                return resolve_return_value::Return(-EIO);
             case kfile_status::NOT_DIRECTORY:
-                return -ENOTDIR;
+                return resolve_return_value::Return(-ENOTDIR);
             default:
-                return -EIO;
+                return resolve_return_value::Return(-EIO);
         }
     }
 }
 
-intptr_t FsFileDescriptorHandler::read(void *ptr, intptr_t len, uintptr_t offset) {
+resolve_return_value FsFileDescriptorHandler::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
     if (!openRead) {
-        return -EINVAL;
+        return resolve_return_value::Return(-EINVAL);
     }
     auto result = file->Read(offset, ptr, len);
     if (result.status == kfile_status::SUCCESS || result.result > 0) {
-        return result.result;
+        return resolve_return_value::Return(result.result);
     } else {
         switch (result.status) {
             case kfile_status::IO_ERROR:
-                return -EIO;
+                return resolve_return_value::Return(-EIO);
             case kfile_status::NOT_DIRECTORY:
-                return -ENOTDIR;
+                return resolve_return_value::Return(-ENOTDIR);
             default:
-                return -EIO;
+                return resolve_return_value::Return(-EIO);
         }
     }
 }

@@ -8,6 +8,8 @@
 #include <exec/procthread.h>
 #include <fcntl.h>
 
+//#define STDIN_READ_DEBUG
+
 StdinDesc::StdinDesc(std::shared_ptr<class tty> tty) : tty(tty) {
 }
 
@@ -41,12 +43,18 @@ bool StdinDesc::can_read() {
     return true;
 }
 
-intptr_t StdinDesc::read(void *ptr, intptr_t len) {
-    return -EIO;
+resolve_return_value StdinDesc::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len) {
+#ifdef STDIN_READ_DEBUG
+    std::cout << "stdin read(ptr, " << std::dec << len << ")\n";
+#endif
+    return resolve_return_value::Return(-EIO);
 }
 
-intptr_t StdinDesc::read(void *ptr, intptr_t len, uintptr_t offset) {
-    return -EIO;
+resolve_return_value StdinDesc::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
+#ifdef STDIN_READ_DEBUG
+    std::cout << "stdin read(ptr, " << std::dec << len <<", offset:" << offset << ")\n";
+#endif
+    return resolve_return_value::Return(-EIO);
 }
 
 intptr_t StdinDesc::write(const void *ptr, intptr_t len) {

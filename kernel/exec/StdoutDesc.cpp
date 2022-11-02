@@ -34,12 +34,12 @@ bool StdoutDesc::can_read() {
     return false;
 }
 
-intptr_t StdoutDesc::read(void *ptr, intptr_t len) {
-    return -EIO;
+resolve_return_value StdoutDesc::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len) {
+    return resolve_return_value::Return(-EIO);
 }
 
-intptr_t StdoutDesc::read(void *ptr, intptr_t len, uintptr_t offset) {
-    return -EIO;
+resolve_return_value StdoutDesc::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
+    return resolve_return_value::Return(-EIO);
 }
 
 intptr_t StdoutDesc::write(const void *ptr, intptr_t len) {
