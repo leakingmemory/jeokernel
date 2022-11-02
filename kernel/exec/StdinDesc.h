@@ -19,8 +19,8 @@ public:
     std::shared_ptr<kfile> get_file() override;
     void Notify() override;
     bool can_read() override;
-    resolve_return_value read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len) override;
-    resolve_return_value read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len, uintptr_t offset) override;
+    resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) override;
+    resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;
     bool stat(struct stat &st) override;
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) override;

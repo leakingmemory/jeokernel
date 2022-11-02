@@ -56,7 +56,7 @@ bool FsFileDescriptorHandler::can_read() {
     return openRead;
 }
 
-resolve_return_value FsFileDescriptorHandler::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len) {
+resolve_return_value FsFileDescriptorHandler::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {
     if (!openRead) {
         return resolve_return_value::Return(-EINVAL);
     }
@@ -90,7 +90,7 @@ resolve_return_value FsFileDescriptorHandler::read(std::shared_ptr<SyscallCtx> c
     }
 }
 
-resolve_return_value FsFileDescriptorHandler::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
+resolve_return_value FsFileDescriptorHandler::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
     if (!openRead) {
         return resolve_return_value::Return(-EINVAL);
     }

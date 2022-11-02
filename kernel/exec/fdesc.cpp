@@ -82,11 +82,11 @@ bool FileDescriptor::can_read() {
     return handler->can_read();
 }
 
-resolve_return_value FileDescriptor::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len) {
+resolve_return_value FileDescriptor::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {
     return handler->read(ctx, ptr, len);
 }
 
-resolve_return_value FileDescriptor::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
+resolve_return_value FileDescriptor::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
     return handler->read(ctx, ptr, len, offset);
 }
 

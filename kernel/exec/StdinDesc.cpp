@@ -43,14 +43,14 @@ bool StdinDesc::can_read() {
     return true;
 }
 
-resolve_return_value StdinDesc::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len) {
+resolve_return_value StdinDesc::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {
 #ifdef STDIN_READ_DEBUG
     std::cout << "stdin read(ptr, " << std::dec << len << ")\n";
 #endif
     return resolve_return_value::Return(-EIO);
 }
 
-resolve_return_value StdinDesc::read(std::shared_ptr<SyscallCtx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
+resolve_return_value StdinDesc::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
 #ifdef STDIN_READ_DEBUG
     std::cout << "stdin read(ptr, " << std::dec << len <<", offset:" << offset << ")\n";
 #endif
