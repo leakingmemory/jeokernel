@@ -108,6 +108,24 @@ void tty::Unsubscribe(FileDescriptorHandler *handler) {
     }
 }
 
+int tty::Read(void *ptr, int len) {
+    if (len <= 0) {
+        return -EINVAL;
+    }
+    std::lock_guard lock{mtx};
+    auto sz = buffer.size();
+    if (sz == 0) {
+        return -EAGAIN;
+    }
+    if (sz <= len) {
+        memcpy(ptr, buffer.data(), sz);
+        return sz;
+    }
+    memcpy(ptr, buffer.data(), len);
+    buffer.erase(0, len);
+    return len;
+}
+
 void InitTty() {
     ttyhandler::Create("tty");
 }

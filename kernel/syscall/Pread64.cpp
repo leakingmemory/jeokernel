@@ -13,7 +13,7 @@ int64_t Pread64::Call(int64_t fd, int64_t uptr_buf, int64_t count, int64_t pos, 
     if (!desc.Valid()) {
         return -EBADF;
     }
-    return ctx.Write(uptr_buf, count, [this, ctx, desc, count, pos] (void *ptr) {
+    return ctx.Write(uptr_buf, count, [this, ctx, desc, count, pos] (void *ptr) mutable {
         Queue([ctx, desc, ptr, count, pos] () mutable {
             std::shared_ptr<SyscallCtx> shctx = std::make_shared<SyscallCtx>(ctx);
             auto result = desc.read(shctx, ptr, count, pos);

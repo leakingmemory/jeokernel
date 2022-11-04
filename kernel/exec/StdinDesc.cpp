@@ -47,14 +47,14 @@ resolve_return_value StdinDesc::read(std::shared_ptr<callctx> ctx, void *ptr, in
 #ifdef STDIN_READ_DEBUG
     std::cout << "stdin read(ptr, " << std::dec << len << ")\n";
 #endif
-    return resolve_return_value::Return(-EIO);
+    return resolve_return_value::Return(tty->Read(ptr, len));
 }
 
 resolve_return_value StdinDesc::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
 #ifdef STDIN_READ_DEBUG
     std::cout << "stdin read(ptr, " << std::dec << len <<", offset:" << offset << ")\n";
 #endif
-    return resolve_return_value::Return(-EIO);
+    return resolve_return_value::Return(-EOPNOTSUPP);
 }
 
 intptr_t StdinDesc::write(const void *ptr, intptr_t len) {

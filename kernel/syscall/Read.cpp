@@ -14,7 +14,7 @@ int64_t Read::Call(int64_t fd, int64_t uptr_buf, int64_t count, int64_t, Syscall
     if (!desc.Valid()) {
         return -EBADF;
     }
-    return ctx.Write(uptr_buf, count, [this, ctx, desc, count] (void *ptr) {
+    return ctx.Write(uptr_buf, count, [this, ctx, desc, count] (void *ptr) mutable {
         Queue([ctx, desc, ptr, count] () mutable {
             std::shared_ptr<SyscallCtx> shctx = std::make_shared<SyscallCtx>(ctx);
             auto result = desc.read(shctx, ptr, count);

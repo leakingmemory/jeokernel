@@ -32,6 +32,7 @@ public:
     bool HasInput();
     void Subscribe(std::shared_ptr<FileDescriptorHandler> handler);
     void Unsubscribe(FileDescriptorHandler *handler);
+    int Read(void *ptr, int len);
 };
 
 #endif //JEOKERNEL_TTY_H
