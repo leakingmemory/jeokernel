@@ -313,7 +313,7 @@ namespace std {
         }
 
         template <class P,class PDeleter> shared_ptr(shared_ptr<P,Deleter> &&mv) : container(mv.container), ptr(dynamic_cast<T*>(mv.ptr)) {
-            static_assert(is_assignable<T*,P*>::value || is_assignable<P*,T*>::value);
+            static_assert(std::is_assignable<T*,P*>::value || std::is_assignable<P*,T*>::value);
             if (ptr != nullptr) {
                 mv.container = nullptr;
                 mv.ptr = nullptr;

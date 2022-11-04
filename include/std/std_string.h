@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <string.h>
 #include <memory>
+#include <limits>
 
 namespace std {
 
@@ -259,6 +260,7 @@ namespace std {
         typedef typename allocator::size_type size_type;
         typedef basic_string_iterator<CharT> iterator;
         typedef basic_string_iterator<const CharT> const_iterator;
+        static constexpr size_type npos = std::numeric_limits<size_type>::max();
     private:
         struct _data_container : allocator {
             union {
@@ -518,6 +520,32 @@ namespace std {
 
         constexpr basic_string &append(const basic_string &str) {
             return append(str.data(), str.size());
+        }
+
+        basic_string &erase(size_type index = 0, size_type count = npos) {
+            {
+                size_type overflow_cap = npos - index;
+                if (count > overflow_cap) {
+                    count = overflow_cap;
+                }
+            }
+            size_type end = index + count;
+            {
+                size_type sz = size();
+                if (end > sz) {
+                    end = sz;
+                }
+                if (end < sz) {
+                    size_t preserve = sz - end;
+                    memcpy(data() + index, data() + end, preserve);
+                }
+                if (this->c.shrt.is_short()) {
+                    this->c.shrt.set_size(sz - count);
+                } else {
+                    this->c.ptr.size = sz - count;
+                }
+            }
+            return *this;
         }
 
         constexpr void resize( size_type count) {
