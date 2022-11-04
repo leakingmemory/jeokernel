@@ -47,7 +47,9 @@ resolve_return_value StdinDesc::read(std::shared_ptr<callctx> ctx, void *ptr, in
 #ifdef STDIN_READ_DEBUG
     std::cout << "stdin read(ptr, " << std::dec << len << ")\n";
 #endif
-    return resolve_return_value::Return(tty->Read(ptr, len));
+    auto result = tty->Read(ptr, len);
+    Notify();
+    return resolve_return_value::Return(result);
 }
 
 resolve_return_value StdinDesc::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
