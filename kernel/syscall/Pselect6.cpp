@@ -14,7 +14,7 @@
 //#define FDSET_DEBUG
 
 struct fdset {
-    int32_t data[];
+    int32_t data[0];
 
 private:
     constexpr int StartOfPos(int pos) {

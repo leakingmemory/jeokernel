@@ -132,7 +132,7 @@ struct resolve_and_run {
 
 struct sigaction_record {
     int signal;
-    sigaction sigaction;
+    struct sigaction sigaction;
 };
 
 class ProcThread;
@@ -152,7 +152,7 @@ private:
     std::vector<std::shared_ptr<FutexWait>> fwaits;
     std::vector<BinaryRelocation> relocations;
     std::shared_ptr<kfile> cwd;
-    std::shared_ptr<tty> tty;
+    std::shared_ptr<class tty> tty;
     std::vector<sigaction_record> sigactions;
     std::vector<std::function<void (intptr_t)>> exitNotifications;
     intptr_t exitCode;
