@@ -119,6 +119,7 @@ int tty::Read(void *ptr, int len) {
     }
     if (sz <= len) {
         memcpy(ptr, buffer.data(), sz);
+        buffer.erase(0, sz);
         return sz;
     }
     memcpy(ptr, buffer.data(), len);
