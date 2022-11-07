@@ -47,6 +47,7 @@
 #include "Time.h"
 #include "Pselect6.h"
 #include "Setpgid.h"
+#include "Clone.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -150,6 +151,7 @@ private:
     Time time{*this};
     Pselect6 pselect6{*this};
     Setpgid setpgid{*this};
+    Clone clone{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

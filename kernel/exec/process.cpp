@@ -112,7 +112,7 @@ MemMapping::~MemMapping() {
     bool freePages{false};
 #endif
     for (const auto &ppage : mappings) {
-        if (!ppage.data) {
+        if (!ppage.data && !ppage.cow) {
 #ifdef DEBUG_MEMMAPPING_DESTRUCTION_FREEPAGE
             if (!freePages) {
                 std::cout << "Free pages: ";
@@ -714,6 +714,25 @@ uint32_t Process::FindFree(uint32_t pages) {
         return 0;
     }
     return memoryArea->end - pages;
+}
+
+void Process::WriteProtectCow() {
+    std::lock_guard lock{mtx};
+    for (auto &mapping : mappings) {
+        for (auto &phmap : mapping.mappings) {
+            bool wasWriteable{false};
+            Pageentry(phmap.page, [&wasWriteable] (pageentr &pe) {
+                if (pe.writeable != 0) {
+                    wasWriteable = true;
+                    pe.writeable = 0;
+                }
+            });
+            if (wasWriteable && phmap.phys_page != 0 && !phmap.data) {
+                phmap.cow = std::make_shared<CowPageRef>(phmap.phys_page);
+                phmap.phys_page = 0;
+            }
+        }
+    }
 }
 
 bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
@@ -1514,33 +1533,61 @@ bool Process::resolve_page(uintptr_t fault_addr) {
             reload_pagetables();
         }
         return true;
-    } else if (mapping->cow) {
+    } else {
+        auto isCowMapping = mapping->cow;
         for (auto &pagemap : mapping->mappings) {
-            if (page == pagemap.page && pagemap.data) {
-                auto phys = ppagealloc(PAGESIZE);
-                if (phys == 0) {
-                    std::cerr << "Error: Unable to allocate phys page for copy on write\n";
-                    return false;
-                }
+            if (page == pagemap.page) {
+                if (pagemap.data) {
+                    if (!isCowMapping) {
+                        return false;
+                    }
+                    auto phys = ppagealloc(PAGESIZE);
+                    if (phys == 0) {
+                        std::cerr << "Error: Unable to allocate phys page for copy on write\n";
+                        return false;
+                    }
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
-                std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+                    std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
 #endif
-                vmem vm{PAGESIZE * 2};
-                vm.page(0).rwmap(phys);
-                vm.page(1).rmap(pagemap.data.PhysAddr());
-                vm.reload();
-                uint8_t *src = (uint8_t *) vm.pointer();
-                src += PAGESIZE;
-                memcpy(vm.pointer(), src, PAGESIZE);
-                b3.user_access = 1;
-                b3.page_ppn = phys >> 12;
-                b3.writeable = 1;
-                b3.execution_disabled = 1;
-                b3.present = 1;
-                vm.reload();
-                pagemap.data = {};
-                pagemap.phys_page = phys;
-                return true;
+                    vmem vm{PAGESIZE * 2};
+                    vm.page(0).rwmap(phys);
+                    vm.page(1).rmap(pagemap.data.PhysAddr());
+                    vm.reload();
+                    uint8_t *src = (uint8_t *) vm.pointer();
+                    src += PAGESIZE;
+                    memcpy(vm.pointer(), src, PAGESIZE);
+                    b3.user_access = 1;
+                    b3.page_ppn = phys >> 12;
+                    b3.writeable = 1;
+                    b3.execution_disabled = 1;
+                    b3.present = 1;
+                    vm.reload();
+                    pagemap.data = {};
+                    pagemap.phys_page = phys;
+                    return true;
+                } else if (pagemap.cow) {
+                    auto phys = ppagealloc(PAGESIZE);
+                    if (phys == 0) {
+                        std::cerr << "Error: Unable to allocate phys page for copy on write\n";
+                        return false;
+                    }
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
+                    std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+#endif
+                    vmem vm{PAGESIZE * 2};
+                    vm.page(0).rwmap(phys);
+                    vm.page(1).rmap(pagemap.cow->GetPhysPage());
+                    vm.reload();
+                    uint8_t *src = (uint8_t *) vm.pointer();
+                    src += PAGESIZE;
+                    memcpy(vm.pointer(), src, PAGESIZE);
+                    b3.page_ppn = phys >> 12;
+                    b3.writeable = 1;
+                    vm.reload();
+                    pagemap.cow = {};
+                    pagemap.phys_page = phys;
+                    return true;
+                }
             }
         }
     }

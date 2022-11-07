@@ -43,8 +43,26 @@ public:
     PagetableRoot(PagetableRoot &&mv);
 };
 
+class CowPageRef {
+private:
+    phys_t phys_page;
+public:
+    explicit CowPageRef(phys_t phys_page) : phys_page(phys_page) {};
+    CowPageRef(const CowPageRef &) = delete;
+    CowPageRef(CowPageRef &&) = delete;
+    CowPageRef &operator =(const CowPageRef &) = delete;
+    CowPageRef &operator =(CowPageRef &&) = delete;
+    ~CowPageRef() {
+        ppagefree(phys_page, PAGESIZE);
+    }
+    phys_t GetPhysPage() {
+        return phys_page;
+    }
+};
+
 struct PhysMapping {
     filepage_ref data;
+    std::shared_ptr<CowPageRef> cow;
     phys_t phys_page;
     uint32_t page;
 };
@@ -190,6 +208,7 @@ public:
     bool IsInRange(uint32_t pagenum, uint32_t pages);
     void ClearRange(uint32_t pagenum, uint32_t pages);
     uint32_t FindFree(uint32_t pages);
+    void WriteProtectCow();
     void SetProgramBreak(uintptr_t pbrk) {
         program_brk = pbrk;
     }
