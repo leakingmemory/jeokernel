@@ -16,6 +16,6 @@ int64_t Clone::Call(int64_t flags, int64_t new_stackp, int64_t uptr_parent_tidpt
         return -EOPNOTSUPP;
     }
     SyscallCtx ctx{params};
-    ctx.GetProcess().WriteProtectCow();
+    std::shared_ptr<Process> clonedProcess = ctx.GetProcess().Clone();
     return -EOPNOTSUPP;
 }

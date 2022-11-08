@@ -184,6 +184,10 @@ Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class 
     pgrp = pid;
 }
 
+Process::Process(const Process &cp) : sigmask(cp.sigmask), rlimits(cp.rlimits), pid(0), pgrp(cp.pgrp), parent_pid(cp.pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cp.cwd), tty(cp.tty), sigactions(cp.sigactions), exitNotifications(), exitCode(-1), program_brk(cp.program_brk), euid(cp.euid), egid(cp.egid), uid(cp.uid), gid(cp.gid), fwaits() {
+    pid = AllocPid();
+}
+
 Process::~Process() {
     std::vector<std::function<void (intptr_t)>> calls{};
     {
@@ -744,6 +748,16 @@ std::vector<MemMapping> Process::WriteProtectCow() {
         }
     }
     return memMappings;
+}
+
+std::shared_ptr<Process> Process::Clone() {
+    std::shared_ptr<Process> clonedProcess{};
+    {
+        std::lock_guard lock{mtx};
+        clonedProcess = new Process(*this);
+    }
+    clonedProcess->mappings = WriteProtectCow();
+    return clonedProcess;
 }
 
 bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {

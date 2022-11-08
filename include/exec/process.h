@@ -178,7 +178,9 @@ private:
     int32_t euid, egid, uid, gid;
 public:
     Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid);
-    Process(const Process &) = delete;
+private:
+    Process(const Process &cp);
+public:
     Process(Process &&) = delete;
     Process &operator =(const Process &) = delete;
     Process &operator =(Process &&) = delete;
@@ -208,7 +210,10 @@ public:
     bool IsInRange(uint32_t pagenum, uint32_t pages);
     void ClearRange(uint32_t pagenum, uint32_t pages);
     uint32_t FindFree(uint32_t pages);
+private:
     std::vector<MemMapping> WriteProtectCow();
+public:
+    std::shared_ptr<Process> Clone();
     void SetProgramBreak(uintptr_t pbrk) {
         program_brk = pbrk;
     }

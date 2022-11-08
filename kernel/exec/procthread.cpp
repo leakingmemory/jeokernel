@@ -45,8 +45,8 @@ uint32_t ProcThread::FindFree(uint32_t pages) {
     return process->FindFree(pages);
 }
 
-std::vector<MemMapping> ProcThread::WriteProtectCow() {
-    return process->WriteProtectCow();
+std::shared_ptr<Process> ProcThread::Clone() {
+    return process->Clone();
 }
 
 bool ProcThread::IsInRange(uint32_t pagenum, uint32_t pages) {
