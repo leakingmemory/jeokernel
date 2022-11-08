@@ -757,6 +757,19 @@ std::shared_ptr<Process> Process::Clone() {
         clonedProcess = new Process(*this);
     }
     clonedProcess->mappings = WriteProtectCow();
+    for (auto &mapping : clonedProcess->mappings)
+    {
+        uintptr_t pageend = mapping.pagenum;
+        pageend += mapping.pages;
+        for (uintptr_t pageaddr = mapping.pagenum; pageaddr < pageend; pageaddr++) {
+            auto srcPe = Pageentry(pageaddr);
+            if (srcPe) {
+                clonedProcess->Pageentry(pageaddr, [&srcPe] (pageentr &pe) {
+                    pe = *srcPe;
+                });
+            }
+        }
+    }
     return clonedProcess;
 }
 
