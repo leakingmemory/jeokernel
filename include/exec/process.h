@@ -208,7 +208,7 @@ public:
     bool IsInRange(uint32_t pagenum, uint32_t pages);
     void ClearRange(uint32_t pagenum, uint32_t pages);
     uint32_t FindFree(uint32_t pages);
-    void WriteProtectCow();
+    std::vector<MemMapping> WriteProtectCow();
     void SetProgramBreak(uintptr_t pbrk) {
         program_brk = pbrk;
     }

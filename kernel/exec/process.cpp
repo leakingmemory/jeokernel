@@ -716,9 +716,12 @@ uint32_t Process::FindFree(uint32_t pages) {
     return memoryArea->end - pages;
 }
 
-void Process::WriteProtectCow() {
+std::vector<MemMapping> Process::WriteProtectCow() {
+    std::vector<MemMapping> memMappings{};
     std::lock_guard lock{mtx};
     for (auto &mapping : mappings) {
+        auto &newMapping = memMappings.emplace_back(mapping.image, mapping.pagenum, mapping.pages, mapping.image_skip_pages, mapping.load, mapping.cow, mapping.binary_mapping);
+        newMapping.read = mapping.read;
         for (auto &phmap : mapping.mappings) {
             bool wasWriteable{false};
             Pageentry(phmap.page, [&wasWriteable] (pageentr &pe) {
@@ -727,12 +730,20 @@ void Process::WriteProtectCow() {
                     pe.writeable = 0;
                 }
             });
-            if (wasWriteable && phmap.phys_page != 0 && !phmap.data) {
-                phmap.cow = std::make_shared<CowPageRef>(phmap.phys_page);
-                phmap.phys_page = 0;
+            if (wasWriteable || phmap.data) {
+                if (phmap.phys_page != 0 && !phmap.data) {
+                    phmap.cow = std::make_shared<CowPageRef>(phmap.phys_page);
+                    phmap.phys_page = 0;
+                }
+                auto &newPhysMapping = newMapping.mappings.emplace_back();
+                newPhysMapping.phys_page = phmap.phys_page;
+                newPhysMapping.page = phmap.page;
+                newPhysMapping.data = phmap.data;
+                newPhysMapping.cow = phmap.cow;
             }
         }
     }
+    return memMappings;
 }
 
 bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
