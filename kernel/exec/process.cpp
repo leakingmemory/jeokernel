@@ -1728,9 +1728,12 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
     if (b3.writeable != 0) {
         return ResolveWrite::WAS_WRITEABLE;
     }
-    if (mapping->cow) {
-        for (auto &pagemap : mapping->mappings) {
-            if (page == pagemap.page && pagemap.data) {
+    for (auto &pagemap : mapping->mappings) {
+        if (page == pagemap.page) {
+            if (pagemap.data) {
+                if (!mapping->cow) {
+                    break;
+                }
                 auto phys = ppagealloc(PAGESIZE);
                 if (phys == 0) {
                     std::cerr << "Error: Unable to allocate phys page for copy on write\n";
@@ -1753,6 +1756,28 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
                 b3.present = 1;
                 vm.reload();
                 pagemap.data = {};
+                pagemap.phys_page = phys;
+                return ResolveWrite::MADE_WRITEABLE;
+            } else if (pagemap.cow) {
+                auto phys = ppagealloc(PAGESIZE);
+                if (phys == 0) {
+                    std::cerr << "Error: Unable to allocate phys page for copy on write\n";
+                    return ResolveWrite::ERROR;
+                }
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
+                std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+#endif
+                vmem vm{PAGESIZE * 2};
+                vm.page(0).rwmap(phys);
+                vm.page(1).rmap(pagemap.cow->GetPhysPage());
+                vm.reload();
+                uint8_t *src = (uint8_t *) vm.pointer();
+                src += PAGESIZE;
+                memcpy(vm.pointer(), src, PAGESIZE);
+                b3.page_ppn = phys >> 12;
+                b3.writeable = 1;
+                vm.reload();
+                pagemap.cow = {};
                 pagemap.phys_page = phys;
                 return ResolveWrite::MADE_WRITEABLE;
             }
