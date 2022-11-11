@@ -36,6 +36,7 @@ public:
         return resolve_return_value::Return(result);
     }
     void ReturnWhenNotRunning(intptr_t value) const;
+    std::shared_ptr<callctx_async> AsyncCtx() const;
 };
 
 #endif //JEOKERNEL_CALLCTX_H
