@@ -11,13 +11,19 @@
 
 class Interrupt;
 
+class SyscallInterruptFrameVisitor {
+public:
+    virtual void VisitInterruptFrame(Interrupt &intr) = 0;
+};
+
 class SyscallAdditionalParams {
 private:
     int64_t param5, param6;
+    std::function<void (SyscallInterruptFrameVisitor &)> accessInterruptFrame;
     std::function<void (Interrupt &)> modifyCpuState;
     bool doContextSwitch;
 public:
-    SyscallAdditionalParams(int64_t param5, int64_t param6) : param5(param5), param6(param6), modifyCpuState(), doContextSwitch(false) {
+    SyscallAdditionalParams(int64_t param5, int64_t param6, const std::function<void (SyscallInterruptFrameVisitor &)> &accessInterruptFrame) : param5(param5), param6(param6), accessInterruptFrame(accessInterruptFrame), modifyCpuState(), doContextSwitch(false) {
     }
     int64_t Param5() const {
         return param5;
@@ -43,6 +49,9 @@ public:
     }
     void ModifyCpuState(const std::function<void (Interrupt &)> &func) {
         modifyCpuState = func;
+    }
+    void Accept(SyscallInterruptFrameVisitor &visitor) {
+        accessInterruptFrame(visitor);
     }
 };
 
