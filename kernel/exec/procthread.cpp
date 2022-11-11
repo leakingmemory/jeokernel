@@ -4,8 +4,8 @@
 
 #include <exec/procthread.h>
 
-ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid) :
-process(new Process(cwd, tty, parent_pid)), rseq(), fsBase(0), tidAddress(0), robustListHead(0)
+ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) :
+process(new Process(cwd, tty, parent_pid, cmdline)), rseq(), fsBase(0), tidAddress(0), robustListHead(0)
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
 , threadFaulted(false)
 #endif

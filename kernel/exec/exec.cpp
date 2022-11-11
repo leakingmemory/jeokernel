@@ -349,7 +349,7 @@ std::shared_ptr<Process> Exec::Run() {
 
         Pages(pages, loads, userElf);
 
-        auto *process = new ProcThread(cwd_ref, tty, parent_pid);
+        auto *process = new ProcThread(cwd_ref, tty, parent_pid, cmd_name);
         process->SetProgramBreak(loads.program_brk + relocationOffset);
 
         MapPages(binary, process, pages, loads, relocationOffset);

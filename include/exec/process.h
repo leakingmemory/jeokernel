@@ -170,6 +170,7 @@ private:
     std::vector<std::shared_ptr<FutexWait>> fwaits;
     std::vector<BinaryRelocation> relocations;
     std::shared_ptr<kfile> cwd;
+    std::string cmdline;
     std::shared_ptr<class tty> tty;
     std::vector<sigaction_record> sigactions;
     std::vector<std::function<void (intptr_t)>> exitNotifications;
@@ -177,7 +178,7 @@ private:
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
 public:
-    Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid);
+    Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
 private:
     Process(const Process &cp);
 public:
@@ -259,6 +260,9 @@ public:
     bool close_file_descriptor(int fd);
     std::shared_ptr<class tty> GetTty() const {
         return tty;
+    }
+    std::string GetCmdline() const {
+        return cmdline;
     }
     int32_t geteuid() const {
         return euid;
