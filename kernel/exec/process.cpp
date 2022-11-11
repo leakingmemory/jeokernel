@@ -176,7 +176,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) : sigmask(), rlimits(), pid(0), pgrp(0), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), cmdline(cmdline), tty(tty), sigactions(), exitNotifications(), exitCode(-1), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
+Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) : mtx(), self_ref(), sigmask(), rlimits(), pid(0), pgrp(0), parent(), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), cmdline(cmdline), tty(tty), sigactions(), exitNotifications(), exitCode(-1), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
     fileDescriptors.push_back(StdinDesc::Descriptor(tty));
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -184,8 +184,17 @@ Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class 
     pgrp = pid;
 }
 
-Process::Process(const Process &cp) : sigmask(cp.sigmask), rlimits(cp.rlimits), pid(0), pgrp(cp.pgrp), parent_pid(cp.pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cp.cwd), cmdline(cp.cmdline), tty(cp.tty), sigactions(cp.sigactions), exitNotifications(), exitCode(-1), program_brk(cp.program_brk), euid(cp.euid), egid(cp.egid), uid(cp.uid), gid(cp.gid), fwaits() {
+Process::Process(std::shared_ptr<Process> cp) : mtx(), self_ref(), sigmask(cp->sigmask), rlimits(cp->rlimits), pid(0), pgrp(cp->pgrp), parent(cp), parent_pid(cp->pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cp->cwd), cmdline(cp->cmdline), tty(cp->tty), sigactions(cp->sigactions), exitNotifications(), exitCode(-1), program_brk(cp->program_brk), euid(cp->euid), egid(cp->egid), uid(cp->uid), gid(cp->gid), fwaits() {
     pid = AllocPid();
+}
+
+std::shared_ptr<Process>
+Process::Create(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid,
+                const std::string &cmdline) {
+    std::shared_ptr<Process> process{new Process(cwd, tty, parent_pid, cmdline)};
+    std::weak_ptr<Process> weak{process};
+    process->self_ref = weak;
+    return process;
 }
 
 Process::~Process() {
@@ -200,6 +209,17 @@ Process::~Process() {
     for (auto en : calls) {
         en(exitCode);
     }
+    {
+        std::shared_ptr<Process> parentRef{};
+        parentRef = parent.lock();
+        if (parentRef) {
+            parentRef->ChildExitNotification(pid, exitCode);
+        }
+    }
+}
+
+void Process::ChildExitNotification(pid_t pid, intptr_t status) {
+    std::cout << "Child exit "<< std::dec << pid << ": " << status << "\n";
 }
 
 std::optional<pageentr> Process::Pageentry(uint32_t pagenum) {
@@ -752,9 +772,15 @@ std::vector<MemMapping> Process::WriteProtectCow() {
 
 std::shared_ptr<Process> Process::Clone() {
     std::shared_ptr<Process> clonedProcess{};
+    std::shared_ptr<Process> original{};
+    original = this->self_ref.lock();
     {
         std::lock_guard lock{mtx};
-        clonedProcess = new Process(*this);
+        clonedProcess = new Process(original);
+    }
+    {
+        std::weak_ptr<Process> weak{clonedProcess};
+        clonedProcess->self_ref = weak;
     }
     clonedProcess->mappings = WriteProtectCow();
     for (auto &mapping : clonedProcess->mappings)

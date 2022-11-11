@@ -158,10 +158,12 @@ class ProcThread;
 class Process {
 private:
     hw_spinlock mtx;
+    std::weak_ptr<Process> self_ref;
     sigset_t sigmask;
     RLimits rlimits;
     pid_t pid;
     pid_t pgrp;
+    std::weak_ptr<Process> parent;
     pid_t parent_pid;
     std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
@@ -177,16 +179,17 @@ private:
     intptr_t exitCode;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
-public:
-    Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
 private:
-    Process(const Process &cp);
+    Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
+    Process(std::shared_ptr<Process> cp);
 public:
+    static std::shared_ptr<Process> Create(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
     Process(Process &&) = delete;
     Process &operator =(const Process &) = delete;
     Process &operator =(Process &&) = delete;
     ~Process();
 private:
+    void ChildExitNotification(pid_t pid, intptr_t status);
     std::optional<pageentr> Pageentry(uint32_t pagenum);
     bool Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func);
     bool CheckMapOverlap(uint32_t pagenum, uint32_t pages);
