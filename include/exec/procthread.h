@@ -23,6 +23,7 @@ private:
 #endif
 public:
     ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid);
+    explicit ProcThread(std::shared_ptr<Process> process);
     std::shared_ptr<Process> GetProcess() const {
         return process;
     }

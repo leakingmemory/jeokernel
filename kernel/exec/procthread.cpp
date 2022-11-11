@@ -11,6 +11,14 @@ process(new Process(cwd, tty, parent_pid)), rseq(), fsBase(0), tidAddress(0), ro
 #endif
 {}
 
+ProcThread::ProcThread(std::shared_ptr<Process> process) : process(process), rseq(), fsBase(0), tidAddress(0), robustListHead(0)
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+, threadFaulted(false)
+#endif
+{
+
+}
+
 phys_t ProcThread::phys_addr(uintptr_t addr) {
     return process->phys_addr(addr);
 }
