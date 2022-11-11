@@ -346,6 +346,11 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint16_t ds, uint64_t fsb
         .ss = ds
     };
 
+    return new_task(fpusse_state, cpu_state, cpu_frame, resources);
+}
+
+uint32_t tasklist::new_task(const x86_fpu_state &fpusse_state, const InterruptStackFrame &cpu_state,
+                            const InterruptCpuFrame &cpu_frame, const std::vector<task_resource *> &resources) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
