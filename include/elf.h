@@ -237,7 +237,7 @@ struct ELF64_header {
             const int8_t *ptr = (int8_t *) ((void *) &start);
             ptr += se.sh_offset;
             const char *str = (const char *) ptr;
-            if (se.sh_type == SHT_RELA && strcmp(get_cstring(se.sh_name), ".rela.dyn")) {
+            if (se.sh_type == SHT_RELA && strcmp(get_cstring(se.sh_name), ".rela.dyn") == 0) {
                 return &se;
             }
         }
@@ -250,7 +250,7 @@ struct ELF64_header {
             const int8_t *ptr = (int8_t *) ((void *) &start);
             ptr += se.sh_offset;
             const char *str = (const char *) ptr;
-            if (se.sh_type == SHT_STRTAB && strcmp(get_cstring(se.sh_name), ".dynstr")) {
+            if (se.sh_type == SHT_STRTAB && strcmp(get_cstring(se.sh_name), ".dynstr") == 0) {
                 return &se;
             }
         }
