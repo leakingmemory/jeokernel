@@ -49,6 +49,7 @@
 #include "Setpgid.h"
 #include "Clone.h"
 #include "Wait4.h"
+#include "Execve.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -156,6 +157,7 @@ private:
     Setpgid setpgid{*this};
     Clone clone{*this};
     Wait4 wait4{*this};
+    Execve execve{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

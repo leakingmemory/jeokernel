@@ -224,6 +224,7 @@ public:
     bool IsInRange(uint32_t pagenum, uint32_t pages);
     void ClearRange(uint32_t pagenum, uint32_t pages);
     uint32_t FindFree(uint32_t pages);
+    void TearDownMemory();
 private:
     std::vector<MemMapping> WriteProtectCow();
 public:

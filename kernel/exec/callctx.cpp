@@ -23,6 +23,7 @@ public:
     static resolve_return_value NestedResolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value ()>);
     static intptr_t Read(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
     static intptr_t Write(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
+    static intptr_t ReadString(std::shared_ptr<callctx_impl> ref, intptr_t ptr, std::function<resolve_return_value (const std::string &)>);
     static resolve_return_value NestedRead(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
     static resolve_return_value NestedWrite(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
     static void ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intptr_t value);
@@ -109,6 +110,33 @@ intptr_t callctx_impl::Write(std::shared_ptr<callctx_impl> ref, intptr_t ptr, in
     });
 }
 
+intptr_t callctx_impl::ReadString(std::shared_ptr<callctx_impl> ref, intptr_t ptr,
+                                  std::function<resolve_return_value(const std::string &)> func) {
+    auto result = ref->process->resolve_read_nullterm(ptr, ref->is_async, [ref] (intptr_t result) {
+        ref->async->returnAsync(result);
+    }, [ref, func, ptr] (bool success, bool async, size_t len, const std::function<void (uintptr_t)> &) mutable {
+        ref->is_async = async;
+        if (!success) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        std::string str{};
+        {
+            UserMemory usermem{*(ref->process), (uintptr_t) ptr, (uintptr_t) len};
+            if (!usermem) {
+                return resolve_return_value::Return(-EFAULT);
+            }
+            str.append((const char *) usermem.Pointer());
+        }
+        return func(str);
+    });
+    if (result.async) {
+        ref->async->async();
+        return 0;
+    } else {
+        return result.result;
+    }
+}
+
 resolve_return_value callctx_impl::NestedRead(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) {
     return NestedResolve(ref, ptr, len, [ref, ptr, len, func] () mutable {
         std::shared_ptr<UserMemory> usermem{new UserMemory(*(ref->process), (uintptr_t) ptr, (uintptr_t) len)};
@@ -166,6 +194,10 @@ intptr_t callctx::Read(intptr_t ptr, intptr_t len, std::function<resolve_return_
 
 intptr_t callctx::Write(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {
     return callctx_impl::Write(impl, ptr, len, func);
+}
+
+intptr_t callctx::ReadString(intptr_t ptr, std::function<resolve_return_value (const std::string &)> func) const {
+    return callctx_impl::ReadString(impl, ptr, func);
 }
 
 resolve_return_value callctx::NestedRead(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {

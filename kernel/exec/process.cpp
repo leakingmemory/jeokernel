@@ -763,6 +763,21 @@ uint32_t Process::FindFree(uint32_t pages) {
     return memoryArea->end - pages;
 }
 
+void Process::TearDownMemory() {
+    std::lock_guard lock{mtx};
+    for (auto &mapping : mappings) {
+        for (auto &phmap : mapping.mappings) {
+            Pageentry(phmap.page, [] (pageentr &pe) {
+                pe.present = 0;
+                pe.writeable = 0;
+                pe.execution_disabled = 1;
+                pe.page_ppn = 0;
+            });
+        }
+    }
+    mappings.clear();
+}
+
 std::vector<MemMapping> Process::WriteProtectCow() {
     std::vector<MemMapping> memMappings{};
     std::lock_guard lock{mtx};

@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <exec/resolve_return.h>
+#include <string>
 
 class callctx_async {
 public:
@@ -30,6 +31,7 @@ public:
     intptr_t Await(resolve_return_value returnValue) const;
     intptr_t Read(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
     intptr_t Write(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
+    intptr_t ReadString(intptr_t ptr, std::function<resolve_return_value (const std::string &)>) const;
     resolve_return_value NestedRead(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
     resolve_return_value NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
     resolve_return_value Return(intptr_t result) const {
