@@ -83,6 +83,7 @@ public:
         robustListHead = addr;
     }
     void SetExitCode(intptr_t code);
+    bool WaitForAnyChild(child_result &immediateResult, const std::function<void (pid_t, intptr_t)> &orAsync);
 
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
     void SetThreadFaulted(bool faulted) {

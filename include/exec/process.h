@@ -153,6 +153,11 @@ struct sigaction_record {
     struct sigaction sigaction;
 };
 
+struct child_result {
+    intptr_t result;
+    pid_t pid;
+};
+
 class ProcThread;
 
 class Process {
@@ -176,6 +181,8 @@ private:
     std::shared_ptr<class tty> tty;
     std::vector<sigaction_record> sigactions;
     std::vector<std::function<void (intptr_t)>> exitNotifications;
+    std::vector<std::function<void (pid_t pid, intptr_t status)>> childExitNotifications;
+    std::vector<child_result> childResults;
     intptr_t exitCode;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
@@ -190,6 +197,9 @@ public:
     ~Process();
 private:
     void ChildExitNotification(pid_t pid, intptr_t status);
+public:
+    bool WaitForAnyChild(child_result &immediateResult, const std::function<void (pid_t, intptr_t)> &orAsync);
+private:
     std::optional<pageentr> Pageentry(uint32_t pagenum);
     bool Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func);
     bool CheckMapOverlap(uint32_t pagenum, uint32_t pages);

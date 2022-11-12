@@ -191,3 +191,7 @@ std::shared_ptr<kfile> ProcThread::GetCwd() const {
 void ProcThread::SetExitCode(intptr_t code) {
     process->SetExitCode(code);
 }
+
+bool ProcThread::WaitForAnyChild(child_result &immediateResult, const std::function<void(pid_t, intptr_t)> &orAsync) {
+    return process->WaitForAnyChild(immediateResult, orAsync);
+}

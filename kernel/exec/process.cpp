@@ -176,7 +176,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) : mtx(), self_ref(), sigmask(), rlimits(), pid(0), pgrp(0), parent(), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), cmdline(cmdline), tty(tty), sigactions(), exitNotifications(), exitCode(-1), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
+Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) : mtx(), self_ref(), sigmask(), rlimits(), pid(0), pgrp(0), parent(), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), cmdline(cmdline), tty(tty), sigactions(), exitNotifications(), childExitNotifications(), exitCode(-1), program_brk(0), euid(0), egid(0), uid(0), gid(0), fwaits() {
     fileDescriptors.push_back(StdinDesc::Descriptor(tty));
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -184,7 +184,7 @@ Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class 
     pgrp = pid;
 }
 
-Process::Process(std::shared_ptr<Process> cp) : mtx(), self_ref(), sigmask(cp->sigmask), rlimits(cp->rlimits), pid(0), pgrp(cp->pgrp), parent(cp), parent_pid(cp->pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cp->cwd), cmdline(cp->cmdline), tty(cp->tty), sigactions(cp->sigactions), exitNotifications(), exitCode(-1), program_brk(cp->program_brk), euid(cp->euid), egid(cp->egid), uid(cp->uid), gid(cp->gid), fwaits() {
+Process::Process(std::shared_ptr<Process> cp) : mtx(), self_ref(), sigmask(cp->sigmask), rlimits(cp->rlimits), pid(0), pgrp(cp->pgrp), parent(cp), parent_pid(cp->pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cp->cwd), cmdline(cp->cmdline), tty(cp->tty), sigactions(cp->sigactions), exitNotifications(), childExitNotifications(), exitCode(-1), program_brk(cp->program_brk), euid(cp->euid), egid(cp->egid), uid(cp->uid), gid(cp->gid), fwaits() {
     pid = AllocPid();
 }
 
@@ -218,8 +218,31 @@ Process::~Process() {
     }
 }
 
-void Process::ChildExitNotification(pid_t pid, intptr_t status) {
-    std::cout << "Child exit "<< std::dec << pid << ": " << status << "\n";
+void Process::ChildExitNotification(pid_t cpid, intptr_t status) {
+    std::function<void (pid_t, intptr_t)> notify{};
+    {
+        std::lock_guard lock{mtx};
+        if (childExitNotifications.empty()) {
+            childResults.push_back({.result = status, .pid = cpid});
+            return;
+        }
+        auto iterator = childExitNotifications.begin();
+        notify = *iterator;
+        childExitNotifications.erase(iterator);
+    }
+    notify(cpid, status);
+}
+
+bool Process::WaitForAnyChild(child_result &immediateResult, const std::function<void(pid_t, intptr_t)> &orAsync) {
+    std::lock_guard lock{mtx};
+    if (childResults.empty()) {
+        childExitNotifications.push_back(orAsync);
+        return false;
+    }
+    auto iterator = childResults.begin();
+    immediateResult = *iterator;
+    childResults.erase(iterator);
+    return true;
 }
 
 std::optional<pageentr> Process::Pageentry(uint32_t pagenum) {
