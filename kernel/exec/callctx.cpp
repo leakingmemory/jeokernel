@@ -112,7 +112,7 @@ intptr_t callctx_impl::Write(std::shared_ptr<callctx_impl> ref, intptr_t ptr, in
 
 intptr_t callctx_impl::ReadString(std::shared_ptr<callctx_impl> ref, intptr_t ptr,
                                   std::function<resolve_return_value(const std::string &)> func) {
-    auto result = ref->process->resolve_read_nullterm(ptr, ref->is_async, [ref] (intptr_t result) {
+    auto result = ref->process->resolve_read_nullterm(ptr, 1, ref->is_async, [ref] (intptr_t result) {
         ref->async->returnAsync(result);
     }, [ref, func, ptr] (bool success, bool async, size_t len, const std::function<void (uintptr_t)> &) mutable {
         ref->is_async = async;

@@ -1913,7 +1913,7 @@ phys_t Process::phys_addr(uintptr_t addr) {
     return paddr;
 }
 
-resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uintptr_t addr, size_t add_len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, size_t, std::function<void (intptr_t)>)> func) {
+resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uintptr_t addr, size_t item_size, size_t add_len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, size_t, std::function<void (intptr_t)>)> func) {
     auto len = 0;
     while (readable(addr)) {
         auto page = addr >> 12;
@@ -1936,7 +1936,14 @@ resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uin
         str += offset;
         int i = 0;
         while (i < remaining) {
-            if (*str == 0) {
+            bool nonzero{false};
+            for (int j = 0; j < item_size; j++) {
+                if (str[j] != 0) {
+                    nonzero = true;
+                    break;
+                }
+            }
+            if (!nonzero) {
                 auto result = func(true, async, len + add_len, asyncReturn);
                 if (async && !result.async) {
                     asyncReturn(result.result);
@@ -1944,14 +1951,14 @@ resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uin
                 }
                 return result;
             }
-            ++str;
-            ++i;
+            str += item_size;
+            i += item_size;
             ++len;
         }
-        addr += remaining;
+        addr += i;
     }
     std::lock_guard lock{pfault_lck};
-    activate_fault({.pfaultTask = nullptr, .process = &thread, .ip = 0, .address = addr, .func = [this, &thread, addr, func, len, add_len, asyncReturn] (bool success) mutable {
+    activate_fault({.pfaultTask = nullptr, .process = &thread, .ip = 0, .address = addr, .func = [this, &thread, addr, func, item_size, len, add_len, asyncReturn] (bool success) mutable {
         if (!success) {
             auto result = func(false, true, 0, asyncReturn);
             if (!result.async) {
@@ -1975,8 +1982,16 @@ resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uin
             vm.reload();
             const char *str = (const char *) vm.pointer();
             str += offset;
-            for (int i = 0; i < remaining; i++) {
-                if (*str == 0) {
+            int i = 0;
+            while (i < remaining) {
+                bool nonzero{false};
+                for (int j = 0; j < item_size; j++) {
+                    if (str[j] != 0) {
+                        nonzero = true;
+                        break;
+                    }
+                }
+                if (!nonzero) {
                     auto result = func(true, true, len + add_len, asyncReturn);
                     if (!result.async) {
                         asyncReturn(result.result);
@@ -1984,18 +1999,19 @@ resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uin
                     return;
                 }
                 ++len;
-                ++str;
+                str += item_size;
+                i += item_size;
             }
-            addr += 4096;
-            resolve_read_nullterm_impl(thread, addr, len + add_len, true, asyncReturn, func);
+            addr += i;
+            resolve_read_nullterm_impl(thread, addr, item_size, len + add_len, true, asyncReturn, func);
         }
     }});
     activate_pfault_thread();
     return resolve_return_value::AsyncReturn();
 }
 
-resolve_and_run Process::resolve_read_nullterm(ProcThread &thread, uintptr_t addr, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, size_t, std::function<void (intptr_t)>)> func) {
-    auto result = resolve_read_nullterm_impl(thread, addr, 0, async, asyncReturn, func);
+resolve_and_run Process::resolve_read_nullterm(ProcThread &thread, uintptr_t addr, size_t item_size, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, size_t, std::function<void (intptr_t)>)> func) {
+    auto result = resolve_read_nullterm_impl(thread, addr, item_size, 0, async, asyncReturn, func);
     return {.result = result.result, .async = result.async, .hasValue = result.hasValue};
 }
 

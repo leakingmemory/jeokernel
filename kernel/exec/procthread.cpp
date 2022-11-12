@@ -23,8 +23,8 @@ phys_t ProcThread::phys_addr(uintptr_t addr) {
     return process->phys_addr(addr);
 }
 
-resolve_and_run ProcThread::resolve_read_nullterm(uintptr_t addr, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, size_t, std::function<void (intptr_t)>)> func) {
-    return process->resolve_read_nullterm(*this, addr, async, asyncReturn, func);
+resolve_and_run ProcThread::resolve_read_nullterm(uintptr_t addr, size_t item_size, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, size_t, std::function<void (intptr_t)>)> func) {
+    return process->resolve_read_nullterm(*this, addr, item_size, async, asyncReturn, func);
 }
 
 resolve_and_run ProcThread::resolve_read(uintptr_t addr, uintptr_t len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, std::function<void (intptr_t)>)> func) {

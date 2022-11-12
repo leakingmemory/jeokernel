@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <iostream>
+#include "SyscallCtx.h"
 
 int Access::DoAccess(ProcThread &proc, std::string filename, int mode) {
     constexpr int allAccess = F_OK | X_OK | W_OK | R_OK;
@@ -60,35 +61,16 @@ int Access::DoAccess(ProcThread &proc, std::string filename, int mode) {
 }
 
 int64_t Access::Call(int64_t uptr_filename, int64_t mode, int64_t, int64_t, SyscallAdditionalParams &params) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
-    auto result = process->resolve_read_nullterm(uptr_filename, false, [scheduler, current_task] (intptr_t result) {
-        scheduler->when_not_running(*current_task, [current_task, result] () {
-            current_task->get_cpu_state().rax = (uint64_t) result;
-            current_task->set_blocked(false);
-        });
-    }, [this, process, uptr_filename, mode] (bool success, bool, size_t slen, std::function<void (intptr_t)> asyncFunc) {
-        if (!success) {
-            return resolve_return_value::Return(-EFAULT);
-        }
-        std::string filename{};
-        {
-            UserMemory filename_mem{*process, (uintptr_t) uptr_filename, slen};
-            filename.append((const char *) filename_mem.Pointer(), slen);
-        }
-        Queue([this, filename, mode, process, asyncFunc] () mutable {
-            auto res = DoAccess(*process, filename, mode);
+    SyscallCtx ctx{params};
+
+    return ctx.ReadString(uptr_filename, [this, ctx, mode] (const std::string &u_filename) {
+        std::string filename{u_filename};
+
+        Queue([this, ctx, filename, mode] () mutable {
+            auto res = DoAccess(ctx.GetProcess(), filename, mode);
             std::cout << "access(" << filename << ", " << std::hex << mode << std::dec << ") => " << res << "\n";
-            asyncFunc(res);
+            ctx.ReturnWhenNotRunning(res);
         });
         return resolve_return_value::AsyncReturn();
     });
-    if (result.async) {
-        current_task->set_blocked(true);
-        params.DoContextSwitch(true);
-        return 0;
-    } else {
-        return result.result;
-    }
 }

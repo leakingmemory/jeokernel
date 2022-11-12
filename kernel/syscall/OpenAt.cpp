@@ -11,6 +11,7 @@
 #include <iostream>
 #include <kfs/kfiles.h>
 #include <exec/files.h>
+#include "SyscallCtx.h"
 
 constexpr int supportedOpenFlags = (3 | O_CLOEXEC | O_NONBLOCK);
 constexpr int notSupportedOpenFlags = ~supportedOpenFlags;
@@ -101,35 +102,15 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
 }
 
 int64_t OpenAt::Call(int64_t dfd, int64_t uptr_filename, int64_t flags, int64_t mode, SyscallAdditionalParams &params) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
-    auto result = process->resolve_read_nullterm(uptr_filename, false, [scheduler, current_task] (intptr_t result) {
-        scheduler->when_not_running(*current_task, [current_task, result]() {
-            current_task->get_cpu_state().rax = (uint64_t) result;
-            current_task->set_blocked(false);
-        });
-    },
-    [this, process, uptr_filename, dfd, flags, mode] (bool success, bool, size_t slen, std::function<void (intptr_t)> asyncFunc) {
-        if (!success) {
-            return resolve_return_value::Return(-EFAULT);
-        }
-        std::string filename{};
-        {
-            UserMemory filename_mem{*process, (uintptr_t) uptr_filename, slen};
-            filename.append((const char *) filename_mem.Pointer(), slen);
-        }
-        Queue([this, process, filename, dfd, flags, mode, asyncFunc] () mutable {
-            auto res = DoOpenAt(*process, dfd, filename, flags, mode);
-            asyncFunc(res);
+    SyscallCtx ctx{params};
+
+    return ctx.ReadString(uptr_filename, [this, ctx, dfd, flags, mode] (const std::string &u_filename) {
+        std::string filename{u_filename};
+
+        Queue([this, ctx, filename, dfd, flags, mode] () mutable {
+            auto res = DoOpenAt(ctx.GetProcess(), dfd, filename, flags, mode);
+            ctx.ReturnWhenNotRunning(res);
         });
         return resolve_return_value::AsyncReturn();
     });
-    if (result.async) {
-        current_task->set_blocked(true);
-        params.DoContextSwitch(true);
-        return 0;
-    } else {
-        return result.result;
-    }
 }
