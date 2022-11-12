@@ -777,8 +777,8 @@ std::vector<MemMapping> Process::WriteProtectCow() {
                     pe.writeable = 0;
                 }
             });
-            if (wasWriteable || phmap.data) {
-                if (phmap.phys_page != 0 && !phmap.data) {
+            if (wasWriteable || phmap.data || phmap.cow) {
+                if (phmap.phys_page != 0 && !phmap.data && !phmap.cow) {
                     phmap.cow = std::make_shared<CowPageRef>(phmap.phys_page);
                     phmap.phys_page = 0;
                 }
