@@ -26,6 +26,9 @@ public:
     static intptr_t ReadString(std::shared_ptr<callctx_impl> ref, intptr_t ptr, std::function<resolve_return_value (const std::string &)>);
     static resolve_return_value NestedRead(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
     static resolve_return_value NestedWrite(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>);
+    static resolve_return_value NestedReadNullterminatedArrayOfPointers(std::shared_ptr<callctx_impl> ref, intptr_t ptr, std::function<resolve_return_value (void **, size_t)>);
+    static resolve_return_value NestedReadString(std::shared_ptr<callctx_impl> ref, intptr_t ptr, std::function<resolve_return_value (const std::string &)>);
+    static resolve_return_value NestedReadArrayOfStrings(std::shared_ptr<callctx_impl> ref, void **vptr, size_t len, std::function<resolve_return_value (const std::vector<std::string> &)>);
     static void ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intptr_t value);
     static std::shared_ptr<callctx_async> AsyncCtx(std::shared_ptr<callctx_impl> ref);
 };
@@ -121,11 +124,11 @@ intptr_t callctx_impl::ReadString(std::shared_ptr<callctx_impl> ref, intptr_t pt
         }
         std::string str{};
         {
-            UserMemory usermem{*(ref->process), (uintptr_t) ptr, (uintptr_t) len};
+            UserMemory usermem{*(ref->process), (uintptr_t) ptr, ((uintptr_t) len)};
             if (!usermem) {
                 return resolve_return_value::Return(-EFAULT);
             }
-            str.append((const char *) usermem.Pointer());
+            str.append((const char *) usermem.Pointer(), len);
         }
         return func(str);
     });
@@ -160,6 +163,117 @@ resolve_return_value callctx_impl::NestedWrite(std::shared_ptr<callctx_impl> ref
         }
         return func(usermem->Pointer());
     });
+}
+
+resolve_return_value callctx_impl::NestedReadNullterminatedArrayOfPointers(std::shared_ptr<callctx_impl> ref,
+                                                                           intptr_t ptr,
+                                                                           std::function<resolve_return_value(
+                                                                                   void **, size_t len)> func) {
+    auto result = ref->process->resolve_read_nullterm(ptr, sizeof(void *), ref->is_async, [ref] (intptr_t result) {
+        ref->async->returnAsync(result);
+    }, [ref, ptr, func] (bool success, bool async, size_t len, const std::function<void (uintptr_t)> &) mutable {
+        ref->is_async |= async;
+        if (!success) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        std::shared_ptr<UserMemory> usermem{new UserMemory(*(ref->process), (uintptr_t) ptr, ((uintptr_t) len) * sizeof(void *))};
+        ref->memRefs.push_back(usermem);
+        if (!(*usermem)) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        return func((void **) usermem->Pointer(), len);
+    });
+    if (result.hasValue) {
+        return resolve_return_value::Return(result.result);
+    } else if (result.async) {
+        return resolve_return_value::AsyncReturn();
+    } else {
+        return resolve_return_value::NoReturn();
+    }
+}
+
+resolve_return_value callctx_impl::NestedReadArrayOfStrings(std::shared_ptr<callctx_impl> ref, void **vptr, size_t len,
+                                                            std::function<resolve_return_value(
+                                                                    const std::vector<std::string> &)> func) {
+    if (len <= 0) {
+        std::vector<std::string> emptyArray{};
+        return func(emptyArray);
+    }
+    struct Context {
+        hw_spinlock lock{};
+        std::vector<std::string> strings{};
+        resolve_return_value result{resolve_return_value::Return(0)};
+        size_t remaining;
+        bool complete;
+        bool async;
+        bool returned;
+    };
+    std::shared_ptr<Context> context = std::make_shared<Context>();
+    context->strings.reserve(len);
+    context->remaining = len;
+    context->complete = false;
+    context->async = false;
+    context->returned = false;
+    for (size_t i = 0; i < len; i++) {
+        context->strings.emplace_back();
+    }
+    for (size_t i = 0; i < len; i++) {
+        intptr_t ptr = (intptr_t) vptr[i];
+        ref->process->resolve_read_nullterm(ptr, 1, true, [ref, context] (intptr_t) {
+            std::unique_lock lock{context->lock};
+            if (context->complete && !context->returned) {
+                auto result = context->result;
+                context->returned = true;
+                lock.release();
+                if (result.hasValue) {
+                    callctx_impl::ReturnWhenNotRunning(ref, result.result);
+                }
+            }
+        }, [ref, context, func, ptr, i] (bool success, bool async, size_t len, const std::function<void(intptr_t)> &) mutable {
+            if (!success) {
+                std::lock_guard lock{context->lock};
+                context->complete = true;
+                context->result = resolve_return_value::Return(-EFAULT);
+                return context->result;
+            }
+            std::string str{};
+            {
+                UserMemory userMemory{*(ref->process), (uintptr_t) ptr, len};
+                if (!userMemory) {
+                    std::lock_guard lock{context->lock};
+                    context->complete = true;
+                    context->result = resolve_return_value::Return(-EFAULT);
+                    return context->result;
+                }
+                str.append((const char *) userMemory.Pointer(), len);
+            }
+            {
+                std::lock_guard lock{context->lock};
+                if (context->complete) {
+                    return context->result;
+                }
+                context->strings[i] = str;
+                --(context->remaining);
+                if (context->remaining != 0) {
+                    return resolve_return_value::Return(0);
+                }
+            }
+            auto result = func(context->strings);
+            std::lock_guard lock{context->lock};
+            context->result = result;
+            context->complete = true;
+            return context->result;
+        });
+    }
+    std::unique_lock lock{context->lock};
+    if (context->complete && !context->returned) {
+        auto result = context->result;
+        context->returned = true;
+        lock.release();
+        return result;
+    }
+    context->async = true;
+    return resolve_return_value::AsyncReturn();
 }
 
 void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intptr_t value) {
@@ -206,6 +320,16 @@ resolve_return_value callctx::NestedRead(intptr_t ptr, intptr_t len, std::functi
 
 resolve_return_value callctx::NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {
     return callctx_impl::NestedWrite(impl, ptr, len, func);
+}
+
+resolve_return_value
+callctx::NestedReadNullterminatedArrayOfPointers(intptr_t ptr, std::function<resolve_return_value(void **, size_t)> func) {
+    return callctx_impl::NestedReadNullterminatedArrayOfPointers(impl, ptr, func);
+}
+
+resolve_return_value callctx::NestedReadArrayOfStrings(void **vptr, size_t len, std::function<resolve_return_value(
+        const std::vector<std::string> &)> func) {
+    return callctx_impl::NestedReadArrayOfStrings(impl, vptr, len, func);
 }
 
 void callctx::ReturnWhenNotRunning(intptr_t value) const {
