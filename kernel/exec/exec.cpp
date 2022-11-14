@@ -312,12 +312,12 @@ public:
     }
 };
 
-std::shared_ptr<Process> Exec::Run() {
+ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success, const ExecStartVector &)> &c_func) {
     std::string cmd_name = name;
     UserElf userElf{binary};
     if (!userElf.is_valid()) {
         std::cerr << "Not valid ELF64\n";
-        return {};
+        return ExecResult::SOFTERROR;
     }
     constexpr uint64_t lowerUserspaceEnd = ((uint64_t) USERSPACE_LOW_END) << (9+9+12);
     constexpr uint64_t upperUserspaceStart = ((uint64_t) PMLT4_USERSPACE_HIGH_START) << (9+9+9+12);
@@ -325,7 +325,7 @@ std::shared_ptr<Process> Exec::Run() {
     uintptr_t fsBase{0};
     {
         if (!LoadLoads(*binary, loads, userElf)) {
-            return {};
+            return ExecResult::SOFTERROR;
         }
         fsBase = loads.tlsStart + loads.tlsMemSize;
         if (loads.tlsAlign != 0) {
@@ -349,7 +349,8 @@ std::shared_ptr<Process> Exec::Run() {
 
         Pages(pages, loads, userElf);
 
-        auto *process = new ProcThread(cwd_ref, tty, parent_pid, cmd_name);
+        // PONR
+
         process->SetProgramBreak(loads.program_brk + relocationOffset);
 
         MapPages(binary, process, pages, loads, relocationOffset);
@@ -376,13 +377,11 @@ std::shared_ptr<Process> Exec::Run() {
         uintptr_t stackAddr = process->FindFree(stackPages);
         if (stackAddr == 0) {
             std::cerr << "Error: Unable to allocate stack space\n";
-            delete process;
-            return {};
+            return ExecResult::FATALERROR;
         }
         if (!process->Map(stackAddr, stackPages, false)) {
             std::cerr << "Error: Unable to allocate stack space (map failed)\n";
-            delete process;
-            return {};
+            return ExecResult::FATALERROR;
         }
         stackAddr += stackPages;
         stackAddr = stackAddr << 12;
@@ -410,13 +409,12 @@ std::shared_ptr<Process> Exec::Run() {
         auto sizePhEnt = userElf.get_size_of_program_entry();
         auto numPhEnt = userElf.get_num_program_entries();
 
-        std::shared_ptr<ProcessStart> processStart{new ProcessStart};
+        std::function<void (bool, const ExecStartVector &)> func{c_func};
 
-        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [execState, loads, interpreter, process, random, environ, argv, argc, programHeaderAddr, sizePhEnt, numPhEnt, entrypoint, cmd_name, fsBase, processStart] (bool success, uintptr_t randomAddr) mutable {
+        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [execState, loads, interpreter, process, random, environ, argv, argc, programHeaderAddr, sizePhEnt, numPhEnt, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t randomAddr) mutable {
             if (!success) {
                 std::cerr << "Error: Failed to push random data to stack for new process\n";
-                delete process;
-                processStart->Return();
+                func(false, {});
                 return;
             }
             std::shared_ptr<std::vector<ELF64_auxv>> auxv{new std::vector<ELF64_auxv>};
@@ -430,21 +428,19 @@ std::shared_ptr<Process> Exec::Run() {
             if (!interpreter.empty()) {
                 auto interpreterFile = execState->ResolveFile(interpreter);
                 if (!interpreterFile) {
-                    delete process;
-                    processStart->Return();
+                    std::cerr << "Error: Interpreter not found: " << interpreter << "\n";
+                    func(false, {});
                     return;
                 }
                 UserElf interpreterElf{interpreterFile};
                 if (!interpreterElf.is_valid()) {
                     std::cerr << "interpreter: " << interpreter << ": Not valid ELF64\n";
-                    delete process;
-                    processStart->Return();
+                    func(false, {});
                     return;
                 }
                 ELF_loads interpreterLoads{};
                 if (!LoadLoads(*interpreterFile, interpreterLoads, interpreterElf)) {
-                    delete process;
-                    processStart->Return();
+                    func(false, {});
                     return;
                 }
 
@@ -455,26 +451,25 @@ std::shared_ptr<Process> Exec::Run() {
                 uintptr_t interpreterRelocate{0};
                 if (!process->IsFree(interpreterLoads.startpage, interpreterLoads.endpage - interpreterLoads.startpage)) {
                     std::cout << "Interpreter " << std::hex << interpreterLoads.startpage
-                    << "-" << interpreterLoads.endpage << std::dec << " must be relocated\n";
+                              << "-" << interpreterLoads.endpage << std::dec << " must be relocated\n";
 
                     interpreterRelocate = loads.endpage + 1;
 
                     if (process->IsFree(interpreterLoads.startpage + interpreterRelocate, interpreterLoads.endpage - interpreterLoads.startpage)) {
                         std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
-                        << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                                  << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
                     } else {
                         std::cerr << "(fail+fallback) Interpreter not relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
-                        << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                                  << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
                         auto startpage = process->FindFree(interpreterLoads.endpage - interpreterLoads.startpage);
                         if (startpage == 0) {
                             std::cerr << "Error: Could not allocate vspace for ELF interpreter\n";
-                            delete process;
-                            processStart->Return();
+                            func(false, {});
                             return;
                         }
                         interpreterRelocate = interpreterLoads.startpage - startpage;
                         std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
-                        << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
+                                  << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
                     }
                 }
 
@@ -498,74 +493,62 @@ std::shared_ptr<Process> Exec::Run() {
                 auxv->push_back({.type = AT_BASE, .uintptr = interpreterBase});
             }
 
-            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase, processStart] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) {
+            process->push_strings(randomAddr, environ->begin(), environ->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environ, argv, argc, auxv, entrypoint, cmd_name, fsBase, func] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
                 if (!success) {
                     std::cerr << "Error: Failed to push environment to stack for new process\n";
-                    delete process;
-                    processStart->Return();
+                    func(false, {});
                     return;
                 }
                 std::vector<uintptr_t> environPtrs{ptrs};
-                process->push_strings(stackAddr, argv->begin(), argv->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environPtrs, argv, argc, auxv, entrypoint, cmd_name, fsBase, processStart] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
+                process->push_strings(stackAddr, argv->begin(), argv->end(), std::vector<uintptr_t>(), [execState, loads, interpreter, process, environPtrs, argv, argc, auxv, entrypoint, cmd_name, fsBase, func] (bool success, const std::vector<uintptr_t> &ptrs, uintptr_t stackAddr) mutable {
                     if (!success) {
                         std::cerr << "Error: Failed to push args to stack for new process\n";
-                        delete process;
-                        processStart->Return();
+                        func(false, {});
                         return;
                     }
                     stackAddr = (stackAddr + 8) & ~((uintptr_t) 0xf);
                     stackAddr -= 8;
                     std::vector<uintptr_t> argvPtrs{ptrs};
-                    process->push_64(stackAddr, 0, [execState, loads, interpreter, process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase, processStart] (bool success, uintptr_t stackAddr) mutable {
+                    process->push_64(stackAddr, 0, [execState, loads, interpreter, process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t stackAddr) mutable {
                         if (!success) {
                             std::cerr << "Error: Failed to push end of auxv to stack for new process\n";
-                            delete process;
-                            processStart->Return();
+                            func(false, {});
                             return;
                         }
-                        process->push_data(stackAddr, &(auxv->at(0)), sizeof(auxv->at(0)) * auxv->size(), [execState, loads, interpreter, process, auxv, environPtrs, argvPtrs, argc, entrypoint, cmd_name, fsBase, processStart] (bool success, uintptr_t auxvAddr) mutable {
+                        process->push_data(stackAddr, &(auxv->at(0)), sizeof(auxv->at(0)) * auxv->size(), [execState, loads, interpreter, process, auxv, environPtrs, argvPtrs, argc, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t auxvAddr) mutable {
                             if (!success) {
                                 std::cerr << "Error: Failed to push auxv to stack for new process\n";
-                                delete process;
-                                processStart->Return();
+                                func(false, {});
                                 return;
                             }
                             std::shared_ptr<std::vector<uintptr_t>> environ{new std::vector<uintptr_t>(environPtrs)};
                             environ->push_back(0);
-                            process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [execState, loads, interpreter, process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase, processStart] (bool success, uintptr_t environAddr) {
+                            process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [execState, loads, interpreter, process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t environAddr) mutable {
                                 if (!success) {
                                     std::cerr << "Error: Failed to push environment to stack for new process\n";
-                                    delete process;
-                                    processStart->Return();
+                                    func(false, {});
                                     return;
                                 }
                                 std::shared_ptr<std::vector<uintptr_t>> argv{new std::vector<uintptr_t>(argvPtrs)};
                                 argv->push_back(0);
-                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [execState, loads, interpreter, process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase, processStart] (bool success, uintptr_t stackAddr) {
+                                process->push_data(environAddr, &(argv->at(0)), sizeof(argv->at(0)) * argv->size(), [execState, loads, interpreter, process, argv, auxvAddr, environAddr, argc, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t stackAddr) mutable {
                                     if (!success) {
                                         std::cerr << "Error: Failed to push args to stack for new process\n";
-                                        delete process;
-                                        processStart->Return();
+                                        func(false, {});
                                         return;
                                     }
-                                    process->push_64(stackAddr, argc, [execState, loads, interpreter, process, entrypoint, cmd_name, fsBase, processStart] (bool success, uintptr_t stackAddr) {
+                                    process->push_64(stackAddr, argc, [execState, loads, interpreter, process, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t stackAddr) mutable {
                                         if (!success) {
                                             std::cerr << "Error: Failed to push args count to stack for new process\n";
-                                            delete process;
-                                            processStart->Return();
+                                            func(false, {});
                                             return;
                                         }
-                                        std::vector<task_resource *> resources{};
-                                        auto *scheduler = get_scheduler();
-                                        resources.push_back(process);
-                                        processStart->Return(process->GetProcess());
-                                        auto pid = scheduler->new_task(
-                                                entrypoint,
-                                                0x18 | 3 /* ring3 / lowest*/,
-                                                0x20 | 3, fsBase, 0, stackAddr, 0, 0, 0,
-                                                0, 0, 0, resources);
-                                        std::cout << "Started task " << pid << "\n";
-                                        scheduler->set_name(pid, cmd_name);
+                                        ExecStartVector startVector{
+                                            .entrypoint = entrypoint,
+                                            .fsBase = fsBase,
+                                            .stackAddr = stackAddr
+                                        };
+                                        func(true, startVector);
                                     });
                                 });
                             });
@@ -574,6 +557,30 @@ std::shared_ptr<Process> Exec::Run() {
                 });
             });
         });
-        return processStart->Await();
+        return ExecResult::DETACHED;
     }
+}
+
+std::shared_ptr<Process> Exec::Run() {
+    std::string cmd_name = name;
+    auto *process = new ProcThread(cwd_ref, tty, parent_pid, cmd_name);
+    std::shared_ptr<ProcessStart> processStart{new ProcessStart};
+    auto result = Run(process, [process, cmd_name, processStart] (bool success, const ExecStartVector &startVector) {
+        std::vector<task_resource *> resources{};
+        auto *scheduler = get_scheduler();
+        resources.push_back(process);
+        processStart->Return(process->GetProcess());
+        auto pid = scheduler->new_task(
+                startVector.entrypoint,
+                0x18 | 3 /* ring3 / lowest*/,
+                0x20 | 3, startVector.fsBase, 0, startVector.stackAddr, 0, 0, 0,
+                0, 0, 0, resources);
+        std::cout << "Started task " << pid << "\n";
+        scheduler->set_name(pid, cmd_name);
+    });
+    if (result != ExecResult::DETACHED) {
+        delete process;
+        return {};
+    }
+    return processStart->Await();
 }

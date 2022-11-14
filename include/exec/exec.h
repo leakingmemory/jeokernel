@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 #include <sys/types.h>
+#include <functional>
 
 class tty;
 class kfile;
@@ -30,6 +31,18 @@ public:
 
 class Process;
 
+enum class ExecResult {
+    DETACHED,
+    SOFTERROR,
+    FATALERROR
+};
+
+struct ExecStartVector {
+    uintptr_t entrypoint;
+    uintptr_t fsBase;
+    uintptr_t stackAddr;
+};
+
 class Exec {
 private:
     std::shared_ptr<class tty> tty;
@@ -45,6 +58,7 @@ private:
     static void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);
     static void MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset);
 public:
+    ExecResult Run(ProcThread *process, const std::function<void (bool success, const ExecStartVector &)> &);
     std::shared_ptr<Process> Run();
 };
 
