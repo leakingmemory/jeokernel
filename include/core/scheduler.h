@@ -218,6 +218,9 @@ public:
         return bits.end;
     }
 
+    x86_fpu_state &get_fpu_state() {
+        return fpu_sse_state;
+    }
     InterruptCpuFrame &get_cpu_frame() {
         return cpu_frame;
     }

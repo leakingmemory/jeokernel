@@ -30,6 +30,8 @@ public:
     static resolve_return_value NestedReadString(std::shared_ptr<callctx_impl> ref, intptr_t ptr, std::function<resolve_return_value (const std::string &)>);
     static resolve_return_value NestedReadArrayOfStrings(std::shared_ptr<callctx_impl> ref, void **vptr, size_t len, std::function<resolve_return_value (const std::vector<std::string> &)>);
     static void ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intptr_t value);
+    static void KillAsync(std::shared_ptr<callctx_impl> ref);
+    static void EntrypointAsync(std::shared_ptr<callctx_impl> ref, uintptr_t entrypoint, uintptr_t fsBase, uintptr_t stackPtr);
     static std::shared_ptr<callctx_async> AsyncCtx(std::shared_ptr<callctx_impl> ref);
 };
 
@@ -283,6 +285,33 @@ void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intpt
     });
 }
 
+void callctx_impl::KillAsync(std::shared_ptr<callctx_impl> ref) {
+    ref->scheduler->when_not_running(*(ref->current_task), [ref] {
+        ref->current_task->set_end(true);
+    });
+}
+
+void callctx_impl::EntrypointAsync(std::shared_ptr<callctx_impl> ref, uintptr_t entrypoint, uintptr_t fsBase,
+                                   uintptr_t stackPtr) {
+    ref->scheduler->when_not_running(*(ref->current_task), [ref, entrypoint, stackPtr, fsBase] {
+        ref->current_task->get_fpu_state() = {};
+        auto &state = ref->current_task->get_cpu_state();
+        auto &frame = ref->current_task->get_cpu_frame();
+        state = {};
+        frame = {};
+        frame.rip = entrypoint;
+        frame.cs = 0x18 | 3;
+        frame.rsp = stackPtr;
+        frame.ss = 0x20 | 3;
+        state.ds = 0x20 | 3;
+        state.es = 0x20 | 3;
+        state.fs = 0x20 | 3;
+        state.gs = 0x20 | 3;
+        state.fsbase = fsBase;
+        ref->current_task->set_blocked(false);
+    });
+}
+
 std::shared_ptr<callctx_async> callctx_impl::AsyncCtx(std::shared_ptr<callctx_impl> ref) {
     return ref->async;
 }
@@ -334,6 +363,14 @@ resolve_return_value callctx::NestedReadArrayOfStrings(void **vptr, size_t len, 
 
 void callctx::ReturnWhenNotRunning(intptr_t value) const {
     callctx_impl::ReturnWhenNotRunning(impl, value);
+}
+
+void callctx::KillAsync() const {
+    callctx_impl::KillAsync(impl);
+}
+
+void callctx::EntrypointAsync(uintptr_t entrypoint, uintptr_t fsBase, uintptr_t stackPtr) const {
+    callctx_impl::EntrypointAsync(impl, entrypoint, fsBase, stackPtr);
 }
 
 std::shared_ptr<callctx_async> callctx::AsyncCtx() const {

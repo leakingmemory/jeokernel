@@ -6,10 +6,11 @@
 #define JEOKERNEL_EXECVE_H
 
 #include "SyscallHandler.h"
+#include "SyscallAsyncThread.h"
 
-class Execve : public Syscall{
+class Execve : public Syscall, private SyscallAsyncThread {
 public:
-    Execve(SyscallHandler &handler) : Syscall(handler, 59) {}
+    Execve(SyscallHandler &handler) : Syscall(handler, 59), SyscallAsyncThread("[execve]") {}
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;
 };
 

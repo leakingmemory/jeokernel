@@ -41,6 +41,8 @@ public:
         return resolve_return_value::Return(result);
     }
     void ReturnWhenNotRunning(intptr_t value) const;
+    void KillAsync() const;
+    void EntrypointAsync(uintptr_t entrypoint, uintptr_t fsBase, uintptr_t stackPtr) const;
     std::shared_ptr<callctx_async> AsyncCtx() const;
 };
 
