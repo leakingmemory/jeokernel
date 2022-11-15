@@ -50,6 +50,7 @@
 #include "Clone.h"
 #include "Wait4.h"
 #include "Execve.h"
+#include "Prctl.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -158,6 +159,7 @@ private:
     Clone clone{*this};
     Wait4 wait4{*this};
     Execve execve{*this};
+    Prctl prctl{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
