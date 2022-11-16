@@ -15,6 +15,7 @@
 #include <tuple>
 #include <filesystems/filesystem.h>
 #include <devfs/devfsinit.h>
+#include <procfs/procfs.h>
 
 static parttable_readers *parttableReaders = nullptr;
 static blockdevsystem *blockdevSystem = nullptr;
@@ -265,6 +266,7 @@ void init_blockdevsystem() {
     init_filesystem_providers();
     register_filesystem_providers();
     InstallDevfs();
+    InstallProcfs();
 }
 
 blockdevsystem &get_blockdevsystem() {

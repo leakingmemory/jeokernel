@@ -38,6 +38,7 @@ add_subdirectory(random)
 add_subdirectory(clock)
 add_subdirectory(devfs)
 add_subdirectory(tty)
+add_subdirectory(procfs)
 
 add_library(bootstrap bootstrap.S)
 
@@ -91,3 +92,4 @@ target_link_libraries(kernel.full PRIVATE clock)
 target_link_libraries(kernel.full PRIVATE devfs)
 target_link_libraries(kernel.full PRIVATE ttydev)
 target_link_libraries(kernel.full PRIVATE tty)
+target_link_libraries(kernel.full PRIVATE procfs)
