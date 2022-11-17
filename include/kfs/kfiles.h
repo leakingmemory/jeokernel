@@ -50,7 +50,7 @@ public:
 
 class kstatable {
 public:
-    virtual void stat(struct stat &st) = 0;
+    virtual void stat(struct stat64 &st) = 0;
 };
 
 class kdirent {

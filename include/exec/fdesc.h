@@ -48,7 +48,7 @@ public:
     virtual resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) = 0;
     virtual resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) = 0;
     virtual intptr_t write(const void *ptr, intptr_t len) = 0;
-    virtual bool stat(struct stat &st) = 0;
+    virtual bool stat(struct stat64 &st) = 0;
     virtual intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) = 0;
 };
 

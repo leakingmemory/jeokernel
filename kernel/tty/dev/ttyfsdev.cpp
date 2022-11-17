@@ -5,6 +5,6 @@
 #include "ttyfsdev.h"
 #include <sys/stat.h>
 
-void ttyfsdev::stat(struct stat &st) {
+void ttyfsdev::stat(struct stat64 &st) {
     st.st_mode |= S_IFCHR;
 }

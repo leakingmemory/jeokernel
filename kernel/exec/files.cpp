@@ -117,12 +117,47 @@ intptr_t FsFileDescriptorHandler::write(const void *ptr, intptr_t len) {
     return -EIO;
 }
 
-bool FsFileDescriptorHandler::stat(struct stat &st) {
+bool FsFileDescriptorHandler::stat(struct stat64 &st) {
     FsStat::Stat(*file, st);
     return true;
 }
 
 intptr_t FsFileDescriptorHandler::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     std::cout << "fsfile->ioctl(0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
+    return -EOPNOTSUPP;
+}
+
+std::shared_ptr<FileDescriptorHandler> FsDirectoryDescriptorHandler::clone() {
+
+}
+
+std::shared_ptr<kfile> FsDirectoryDescriptorHandler::get_file() {
+    std::shared_ptr<kfile> f{dir};
+    return f;
+}
+
+bool FsDirectoryDescriptorHandler::can_read() {
+    return true;
+}
+
+resolve_return_value FsDirectoryDescriptorHandler::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {
+    return resolve_return_value::Return(-EISDIR);
+}
+
+resolve_return_value
+FsDirectoryDescriptorHandler::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) {
+    return resolve_return_value::Return(-EISDIR);
+}
+
+intptr_t FsDirectoryDescriptorHandler::write(const void *ptr, intptr_t len) {
+    return -EISDIR;
+}
+
+bool FsDirectoryDescriptorHandler::stat(struct stat64 &st) {
+    FsStat::Stat(*dir, st);
+    return true;
+}
+
+intptr_t FsDirectoryDescriptorHandler::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     return -EOPNOTSUPP;
 }

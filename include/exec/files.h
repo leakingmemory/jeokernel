@@ -7,12 +7,13 @@
 
 #include <exec/fdesc.h>
 #include "concurrency/hw_spinlock.h"
+#include "kfs/kfiles.h"
 
 class kfile;
 
 class FsStat {
 public:
-    static void Stat(kfile &file, struct stat &st);
+    static void Stat(kfile &file, struct stat64 &st);
 };
 
 class FsFileDescriptorHandler : public FileDescriptorHandler {
@@ -32,7 +33,7 @@ public:
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) override;
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;
-    bool stat(struct stat &st) override;
+    bool stat(struct stat64 &st) override;
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) override;
 };
 
