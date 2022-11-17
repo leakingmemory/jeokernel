@@ -110,19 +110,21 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
         }
         for (auto fsent : entriesResult.entries) {
             std::string name = fsent->Name();
-            std::shared_ptr<fileitem> fsfile = fsent->Item();
-            directory *fsdir = dynamic_cast<directory *> (&(*fsfile));
-            if (fsdir != nullptr && name != ".." && name != ".") {
-                std::string subpath{kpath};
-                if (subpath[subpath.size() - 1] != '/') {
-                    subpath.append("/", 1);
+            if (name != ".." && name != ".") {
+                std::shared_ptr<fileitem> fsfile = fsent->Item();
+                directory *fsdir = dynamic_cast<directory *> (&(*fsfile));
+                if (fsdir != nullptr) {
+                    std::string subpath{kpath};
+                    if (subpath[subpath.size() - 1] != '/') {
+                        subpath.append("/", 1);
+                    }
+                    subpath.append(name);
+                    std::shared_ptr<kdirectory_impl> dir{new kdirectory_impl(this_ref, subpath, fsfile)};
+                    items.push_back(std::make_shared<kdirent>(name, dir));
+                } else {
+                    std::shared_ptr<kfile> file{new kfile(fsfile)};
+                    items.push_back(std::make_shared<kdirent>(name, file));
                 }
-                subpath.append(name);
-                std::shared_ptr<kdirectory_impl> dir{new kdirectory_impl(this_ref, subpath, fsfile)};
-                items.push_back(std::make_shared<kdirent>(name, dir));
-            } else {
-                std::shared_ptr<kfile> file{new kfile(fsfile)};
-                items.push_back(std::make_shared<kdirent>(name, file));
             }
         }
     }
