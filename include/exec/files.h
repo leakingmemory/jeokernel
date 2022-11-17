@@ -37,4 +37,20 @@ public:
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) override;
 };
 
+class FsDirectoryDescriptorHandler : public FileDescriptorHandler {
+private:
+    hw_spinlock mtx;
+    std::shared_ptr<kdirectory> dir;
+public:
+    FsDirectoryDescriptorHandler(const std::shared_ptr<kdirectory> &dir) : FileDescriptorHandler(), mtx(), dir(dir) {}
+    std::shared_ptr<FileDescriptorHandler> clone() override;
+    std::shared_ptr<kfile> get_file() override;
+    bool can_read() override;
+    resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) override;
+    resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) override;
+    intptr_t write(const void *ptr, intptr_t len) override;
+    bool stat(struct stat64 &st) override;
+    intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) override;
+};
+
 #endif //JEOKERNEL_FILES_H

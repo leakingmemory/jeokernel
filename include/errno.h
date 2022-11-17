@@ -18,6 +18,7 @@ extern int errno;
 #define EFAULT      14 // Bad address
 #define EBUSY       16
 #define ENOTDIR     20
+#define EISDIR      21
 #define EINVAL      22 // Invalid argument
 #define EMFILE      24
 #define ERANGE      34

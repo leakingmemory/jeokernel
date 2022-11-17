@@ -13,7 +13,7 @@
 #include <exec/files.h>
 #include "SyscallCtx.h"
 
-constexpr int supportedOpenFlags = (3 | O_CLOEXEC | O_NONBLOCK);
+constexpr int supportedOpenFlags = (3 | O_CLOEXEC | O_DIRECTORY | O_NONBLOCK);
 constexpr int notSupportedOpenFlags = ~supportedOpenFlags;
 
 int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int flags, int mode) {
@@ -93,6 +93,21 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
         if ((fileMode & W_OK) != W_OK) {
             return -EPERM;
         }
+    }
+
+    std::shared_ptr<kdirectory> perhapsDir{file};
+    if (perhapsDir) {
+        if (openWrite) {
+            return -EISDIR;
+        }
+        std::shared_ptr<FileDescriptorHandler> handler{new FsDirectoryDescriptorHandler(perhapsDir)};
+        FileDescriptor desc = proc.create_file_descriptor(flags, handler);
+        std::cout << "openat -> " << std::dec << desc.FD() << "\n";
+        return desc.FD();
+    }
+
+    if ((flags & O_DIRECTORY) != 0) {
+        return -ENOTDIR;
     }
 
     std::shared_ptr<FileDescriptorHandler> handler{new FsFileDescriptorHandler(file, openRead, openWrite, (flags & O_NONBLOCK) != 0)};
