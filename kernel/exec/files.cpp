@@ -8,7 +8,7 @@
 #include <kfs/kfiles.h>
 #include <mutex>
 
-void FsStat::Stat(kfile &file, struct stat &st) {
+void FsStat::Stat(kfile &file, struct stat64 &st) {
     st.st_mode = file.Mode();
     st.st_size = file.Size();
     st.st_gid = file.Gid();
