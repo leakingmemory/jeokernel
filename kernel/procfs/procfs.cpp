@@ -20,7 +20,7 @@ public:
 };
 
 uint32_t procfs_directory::Mode() {
-    return 0555;
+    return 0040555;
 }
 
 std::size_t procfs_directory::Size() {
