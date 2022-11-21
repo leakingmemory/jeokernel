@@ -33,7 +33,12 @@ namespace std {
     private:
         T *ptr;
     public:
+        constexpr vector_iterator_base() : ptr(nullptr) {}
         constexpr explicit vector_iterator_base(T *ptr) noexcept : ptr(ptr) {}
+
+        explicit constexpr operator bool () const {
+            return ptr != nullptr;
+        }
 
         constexpr T & operator *() const {
             return *ptr;
@@ -64,7 +69,8 @@ namespace std {
     };
     template <class T> class vector_iterator : public vector_iterator_base<T> {
     public:
-        vector_iterator(T *ptr) : vector_iterator_base<T>(ptr) { }
+        constexpr vector_iterator() : vector_iterator_base<T>() {}
+        constexpr vector_iterator(T *ptr) : vector_iterator_base<T>(ptr) { }
         vector_iterator(const vector_iterator &cp) : vector_iterator_base<T>(cp.ptr) { }
 
         operator vector_iterator<const T> () const {
