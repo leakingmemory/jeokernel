@@ -74,7 +74,7 @@ void FileDescriptorHandler::SetReadyRead(bool ready) {
 void FileDescriptorHandler::Notify() {
 }
 
-std::shared_ptr<kfile> FileDescriptor::get_file() {
+std::shared_ptr<kfile> FileDescriptor::get_file() const {
     return handler->get_file();
 }
 
@@ -242,4 +242,8 @@ bool FileDescriptor::stat(struct stat &st) {
 
 intptr_t FileDescriptor::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     return handler->ioctl(ctx, cmd, arg);
+}
+
+int FileDescriptor::readdir(const std::function<bool (kdirent &dirent)> &func) const {
+    return handler->readdir(func);
 }

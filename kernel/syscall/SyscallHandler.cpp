@@ -51,6 +51,7 @@
 #include "Wait4.h"
 #include "Execve.h"
 #include "Prctl.h"
+#include "Getdents64.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -160,6 +161,7 @@ private:
     Wait4 wait4{*this};
     Execve execve{*this};
     Prctl prctl{*this};
+    Getdents64 getdents64{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

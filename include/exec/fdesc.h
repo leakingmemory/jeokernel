@@ -17,6 +17,7 @@
 class callctx;
 class ProcThread;
 class kfile;
+class kdirent;
 
 struct file_descriptor_result {
     intptr_t result;
@@ -50,6 +51,7 @@ public:
     virtual intptr_t write(const void *ptr, intptr_t len) = 0;
     virtual bool stat(struct stat64 &st) = 0;
     virtual intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) = 0;
+    virtual int readdir(const std::function<bool (kdirent &dirent)> &) = 0;
 };
 
 class FileDescriptor {
@@ -76,7 +78,7 @@ public:
     std::shared_ptr<FileDescriptorHandler> GetHandler() {
         return handler;
     }
-    std::shared_ptr<kfile> get_file();
+    std::shared_ptr<kfile> get_file() const;
     bool can_read();
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *, intptr_t len);
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *, intptr_t len, uintptr_t offset);
@@ -90,6 +92,7 @@ public:
     void set_open_flags(int flags) {
         openFlags = flags;
     }
+    int readdir(const std::function<bool (kdirent &dirent)> &) const;
 };
 
 #endif //JEOKERNEL_FDESC_H

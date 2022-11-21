@@ -82,3 +82,7 @@ intptr_t StdinDesc::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     }
     return -EOPNOTSUPP;
 }
+
+int StdinDesc::readdir(const std::function<bool (kdirent &dirent)> &) {
+    return -ENOTDIR;
+}

@@ -70,3 +70,7 @@ intptr_t StdoutDesc::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     }
     return -EOPNOTSUPP;
 }
+
+int StdoutDesc::readdir(const std::function<bool (kdirent &dirent)> &) {
+    return -ENOTDIR;
+}

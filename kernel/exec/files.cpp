@@ -127,8 +127,30 @@ intptr_t FsFileDescriptorHandler::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg
     return -EOPNOTSUPP;
 }
 
-std::shared_ptr<FileDescriptorHandler> FsDirectoryDescriptorHandler::clone() {
+int FsFileDescriptorHandler::readdir(const std::function<bool (kdirent &dirent)> &) {
+    return -ENOTDIR;
+}
 
+FsDirectoryDescriptorHandler::FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &cp) : mtx(), dir(), readdirInited(false), dirents(), iterator() {
+    std::lock_guard lock{*((hw_spinlock *) &(cp.mtx))};
+    dir = cp.dir;
+    readdirInited = cp.readdirInited;
+    dirents = cp.dirents;
+    iterator = dirents.begin();
+    if (cp.iterator) {
+        auto iterator = dirents.begin();
+        while (iterator != dirents.end()) {
+            if (*iterator == *(cp.iterator)) {
+                this->iterator = iterator;
+                break;
+            }
+            ++iterator;
+        }
+    }
+}
+
+std::shared_ptr<FileDescriptorHandler> FsDirectoryDescriptorHandler::clone() {
+    return std::make_shared<FsDirectoryDescriptorHandler>((const FsDirectoryDescriptorHandler &) *this);
 }
 
 std::shared_ptr<kfile> FsDirectoryDescriptorHandler::get_file() {
@@ -160,4 +182,24 @@ bool FsDirectoryDescriptorHandler::stat(struct stat64 &st) {
 
 intptr_t FsDirectoryDescriptorHandler::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     return -EOPNOTSUPP;
+}
+
+int FsDirectoryDescriptorHandler::readdir(const std::function<bool (kdirent &dirent)> &c_accept) {
+    std::lock_guard lock{mtx};
+    if (!readdirInited) {
+        auto result = dir->Entries();
+        if (result.status != kfile_status::SUCCESS) {
+            return -EIO;
+        }
+        dirents = result.result;
+        iterator = dirents.begin();
+        readdirInited = true;
+    }
+    int count{0};
+    std::function<bool (kdirent &)> accept{c_accept};
+    while (iterator != dirents.end() && accept(**iterator)) {
+        ++iterator;
+        ++count;
+    }
+    return count;
 }
