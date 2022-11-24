@@ -35,6 +35,36 @@ void FsStat::Stat(kfile &file, struct stat64 &st) {
     }
 }
 
+void FsStat::Stat(kfile &file, statx &st) {
+    st.stx_mode = file.Mode();
+    st.stx_size = file.Size();
+    st.stx_gid = file.Gid();
+    st.stx_uid = file.Uid();
+    st.stx_blksize = file.BlockSize();
+    st.stx_dev_major = file.SysDevId();
+    st.stx_dev_minor = 0;
+    st.stx_ino = file.InodeNum();
+
+    // TODO
+    st.stx_blocks = 0;
+    st.stx_atime = {};
+    st.stx_btime = {};
+    st.stx_ctime = {};
+    st.stx_mtime = {};
+    st.stx_nlink = 0;
+    st.stx_rdev_major = 0;
+    st.stx_rdev_minor = 0;
+
+    auto *statable = dynamic_cast<kstatable *>(&file);
+    if (statable != nullptr) {
+        statable->stat(st);
+    } else if (dynamic_cast<kdirectory *>(&file) != nullptr) {
+        st.stx_mode |= S_IFDIR;
+    } else {
+        st.stx_mode |= S_IFREG;
+    }
+}
+
 FsFileDescriptorHandler::FsFileDescriptorHandler(const FsFileDescriptorHandler &cp) : mtx() {
     std::lock_guard lock{*((hw_spinlock *) &(cp.mtx))};
     this->file = cp.file;
@@ -122,6 +152,11 @@ bool FsFileDescriptorHandler::stat(struct stat64 &st) {
     return true;
 }
 
+bool FsFileDescriptorHandler::stat(struct statx &st) {
+    FsStat::Stat(*file, st);
+    return true;
+}
+
 intptr_t FsFileDescriptorHandler::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     std::cout << "fsfile->ioctl(0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
     return -EOPNOTSUPP;
@@ -176,6 +211,11 @@ intptr_t FsDirectoryDescriptorHandler::write(const void *ptr, intptr_t len) {
 }
 
 bool FsDirectoryDescriptorHandler::stat(struct stat64 &st) {
+    FsStat::Stat(*dir, st);
+    return true;
+}
+
+bool FsDirectoryDescriptorHandler::stat(struct statx &st) {
     FsStat::Stat(*dir, st);
     return true;
 }

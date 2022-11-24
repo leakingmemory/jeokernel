@@ -50,6 +50,7 @@ public:
     virtual resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) = 0;
     virtual intptr_t write(const void *ptr, intptr_t len) = 0;
     virtual bool stat(struct stat64 &st) = 0;
+    virtual bool stat(struct statx &st) = 0;
     virtual intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) = 0;
     virtual int readdir(const std::function<bool (kdirent &dirent)> &) = 0;
 };
@@ -85,6 +86,7 @@ public:
     file_descriptor_result write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
     file_descriptor_result writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void (intptr_t)> func);
     bool stat(struct stat &st);
+    bool stat(struct statx &st);
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg);
     int get_open_flags() {
         return openFlags;

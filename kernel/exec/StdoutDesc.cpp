@@ -57,6 +57,12 @@ bool StdoutDesc::stat(struct stat64 &st) {
     return true;
 }
 
+bool StdoutDesc::stat(struct statx &st) {
+    struct statx s{.stx_blksize = 1024, .stx_mode = S_IFCHR | 00666};
+    st = s;
+    return true;
+}
+
 intptr_t StdoutDesc::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     auto *scheduler = get_scheduler();
     task *current_task = &(scheduler->get_current_task());

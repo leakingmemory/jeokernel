@@ -240,6 +240,10 @@ bool FileDescriptor::stat(struct stat &st) {
     return handler->stat(st);
 }
 
+bool FileDescriptor::stat(struct statx &st) {
+    return handler->stat(st);
+}
+
 intptr_t FileDescriptor::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     return handler->ioctl(ctx, cmd, arg);
 }

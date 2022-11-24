@@ -8,3 +8,7 @@
 void ttyfsdev::stat(struct stat64 &st) {
     st.st_mode |= S_IFCHR;
 }
+
+void ttyfsdev::stat(struct statx &st) {
+    st.stx_mode |= S_IFCHR;
+}

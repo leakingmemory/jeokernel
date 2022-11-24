@@ -52,6 +52,7 @@
 #include "Execve.h"
 #include "Prctl.h"
 #include "Getdents64.h"
+#include "Statx.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -162,6 +163,7 @@ private:
     Execve execve{*this};
     Prctl prctl{*this};
     Getdents64 getdents64{*this};
+    Statx stat{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
