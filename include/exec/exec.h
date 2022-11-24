@@ -50,9 +50,11 @@ private:
     kdirectory &cwd;
     std::shared_ptr<kfile> binary;
     std::string name;
+    std::vector<std::string> argv;
+    std::vector<std::string> env;
     pid_t parent_pid;
 public:
-    Exec(const std::shared_ptr<class tty> &tty, const std::shared_ptr<kfile> &cwd_ref, kdirectory &cwd, std::shared_ptr<kfile> binary, const std::string &name, pid_t parent_pid) : tty(tty), cwd_ref(cwd_ref), cwd(cwd), binary(binary), name(name), parent_pid(parent_pid) {}
+    Exec(const std::shared_ptr<class tty> &tty, const std::shared_ptr<kfile> &cwd_ref, kdirectory &cwd, std::shared_ptr<kfile> binary, const std::string &name, const std::vector<std::string> &argv, const std::vector<std::string> &env, pid_t parent_pid) : tty(tty), cwd_ref(cwd_ref), cwd(cwd), binary(binary), name(name), argv(argv), env(env), parent_pid(parent_pid) {}
 private:
     static bool LoadLoads(kfile &binary, ELF_loads &loads, UserElf &userElf);
     static void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);

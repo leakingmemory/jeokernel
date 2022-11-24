@@ -386,9 +386,8 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
         stackAddr += stackPages;
         stackAddr = stackAddr << 12;
 
-        std::shared_ptr<std::vector<std::string>> environ{new std::vector<std::string>};
-        std::shared_ptr<std::vector<std::string>> argv{new std::vector<std::string>};
-        argv->push_back(name);
+        std::shared_ptr<std::vector<std::string>> environ{new std::vector<std::string>(this->env)};
+        std::shared_ptr<std::vector<std::string>> argv{new std::vector<std::string>(this->argv)};
         auto argc = argv->size();
         typedef struct {
             uint8_t data[16];
@@ -506,8 +505,17 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
                         func(false, {});
                         return;
                     }
-                    stackAddr = (stackAddr + 8) & ~((uintptr_t) 0xf);
-                    stackAddr -= 8;
+                    uintptr_t alignment = 0xF;
+                    stackAddr = stackAddr & ~alignment;
+                    uintptr_t size = (sizeof(void *) * 4) + // nullptr separators + argc
+                            (sizeof(auxv->at(0)) * auxv->size()) +
+                            (sizeof(void *) * environPtrs.size()) +
+                            (sizeof(void *) * ptrs.size());
+                    auto alignmentCorrection = size & alignment;
+                    if (alignmentCorrection != 0) {
+                        alignmentCorrection = 1 + alignment - alignmentCorrection;
+                        stackAddr -= alignmentCorrection;
+                    }
                     std::vector<uintptr_t> argvPtrs{ptrs};
                     process->push_64(stackAddr, 0, [execState, loads, interpreter, process, environPtrs, argvPtrs, argc, auxv, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t stackAddr) mutable {
                         if (!success) {

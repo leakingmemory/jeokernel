@@ -46,7 +46,7 @@ int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp
                             auto cwd = ctx.GetProcess().GetCwd();
                             std::shared_ptr<kdirectory> cwd_dir{cwd};
                             std::shared_ptr<tty> tty{};
-                            Exec exec{tty, cwd, *cwd_dir, binary.result, filename, 0};
+                            Exec exec{tty, cwd, *cwd_dir, binary.result, filename, argv, env, 0};
                             auto result = exec.Run(&(ctx.GetProcess()), [ctx] (bool success, const ExecStartVector &startVector) {
                                 if (!success) {
                                     ctx.KillAsync();

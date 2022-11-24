@@ -25,6 +25,14 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         return;
     }
     std::string filename = *iterator;
+    std::vector<std::string> env{};
+    std::vector<std::string> args{};
+    args.push_back(filename);
+    ++iterator;
+    while (iterator != cmd.end()) {
+        args.push_back(*iterator);
+        ++iterator;
+    }
     if (filename.starts_with("/")) {
         std::string resname{};
         resname.append(filename.c_str()+1);
@@ -49,7 +57,7 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             if (ldir != nullptr) {
                 std::cerr << "exec: is a directory: " << filename << "\n";
             } else {
-                class Exec exec{shell.Tty(), dir_ref, *dir, litem, filename, 0};
+                class Exec exec{shell.Tty(), dir_ref, *dir, litem, filename, args, env, 0};
                 Keyboard().consume(keycodeConsumer);
                 auto process = exec.Run();
                 if (process) {
@@ -78,7 +86,7 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             if (ldir != nullptr) {
                 std::cerr << "exec: is a directory: " << filename << "\n";
             } else {
-                class Exec exec{shell.Tty(), dir_ref, *dir, litem, filename, 0};
+                class Exec exec{shell.Tty(), dir_ref, *dir, litem, filename, args, env, 0};
                 Keyboard().consume(keycodeConsumer);
                 auto process = exec.Run();
                 if (process) {
