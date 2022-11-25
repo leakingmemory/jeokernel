@@ -10,6 +10,7 @@
 #include <iostream>
 
 //#define WRITEV_DEBUG
+//#define WRITEV_IGNORE
 //#define SUBSCRIPTION_DEBUG
 
 FileDescriptorHandler::FileDescriptorHandler() : mtx(), subscriptions(), readyRead(false) {
@@ -127,13 +128,19 @@ struct writev_state {
 
 file_descriptor_result
 FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void(intptr_t)> func) {
+#ifdef WRITEV_IGNORE
+#ifdef WRITEV_DEBUG
+    std::cout << "writev(..) ignored\n";
+#endif
+    return {.result = 0, .async = false};
+#else
     auto handler = this->handler;
     std::shared_ptr<writev_state> state{new writev_state};
     state->remaining = iovcnt;
 #ifdef WRITEV_DEBUG
     std::cout << "writev: remaining=" << state->remaining << "\n";
 #endif
-    auto result = process->resolve_read(usersp_iov_ptr, sizeof(iovec), false, [func] (uintptr_t returnv) mutable {func(returnv);}, [process, handler, usersp_iov_ptr, iovcnt, state, func] (bool success, bool async, std::function<void (intptr_t)> asyncFunc) mutable {
+    auto result = process->resolve_read(usersp_iov_ptr, sizeof(iovec) * iovcnt, false, [func] (uintptr_t returnv) mutable {func(returnv);}, [process, handler, usersp_iov_ptr, iovcnt, state, func] (bool success, bool async, std::function<void (intptr_t)> asyncFunc) mutable {
         if (success) {
             auto iov_len = sizeof(iovec) * iovcnt;
             UserMemory umem{*process, usersp_iov_ptr, iov_len};
@@ -234,6 +241,7 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
         }
     });
     return {.result = result.result, .async = result.async};
+#endif
 }
 
 bool FileDescriptor::stat(struct stat &st) {
