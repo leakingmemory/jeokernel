@@ -12,6 +12,7 @@
 #define USERSPACE_DEFAULT_STACKSIZE     ((uintptr_t) ((uintptr_t) 32*1048576))
 
 //#define DEBUG_USERSPACE_PAGELIST
+//#define DEBUG_PRINT_INDIVIDUAL_PAGES
 
 struct exec_pageinfo {
     uint32_t filep;
@@ -164,11 +165,15 @@ void Exec::Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &u
                     break;
                 }
                 if ((se->sh_flags & SHF_WRITE) != 0) {
+#ifdef DEBUG_PRINT_INDIVIDUAL_PAGES
                     std::cout << "Set write on " << std::hex << page << std::dec << "\n";
+#endif
                     pages[page - loads.startpage].write = true;
                 }
                 if ((se->sh_flags & SHF_EXECINSTR) != 0) {
+#ifdef DEBUG_PRINT_INDIVIDUAL_PAGES
                     std::cout << "Set exec on " << std::hex << page << std::dec << "\n";
+#endif
                     pages[page - loads.startpage].exec = true;
                 }
             }
