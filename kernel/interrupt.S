@@ -1411,12 +1411,10 @@ interrupt_imm_handler:
     test $0xFF,%rax
     jnz interrupt_imm_handler_return_with_code
     intpop
-    sti
     iretq
 interrupt_imm_handler_return_with_code:
     intpop
     add $8, %rsp
-    sti
     iretq
 
 syscall_enter:
