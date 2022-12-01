@@ -1088,6 +1088,7 @@ static hw_spinlock pfault_lck{};
 static raw_semaphore pfault_sema{-1};
 static std::vector<process_pfault> p_faults{};
 static std::thread *pfault_thread{nullptr};
+static hw_spinlock pfault_thread_activate_single{};
 
 static void activate_fault(const process_pfault &fault)
 {
@@ -1099,6 +1100,10 @@ static void activate_fault(const process_pfault &fault)
 
 void Process::activate_pfault_thread() {
     pfault_sema.release();
+    if (pfault_thread != nullptr) {
+        return;
+    }
+    std::lock_guard lock{pfault_thread_activate_single};
     if (pfault_thread == nullptr) {
         pfault_thread = new std::thread([] () {
             std::this_thread::set_name("[pfault]");
