@@ -271,7 +271,9 @@ bool tasklist::page_fault(Interrupt &interrupt) {
     }
 
     bool handled = current_task->page_fault(interrupt);
-    switch_tasks(interrupt, cpu);
+    if (handled) {
+        switch_tasks(interrupt, cpu);
+    }
     return handled;
 }
 
