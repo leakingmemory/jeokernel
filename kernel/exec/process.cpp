@@ -1677,7 +1677,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                         return false;
                     }
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
-                    std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+                    std::cout << "Memory copy " << std::hex << page << ": " << pagemap.cow->GetPhysPage() << " -> " << phys << "\n";
 #endif
                     vmem vm{PAGESIZE * 2};
                     vm.page(0).rwmap(phys);
