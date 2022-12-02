@@ -11,7 +11,7 @@
 #include <termios.h>
 #include <exec/fdesc.h>
 
-tty::tty() : mtx(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), subscribers(), stop(false) {
+tty::tty() : mtx(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), lineedit(true), stop(false) {
 }
 
 void tty::thread() {
@@ -71,10 +71,29 @@ intptr_t tty::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
 bool tty::Consume(uint32_t keycode) {
     if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
         char ch[2] = {(char) codepage->Translate(keycode), 0};
-        get_klogger() << ch;
         std::lock_guard lock{mtx};
-        buffer.append(ch, 1);
-        sema.release();
+        if (lineedit) {
+            if (ch[0] == '\n') {
+                get_klogger() << ch;
+                linebuffer.append(ch, 1);
+                buffer.append(linebuffer);
+                linebuffer.resize(0);
+                sema.release();
+            } else if (ch[0] == '\10') {
+                auto s = linebuffer.size();
+                if (s > 0) {
+                    get_klogger().erase(1, 1);
+                    linebuffer.resize(s - 1);
+                }
+            } else {
+                get_klogger() << ch;
+                linebuffer.append(ch, 1);
+            }
+        } else {
+            get_klogger() << ch;
+            buffer.append(ch, 1);
+            sema.release();
+        }
     }
     return true;
 }

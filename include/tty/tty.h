@@ -21,7 +21,9 @@ private:
     std::thread thr;
     std::shared_ptr<keyboard_codepage> codepage;
     std::string buffer;
+    std::string linebuffer;
     std::vector<std::weak_ptr<FileDescriptorHandler>> subscribers;
+    bool lineedit;
     bool stop;
 public:
     tty();
