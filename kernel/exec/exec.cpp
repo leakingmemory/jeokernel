@@ -13,6 +13,7 @@
 
 //#define DEBUG_USERSPACE_PAGELIST
 //#define DEBUG_PRINT_INDIVIDUAL_PAGES
+//#define DEBUG_PRINT_LOADS
 
 struct exec_pageinfo {
     uint32_t filep;
@@ -76,8 +77,10 @@ bool Exec::LoadLoads(kfile &binary, ELF_loads &loads, UserElf &userElf) {
     for (int i = 0; i < userElf.get_num_program_entries(); i++) {
         auto pe = userElf.get_program_entry(i);
         if (pe->p_type == PHT_LOAD || (!loads.interpreter.empty() && pe->p_type == PHT_PHDR)) {
+#ifdef DEBUG_PRINT_LOADS
             std::cout << "Load " << std::hex << pe->p_offset << " -> " << pe->p_vaddr << " file/mem "
                       << pe->p_filesz << "/" << pe->p_memsz << "\n";
+#endif
             loads.loads.push_back(pe);
             if (pe->p_vaddr < loads.start) {
                 loads.start = pe->p_vaddr;
@@ -128,8 +131,6 @@ void Exec::Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &u
         auto vendaddr = vpageendaddr << 12;
         auto pvendaddr = vendaddr;
         if (pe->p_filesz < pe->p_memsz) {
-            std::cerr << "Warning: Less filesize than memsize "<<pe->p_filesz << "<" << pe->p_memsz
-                      << " may not be correctly implemented\n";
             pvendaddr = pe->p_vaddr + pe->p_filesz;
         }
         for (auto i = vpageaddr; i < vpageendaddr; i++) {

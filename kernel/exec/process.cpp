@@ -21,6 +21,8 @@
 //#define DEBUG_PAGE_FAULT_RESOLVE
 //#define DEBUG_MAP_CLEAR_FREE
 //#define DEBUG_MEMMAPPING_DESTRUCTION_FREEPAGE
+//#define DEBUG_MMAP
+//#define DEBUG_MMAP_OVERLAP
 
 static hw_spinlock pidLock{};
 static std::vector<pid_t> pids{};
@@ -573,12 +575,18 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
                     if (mapping_end > overlap_end) {
                         auto &newMapping = newMappings.emplace_back();
                         MemMapping::CopyAttributes(newMapping, mapping);
+#ifdef DEBUG_MMAP_OVERLAP
                         std::cout << "Map split " << std::hex << mapping.pagenum << "/" << mapping.pages;
+#endif
                         mapping.pages = overlap_page - mapping.pagenum;
+#ifdef DEBUG_MMAP_OVERLAP
                         std::cout << " -> " << std::hex << mapping.pagenum << "/" << mapping.pages << ", ";
+#endif
                         newMapping.pages -= overlap_end - mapping.pagenum;
                         newMapping.pagenum = overlap_end;
+#ifdef DEBUG_MMAP_OVERLAP
                         std::cout << newMapping.pagenum << "/" << newMapping.pages << "\n";
+#endif
                         {
 #ifdef DEBUG_MAP_CLEAR_FREE
                             std::cout << "Free pages: ";
@@ -614,7 +622,9 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
 #endif
                         }
                     } else {
+#ifdef DEBUG_MMAP_OVERLAP
                         std::cout << "Map slit/2 type-reduce keep:" << std::hex << mapping.pagenum << "-" << overlap_page << " drop:-" << overlap_end << std::dec << "\n";
+#endif
                         mapping.pages = overlap_page - mapping.pagenum;
                         {
                             auto dropIterator = mapping.mappings.begin();
@@ -643,7 +653,9 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
                         }
                     }
                 } else if (mapping_end > overlap_end) {
+#ifdef DEBUG_MMAP_OVERLAP
                     std::cout << "Map slit/3 type-reduce drop:" << std::hex << mapping.pagenum << "- keep:" << overlap_end << "-" << mapping_end << std::dec << "\n";
+#endif
                     mapping.pages = mapping_end - overlap_end;
                     mapping.pagenum = overlap_end;
                     {
@@ -672,7 +684,9 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
 #endif
                     }
                 } else {
+#ifdef DEBUG_MMAP_OVERLAP
                     std::cout << "Map slit/4 type-drop drop:" << std::hex << mapping.pagenum << " num:" << mapping.pages << std::dec << "\n";
+#endif
                     mappings.erase(iterator);
                     continue;
                 }
@@ -841,7 +855,9 @@ std::shared_ptr<Process> Process::Clone() {
 }
 
 bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
+#ifdef DEBUG_MMAP
     std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " -> " << image_skip_pages << (write ? " write" : "") << (execute ? " exec" : "") << std::dec << "\n";
+#endif
     if (write && !copyOnWrite) {
         std::cerr << "Error mapping: Write without COW is not supported\n";
     }
@@ -878,7 +894,9 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
 }
 
 bool Process::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
+#ifdef DEBUG_MMAP
     std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " on demand " << std::dec << "\n";
+#endif
     std::lock_guard lock{mtx};
     if (!CheckMapOverlap(pagenum, pages)) {
         return false;

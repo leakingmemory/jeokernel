@@ -9,7 +9,7 @@
 #include <sys/mman.h>
 #include "Mmap.h"
 
-#define MMAP_DEBUG
+//#define MMAP_DEBUG
 
 int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, SyscallAdditionalParams &params) {
     int64_t fd = params.Param5();
