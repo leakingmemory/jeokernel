@@ -4,8 +4,8 @@
 
 #include <keyboard/keyboard_en.h>
 
-static const char *prim_codes = "1234567890\n\0\0\t -=[]\\\0;'`,./";
-static const char *mod_codes = "!@#$%^&*()\n\0\0\t _+{}|\0:\"~<>?";
+static const char *prim_codes = "1234567890\n\0\10\t -=[]\\\0;'`,./";
+static const char *mod_codes = "!@#$%^&*()\n\0\10\t _+{}|\0:\"~<>?";
 
 uint32_t keyboard_en_codepage::Translate(uint32_t keycode) {
     bool upper{false};
