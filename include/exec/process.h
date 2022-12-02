@@ -205,6 +205,7 @@ private:
     bool CheckMapOverlap(uint32_t pagenum, uint32_t pages);
     void activate_pfault_thread();
     bool readable(uintptr_t addr);
+    bool sync_resolve_page(uintptr_t fault_addr);
     bool resolve_page(uintptr_t fault_addr);
     void resolve_page_fault(ProcThread &process, task &current_task, uintptr_t ip, uintptr_t fault_addr);
     void resolve_read_page(ProcThread &process, uintptr_t addr, std::function<void (bool)> func);
