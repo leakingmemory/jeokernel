@@ -207,7 +207,6 @@ kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(std::string filename) {
             }
         }
     }
-    std::cout << " not found.\n";
     return {.result = {}, .status = kfile_status::SUCCESS};
 }
 

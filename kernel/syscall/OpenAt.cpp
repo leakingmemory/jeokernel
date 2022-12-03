@@ -13,11 +13,15 @@
 #include <exec/files.h>
 #include "SyscallCtx.h"
 
+//#define DEBUG_OPENAT_CALL
+
 constexpr int supportedOpenFlags = (3 | O_CLOEXEC | O_DIRECTORY | O_NONBLOCK);
 constexpr int notSupportedOpenFlags = ~supportedOpenFlags;
 
 int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int flags, int mode) {
+#ifdef DEBUG_OPENAT_CALL
     std::cout << "openat(" << std::dec << dfd << ", " << filename << ", 0x" << std::hex << flags << std::oct << ", 0" << mode << std::dec << ")\n";
+#endif
     if (dfd != AT_FDCWD) {
         std::cerr << "not implemented: open at fd\n";
         return -EIO;
@@ -48,7 +52,9 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
     }
     auto file = fileResolve.result;
     if (!file) {
+#ifdef DEBUG_OPENAT_CALL
         std::cout << "openat: not found: " << filename << "\n";
+#endif
         return -ENOENT;
     }
 
@@ -102,7 +108,9 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
         }
         std::shared_ptr<FileDescriptorHandler> handler{new FsDirectoryDescriptorHandler(perhapsDir)};
         FileDescriptor desc = proc.create_file_descriptor(flags, handler);
+#ifdef DEBUG_OPENAT_CALL
         std::cout << "openat -> " << std::dec << desc.FD() << "\n";
+#endif
         return desc.FD();
     }
 
