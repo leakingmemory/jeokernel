@@ -937,6 +937,7 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
     uint32_t covered{0};
     std::vector<ProtectMapping> prot_mappings{};
     std::lock_guard lock{mtx};
+    prot_mappings.reserve(4);
     for (auto &mapping : mappings) {
         auto ol_start = mapping.pagenum;
         if (ol_start < pagenum) {
@@ -958,7 +959,9 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
         return -EINVAL;
     }
     std::vector<MemMapping> new_mappings{};
+    new_mappings.reserve(prot_mappings.size() * 2);
     std::function<void ()> apply_new_mappings = [this, &new_mappings] () {
+        mappings.reserve(mappings.size() + new_mappings.size());
         for (auto &mapping : new_mappings) {
             auto &map = mappings.emplace_back();
             MemMapping::CopyAttributes(map, mapping);
