@@ -8,10 +8,14 @@
 #include <errno.h>
 #include "Mprotect.h"
 
+//#define MPROTECT_CALL_DEBUG
+
 int64_t Mprotect::Call(int64_t addr, int64_t len , int64_t prot, int64_t, SyscallAdditionalParams &) {
     constexpr uint64_t supportedProt = PROT_NONE | PROT_READ | PROT_WRITE | PROT_EXEC;
     constexpr uint64_t notSupportedProt = ~supportedProt;
+#ifdef MPROTECT_CALL_DEBUG
     std::cout << "mprotect(" << std::hex << addr << ", " << len << ", " << prot << std::dec << ")\n";
+#endif
     if ((prot & notSupportedProt) != 0) {
         std::cerr << "mprotect: not supported prot flags 0x" << std::hex << prot << std::dec << "\n";
         return -EINVAL;

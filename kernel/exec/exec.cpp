@@ -374,10 +374,7 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
         process->AddRelocation("main", relocationOffset);
         uint64_t entrypoint = userElf.get_entrypoint_addr();
 
-        if (relocationOffset != 0) {
-            std::cout << "Relocation " <<std::hex<< (loads.startpage) << "->" << (relocationOffset+loads.startpage) <<std::dec<< "\n";
-            entrypoint += relocationOffset;
-        }
+        entrypoint += relocationOffset;
 
         constexpr uintptr_t stackPages = USERSPACE_DEFAULT_STACKSIZE / PAGESIZE;
         uintptr_t stackAddr = process->FindFree(stackPages);

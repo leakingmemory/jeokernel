@@ -9,6 +9,8 @@
 #include <sys/types.h>
 #include <exec/procthread.h>
 
+//#define DEBUG_WAIT_CALL
+
 resolve_return_value Wait4::WaitAny(SyscallCtx &r_ctx, int *status) {
     SyscallCtx ctx{r_ctx};
     child_result result{};
@@ -29,9 +31,10 @@ resolve_return_value Wait4::WaitAny(SyscallCtx &r_ctx, int *status) {
 
 int64_t Wait4::Call(int64_t u_pid, int64_t uptr_stat_addr, int64_t options, int64_t uptr_rusage, SyscallAdditionalParams &params) {
     pid_t pid = (pid_t) u_pid;
-    std::cout << "wait4(" << std::dec << pid << ", " << std::hex << uptr_stat_addr << ", " << options << ", " << uptr_rusage << ")\n";
     if (pid == -1) {
-        std::cout << "wait any pid\n";
+#ifdef DEBUG_WAIT_CALL
+        std::cout << "wait4(" << std::dec << pid << "/any, " << std::hex << uptr_stat_addr << ", " << options << ", " << uptr_rusage << ")\n";
+#endif
         SyscallCtx ctx{params};
         if (uptr_stat_addr != 0) {
             return ctx.Write(uptr_stat_addr, sizeof(int), [this, ctx] (void *ptr) mutable {
@@ -45,5 +48,6 @@ int64_t Wait4::Call(int64_t u_pid, int64_t uptr_stat_addr, int64_t options, int6
         ctx.AsyncCtx()->async();
         return 0;
     }
+    std::cout << "wait4(" << std::dec << pid << ", " << std::hex << uptr_stat_addr << ", " << options << ", " << uptr_rusage << ") not implemented\n";
     return -EOPNOTSUPP;
 }

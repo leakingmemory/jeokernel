@@ -10,6 +10,8 @@
 #include <exec/exec.h>
 #include <exec/procthread.h>
 
+//#define DEBUG_EXECVE
+
 int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp, int64_t flags, SyscallAdditionalParams &params) {
     if (uptr_filename == 0 || uptr_argv == 0 || uptr_envp == 0) {
         return -EINVAL;
@@ -17,21 +19,31 @@ int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp
     SyscallCtx ctx{params};
     return ctx.ReadString(uptr_filename, [this, ctx, uptr_argv, uptr_envp] (const std::string &rd_filename) mutable {
         std::string filename{rd_filename};
+#ifdef DEBUG_EXECVE
         std::cout << "execve(" << filename << ", ...)\n";
+#endif
         return ctx.NestedReadNullterminatedArrayOfPointers(uptr_argv, [this, ctx, filename, uptr_envp] (void **argv_ptr, size_t len) mutable {
+#ifdef DEBUG_EXECVE
             std::cout << "Argv " << len << ":\n";
+#endif
             return ctx.NestedReadArrayOfStrings(argv_ptr, len, [this, ctx, filename, uptr_envp] (const std::vector<std::string> &c_argv) mutable {
                 std::vector<std::string> argv{c_argv};
+#ifdef DEBUG_EXECVE
                 for (auto arg : argv) {
                     std::cout << " - " << arg << "\n";
                 }
+#endif
                 return ctx.NestedReadNullterminatedArrayOfPointers(uptr_envp, [this, ctx, filename, argv] (void **envp, size_t len) mutable {
+#ifdef DEBUG_EXECVE
                     std::cout << "Env " << len << ":\n";
+#endif
                     return ctx.NestedReadArrayOfStrings(envp, len, [this, ctx, filename, argv] (const std::vector<std::string> &c_env) {
                         std::vector<std::string> env{c_env};
+#ifdef DEBUG_EXECVE
                         for (auto e : env) {
                             std::cout << " - " << e << "\n";
                         }
+#endif
                         Queue([ctx, filename, argv, env] () mutable {
                             auto binary = ctx.GetProcess().ResolveFile(filename);
                             if (binary.status != kfile_status::SUCCESS) {

@@ -7,7 +7,7 @@
 #include <exec/usermem.h>
 #include <core/scheduler.h>
 
-#define RSEQ_DEBUG
+//#define RSEQ_DEBUG
 
 int ThreadRSeq::Register(uintptr_t n_uptr_rseq, rseq &k_rseq, uint32_t n_sig) {
 #ifdef RSEQ_DEBUG

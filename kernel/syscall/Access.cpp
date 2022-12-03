@@ -11,6 +11,8 @@
 #include <iostream>
 #include "SyscallCtx.h"
 
+//#define DEBUG_ACCESS_CALL
+
 int Access::DoAccess(ProcThread &proc, std::string filename, int mode) {
     constexpr int allAccess = F_OK | X_OK | W_OK | R_OK;
     if ((mode & allAccess) != mode) {
@@ -68,7 +70,9 @@ int64_t Access::Call(int64_t uptr_filename, int64_t mode, int64_t, int64_t, Sysc
 
         Queue([this, ctx, filename, mode] () mutable {
             auto res = DoAccess(ctx.GetProcess(), filename, mode);
+#ifdef DEBUG_ACCESS_CALL
             std::cout << "access(" << filename << ", " << std::hex << mode << std::dec << ") => " << res << "\n";
+#endif
             ctx.ReturnWhenNotRunning(res);
         });
         return resolve_return_value::AsyncReturn();

@@ -120,7 +120,9 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
 
     std::shared_ptr<FileDescriptorHandler> handler{new FsFileDescriptorHandler(file, openRead, openWrite, (flags & O_NONBLOCK) != 0)};
     FileDescriptor desc = proc.create_file_descriptor(flags, handler);
+#ifdef DEBUG_OPENAT_CALL
     std::cout << "openat -> " << std::dec << desc.FD() << "\n";
+#endif
     return desc.FD();
 }
 

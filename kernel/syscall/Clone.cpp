@@ -9,6 +9,9 @@
 #include <errno.h>
 #include <exec/procthread.h>
 
+//#define DEBUG_CLONE_CALL
+//#define DEBUG_CLONE_TASK_STARTED
+
 class TaskCloner : public SyscallInterruptFrameVisitor {
 private:
     std::weak_ptr<TaskCloner> this_ref;
@@ -46,7 +49,9 @@ void TaskCloner::SpawnFromInterrupt(ProcThread *process, const x86_fpu_state &fp
             cpuState,
             cpuFrame,
             resources);
+#ifdef DEBUG_CLONE_TASK_STARTED
     std::cout << "Started task " << pid << "\n";
+#endif
     scheduler->set_name(pid, process->GetProcess()->GetCmdline());
 }
 
@@ -113,8 +118,10 @@ bool TaskCloner::CallbackIfAsyncOrCompletedNow(std::function<void (bool fault)> 
 
 int64_t Clone::Call(int64_t flags, int64_t new_stackp, int64_t uptr_parent_tidptr, int64_t uptr_child_tidptr, SyscallAdditionalParams &params) {
     auto tls = params.Param5();
+#ifdef DEBUG_CLONE_CALL
     std::cout << "clone(" << std::hex << flags << ", " << new_stackp << ", " << uptr_parent_tidptr << ", " << uptr_child_tidptr
     << ", " << tls << std::dec << ")\n";
+#endif
     if ((flags & CloneSupportedFlags) != flags) {
         return -EOPNOTSUPP;
     }

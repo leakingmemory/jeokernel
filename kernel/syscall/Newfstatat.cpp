@@ -13,6 +13,8 @@
 #include "Newfstatat.h"
 #include "SyscallCtx.h"
 
+//#define DEBUG_NEWFSTATAT
+
 int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbuf, int64_t flag, SyscallAdditionalParams &params) {
     if (uptr_filename == 0) {
         return -EINVAL;
@@ -34,9 +36,10 @@ int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbu
                 struct stat st{};
 
                 if ((!filename.empty() && filename.starts_with("/")) || dfd == AT_FDCWD) {
-                    // TODO
+#ifdef DEBUG_NEWFSTATAT
                     std::cout << "newfstatat(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
                               << "statbuf, " << flag << std::dec << ")\n";
+#endif
                     auto fileResolve = ctx.GetProcess().ResolveFile(filename);
                     if (fileResolve.status != kfile_status::SUCCESS) {
                         int err{-EIO};

@@ -66,7 +66,9 @@ int64_t Getdents64::Call(int64_t fd, int64_t uptr_dirent, int64_t count, int64_t
         return -EINVAL;
     }
     SyscallCtx ctx{params};
+#ifdef GETDENTS64_DEBUG
     std::cout << "getdents64(" << std::dec << fd << ", " << std::hex << uptr_dirent << std::dec << ", " << count << ")\n";
+#endif
     auto desc = ctx.GetProcess().get_file_descriptor(fd);
     if (!desc.Valid()) {
         return -EBADF;
