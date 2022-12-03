@@ -22,4 +22,11 @@ struct termios {
     cc_t c_cc[ncc];
 };
 
+struct winsize {
+    unsigned short ws_row;
+    unsigned short ws_col;
+    unsigned short ws_xpixel;
+    unsigned short ws_ypixel;
+};
+
 #endif //JEOKERNEL_TERMIOS_H

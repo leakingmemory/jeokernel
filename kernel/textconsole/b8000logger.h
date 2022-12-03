@@ -19,6 +19,8 @@ public:
     void print_at(uint8_t col, uint8_t row, const char *str) override;
     void erase(int backtrack, int erase) override;
     b8000logger & operator << (const char *str) override;
+    uint32_t GetWidth() override;
+    uint32_t GetHeight() override;
 };
 
 

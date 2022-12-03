@@ -213,3 +213,18 @@ void framebuffer_kcons_with_worker_thread::erase(int backtrack, int erase) {
         delete cmd;
     }
 }
+
+uint32_t framebuffer_kcons_with_worker_thread::GetWidth() {
+    std::lock_guard lock{spinlock};
+    return targetObject->GetWidth();
+}
+
+uint32_t framebuffer_kcons_with_worker_thread::GetHeight() {
+    std::lock_guard lock{spinlock};
+    return targetObject->GetHeight();
+}
+
+void framebuffer_kcons_with_worker_thread::GetDimensions(uint32_t &width, uint32_t &height) {
+    std::lock_guard lock{spinlock};
+    targetObject->GetDimensions(width, height);
+}

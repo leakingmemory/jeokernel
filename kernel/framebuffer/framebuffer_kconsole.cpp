@@ -74,6 +74,10 @@ void framebuffer_kconsole::SetCursorVisible(bool visibility) {
     fbconsole->SetCursorVisibility(visibility, 0x7F7F7F7F);
 }
 
+uint32_t framebuffer_kconsole::GetWidth() {
+    return fbconsole->GetWidth();
+}
+
 uint32_t framebuffer_kconsole::GetHeight() {
     return fbconsole->GetHeight();
 }

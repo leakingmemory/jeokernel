@@ -24,3 +24,11 @@ void b8000logger::erase(int backtrack, int erase) {
     std::lock_guard lock(_lock);
     cons.erase(backtrack, erase);
 }
+
+uint32_t b8000logger::GetWidth() {
+    return 80;
+}
+
+uint32_t b8000logger::GetHeight() {
+    return 25;
+}

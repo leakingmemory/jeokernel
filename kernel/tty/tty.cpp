@@ -63,6 +63,19 @@ intptr_t tty::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
                 }
                 return ctx.Return(0);
             });
+        case TIOCGWINSZ:
+            return ctx.Write(arg, sizeof(winsize), [ctx] (void *ptr) mutable {
+                auto &kl = get_klogger();
+                uint32_t width, height;
+                kl.GetDimensions(width, height);
+                winsize wz{};
+                wz.ws_col = width;
+                wz.ws_row = height;
+                wz.ws_xpixel = 0;
+                wz.ws_ypixel = 0;
+                memcpy(ptr, &wz, sizeof(wz));
+                return ctx.Return(0);
+            });
     }
     std::cout << "tty->ioctl(0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
     return -EOPNOTSUPP;

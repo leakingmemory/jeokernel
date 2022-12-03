@@ -5,6 +5,7 @@
 #ifndef JEOKERNEL_IOCTL_H
 #define JEOKERNEL_IOCTL_H
 
-#define TCGETS  0x5401
+#define TCGETS      0x5401
+#define TIOCGWINSZ  0x5413
 
 #endif //JEOKERNEL_IOCTL_H

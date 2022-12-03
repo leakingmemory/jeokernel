@@ -41,6 +41,9 @@ public:
     void print_at(uint8_t col, uint8_t row, const char *str) override;
     void erase(int backtrack, int erase) override;
     framebuffer_kcons_with_worker_thread & operator << (const char *str) override;
+    uint32_t GetWidth();
+    uint32_t GetHeight();
+    void GetDimensions(uint32_t &width, uint32_t &height) override;
 };
 
 

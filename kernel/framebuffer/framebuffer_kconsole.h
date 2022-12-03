@@ -23,7 +23,8 @@ public:
     void MakeRoomForLinefeeds(unsigned int linefeeds);
     void SetCursorVisible(bool visibility);
 
-    uint32_t GetHeight();
+    uint32_t GetWidth() override;
+    uint32_t GetHeight() override;
 };
 
 

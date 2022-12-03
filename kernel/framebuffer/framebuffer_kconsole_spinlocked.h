@@ -20,6 +20,9 @@ public:
     void print_at(uint8_t col, uint8_t row, const char *str) override;
     void erase(int backtrack, int erase) override;
     framebuffer_kconsole_spinlocked & operator << (const char *str) override;
+    uint32_t GetWidth() override;
+    uint32_t GetHeight() override;
+    void GetDimensions(uint32_t &width, uint32_t &height) override;
 };
 
 

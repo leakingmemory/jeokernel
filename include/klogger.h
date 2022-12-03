@@ -12,11 +12,14 @@ class KLogger {
 public:
     virtual ~KLogger() {}
 
-    virtual void print_at(uint8_t col, uint8_t row, const char *str) {
+    virtual uint32_t GetWidth() = 0;
+    virtual uint32_t GetHeight() = 0;
+    virtual void GetDimensions(uint32_t &width, uint32_t &height) {
+        width = GetWidth();
+        height = GetHeight();
     }
-
-    virtual void erase(int backtrack, int erase) {
-    }
+    virtual void print_at(uint8_t col, uint8_t row, const char *str) = 0;
+    virtual void erase(int backtrack, int erase) = 0;
 
     virtual KLogger & operator << (const char *str) {
         return *this;
