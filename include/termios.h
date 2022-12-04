@@ -22,6 +22,8 @@ struct termios {
     cc_t c_cc[ncc];
 };
 
+#define ISIG    1
+
 struct winsize {
     unsigned short ws_row;
     unsigned short ws_col;

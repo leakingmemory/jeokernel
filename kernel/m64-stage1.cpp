@@ -998,7 +998,7 @@ done_with_mem_extension:
                     }
                 }
 
-                std::shared_ptr<tty> term = std::make_shared<tty>();
+                std::shared_ptr<tty> term = tty::Create();
                 kshell_commands shell{*(new kshell(term))};
             }};
             pci_scan_thread.detach();

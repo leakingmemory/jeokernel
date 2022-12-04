@@ -17,6 +17,7 @@ class FileDescriptorHandler;
 class tty : public keycode_consumer {
 private:
     hw_spinlock mtx;
+    std::weak_ptr<tty> self;
     raw_semaphore sema;
     std::thread thr;
     std::shared_ptr<keyboard_codepage> codepage;
@@ -24,9 +25,12 @@ private:
     std::string linebuffer;
     std::vector<std::weak_ptr<FileDescriptorHandler>> subscribers;
     bool lineedit;
+    bool signals;
     bool stop;
-public:
+private:
     tty();
+public:
+    static std::shared_ptr<tty> Create();
     void thread();
     ~tty();
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg);

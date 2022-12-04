@@ -11,7 +11,14 @@
 #include <termios.h>
 #include <exec/fdesc.h>
 
-tty::tty() : mtx(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), lineedit(true), stop(false) {
+tty::tty() : mtx(), self(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), lineedit(true), signals(false), stop(false) {
+}
+
+std::shared_ptr<tty> tty::Create() {
+    std::shared_ptr<tty> inst{new tty()};
+    std::weak_ptr<tty> weak{inst};
+    inst->self = weak;
+    return inst;
 }
 
 void tty::thread() {
@@ -50,19 +57,57 @@ tty::~tty() {
 
 intptr_t tty::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     switch (cmd) {
-        case TCGETS:
-            return ctx.Write(arg, sizeof(termios), [ctx] (void *ptr) mutable {
+        case TCGETS: {
+            std::shared_ptr<tty> ref = self.lock();
+            return ctx.Write(arg, sizeof(termios), [ref, ctx](void *ptr) mutable {
                 termios *t = (termios *) ptr;
-                t->c_iflag = 0;
-                t->c_oflag = 0;
-                t->c_cflag = 0;
-                t->c_lflag = 0;
-                t->c_line = 0;
-                for (int i = 0; i < termios::ncc; i++) {
-                    t->c_cc[i] = 0;
+                {
+                    std::lock_guard lock{ref->mtx};
+                    t->c_iflag = 0;
+                    t->c_oflag = 0;
+                    t->c_cflag = 0;
+                    t->c_lflag = ref->signals ? ISIG : 0;
+                    t->c_line = 0;
+                    for (int i = 0; i < termios::ncc; i++) {
+                        t->c_cc[i] = 0;
+                    }
                 }
                 return ctx.Return(0);
             });
+        }
+        case TCSETSW: {
+            std::shared_ptr<tty> ref = self.lock();
+            return ctx.Read(arg, sizeof(termios), [ref, ctx](const void *ptr) mutable {
+                const termios &t = *((const termios *) ptr);
+                if (t.c_iflag != 0) {
+                    std::cout << "drain & set termios(" << std::hex << t.c_iflag << ", " << t.c_oflag << ", "
+                              << t.c_cflag
+                              << ", " << t.c_lflag << ", " << t.c_line << std::dec << ")\n";
+                    return ctx.Return(-EOPNOTSUPP);
+                }
+                if (t.c_oflag != 0) {
+                    std::cout << "drain & set termios(" << std::hex << t.c_iflag << ", " << t.c_oflag << ", "
+                              << t.c_cflag
+                              << ", " << t.c_lflag << ", " << t.c_line << std::dec << ")\n";
+                    return ctx.Return(-EOPNOTSUPP);
+                }
+                if (t.c_cflag != 0) {
+                    std::cout << "drain & set termios(" << std::hex << t.c_iflag << ", " << t.c_oflag << ", "
+                              << t.c_cflag
+                              << ", " << t.c_lflag << ", " << t.c_line << std::dec << ")\n";
+                    return ctx.Return(-EOPNOTSUPP);
+                }
+                if (t.c_lflag != 0 && t.c_lflag != ISIG /* Signals on Ctr+C, etc */) {
+                    std::cout << "drain & set termios(" << std::hex << t.c_iflag << ", " << t.c_oflag << ", "
+                              << t.c_cflag
+                              << ", " << t.c_lflag << ", " << t.c_line << std::dec << ")\n";
+                    return ctx.Return(-EOPNOTSUPP);
+                }
+                std::lock_guard lock{ref->mtx};
+                ref->signals = (t.c_cflag & ISIG) != 0;
+                return ctx.Return(0);
+            });
+        }
         case TIOCGWINSZ:
             return ctx.Write(arg, sizeof(winsize), [ctx] (void *ptr) mutable {
                 auto &kl = get_klogger();

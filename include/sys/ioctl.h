@@ -6,6 +6,7 @@
 #define JEOKERNEL_IOCTL_H
 
 #define TCGETS      0x5401
+#define TCSETSW     0x5403
 #define TIOCGWINSZ  0x5413
 #define TIOCSWINSZ  0x5414
 
