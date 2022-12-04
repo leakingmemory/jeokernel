@@ -76,6 +76,18 @@ intptr_t tty::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
                 memcpy(ptr, &wz, sizeof(wz));
                 return ctx.Return(0);
             });
+        case TIOCSWINSZ:
+            return ctx.Read(arg, sizeof(winsize), [ctx] (const void *ptr) mutable {
+                const winsize &wz = *((const winsize *) ptr);
+                auto &kl = get_klogger();
+                uint32_t width, height;
+                kl.GetDimensions(width, height);
+                if (width == wz.ws_col && height == wz.ws_row) {
+                    return ctx.Return(0);
+                }
+                std::cout << "error: tty setwinsize (" << wz.ws_col << ", " << wz.ws_row << ", " << wz.ws_xpixel << ", " << wz.ws_ypixel << ")\n";
+                return ctx.Return(-EOPNOTSUPP);
+            });
     }
     std::cout << "tty->ioctl(0x" << std::hex << cmd << ", 0x" << arg << std::dec << ")\n";
     return -EOPNOTSUPP;
