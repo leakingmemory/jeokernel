@@ -15,6 +15,8 @@
 #include "Statx.h"
 #include "SyscallCtx.h"
 
+//#define DEBUG_STATX
+
 int64_t Statx::Call(int64_t dfd, int64_t uptr_filename, int64_t flag, int64_t mask, SyscallAdditionalParams &params) {
     int64_t uptr_statbuf = params.Param5();
     if (uptr_filename == 0 || uptr_statbuf == 0) {
@@ -38,8 +40,10 @@ int64_t Statx::Call(int64_t dfd, int64_t uptr_filename, int64_t flag, int64_t ma
                 struct statx st{};
 
                 if ((!filename.empty() && filename.starts_with("/")) || dfd == AT_FDCWD) {
+#ifdef DEBUG_STATX
                     std::cout << "statx(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
                               << "statbuf, " << flag << std::dec << ")\n";
+#endif
                     auto fileResolve = ctx.GetProcess().ResolveFile(filename);
                     if (fileResolve.status != kfile_status::SUCCESS) {
                         int err{-EIO};
