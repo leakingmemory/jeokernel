@@ -54,6 +54,7 @@
 #include "Getdents64.h"
 #include "Statx.h"
 #include "Chdir.h"
+#include "Munmap.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -166,6 +167,7 @@ private:
     Getdents64 getdents64{*this};
     Statx stat{*this};
     Chdir chdir{*this};
+    Munmap munmap{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

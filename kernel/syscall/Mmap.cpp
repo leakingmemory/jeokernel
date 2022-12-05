@@ -52,6 +52,7 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
     }
 
     uintptr_t vpageaddr;
+    std::vector<DeferredReleasePage> discardPages{};
     if ((flags & MAP_FIXED) == 0) {
         vpageaddr = process->FindFree(pages);
         if (vpageaddr == 0) {
@@ -68,6 +69,7 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
             std::cerr << "mmap: address is not in the allowed range for fixed mappings\n";
             return -ENOMEM;
         }
+        discardPages = process->ClearRange(vpageaddr, pages);
         process->ClearRange(vpageaddr, pages);
     }
     if ((flags & MAP_ANONYMOUS) != 0) {

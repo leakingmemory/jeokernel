@@ -61,8 +61,12 @@ bool ProcThread::IsInRange(uint32_t pagenum, uint32_t pages) {
     return process->IsInRange(pagenum, pages);
 }
 
-void ProcThread::ClearRange(uint32_t pagenum, uint32_t pages) {
-    process->ClearRange(pagenum, pages);
+void ProcThread::DisableRange(uint32_t pagenum, uint32_t pages) {
+    process->DisableRange(pagenum, pages);
+}
+
+std::vector<DeferredReleasePage> ProcThread::ClearRange(uint32_t pagenum, uint32_t pages) {
+    return process->ClearRange(pagenum, pages);
 }
 
 void ProcThread::SetProgramBreak(uintptr_t pbrk) {

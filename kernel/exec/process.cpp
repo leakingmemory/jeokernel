@@ -133,6 +133,22 @@ MemMapping::~MemMapping() {
 #endif
 }
 
+DeferredReleasePage::DeferredReleasePage(DeferredReleasePage &&mv) : pagenum(mv.pagenum), data(mv.data), cow(mv.cow) {
+    if (this != &mv) {
+        mv.pagenum = 0;
+        mv.data = {};
+        mv.cow = {};
+    }
+}
+
+DeferredReleasePage::~DeferredReleasePage() {
+    if (!data && !cow && pagenum != 0) {
+        uintptr_t addr{pagenum};
+        addr = addr << 12;
+        ppagefree(addr, PAGESIZE);
+    }
+}
+
 static pid_t FindNextPid() {
     auto numPids = pids.size();
     uint32_t i = 0;
@@ -554,7 +570,19 @@ bool Process::IsInRange(uint32_t pagenum, uint32_t pages) {
     return (start >= lowLim) && (end <= highLim);
 }
 
-void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
+void Process::DisableRange(uint32_t pagenum, uint32_t pages) {
+    for (typeof(pagenum) p = 0; p < pages; p++) {
+        auto addr = pagenum;
+        addr += p;
+        Pageentry(addr, [] (pageentr &pe) {
+            pe.present = 0;
+        });
+    }
+}
+
+std::vector<DeferredReleasePage> Process::ClearRange(uint32_t pagenum, uint32_t pages) {
+    std::vector<DeferredReleasePage> release{};
+    release.reserve(2);
     std::lock_guard lock{mtx};
     auto iterator = mappings.begin();
     std::vector<MemMapping> newMappings{};
@@ -596,14 +624,7 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
                                 const auto &check = *dropIterator;
                                 if (check.page >= overlap_page) {
                                     if (check.page < overlap_end) {
-                                        if (!check.data && check.phys_page != 0) {
-#ifdef DEBUG_MAP_CLEAR_FREE
-                                            std::cout << " -" << std::hex << check.page << std::dec;
-#endif
-                                            phys_t addr{check.phys_page};
-                                            addr = addr << 12;
-                                            ppagefree(addr, PAGESIZE);
-                                        }
+                                        release.emplace_back(check.phys_page, check.data, check.cow);
                                     } else {
 #ifdef DEBUG_MAP_CLEAR_FREE
                                         if (!check.data && check.phys_page != 0) {
@@ -634,14 +655,7 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
                             while (dropIterator != mapping.mappings.end()) {
                                 auto &check = *dropIterator;
                                 if (check.page >= overlap_page) {
-                                    if (!check.data && check.phys_page != 0) {
-#ifdef DEBUG_MAP_CLEAR_FREE
-                                        std::cout << " " << std::hex << check.page << std::dec;
-#endif
-                                        phys_t addr{check.phys_page};
-                                        addr = addr << 12;
-                                        ppagefree(addr, PAGESIZE);
-                                    }
+                                    release.emplace_back(check.phys_page, check.data, check.cow);
                                     mapping.mappings.erase(dropIterator);
                                 } else {
                                     ++dropIterator;
@@ -666,14 +680,7 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
                         while (dropIterator != mapping.mappings.end()) {
                             auto &check = *dropIterator;
                             if (check.page < overlap_end) {
-                                if (!check.data && check.phys_page != 0) {
-#ifdef DEBUG_MAP_CLEAR_FREE
-                                    std::cout << " " << std::hex << check.page << std::dec;
-#endif
-                                    phys_t addr{check.phys_page};
-                                    addr = addr << 12;
-                                    ppagefree(addr, PAGESIZE);
-                                }
+                                release.emplace_back(check.phys_page, check.data, check.cow);
                                 mapping.mappings.erase(dropIterator);
                             } else {
                                 ++dropIterator;
@@ -703,6 +710,7 @@ void Process::ClearRange(uint32_t pagenum, uint32_t pages) {
         }
         mapping.mappings.clear();
     }
+    return release;
 }
 
 uint32_t Process::FindFree(uint32_t pages) {

@@ -90,6 +90,20 @@ public:
     ~MemMapping();
 };
 
+class DeferredReleasePage {
+private:
+    uint32_t pagenum;
+    filepage_ref data;
+    std::shared_ptr<CowPageRef> cow;
+public:
+    DeferredReleasePage(uint32_t pagenum, filepage_ref data, std::shared_ptr<CowPageRef> cow)
+        : pagenum(pagenum), data(data), cow(cow) {}
+    DeferredReleasePage(const DeferredReleasePage &) = delete;
+    DeferredReleasePage(DeferredReleasePage &&mv);
+    DeferredReleasePage &operator =(const DeferredReleasePage &) = delete;
+    ~DeferredReleasePage();
+};
+
 constexpr rlim_t rlim_INFINITY = -1;
 
 constexpr rlim_t rlim_AS = (64ULL*1024ULL*1024ULL*1024ULL);
@@ -223,7 +237,8 @@ public:
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
     bool IsFree(uint32_t pagenum, uint32_t pages);
     bool IsInRange(uint32_t pagenum, uint32_t pages);
-    void ClearRange(uint32_t pagenum, uint32_t pages);
+    void DisableRange(uint32_t pagenum, uint32_t pages);
+    [[nodiscard]] std::vector<DeferredReleasePage> ClearRange(uint32_t pagenum, uint32_t pages);
     uint32_t FindFree(uint32_t pages);
     void TearDownMemory();
 private:
