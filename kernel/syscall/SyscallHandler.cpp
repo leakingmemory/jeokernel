@@ -53,6 +53,7 @@
 #include "Prctl.h"
 #include "Getdents64.h"
 #include "Statx.h"
+#include "Chdir.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -164,6 +165,7 @@ private:
     Prctl prctl{*this};
     Getdents64 getdents64{*this};
     Statx stat{*this};
+    Chdir chdir{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
