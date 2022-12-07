@@ -70,7 +70,7 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
             return -ENOMEM;
         }
         discardPages = process->ClearRange(vpageaddr, pages);
-        process->ClearRange(vpageaddr, pages);
+        process->DisableRange(vpageaddr, pages);
     }
     if ((flags & MAP_ANONYMOUS) != 0) {
         if (!process->Map(vpageaddr, pages, false)) {
