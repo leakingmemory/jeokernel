@@ -3,6 +3,7 @@
 //
 
 #include <iostream>
+#include <files/symlink.h>
 #include "ls.h"
 
 int ls(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
@@ -31,7 +32,13 @@ int ls(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &a
                 for (auto entry : entriesResult.entries) {
                     auto item = entry->Item();
                     std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << item->SysDevId()
-                              << ":" << item->InodeNum() << " " << entry->Name() << "\n";
+                              << ":" << item->InodeNum() << " " << entry->Name();
+                    class symlink* syml = dynamic_cast<class symlink *>(&(*item));
+                    if (syml == nullptr) {
+                        std::cout << "\n";
+                    } else {
+                        std::cout << " -> " << syml->GetLink() << "\n";
+                    }
                 }
             } else {
                 std::cerr << "Directory error: " << text(entriesResult.status) << "\n";

@@ -14,7 +14,8 @@ enum class fileitem_status {
     IO_ERROR,
     INTEGRITY_ERROR,
     NOT_SUPPORTED_FS_FEATURE,
-    INVALID_REQUEST
+    INVALID_REQUEST,
+    TOO_MANY_LINKS
 };
 
 std::string text(fileitem_status status);
@@ -30,7 +31,7 @@ struct file_read_result {
 };
 
 class fileitem {
-public:
+ public:
     virtual ~fileitem() = default;
     virtual uint32_t Mode() = 0;
     virtual std::size_t Size() = 0;

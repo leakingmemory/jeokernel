@@ -7,6 +7,7 @@
 #include <cstring>
 #include <strings.h>
 #include <iostream>
+#include <files/symlink.h>
 #include "ext2fs/ext2struct.h"
 
 //#define DEBUG_INODE
@@ -245,7 +246,9 @@ ext2fs_get_inode_result ext2fs::LoadInode(std::size_t inode_num) {
         }
     }
     lock = {};
-    {
+    if (inode.size <= 60) {
+        inode_obj->symlinkPointer.append((const char *) &(inode.block[0]), inode.size);
+    } else {
         uint64_t indirect_block = inode.block[EXT2_NUM_DIRECT_BLOCK_PTRS];
         if (indirect_block != 0) {
 #ifdef DEBUG_INODE
@@ -436,6 +439,73 @@ file_read_result ext2fs_file::Read(uint64_t offset, void *ptr, std::size_t lengt
     return {.size = result.size, .status = Convert(result.status)};
 }
 
+class ext2fs_symlink : public symlink, public ext2fs_file {
+private:
+    std::string symlink;
+    bool loaded;
+public:
+    ext2fs_symlink(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode);
+    uint32_t Mode() override;
+    std::size_t Size() override;
+    uintptr_t InodeNum() override;
+    uint32_t BlockSize() override;
+    uintptr_t SysDevId() override;
+    file_getpage_result GetPage(std::size_t pagenum) override;
+    file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
+    [[nodiscard]] std::string GetLink();
+};
+
+ext2fs_symlink::ext2fs_symlink(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : ext2fs_file(fs, inode), symlink(), loaded(false) {
+    if (inode->filesize <= 60) {
+        this->symlink = inode->symlinkPointer;
+        this->loaded = true;
+    }
+}
+
+uint32_t ext2fs_symlink::Mode() {
+    return ext2fs_file::Mode();
+}
+
+std::size_t ext2fs_symlink::Size() {
+    return ext2fs_file::Size();
+}
+
+uintptr_t ext2fs_symlink::InodeNum() {
+    return ext2fs_file::InodeNum();
+}
+
+uint32_t ext2fs_symlink::BlockSize() {
+    return ext2fs_file::BlockSize();
+}
+
+uintptr_t ext2fs_symlink::SysDevId() {
+    return ext2fs_file::SysDevId();
+}
+
+file_getpage_result ext2fs_symlink::GetPage(std::size_t pagenum) {
+    return {.page = {}, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
+}
+
+file_read_result ext2fs_symlink::Read(uint64_t offset, void *ptr, std::size_t length) {
+    return {.size = 0, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
+}
+
+std::string ext2fs_symlink::GetLink() {
+    if (!loaded) {
+        auto size = inode->filesize;
+        char *buf = (char *) malloc(size);
+        auto result = inode->ReadBytes(0, buf, size);
+        if (result.status != filesystem_status::SUCCESS || result.size <= 0 || result.size > size) {
+            free(buf);
+            return {};
+        }
+        symlink.append((const char *) buf, result.size);
+        free(buf);
+        loaded = true;
+    }
+    return symlink;
+}
+
 class ext2fs_directory : public directory, public ext2fs_file {
 private:
     std::vector<std::shared_ptr<directory_entry>> entries;
@@ -491,6 +561,13 @@ entries_result ext2fs_directory::Entries() {
                             }
                         } else if (dirent->file_type == 1) {
                             auto result = Filesystem().GetFile(fs, dirent->inode);
+                            if (result.node) {
+                                entries.emplace_back(new directory_entry(name, result.node));
+                            } else {
+                                return {.entries = {}, .status = Convert(result.status)};
+                            }
+                        } else if (dirent->file_type == 7) {
+                            auto result = Filesystem().GetSymlink(fs, dirent->inode);
                             if (result.node) {
                                 entries.emplace_back(new directory_entry(name, result.node));
                             } else {
@@ -573,6 +650,21 @@ filesystem_get_node_result<fileitem> ext2fs::GetFile(std::shared_ptr<filesystem>
         return {.node = {}, .status = inode_obj.status};
     }
     return {.node = std::make_shared<ext2fs_file>(shared_this, inode_obj.inode), .status = filesystem_status::SUCCESS};
+}
+
+filesystem_get_node_result<fileitem> ext2fs::GetSymlink(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
+    if (!shared_this || this != ((ext2fs *) &(*shared_this))) {
+        std::cerr << "Wrong shared reference for filesystem when opening directory\n";
+        return {.node = {}, .status = filesystem_status::INVALID_REQUEST};
+    }
+    auto inode_obj = GetInode(inode_num);
+    if (!inode_obj.inode) {
+        std::cerr << "Failed to open inode " << inode_num << "\n";
+        return {.node = {}, .status = inode_obj.status};
+    }
+    std::shared_ptr<ext2fs_symlink> symlink = std::make_shared<ext2fs_symlink>(shared_this, inode_obj.inode);
+    std::shared_ptr<class symlink> as_symlink{symlink};
+    return {.node = as_symlink, .status = filesystem_status::SUCCESS};
 }
 
 filesystem_get_node_result<directory> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {

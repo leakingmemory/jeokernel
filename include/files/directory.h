@@ -34,12 +34,14 @@ struct directory_resolve_result {
     fileitem_status status;
 };
 
+constexpr int maxLinkRecurse = 50;
+
 class directory : public fileitem {
 public:
     virtual ~directory() = default;
     uint32_t Mode() override = 0;
     virtual entries_result Entries() = 0;
-    directory_resolve_result Resolve(std::string filename);
+    directory_resolve_result Resolve(std::string filename, directory *rootdir = nullptr, int followSymlink = maxLinkRecurse);
 };
 
 #endif //FSBITS_DIRECTORY_H

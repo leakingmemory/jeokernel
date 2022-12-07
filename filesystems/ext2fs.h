@@ -98,11 +98,13 @@ public:
     ext2fs_get_inode_result GetInode(std::size_t inode_num);
     filesystem_get_node_result<directory> GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
     filesystem_get_node_result<fileitem> GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
+    filesystem_get_node_result<fileitem> GetSymlink(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
 public:
     filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
 };
 
 class ext2fs_file;
+class ext2fs_symlink;
 
 struct inode_read_blocks_result {
     std::shared_ptr<blockdev_block> block;
@@ -127,6 +129,7 @@ struct inode_read_bytes_result {
 class ext2fs_inode {
     friend ext2fs;
     friend ext2fs_file;
+    friend ext2fs_symlink;
 private:
     std::mutex mtx;
     std::shared_ptr<blockdev> bdev;
@@ -134,6 +137,7 @@ private:
     std::size_t offset;
     std::size_t blocksize;
     std::vector<uint32_t> blockRefs;
+    std::string symlinkPointer;
     std::vector<std::shared_ptr<filepage>> blockCache;
     uintptr_t sys_dev_id;
     uintptr_t inode;
