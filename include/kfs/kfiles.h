@@ -23,6 +23,8 @@ class fileitem;
 class directory;
 class kdirectory;
 class kdirectory_impl;
+class ksymlink_impl;
+class ksymlink;
 
 template <typename T> struct kfile_result {
     T result;
@@ -32,6 +34,8 @@ template <typename T> struct kfile_result {
 class kfile {
     friend kdirectory;
     friend kdirectory_impl;
+    friend ksymlink_impl;
+    friend ksymlink;
 private:
     std::shared_ptr<fileitem> file;
 public:
@@ -85,9 +89,26 @@ private:
 public:
     kdirectory(const std::shared_ptr<kfile> &impl) : kfile(impl->file), impl(impl) {}
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries();
-    kfile_result<std::shared_ptr<kfile>> Resolve(std::string filename);
+    kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root, std::string filename, int resolveSymlinks = 20);
     void Mount(const std::shared_ptr<directory> &fsroot);
     std::string Kpath();
+};
+
+class ksymlink_impl : public kfile {
+    friend ksymlink;
+private:
+    std::shared_ptr<kfile> parent;
+public:
+    ksymlink_impl(std::shared_ptr<kfile> parent, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem), parent(parent) {}
+};
+
+class ksymlink : public kfile {
+private:
+    std::shared_ptr<ksymlink_impl> impl;
+public:
+    ksymlink(std::shared_ptr<ksymlink_impl> impl) : kfile(impl->file), impl(impl) {}
+    [[nodiscard]] kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root);
+    [[nodiscard]] std::string GetLink();
 };
 
 std::shared_ptr<kdirectory> get_kernel_rootdir();

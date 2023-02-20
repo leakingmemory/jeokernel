@@ -252,6 +252,7 @@ void Exec::MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vec
 
 std::shared_ptr<kfile> ExecState::ResolveFile(const std::string &filename) {
     std::shared_ptr<kfile> litem{};
+    auto rootdir = get_kernel_rootdir();
     if (filename.starts_with("/")) {
         std::string resname{};
         resname.append(filename.c_str()+1);
@@ -261,21 +262,21 @@ std::shared_ptr<kfile> ExecState::ResolveFile(const std::string &filename) {
             resname = trim;
         }
         if (!resname.empty()) {
-            auto resolveResult = get_kernel_rootdir()->Resolve(resname);
+            auto resolveResult = rootdir->Resolve(&(*rootdir), resname);
             if (resolveResult.status != kfile_status::SUCCESS) {
                 std::cerr << "elfloader: error: " << text(resolveResult.status) << "\n";
                 return {};
             }
             litem = resolveResult.result;
         } else {
-            litem = get_kernel_rootdir();
+            litem = rootdir;
         }
     } else {
         if (filename.empty()) {
             std::cerr << "elfloader: not found: <empty>\n";
             return {};
         }
-        auto resolveResult = cwd.Resolve(filename);
+        auto resolveResult = cwd.Resolve(&(*rootdir), filename);
         if (resolveResult.status != kfile_status::SUCCESS) {
             std::cerr << "elfloader: error: " << text(resolveResult.status) << "\n";
             return {};

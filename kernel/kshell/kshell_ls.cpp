@@ -6,7 +6,12 @@
 #include "kshell_ls.h"
 
 static void single(kfile *file, std::string name) {
-    std::cout << std::oct << file->Mode() << std::dec << " " << file->Size() << " " << name << "\n";
+    std::cout << std::oct << file->Mode() << std::dec << " " << file->Size() << " " << name;
+    ksymlink *syml = dynamic_cast<ksymlink *>(file);
+    if (syml != nullptr) {
+        std::cout << " -> " << syml->GetLink();
+    }
+    std::cout << "\n";
 }
 
 static void list(kdirectory *dir) {
@@ -30,6 +35,7 @@ void kshell_ls::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     if (iterator != cmd.end()) {
         do {
             std::string filename = *iterator;
+            auto rootdir = get_kernel_rootdir();
             if (filename.starts_with("/")) {
                 std::string resname{};
                 resname.append(filename.c_str()+1);
@@ -40,7 +46,7 @@ void kshell_ls::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                 }
                 std::shared_ptr<kfile> litem;
                 if (!resname.empty()) {
-                    auto resolveResult = get_kernel_rootdir()->Resolve(resname);
+                    auto resolveResult = rootdir->Resolve(&(*rootdir), resname);
                     if (resolveResult.status != kfile_status::SUCCESS) {
                         std::cerr << "Error: " << text(resolveResult.status) << "\n";
                         return;
@@ -49,24 +55,32 @@ void kshell_ls::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                 } else {
                     litem = get_kernel_rootdir();
                 }
-                kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
-                if (ldir != nullptr) {
-                    list(ldir);
+                if (litem) {
+                    kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
+                    if (ldir != nullptr) {
+                        list(ldir);
+                    } else {
+                        single(&(*litem), filename);
+                    }
                 } else {
-                    single(&(*litem), filename);
+                    std::cerr << "Error: " << filename << ": Not found\n";
                 }
             } else {
-                auto resolveResult = dir->Resolve(filename);
+                auto resolveResult = dir->Resolve(&(*rootdir), filename);
                 if (resolveResult.status != kfile_status::SUCCESS) {
                     std::cerr << "Error: " << text(resolveResult.status) << "\n";
                     return;
                 }
                 auto litem = resolveResult.result;
-                kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
-                if (ldir != nullptr) {
-                    list(ldir);
+                if (litem) {
+                    kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
+                    if (ldir != nullptr) {
+                        list(ldir);
+                    } else {
+                        single(&(*litem), filename);
+                    }
                 } else {
-                    single(&(*litem), filename);
+                    std::cerr << "Error: " << filename << ": Not found\n";
                 }
             }
             ++iterator;

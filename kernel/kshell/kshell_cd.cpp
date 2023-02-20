@@ -11,8 +11,9 @@ void kshell_cd::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     if (iterator != cmd.end()) {
         ++iterator;
     }
+    auto rootdir = get_kernel_rootdir();
     if (iterator == cmd.end()) {
-        shell.Cwd(get_kernel_rootdir());
+        shell.Cwd(rootdir);
         return;
     }
     std::string dir = *iterator;
@@ -28,9 +29,9 @@ void kshell_cd::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             trim.append(dir.c_str() + 1);
             dir = trim;
         }
-        newDirRes = get_kernel_rootdir()->Resolve(dir);
+        newDirRes = rootdir->Resolve(&(*rootdir), dir);
     } else {
-        newDirRes = cwd.Resolve(dir);
+        newDirRes = cwd.Resolve(&(*rootdir), dir);
     }
     if (newDirRes.status != kfile_status::SUCCESS) {
         std::cerr << "Error: " << text(newDirRes.status) << "\n";

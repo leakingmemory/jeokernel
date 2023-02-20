@@ -5,6 +5,7 @@
 #include <iostream>
 #include <kfs/kfiles.h>
 #include <files/directory.h>
+#include <files/symlink.h>
 
 std::string text(kfile_status status) {
     switch (status) {
@@ -122,8 +123,14 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
                     std::shared_ptr<kdirectory_impl> dir{new kdirectory_impl(this_ref, subpath, fsfile)};
                     items.push_back(std::make_shared<kdirent>(name, dir));
                 } else {
-                    std::shared_ptr<kfile> file{new kfile(fsfile)};
-                    items.push_back(std::make_shared<kdirent>(name, file));
+                    class symlink *syml = dynamic_cast<class symlink *>(&(*fsfile));
+                    if (syml != nullptr) {
+                        std::shared_ptr<ksymlink_impl> symli = std::make_shared<ksymlink_impl>(this_ref, fsfile);
+                        items.push_back(std::make_shared<kdirent>(name, symli));
+                    } else {
+                        std::shared_ptr<kfile> file{new kfile(fsfile)};
+                        items.push_back(std::make_shared<kdirent>(name, file));
+                    }
                 }
             }
         }
@@ -149,7 +156,14 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
     std::vector<std::shared_ptr<kdirent>> entries{};
     for (auto impl_entry : impl_entries.result) {
         if (dynamic_cast<kdirectory_impl *>(&(*(impl_entry->File()))) == nullptr) {
-            entries.push_back(impl_entry);
+            std::shared_ptr<ksymlink_impl> symli{impl_entry->File()};
+            if (!symli) {
+                entries.push_back(impl_entry);
+            } else {
+                std::shared_ptr<ksymlink> syml = std::make_shared<ksymlink>(symli);
+                std::shared_ptr<kdirent> entry = std::make_shared<kdirent>(impl_entry->Name(), syml);
+                entries.push_back(entry);
+            }
         } else {
             std::shared_ptr<kdirectory> file{new kdirectory(impl_entry->File())};
             std::shared_ptr<kdirent> entry{new kdirent(impl_entry->Name(), file)};
@@ -159,7 +173,7 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
     return {.result = entries, .status = kfile_status::SUCCESS};
 }
 
-kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(std::string filename) {
+kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(kdirectory *root, std::string filename, int resolveSymlinks) {
     if (filename.empty() || filename.starts_with("/")) {
         return {.result = {}, .status = kfile_status::SUCCESS};
     }
@@ -195,15 +209,25 @@ kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(std::string filename) {
     }
     for (const auto &entry : entriesResult.result) {
         if (component == entry->Name()) {
+            auto file = entry->File();
+            ksymlink *syml;
+            while ((syml = dynamic_cast<ksymlink *>(&(*file))) != nullptr && resolveSymlinks > 0) {
+                --resolveSymlinks;
+                auto result = syml->Resolve(root);
+                if (result.status != kfile_status::SUCCESS || !result.result) {
+                    return result;
+                }
+                // syml = nullptr; // Pointer becomes unsafe:
+                file = result.result;
+            }
             if (filename.empty()) {
-                return {.result = entry->File(), .status = kfile_status::SUCCESS};
+                return {.result = file, .status = kfile_status::SUCCESS};
             } else {
-                std::shared_ptr<kfile> ref{entry->File()};
-                kdirectory *dir = dynamic_cast<kdirectory *>(&(*ref));
+                kdirectory *dir = dynamic_cast<kdirectory *>(&(*file));
                 if (dir == nullptr) {
                     return {.result = {}, .status = kfile_status::NOT_DIRECTORY};
                 }
-                return dir->Resolve(filename);
+                return dir->Resolve(root, filename, resolveSymlinks);
             }
         }
     }
@@ -222,4 +246,38 @@ std::string kdirectory::Kpath() {
 
 std::shared_ptr<kdirectory> get_kernel_rootdir() {
     return std::make_shared<kdirectory>(rootdir);
+}
+
+kfile_result<std::shared_ptr<kfile>> ksymlink::Resolve(kdirectory *root) {
+    std::string syml = GetLink();
+    std::shared_ptr<kdirectory> kdir{};
+    if (syml.starts_with("/")) {
+        std::string remaining{};
+        do {
+            remaining.append(syml.c_str() + 1, syml.size() - 1);
+            syml = remaining;
+            remaining.clear();
+        } while (syml.starts_with("/"));
+    } else {
+        auto rootimpl = dynamic_cast<kdirectory_impl *>(&(*(impl->parent)));
+        if (rootimpl != nullptr) {
+            kdir = std::make_shared<kdirectory>(impl->parent);
+            root = &(*kdir);
+        } else {
+            root = dynamic_cast<kdirectory *>(&(*(impl->parent)));
+        }
+    }
+    if (root == nullptr) {
+        return {.result = {}, .status = kfile_status::SUCCESS};
+    }
+    return root->Resolve(root, syml);
+}
+
+std::string ksymlink::GetLink() {
+    auto *syml = dynamic_cast<class symlink *>(&(*(impl->file)));
+    if (syml) {
+        return syml->GetLink();
+    } else {
+        return {};
+    }
 }

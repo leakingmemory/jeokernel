@@ -12,6 +12,7 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     if (iterator != cmd.end()) {
         ++iterator;
     }
+    auto rootdir = get_kernel_rootdir();
     std::string output{};
     while (iterator != cmd.end()) {
         std::string filename = *iterator;
@@ -25,14 +26,14 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             }
             std::shared_ptr<kfile> litem;
             if (!resname.empty()) {
-                auto resolveResult = get_kernel_rootdir()->Resolve(resname);
+                auto resolveResult = rootdir->Resolve(&(*rootdir), resname);
                 if (resolveResult.status != kfile_status::SUCCESS) {
                     std::cerr << "Error: " << text(resolveResult.status) << "\n";
                     return;
                 }
                 litem = resolveResult.result;
             } else {
-                litem = get_kernel_rootdir();
+                litem = rootdir;
             }
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {
@@ -56,7 +57,7 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                 }
             }
         } else {
-            auto resolveResult = dir->Resolve(filename);
+            auto resolveResult = dir->Resolve(&(*rootdir), filename);
             if (resolveResult.status != kfile_status::SUCCESS) {
                 std::cerr << "Error: " << text(resolveResult.status) << "\n";
                 return;

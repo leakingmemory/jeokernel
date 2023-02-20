@@ -2391,6 +2391,7 @@ kfile_result<std::shared_ptr<kfile>> Process::ResolveFile(const std::string &fil
     }
     kdirectory *cwd = cwd_ref ? dynamic_cast<kdirectory *>(&(*cwd_ref)) : nullptr;
 
+    auto rootdir = get_kernel_rootdir();
     std::shared_ptr<kfile> litem{};
     if (filename.starts_with("/")) {
         std::string resname{};
@@ -2401,19 +2402,19 @@ kfile_result<std::shared_ptr<kfile>> Process::ResolveFile(const std::string &fil
             resname = trim;
         }
         if (!resname.empty()) {
-            auto result = get_kernel_rootdir()->Resolve(resname);
+            auto result = rootdir->Resolve(&(*rootdir), resname);
             if (result.status != kfile_status::SUCCESS) {
                 return {.result = {}, .status = result.status};
             }
             litem = result.result;
         } else {
-            litem = get_kernel_rootdir();
+            litem = rootdir;
         }
     } else {
         if (filename.empty() || cwd == nullptr) {
             return {};
         }
-        auto result = cwd->Resolve(filename);
+        auto result = cwd->Resolve(&(*rootdir), filename);
         if (result.status != kfile_status::SUCCESS) {
             return {.result = {}, .status = result.status};
         }

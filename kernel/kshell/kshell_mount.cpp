@@ -54,13 +54,14 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
 
     std::string mountpoint_orig{mountpoint};
     std::shared_ptr<kfile> mountfile{};
+    auto rootdir = get_kernel_rootdir();
     if (mountpoint.starts_with("/")) {
         while (mountpoint.starts_with("/")) {
             std::string trim{};
             trim.append(mountpoint.c_str() + 1);
             mountpoint = trim;
         }
-        mountfile = get_kernel_rootdir();
+        mountfile = rootdir;
     } else {
         mountfile = shell.CwdRef();
         if (mountpoint.empty()) {
@@ -74,7 +75,7 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             std::cerr << "Mountpoint not found " << mountpoint_orig << "\n";
             return;
         }
-        auto resolveResult = dir->Resolve(mountpoint);
+        auto resolveResult = dir->Resolve(&(*rootdir), mountpoint);
         if (resolveResult.status != kfile_status::SUCCESS) {
             std::cerr << "Error: " << text(resolveResult.status) << "\n";
             return;
