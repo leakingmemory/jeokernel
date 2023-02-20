@@ -17,7 +17,8 @@
 
 //#define DEBUG_STATX
 
-int64_t Statx::Call(int64_t dfd, int64_t uptr_filename, int64_t flag, int64_t mask, SyscallAdditionalParams &params) {
+int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t mask, SyscallAdditionalParams &params) {
+    auto dfd = (int32_t) i_dfd;
     int64_t uptr_statbuf = params.Param5();
     if (uptr_filename == 0 || uptr_statbuf == 0) {
         return -EINVAL;
@@ -39,11 +40,11 @@ int64_t Statx::Call(int64_t dfd, int64_t uptr_filename, int64_t flag, int64_t ma
             Queue([ctx, statbuf, filename, dfd, flag] () mutable {
                 struct statx st{};
 
-                if ((!filename.empty() && filename.starts_with("/")) || dfd == AT_FDCWD) {
 #ifdef DEBUG_STATX
-                    std::cout << "statx(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
-                              << "statbuf, " << flag << std::dec << ")\n";
+                std::cout << "statx(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
+                          << "statbuf, " << flag << std::dec << ")\n";
 #endif
+                if ((!filename.empty() && filename.starts_with("/")) || dfd == AT_FDCWD) {
                     auto fileResolve = ctx.GetProcess().ResolveFile(filename);
                     if (fileResolve.status != kfile_status::SUCCESS) {
                         int err{-EIO};

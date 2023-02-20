@@ -15,7 +15,9 @@
 
 //#define DEBUG_NEWFSTATAT
 
-int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbuf, int64_t flag, SyscallAdditionalParams &params) {
+int64_t Newfstatat::Call(int64_t i_dfd, int64_t uptr_filename, int64_t uptr_statbuf, int64_t flag, SyscallAdditionalParams &params) {
+    auto dfd = (int32_t) i_dfd;
+
     if (uptr_filename == 0) {
         return -EINVAL;
     }
@@ -35,11 +37,11 @@ int64_t Newfstatat::Call(int64_t dfd, int64_t uptr_filename, int64_t uptr_statbu
             Queue([ctx, statbuf, filename, dfd, flag] () mutable {
                 struct stat st{};
 
-                if ((!filename.empty() && filename.starts_with("/")) || dfd == AT_FDCWD) {
 #ifdef DEBUG_NEWFSTATAT
-                    std::cout << "newfstatat(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
+                std::cout << "newfstatat(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
                               << "statbuf, " << flag << std::dec << ")\n";
 #endif
+                if ((!filename.empty() && filename.starts_with("/")) || dfd == AT_FDCWD) {
                     auto fileResolve = ctx.GetProcess().ResolveFile(filename);
                     if (fileResolve.status != kfile_status::SUCCESS) {
                         int err{-EIO};
