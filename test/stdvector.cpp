@@ -3,6 +3,7 @@
 //
 
 #include "tests.h"
+#define TEST_VECTOR_NS
 #include "../include/std/vector.h"
 
 
@@ -68,7 +69,7 @@ int main() {
     assert(one.counter->ref == 1);
     assert(two.counter->ref == 1);
     assert(three.counter->ref == 1);
-    std::vector<RefPointer> vec{};
+    testvector::vector<RefPointer> vec{};
     vec.push_back(one);
     vec.push_back(two);
     vec.push_back(three);

@@ -3,6 +3,7 @@
 //
 
 #include "tests.h"
+#include <iostream>
 #include <stdint.h>
 #include <memory>
 typedef uintptr_t phys_t;

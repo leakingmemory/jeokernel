@@ -19,4 +19,8 @@ target_compile_options(jeokernel PRIVATE -g)
 
 target_include_directories(jeokernel PRIVATE ../include)
 
-#set(CMAKE_CXX_LINK_EXECUTABLE "ld -m elf_i386 -nostdlib -T ${CMAKE_SOURCE_DIR}/boot32.ld <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES>")
+if (USE_CLANG)
+    IF(${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+        set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_LINKER> -m elf_i386 -nostdlib -T ${CMAKE_SOURCE_DIR}/boot32.ld <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES>")
+    ENDIF()
+endif()

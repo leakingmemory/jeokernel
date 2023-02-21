@@ -10,7 +10,11 @@
 #include <memory>
 #include <new>
 
+#ifdef TEST_VECTOR_NS
+namespace testvector {
+#else
 namespace std {
+#endif
 
     template <class Class> struct vector_container_element {
         Class element;
@@ -249,7 +253,7 @@ namespace std {
                 if (c._capacity < new_cap) {
                     vector_container_element<T> *new_ptr = (vector_container_element<T> *) (void *) get_allocator().allocate(new_cap);
                     for (size_type i = 0; i < c._size; i++) {
-                        new ((void *) &new_ptr[i]) vector_container_element<T>(move(c._data[i]));
+                        new ((void *) &new_ptr[i]) vector_container_element<T>(std::move(c._data[i]));
                         c._data[i].~vector_container_element<T>();
                     }
                     get_allocator().deallocate((T *) (void *) c._data, c._capacity);

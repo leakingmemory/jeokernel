@@ -3,6 +3,10 @@
 //
 
 #include "tests.h"
+#include <cstdint>
+#include <type_traits>
+#include <new>
+#include <utility>
 
 class critical_section {
 public:

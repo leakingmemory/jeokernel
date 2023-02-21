@@ -10,6 +10,7 @@ function(detect_clang)
                         message("Found ${perhaps_clangpp} and ${perhaps_clang}")
                         set(CMAKE_C_COMPILER ${perhaps_clang} PARENT_SCOPE)
                         set(CMAKE_CXX_COMPILER ${perhaps_clangpp} PARENT_SCOPE)
+                        set(CMAKE_LINKER "ld.lld" PARENT_SCOPE)
                         return()
                 endif()
         endforeach()
@@ -19,7 +20,7 @@ endfunction()
 if(DEFINED ENV{USE_CLANG})
         set(USE_CLANG true)
 
-        detect_clang("clang++-15" "clang++-14" "clang++-13" "clang++-12" "clang++-11")
+        detect_clang("clang++-15" "clang++15" "clang++-14" "clang++14" "clang++-13" "clang++13" "clang++-12" "clang++12" "clang++-11" "clang++11" "clang++")
 endif(DEFINED ENV{USE_CLANG})
 
 cmake_minimum_required(VERSION 3.16)
@@ -61,6 +62,9 @@ add_custom_command(
         COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" ${CMAKE_SOURCE_DIR}/create_efiboot.sh
 )
 
-add_custom_target(jeokernel_iso ALL echo "ISO file built" DEPENDS jeokernel.iso)
 add_custom_target(jeokernel_disk ALL echo "ISO file built" DEPENDS jeokernel.img)
-add_custom_target(jeokernel_efi ALL echo "ISO file built" DEPENDS jeokernelefi.img)
+
+IF(NOT (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
+        add_custom_target(jeokernel_iso ALL echo "ISO file built" DEPENDS jeokernel.iso)
+        add_custom_target(jeokernel_efi ALL echo "ISO file built" DEPENDS jeokernelefi.img)
+ENDIF()
