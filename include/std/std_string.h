@@ -464,10 +464,11 @@ namespace std {
             if (length >= capacity()) {
                 reserve(length);
             }
-            Traits::copy(data(), cstr, length + 1);
+            Traits::copy(data(), cstr, length);
             if (c.shrt.is_short()) {
                 c.shrt.set_size(length);
             } else {
+                c.ptr.pointer[length] = 0;
                 c.ptr.size = length;
             }
         }
