@@ -55,6 +55,7 @@
 #include "Statx.h"
 #include "Chdir.h"
 #include "Munmap.h"
+#include "Getxattr.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -168,6 +169,7 @@ private:
     Statx stat{*this};
     Chdir chdir{*this};
     Munmap munmap{*this};
+    Getxattr getxattr{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

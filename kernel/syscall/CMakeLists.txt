@@ -14,6 +14,7 @@ add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h W
         Sysinfo.cpp Sysinfo.h RtSigaction.cpp RtSigaction.h Getcwd.cpp Getcwd.h Getpid.cpp Getpid.h
         Getppid.cpp Getppid.h Getpgrp.cpp Getpgrp.h Dup.cpp Dup.h Fcntl.cpp Fcntl.h Dup2.cpp Dup2.h Time.cpp Time.h
         Pselect6.cpp Pselect6.h Setpgid.cpp Setpgid.h Clone.cpp Clone.h Wait4.cpp Wait4.h Execve.cpp Execve.h
-        Prctl.cpp Prctl.h Getdents64.cpp Getdents64.h Statx.cpp Statx.h Chdir.cpp Chdir.h Munmap.cpp Munmap.h)
+        Prctl.cpp Prctl.h Getdents64.cpp Getdents64.h Statx.cpp Statx.h Chdir.cpp Chdir.h Munmap.cpp Munmap.h
+        Getxattr.cpp Getxattr.h)
 
 target_include_directories(syscall PRIVATE ../../include)
