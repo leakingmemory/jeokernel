@@ -56,6 +56,7 @@
 #include "Chdir.h"
 #include "Munmap.h"
 #include "Getxattr.h"
+#include "SchedGetaffinity.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -170,6 +171,7 @@ private:
     Chdir chdir{*this};
     Munmap munmap{*this};
     Getxattr getxattr{*this};
+    SchedGetaffinity getaffinity{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
