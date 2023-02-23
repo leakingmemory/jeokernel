@@ -210,15 +210,17 @@ kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(kdirectory *root, std::
     for (const auto &entry : entriesResult.result) {
         if (component == entry->Name()) {
             auto file = entry->File();
-            ksymlink *syml;
-            while ((syml = dynamic_cast<ksymlink *>(&(*file))) != nullptr && resolveSymlinks > 0) {
-                --resolveSymlinks;
-                auto result = syml->Resolve(root);
-                if (result.status != kfile_status::SUCCESS || !result.result) {
-                    return result;
+            if (!filename.empty()) {
+                ksymlink *syml;
+                while ((syml = dynamic_cast<ksymlink *>(&(*file))) != nullptr && resolveSymlinks > 0) {
+                    --resolveSymlinks;
+                    auto result = syml->Resolve(root);
+                    if (result.status != kfile_status::SUCCESS || !result.result) {
+                        return result;
+                    }
+                    // syml = nullptr; // Pointer becomes unsafe:
+                    file = result.result;
                 }
-                // syml = nullptr; // Pointer becomes unsafe:
-                file = result.result;
             }
             if (filename.empty()) {
                 return {.result = file, .status = kfile_status::SUCCESS};
