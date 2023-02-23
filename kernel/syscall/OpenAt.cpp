@@ -129,10 +129,12 @@ int OpenAt::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int
 int64_t OpenAt::Call(int64_t dfd, int64_t uptr_filename, int64_t flags, int64_t mode, SyscallAdditionalParams &params) {
     SyscallCtx ctx{params};
 
-    return ctx.ReadString(uptr_filename, [this, ctx, dfd, flags, mode] (const std::string &u_filename) {
+    auto task_id = get_scheduler()->get_current_task_id();
+
+    return ctx.ReadString(uptr_filename, [this, ctx, task_id, dfd, flags, mode] (const std::string &u_filename) {
         std::string filename{u_filename};
 
-        Queue([this, ctx, filename, dfd, flags, mode] () mutable {
+        Queue(task_id, [this, ctx, filename, dfd, flags, mode] () mutable {
             auto res = DoOpenAt(ctx.GetProcess(), dfd, filename, flags, mode);
             ctx.ReturnWhenNotRunning(res);
         });

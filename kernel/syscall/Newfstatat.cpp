@@ -31,10 +31,12 @@ int64_t Newfstatat::Call(int64_t i_dfd, int64_t uptr_filename, int64_t uptr_stat
 
     SyscallCtx ctx{params};
 
-    return ctx.ReadString(uptr_filename, [this, ctx, uptr_statbuf, dfd, flag] (const std::string &u_filename) {
+    auto task_id = get_scheduler()->get_current_task_id();
+
+    return ctx.ReadString(uptr_filename, [this, ctx, task_id, uptr_statbuf, dfd, flag] (const std::string &u_filename) {
         std::string filename{u_filename};
-        return ctx.NestedWrite(uptr_statbuf, sizeof(struct stat), [this, ctx, filename, dfd, flag] (void *statbuf) {
-            Queue([ctx, statbuf, filename, dfd, flag] () mutable {
+        return ctx.NestedWrite(uptr_statbuf, sizeof(struct stat), [this, ctx, task_id, filename, dfd, flag] (void *statbuf) {
+            Queue(task_id, [ctx, statbuf, filename, dfd, flag] () mutable {
                 struct stat st{};
 
 #ifdef DEBUG_NEWFSTATAT

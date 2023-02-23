@@ -884,6 +884,20 @@ void tasklist::set_name(const std::string &name) {
     t.set_name(name);
 }
 
+void tasklist::set_working_for_task_id(uint32_t id) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    task &t = get_current_task_with_lock();
+    t.set_working_for_task_id(id);
+}
+
+uint32_t tasklist::get_working_for_task_id() {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+    task &t = get_current_task_with_lock();
+    return t.get_working_for_task_id();
+}
+
 std::shared_ptr<task_event_handler_ref> tasklist::set_timeout_millis(uint64_t ms, const std::function<void ()> &callback) {
     uint64_t ticks100hz = (ms / 10) + 1;
     critical_section cli{};

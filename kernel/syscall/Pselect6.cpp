@@ -271,9 +271,9 @@ void Select::NotifyRead(int fd) {
 }
 
 resolve_return_value
-Pselect6::DoSelect(SyscallCtx ctx, int n, fdset *inp, fdset *outp, fdset *exc, const timespec *timeout,
+Pselect6::DoSelect(SyscallCtx ctx, uint32_t task_id, int n, fdset *inp, fdset *outp, fdset *exc, const timespec *timeout,
                    const sigset_t *sigset) {
-    Select select{ctx, [this] (const std::function<void ()> &func) { Queue(func); }, n, inp, outp, exc};
+    Select select{ctx, [this, task_id] (const std::function<void ()> &func) { Queue(task_id, func); }, n, inp, outp, exc};
     return ctx.Async();
 }
 
@@ -289,114 +289,115 @@ int64_t Pselect6::Call(int64_t n, int64_t uptr_inp, int64_t uptr_outp, int64_t u
               << uptr_excp << ", 0x" << uptr_timespec << ", 0x" << uptr_sig << ")\n";
 #endif
     auto sizeofBitm = SizeOfFdSet(n);
+    auto task_id = get_scheduler()->get_current_task_id();
     if (uptr_timespec != 0) {
-        return ctx.Read(uptr_timespec, sizeof(timespec), [this, ctx, sizeofBitm, n, uptr_inp, uptr_outp, uptr_excp] (const void *ptr_timespec) {
+        return ctx.Read(uptr_timespec, sizeof(timespec), [this, ctx, task_id, sizeofBitm, n, uptr_inp, uptr_outp, uptr_excp] (const void *ptr_timespec) {
             auto *timeout = (const timespec *) ptr_timespec;
             if (n == 0) {
-                return DoSelect(ctx, 0, nullptr, nullptr, nullptr, timeout, nullptr);
+                return DoSelect(ctx, task_id, 0, nullptr, nullptr, nullptr, timeout, nullptr);
             }
             if (uptr_inp != 0) {
-                return ctx.NestedWrite(uptr_inp, sizeofBitm, [this, ctx, sizeofBitm, n, uptr_outp, uptr_excp, timeout] (void *ptr_inp) {
+                return ctx.NestedWrite(uptr_inp, sizeofBitm, [this, ctx, task_id, sizeofBitm, n, uptr_outp, uptr_excp, timeout] (void *ptr_inp) {
                     auto *inp = (fdset *) ptr_inp;
                     if (uptr_outp != 0) {
-                        return ctx.NestedWrite(uptr_outp, sizeofBitm, [this, ctx, sizeofBitm, n, uptr_excp, inp, timeout] (void *ptr_outp) {
+                        return ctx.NestedWrite(uptr_outp, sizeofBitm, [this, ctx, task_id, sizeofBitm, n, uptr_excp, inp, timeout] (void *ptr_outp) {
                             auto *outp = (fdset *) ptr_outp;
                             if (uptr_excp != 0) {
-                                return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, n, inp, outp, timeout] (void *ptr_excp) {
+                                return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, task_id, n, inp, outp, timeout] (void *ptr_excp) {
                                     auto *excp = (fdset *) ptr_excp;
-                                    return DoSelect(ctx, n, inp, outp, excp, timeout, nullptr);
+                                    return DoSelect(ctx, task_id, n, inp, outp, excp, timeout, nullptr);
                                 });
                             } else {
-                                return DoSelect(ctx, n, inp, outp, nullptr, timeout, nullptr);
+                                return DoSelect(ctx, task_id, n, inp, outp, nullptr, timeout, nullptr);
                             }
                         });
                     } else {
                         if (uptr_excp != 0) {
-                            return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, n, inp, timeout] (void *ptr_excp) {
+                            return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, task_id, n, inp, timeout] (void *ptr_excp) {
                                 auto *excp = (fdset *) ptr_excp;
-                                return DoSelect(ctx, n, inp, nullptr, excp, timeout, nullptr);
+                                return DoSelect(ctx, task_id, n, inp, nullptr, excp, timeout, nullptr);
                             });
                         } else {
-                            return DoSelect(ctx, n, inp, nullptr, nullptr, timeout, nullptr);
+                            return DoSelect(ctx, task_id, n, inp, nullptr, nullptr, timeout, nullptr);
                         }
                     }
                 });
             } else {
                 if (uptr_outp != 0) {
-                    return ctx.NestedWrite(uptr_outp, sizeofBitm, [this, ctx, sizeofBitm, n, uptr_excp, timeout] (void *ptr_outp) {
+                    return ctx.NestedWrite(uptr_outp, sizeofBitm, [this, ctx, task_id, sizeofBitm, n, uptr_excp, timeout] (void *ptr_outp) {
                         auto *outp = (fdset *) ptr_outp;
                         if (uptr_excp != 0) {
-                            return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, n, outp, timeout] (void *ptr_excp) {
+                            return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, task_id, n, outp, timeout] (void *ptr_excp) {
                                 auto *excp = (fdset *) ptr_excp;
-                                return DoSelect(ctx, n, nullptr, outp, excp, timeout, nullptr);
+                                return DoSelect(ctx, task_id, n, nullptr, outp, excp, timeout, nullptr);
                             });
                         } else {
-                            return DoSelect(ctx, n, nullptr, outp, nullptr, timeout, nullptr);
+                            return DoSelect(ctx, task_id, n, nullptr, outp, nullptr, timeout, nullptr);
                         }
                     });
                 } else {
                     if (uptr_excp != 0) {
-                        return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, n, timeout] (void *ptr_excp) {
+                        return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, task_id, n, timeout] (void *ptr_excp) {
                             auto *excp = (fdset *) ptr_excp;
-                            return DoSelect(ctx, n, nullptr, nullptr, excp, timeout, nullptr);
+                            return DoSelect(ctx, task_id, n, nullptr, nullptr, excp, timeout, nullptr);
                         });
                     } else {
-                        return DoSelect(ctx, 0, nullptr, nullptr, nullptr, timeout, nullptr);
+                        return DoSelect(ctx, task_id, 0, nullptr, nullptr, nullptr, timeout, nullptr);
                     }
                 }
             }
         });
     } else {
         if (n == 0) {
-            return ctx.Await(DoSelect(ctx, 0, nullptr, nullptr, nullptr, nullptr, nullptr));
+            return ctx.Await(DoSelect(ctx, task_id, 0, nullptr, nullptr, nullptr, nullptr, nullptr));
         }
         if (uptr_inp != 0) {
-            return ctx.Write(uptr_inp, sizeofBitm, [this, ctx, sizeofBitm, n, uptr_outp, uptr_excp] (void *ptr_inp) {
+            return ctx.Write(uptr_inp, sizeofBitm, [this, ctx, task_id, sizeofBitm, n, uptr_outp, uptr_excp] (void *ptr_inp) {
                 auto *inp = (fdset *) ptr_inp;
                 if (uptr_outp != 0) {
-                    return ctx.NestedWrite(uptr_outp, sizeofBitm, [this, ctx, sizeofBitm, n, uptr_excp, inp] (void *ptr_outp) {
+                    return ctx.NestedWrite(uptr_outp, sizeofBitm, [this, ctx, task_id, sizeofBitm, n, uptr_excp, inp] (void *ptr_outp) {
                         auto *outp = (fdset *) ptr_outp;
                         if (uptr_excp != 0) {
-                            return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, n, inp, outp] (void *ptr_excp) {
+                            return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, task_id, n, inp, outp] (void *ptr_excp) {
                                 auto *excp = (fdset *) ptr_excp;
-                                return DoSelect(ctx, n, inp, outp, excp, nullptr, nullptr);
+                                return DoSelect(ctx, task_id, n, inp, outp, excp, nullptr, nullptr);
                             });
                         } else {
-                            return DoSelect(ctx, n, inp, outp, nullptr, nullptr, nullptr);
+                            return DoSelect(ctx, task_id, n, inp, outp, nullptr, nullptr, nullptr);
                         }
                     });
                 } else {
                     if (uptr_excp != 0) {
-                        return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, n, inp] (void *ptr_excp) {
+                        return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, task_id, n, inp] (void *ptr_excp) {
                             auto *excp = (fdset *) ptr_excp;
-                            return DoSelect(ctx, n, inp, nullptr, excp, nullptr, nullptr);
+                            return DoSelect(ctx, task_id, n, inp, nullptr, excp, nullptr, nullptr);
                         });
                     } else {
-                        return DoSelect(ctx, n, inp, nullptr, nullptr, nullptr, nullptr);
+                        return DoSelect(ctx, task_id, n, inp, nullptr, nullptr, nullptr, nullptr);
                     }
                 }
             });
         } else {
             if (uptr_outp != 0) {
-                return ctx.Write(uptr_outp, sizeofBitm, [this, ctx, sizeofBitm, n, uptr_excp] (void *ptr_outp) {
+                return ctx.Write(uptr_outp, sizeofBitm, [this, ctx, task_id, sizeofBitm, n, uptr_excp] (void *ptr_outp) {
                     auto *outp = (fdset *) ptr_outp;
                     if (uptr_excp != 0) {
-                        return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, n, outp] (void *ptr_excp) {
+                        return ctx.NestedWrite(uptr_excp, sizeofBitm, [this, ctx, task_id, n, outp] (void *ptr_excp) {
                             auto *excp = (fdset *) ptr_excp;
-                            return DoSelect(ctx, n, nullptr, outp, excp, nullptr, nullptr);
+                            return DoSelect(ctx, task_id, n, nullptr, outp, excp, nullptr, nullptr);
                         });
                     } else {
-                        return DoSelect(ctx, n, nullptr, outp, nullptr, nullptr, nullptr);
+                        return DoSelect(ctx, task_id, n, nullptr, outp, nullptr, nullptr, nullptr);
                     }
                 });
             } else {
                 if (uptr_excp != 0) {
-                    return ctx.Write(uptr_excp, sizeofBitm, [this, ctx, n] (void *ptr_excp) {
+                    return ctx.Write(uptr_excp, sizeofBitm, [this, ctx, task_id, n] (void *ptr_excp) {
                         auto *excp = (fdset *) ptr_excp;
-                        return DoSelect(ctx, n, nullptr, nullptr, excp, nullptr, nullptr);
+                        return DoSelect(ctx, task_id, n, nullptr, nullptr, excp, nullptr, nullptr);
                     });
                 } else {
-                    return ctx.Await(DoSelect(ctx, 0, nullptr, nullptr, nullptr, nullptr, nullptr));
+                    return ctx.Await(DoSelect(ctx, task_id, 0, nullptr, nullptr, nullptr, nullptr, nullptr));
                 }
             }
         }

@@ -65,10 +65,12 @@ int Access::DoAccess(ProcThread &proc, std::string filename, int mode) {
 int64_t Access::Call(int64_t uptr_filename, int64_t mode, int64_t, int64_t, SyscallAdditionalParams &params) {
     SyscallCtx ctx{params};
 
-    return ctx.ReadString(uptr_filename, [this, ctx, mode] (const std::string &u_filename) {
+    auto task_id = get_scheduler()->get_current_task_id();
+
+    return ctx.ReadString(uptr_filename, [this, ctx, task_id, mode] (const std::string &u_filename) {
         std::string filename{u_filename};
 
-        Queue([this, ctx, filename, mode] () mutable {
+        Queue(task_id, [this, ctx, filename, mode] () mutable {
             auto res = DoAccess(ctx.GetProcess(), filename, mode);
 #ifdef DEBUG_ACCESS_CALL
             std::cout << "access(" << filename << ", " << std::hex << mode << std::dec << ") => " << res << "\n";

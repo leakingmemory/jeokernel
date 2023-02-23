@@ -30,9 +30,10 @@ int Chdir::DoChdir(std::shared_ptr<Process> proc, const std::string &filename) {
 
 int64_t Chdir::Call(int64_t uptr_filename, int64_t, int64_t, int64_t, SyscallAdditionalParams &params) {
     SyscallCtx ctx{params};
-    return ctx.ReadString(uptr_filename, [this, ctx] (const std::string &r_filename) {
+    auto task_id = get_scheduler()->get_current_task_id();
+    return ctx.ReadString(uptr_filename, [this, ctx, task_id] (const std::string &r_filename) {
         std::string filename{r_filename};
-        Queue([this, ctx, filename] () {
+        Queue(task_id, [this, ctx, filename] () {
             auto res = DoChdir(ctx.GetProcess().GetProcess(), filename);
             ctx.ReturnWhenNotRunning(res);
         });

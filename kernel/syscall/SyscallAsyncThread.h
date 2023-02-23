@@ -30,7 +30,7 @@ public:
     SyscallAsyncThread(SyscallAsyncThread &&) = delete;
     SyscallAsyncThread &operator =(const SyscallAsyncThread &) = delete;
     SyscallAsyncThread &operator =(SyscallAsyncThread &&) = delete;
-    void Queue(const std::function<void ()> &f);
+    void Queue(uint32_t task_id, const std::function<void ()> &f);
 };
 
 

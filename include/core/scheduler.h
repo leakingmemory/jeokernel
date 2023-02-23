@@ -48,8 +48,9 @@ struct task_bits {
     uint8_t resources: 3;
     uint8_t reserved2;
     uint32_t id;
+    uint32_t working_for_task_id;
 
-    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), stack_quarantine(false), cpu_pinned(false), reserved1(0), cpu(0), points(0), resources(0), reserved2(0), id(0) {
+    task_bits(uint8_t priority_group) : priority_group(priority_group), running(false), blocked(true), end(false), stack_quarantine(false), cpu_pinned(false), reserved1(0), cpu(0), points(0), resources(0), reserved2(0), id(0), working_for_task_id(0) {
     }
 } __attribute__((__packed__));
 
@@ -233,6 +234,13 @@ public:
     }
     uint32_t get_id() {
         return bits.id;
+    }
+
+    void set_working_for_task_id(uint32_t id) {
+        bits.working_for_task_id = id;
+    }
+    uint32_t get_working_for_task_id() const {
+        return bits.working_for_task_id;
     }
 
     void set_stack_quarantine(bool quar) {
@@ -453,6 +461,9 @@ public:
 
     bool set_name(uint32_t pid, const std::string &name);
     void set_name(const std::string &name);
+
+    uint32_t get_working_for_task_id();
+    void set_working_for_task_id(uint32_t id);
 };
 
 tasklist *get_scheduler();
