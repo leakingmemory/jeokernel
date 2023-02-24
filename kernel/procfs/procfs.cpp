@@ -7,6 +7,7 @@
 #include <exec/procthread.h>
 #include <files/symlink.h>
 #include <sstream>
+#include "ProcAuxv.h"
 
 class procfs_symlink : public symlink {
 private:
@@ -97,15 +98,17 @@ file_read_result procfs_directory::Read(uint64_t offset, void *ptr, std::size_t 
 
 class procfs_procdir : public procfs_directory {
 private:
-    pid_t pid;
+    std::shared_ptr<Process> process;
 public:
-    explicit procfs_procdir(pid_t pid) : pid(pid) {}
-    pid_t getpid() { return pid; };
+    explicit procfs_procdir(const std::shared_ptr<Process> &process) : process(process) {}
+    pid_t getpid() { return process->getpid(); };
     entries_result Entries() override;
 };
 
 entries_result procfs_procdir::Entries() {
-    return {.entries = {}, .status = fileitem_status::SUCCESS};
+    entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
+    result.entries.emplace_back(std::make_shared<directory_entry>("auxv", std::make_shared<ProcAuxv>(process->GetAuxv())));
+    return result;
 }
 
 class procfs_root : public procfs_directory {
@@ -152,7 +155,7 @@ entries_result procfs_root::Entries() {
                 }
                 std::shared_ptr<directory_entry> dirent = std::make_shared<directory_entry>(
                         name,
-                        std::make_shared<procfs_procdir>(proc->getpid())
+                        std::make_shared<procfs_procdir>(proc)
                 );
                 result.entries.push_back(dirent);
             }

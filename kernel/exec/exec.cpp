@@ -533,6 +533,8 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
                                 func(false, {});
                                 return;
                             }
+                            auxv->push_back({.type = AT_NULL, .uintptr = 0});
+                            process->SetAuxv(auxv);
                             std::shared_ptr<std::vector<uintptr_t>> environ{new std::vector<uintptr_t>(environPtrs)};
                             environ->push_back(0);
                             process->push_data(auxvAddr, &(environ->at(0)), sizeof(environ->at(0)) * environ->size(), [execState, loads, interpreter, process, environ, argvPtrs, argc, auxvAddr, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t environAddr) mutable {

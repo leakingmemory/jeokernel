@@ -19,6 +19,7 @@
 #include <kfs/kfiles.h>
 #include <tty/tty.h>
 #include <exec/resolve_return.h>
+#include "elf.h"
 
 class Process;
 
@@ -197,6 +198,7 @@ private:
     std::vector<std::function<void (intptr_t)>> exitNotifications;
     std::vector<std::function<void (pid_t pid, intptr_t status)>> childExitNotifications;
     std::vector<child_result> childResults;
+    std::shared_ptr<const std::vector<ELF64_auxv>> auxv;
     intptr_t exitCode;
     uintptr_t program_brk;
     int32_t euid, egid, uid, gid;
@@ -331,6 +333,8 @@ public:
     int wake_all(uintptr_t addr);
     void RegisterExitNotification(const std::function<void (intptr_t)> &func);
     void SetExitCode(intptr_t code);
+    void SetAuxv(const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv);
+    [[nodiscard]] std::shared_ptr<const std::vector<ELF64_auxv>> GetAuxv() const;
 };
 
 #endif //JEOKERNEL_PROCESS_H

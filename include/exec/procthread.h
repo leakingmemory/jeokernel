@@ -85,6 +85,8 @@ public:
     }
     void SetExitCode(intptr_t code);
     bool WaitForAnyChild(child_result &immediateResult, const std::function<void (pid_t, intptr_t)> &orAsync);
+    void SetAuxv(const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv);
+    [[nodiscard]] std::shared_ptr<const std::vector<ELF64_auxv>> GetAuxv() const;
 
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
     void SetThreadFaulted(bool faulted) {

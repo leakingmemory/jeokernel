@@ -199,3 +199,11 @@ void ProcThread::SetExitCode(intptr_t code) {
 bool ProcThread::WaitForAnyChild(child_result &immediateResult, const std::function<void(pid_t, intptr_t)> &orAsync) {
     return process->WaitForAnyChild(immediateResult, orAsync);
 }
+
+void ProcThread::SetAuxv(const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv) {
+    process->SetAuxv(auxv);
+}
+
+std::shared_ptr<const std::vector<ELF64_auxv>> ProcThread::GetAuxv() const {
+    return process->GetAuxv();
+}
