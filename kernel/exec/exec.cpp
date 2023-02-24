@@ -182,6 +182,13 @@ void Exec::Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &u
     }
 }
 
+constexpr uintptr_t programBreakAlignmentMask = 0;
+//constexpr uintptr_t programBreakAlignmentMask = PAGESIZE - 1;
+
+uintptr_t Exec::ProgramBreakAlign(uintptr_t pbrk) {
+    return (pbrk + programBreakAlignmentMask) & ~programBreakAlignmentMask;
+}
+
 void Exec::MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset) {
     if ((relocationOffset & (PAGESIZE-1)) != 0) {
         wild_panic("Invalid relocation offset <-> not page aligned");
@@ -358,7 +365,7 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
 
         // PONR
 
-        process->SetProgramBreak(loads.program_brk + relocationOffset);
+        process->SetProgramBreak(ProgramBreakAlign(loads.program_brk + relocationOffset));
 
         MapPages(binary, process, pages, loads, relocationOffset);
 
@@ -482,7 +489,7 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
                 process->AddRelocation(interpreter, ((uintptr_t) interpreterRelocate) << 12);
 
                 if (process->GetProgramBreak() < pbrk) {
-                    process->SetProgramBreak(pbrk);
+                    process->SetProgramBreak(ProgramBreakAlign(pbrk));
                 }
 
                 MapPages(interpreterFile, process, interpreterPages, interpreterLoads, interpreterRelocate << 12);
