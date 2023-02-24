@@ -13,8 +13,8 @@ class kfile;
 
 class FsStat {
 public:
-    static void Stat(kfile &file, struct stat64 &st);
-    static void Stat(kfile &file, statx &st);
+    static void Stat(const kfile &file, struct stat64 &st);
+    static void Stat(const kfile &file, statx &st);
 };
 
 class FsFileDescriptorHandler : public FileDescriptorHandler {
@@ -34,8 +34,8 @@ public:
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) override;
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;
-    bool stat(struct stat64 &st) override;
-    bool stat(struct statx &st) override;
+    bool stat(struct stat64 &st) const override;
+    bool stat(struct statx &st) const override;
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) override;
     int readdir(const std::function<bool (kdirent &dirent)> &) override;
 };
@@ -56,8 +56,8 @@ public:
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) override;
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;
-    bool stat(struct stat64 &st) override;
-    bool stat(struct statx &st) override;
+    bool stat(struct stat64 &st) const override;
+    bool stat(struct statx &st) const override;
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) override;
     int readdir(const std::function<bool (kdirent &dirent)> &) override;
 };

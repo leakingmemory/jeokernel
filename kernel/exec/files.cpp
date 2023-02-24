@@ -8,7 +8,7 @@
 #include <kfs/kfiles.h>
 #include <mutex>
 
-void FsStat::Stat(kfile &file, struct stat64 &st) {
+void FsStat::Stat(const kfile &file, struct stat64 &st) {
     st.st_mode = file.Mode();
     st.st_size = file.Size();
     st.st_gid = file.Gid();
@@ -25,17 +25,17 @@ void FsStat::Stat(kfile &file, struct stat64 &st) {
     st.st_nlink = 0;
     st.st_rdev = 0;
 
-    auto *statable = dynamic_cast<kstatable *>(&file);
+    auto *statable = dynamic_cast<const kstatable *>(&file);
     if (statable != nullptr) {
         statable->stat(st);
-    } else if (dynamic_cast<kdirectory *>(&file) != nullptr) {
+    } else if (dynamic_cast<const kdirectory *>(&file) != nullptr) {
         st.st_mode |= S_IFDIR;
     } else {
         st.st_mode |= S_IFREG;
     }
 }
 
-void FsStat::Stat(kfile &file, statx &st) {
+void FsStat::Stat(const kfile &file, statx &st) {
     st.stx_mode = file.Mode();
     st.stx_size = file.Size();
     st.stx_gid = file.Gid();
@@ -55,10 +55,10 @@ void FsStat::Stat(kfile &file, statx &st) {
     st.stx_rdev_major = 0;
     st.stx_rdev_minor = 0;
 
-    auto *statable = dynamic_cast<kstatable *>(&file);
+    auto *statable = dynamic_cast<const kstatable *>(&file);
     if (statable != nullptr) {
         statable->stat(st);
-    } else if (dynamic_cast<kdirectory *>(&file) != nullptr) {
+    } else if (dynamic_cast<const kdirectory *>(&file) != nullptr) {
         st.stx_mode |= S_IFDIR;
     } else {
         st.stx_mode |= S_IFREG;
@@ -147,12 +147,12 @@ intptr_t FsFileDescriptorHandler::write(const void *ptr, intptr_t len) {
     return -EIO;
 }
 
-bool FsFileDescriptorHandler::stat(struct stat64 &st) {
+bool FsFileDescriptorHandler::stat(struct stat64 &st) const {
     FsStat::Stat(*file, st);
     return true;
 }
 
-bool FsFileDescriptorHandler::stat(struct statx &st) {
+bool FsFileDescriptorHandler::stat(struct statx &st) const {
     FsStat::Stat(*file, st);
     return true;
 }
@@ -210,12 +210,12 @@ intptr_t FsDirectoryDescriptorHandler::write(const void *ptr, intptr_t len) {
     return -EISDIR;
 }
 
-bool FsDirectoryDescriptorHandler::stat(struct stat64 &st) {
+bool FsDirectoryDescriptorHandler::stat(struct stat64 &st) const {
     FsStat::Stat(*dir, st);
     return true;
 }
 
-bool FsDirectoryDescriptorHandler::stat(struct statx &st) {
+bool FsDirectoryDescriptorHandler::stat(struct statx &st) const {
     FsStat::Stat(*dir, st);
     return true;
 }

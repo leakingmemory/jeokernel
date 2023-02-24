@@ -57,6 +57,7 @@
 #include "Munmap.h"
 #include "Getxattr.h"
 #include "SchedGetaffinity.h"
+#include "Fstat.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -172,6 +173,7 @@ private:
     Munmap munmap{*this};
     Getxattr getxattr{*this};
     SchedGetaffinity getaffinity{*this};
+    Fstat fstat{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

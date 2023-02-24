@@ -15,8 +15,8 @@ private:
     std::shared_ptr<ttydev> ttyd;
 public:
     ttyfsdev(std::shared_ptr<ttydev> ttyd) : devfs_node(00666), ttyd(ttyd) {}
-    void stat(struct stat64 &st) override;
-    void stat(struct statx &st) override;
+    void stat(struct stat64 &st) const override;
+    void stat(struct statx &st) const override;
 };
 
 

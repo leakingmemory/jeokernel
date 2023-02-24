@@ -244,11 +244,11 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
 #endif
 }
 
-bool FileDescriptor::stat(struct stat &st) {
+bool FileDescriptor::stat(struct stat &st) const {
     return handler->stat(st);
 }
 
-bool FileDescriptor::stat(struct statx &st) {
+bool FileDescriptor::stat(struct statx &st) const {
     return handler->stat(st);
 }
 

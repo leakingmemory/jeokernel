@@ -41,21 +41,21 @@ private:
 public:
     kfile(const std::shared_ptr<fileitem> &file) : file(file) {}
     virtual ~kfile() = default;
-    uint32_t Mode();
-    int Gid();
-    int Uid();
-    std::size_t Size();
-    uintptr_t InodeNum();
-    uint32_t BlockSize();
-    uintptr_t SysDevId();
+    uint32_t Mode() const;
+    int Gid() const;
+    int Uid() const;
+    std::size_t Size() const;
+    uintptr_t InodeNum() const;
+    uint32_t BlockSize() const;
+    uintptr_t SysDevId() const;
     kfile_result<std::size_t> Read(uint64_t offset, void *ptr, std::size_t len);
     kfile_result<filepage_ref> GetPage(std::size_t pagenum);
 };
 
 class kstatable {
 public:
-    virtual void stat(struct stat64 &st) = 0;
-    virtual void stat(struct statx &st) = 0;
+    virtual void stat(struct stat64 &st) const = 0;
+    virtual void stat(struct statx &st) const = 0;
 };
 
 class kdirent {

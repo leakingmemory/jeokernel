@@ -28,31 +28,31 @@ struct kmount {
 static std::vector<kmount> mounts{};
 static std::shared_ptr<kdirectory_impl> rootdir{new kdirectory_impl({}, "/", {})};
 
-uint32_t kfile::Mode() {
+uint32_t kfile::Mode() const {
     return file ? file->Mode() : 0040555;
 }
 
-int kfile::Gid() {
+int kfile::Gid() const {
     return 0;
 }
 
-int kfile::Uid() {
+int kfile::Uid() const {
     return 0;
 }
 
-std::size_t kfile::Size() {
+std::size_t kfile::Size() const {
     return file ? file->Size() : 0;
 }
 
-uintptr_t kfile::InodeNum() {
+uintptr_t kfile::InodeNum() const {
     return file ? file->InodeNum() : 0;
 }
 
-uint32_t kfile::BlockSize() {
+uint32_t kfile::BlockSize() const {
     return file ? file->BlockSize() : 0;
 }
 
-uintptr_t kfile::SysDevId() {
+uintptr_t kfile::SysDevId() const {
     return file ? file->SysDevId() : 0;
 }
 
