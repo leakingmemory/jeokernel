@@ -58,6 +58,7 @@
 #include "Getxattr.h"
 #include "SchedGetaffinity.h"
 #include "Fstat.h"
+#include "Fadvise64.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -174,6 +175,7 @@ private:
     Getxattr getxattr{*this};
     SchedGetaffinity getaffinity{*this};
     Fstat fstat{*this};
+    Fadvise64 fadvise64{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
