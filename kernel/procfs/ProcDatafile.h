@@ -8,8 +8,12 @@
 #include <files/fileitem.h>
 
 class ProcDatafile : public fileitem {
+private:
+    uint32_t mode;
 public:
+    ProcDatafile() : mode(00400) {}
     uint32_t Mode() override;
+    void SetMode(uint32_t mode);
     uintptr_t InodeNum() override;
     uint32_t BlockSize() override;
     uintptr_t SysDevId() override;

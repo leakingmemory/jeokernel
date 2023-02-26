@@ -5,7 +5,11 @@
 #include "ProcDatafile.h"
 
 uint32_t ProcDatafile::Mode() {
-    return 00400;
+    return mode;
+}
+
+void ProcDatafile::SetMode(uint32_t mode) {
+    this->mode = mode;
 }
 
 uintptr_t ProcDatafile::InodeNum() {

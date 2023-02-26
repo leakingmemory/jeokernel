@@ -7,7 +7,9 @@
 #include <exec/procthread.h>
 #include <files/symlink.h>
 #include <sstream>
+#include <core/uname_info.h>
 #include "ProcAuxv.h"
+#include "ProcStrfile.h"
 
 class procfs_symlink : public symlink {
 private:
@@ -96,6 +98,39 @@ file_read_result procfs_directory::Read(uint64_t offset, void *ptr, std::size_t 
     return {.size = 0, .status = fileitem_status::INVALID_REQUEST};
 }
 
+class procfs_kerneldir : public procfs_directory {
+public:
+    entries_result Entries() override;
+};
+
+entries_result procfs_kerneldir::Entries() {
+    auto uname = get_uname_info();
+    std::string osrelease{uname.linux_level};
+    osrelease.append("-");
+    osrelease.append(uname.variant);
+    osrelease.append("-");
+    osrelease.append(uname.arch);
+    entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
+    {
+        auto file = std::make_shared<ProcStrfile>(osrelease);
+        file->SetMode(00444);
+        result.entries.push_back(
+                std::make_shared<directory_entry>("osrelease", file));
+    }
+    return result;
+}
+
+class procfs_sysdir : public procfs_directory {
+public:
+    entries_result Entries() override;
+};
+
+entries_result procfs_sysdir::Entries() {
+    entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
+    result.entries.push_back(std::make_shared<directory_entry>("kernel", std::make_shared<procfs_kerneldir>()));
+    return result;
+}
+
 class procfs_procdir : public procfs_directory {
 private:
     std::shared_ptr<Process> process;
@@ -118,6 +153,7 @@ public:
 
 entries_result procfs_root::Entries() {
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
+    result.entries.push_back(std::make_shared<directory_entry>("sys", std::make_shared<procfs_sysdir>()));
     pid_t self{0};
     {
         auto *scheduler = get_scheduler();
