@@ -447,10 +447,11 @@ namespace std {
             }
             if (!c.shrt.is_short()) {
                 get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
-                c.ptr = mv.c.ptr;
+            }
+            static_assert(sizeof(c) == sizeof(mv.c));
+            memcpy(&c, &mv.c, sizeof(c));
+            if (!mv.c.shrt.is_short()) {
                 mv.c.shrt.set_empty();
-            } else {
-                c.shrt = mv.c.shrt;
             }
             return *this;
         }
