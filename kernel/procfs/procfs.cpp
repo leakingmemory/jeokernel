@@ -10,6 +10,7 @@
 #include <core/uname_info.h>
 #include "ProcAuxv.h"
 #include "ProcStrfile.h"
+#include "ProcProcessStat.h"
 
 class procfs_symlink : public symlink {
 private:
@@ -143,6 +144,7 @@ public:
 entries_result procfs_procdir::Entries() {
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
     result.entries.emplace_back(std::make_shared<directory_entry>("auxv", std::make_shared<ProcAuxv>(process->GetAuxv())));
+    result.entries.emplace_back(std::make_shared<directory_entry>("stat", std::make_shared<ProcProcessStat>(process)));
     return result;
 }
 
