@@ -11,6 +11,7 @@
 #include "ProcAuxv.h"
 #include "ProcStrfile.h"
 #include "ProcProcessStat.h"
+#include "ProcUptime.h"
 
 class procfs_symlink : public symlink {
 private:
@@ -156,6 +157,7 @@ public:
 entries_result procfs_root::Entries() {
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
     result.entries.push_back(std::make_shared<directory_entry>("sys", std::make_shared<procfs_sysdir>()));
+    result.entries.push_back(std::make_shared<directory_entry>("uptime", std::make_shared<ProcUptime>()));
     pid_t self{0};
     {
         auto *scheduler = get_scheduler();
