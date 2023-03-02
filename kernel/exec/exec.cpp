@@ -595,7 +595,7 @@ std::shared_ptr<Process> Exec::Run() {
                 startVector.entrypoint,
                 0x18 | 3 /* ring3 / lowest*/,
                 0x20 | 3, startVector.fsBase, 0, startVector.stackAddr, 0, 0, 0,
-                0, 0, 0, resources);
+                0, 0, 0, 0x37F, 0x1F80, resources);
         std::cout << "Started task " << pid << "\n";
         scheduler->set_name(pid, cmd_name);
     });

@@ -48,13 +48,26 @@ ap_trampoline_8060:
     mov %ax,%ss
     lock incw (0x8FF0)
     lgdt GDTR_PTR_ADDR
+
+    fninit
+    fldcw (0x8158)
+
     mov %cr0, %eax
     and $0xFFFFFFFB, %eax // coprocessor emu off
     or $2, %eax // coprocessor monitor on
     mov %eax, %cr0
     mov %cr4, %eax
-    or $0x600, %eax // FXSR xmmsexcept
+    or $0x700, %eax // FXSR xmmsexcept
     mov %eax, %cr4
+
+    fxsave (0x8200)
+    mov (0x821C), %eax
+    or %eax, %eax
+    jnz ap_has_mxcsr_mask
+    mov $0xFFBF, %eax
+ap_has_mxcsr_mask:
+    and %eax, (0x815C)
+    ldmxcsr (0x815C)
 
     // Page tables
     mov $0x05000, %eax
@@ -99,7 +112,13 @@ ap_trampoline_8140:
 .align 16
 ap_trampoline_8150:
     .quad 0x557744cccc997733 # stackptr
+    .long 0x0000037F # 0x8158 (used low word)
+    .long 0x00001F80 # 0x815C
 
 ap_trampoline_end:
     hlt
     jmp ap_trampoline_end
+
+.align 256
+tmp_8200:
+    .long 0

@@ -771,6 +771,9 @@ stack_allocated:
                         }
                     }
                 }
+                {
+                    asm("mov (0x1000), %%ebx; mov $0x037F, %%eax; mov %%eax, (0x1000); fninit; fldcw (0x1000); mov %%ebx, (0x1000)" ::: "%eax","%ebx");
+                }
                 // SSE FP enable:
                 {
                     uint32_t cr0;
@@ -782,8 +785,19 @@ stack_allocated:
                 {
                     uint32_t cr4;
                     asm("mov %%cr4,%0":"=r"(cr4));
-                    cr4 |= 0x600; // FXSR XMMSEXCEPT
+                    cr4 |= 0x700; // FXSR XMMSEXCEPT
                     asm("mov %0,%%cr4"::"r"(cr4));
+                }
+                {
+                    uint32_t addr{stack_ptr - 512};
+                    addr = addr & ~0xF;
+                    asm("fxsave (%0)" :: "r"(addr));
+                    uint32_t mxcsr_mask = *((uint32_t *) (addr + 28));
+                    if (mxcsr_mask == 0) {
+                        mxcsr_mask = 0xFFBF;
+                    }
+                    uint32_t mxcsr = 0x1F80 & mxcsr_mask;
+                    asm("mov (0x1000),%%ebx; mov %0,(0x1000); ldmxcsr (0x1000); mov %%ebx, (0x1000)" ::"r"(mxcsr) : "%ebx");
                 }
 
                 uint32_t cr3 = 0x1000;

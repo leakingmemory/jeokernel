@@ -61,6 +61,7 @@
 #include <core/blockdevsystem.h>
 #include <tty/tty.h>
 #include <tty/ttyinit.h>
+#include <core/x86fpu.h>
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -70,6 +71,7 @@
 //#define SYNC_FB_CONSOLE // Synchronous FB console, worse performance, no cursor, but survives longer and displays more in a crash
 
 void init_keyboard();
+void init_fpu0_initial();
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
@@ -402,6 +404,12 @@ done_with_mem_extension:
             uint64_t base_addr = std::get<0>(res_mem);
             uint64_t end_addr = base_addr + std::get<1>(res_mem) - 1;
             get_klogger() << "Reserved memory range " << base_addr << " - " << end_addr << "\n";
+        }
+
+        init_fpu0_initial();
+        {
+            auto &fpu = get_fpu0_initial();
+            get_klogger() << "Fpu MXCSR value" << fpu.mxcsr << " mask " << fpu.mxcsr_mask << ", fcw " << fpu.fcw << "\n";
         }
 
         create_hw_interrupt_handler();

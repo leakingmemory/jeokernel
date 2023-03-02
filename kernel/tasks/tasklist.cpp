@@ -11,6 +11,7 @@
 #include <core/nanotime.h>
 #include <pagealloc.h>
 #include "../ApStartup.h"
+#include <core/x86fpu.h>
 
 #define CONTINUE_RUNNING_BIAS 12
 #define RESOURCE_PRIORITY_BIAS 12
@@ -319,13 +320,16 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rs
 
     my_resources.push_back(stack_resource);
 
-    return new_task(rip, cs, 0x10, 0, rbp, rsp, rdi, rsi, rdx, rcx, r8, r9, my_resources);
+    auto &fpu = get_fpu0_initial();
+    return new_task(rip, cs, 0x10, 0, rbp, rsp, rdi, rsi, rdx, rcx, r8, r9, fpu.fcw, fpu.mxcsr, my_resources);
 }
 
 
 uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint16_t ds, uint64_t fsbase, uint64_t rbp, uint64_t rsp, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
-                        uint64_t r9, const std::vector<task_resource *> &resources) {
-    x86_fpu_state fpusse_state{};
+                        uint64_t r9, uint16_t fcw, uint32_t mxcsr, const std::vector<task_resource *> &resources) {
+    auto &fpu = get_fpu0_initial();
+    mxcsr = mxcsr & fpu.mxcsr_mask;
+    x86_fpu_state fpusse_state{.fcw = fcw, .mxcsr = mxcsr, .mxcsr_mask = fpu.mxcsr_mask};
     InterruptStackFrame cpu_state{
         .ds = ds,
         .es = ds,

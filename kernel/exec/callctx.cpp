@@ -6,6 +6,7 @@
 #include <exec/procthread.h>
 #include <exec/usermem.h>
 #include <errno.h>
+#include <core/x86fpu.h>
 
 class callctx_impl {
 private:
@@ -294,7 +295,9 @@ void callctx_impl::KillAsync(std::shared_ptr<callctx_impl> ref) {
 void callctx_impl::EntrypointAsync(std::shared_ptr<callctx_impl> ref, uintptr_t entrypoint, uintptr_t fsBase,
                                    uintptr_t stackPtr) {
     ref->scheduler->when_not_running(*(ref->current_task), [ref, entrypoint, stackPtr, fsBase] {
-        ref->current_task->get_fpu_state() = {};
+        auto &fpu = get_fpu0_initial();
+        uint32_t mxcsr = 0x1F80 & fpu.mxcsr_mask;
+        ref->current_task->get_fpu_state() = {.fcw = fpu.fcw, .mxcsr = mxcsr, .mxcsr_mask = fpu.mxcsr_mask};
         auto &state = ref->current_task->get_cpu_state();
         auto &frame = ref->current_task->get_cpu_frame();
         state = {};
