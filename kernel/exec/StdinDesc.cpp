@@ -39,8 +39,16 @@ void StdinDesc::Notify() {
     SetReadyRead(tty->HasInput());
 }
 
+bool StdinDesc::can_seek() {
+    return false;
+}
+
 bool StdinDesc::can_read() {
     return true;
+}
+
+intptr_t StdinDesc::seek(intptr_t offset, SeekWhence whence) {
+    return -EINVAL;
 }
 
 resolve_return_value StdinDesc::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {

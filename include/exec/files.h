@@ -30,7 +30,9 @@ public:
     FsFileDescriptorHandler(const FsFileDescriptorHandler &cp);
     std::shared_ptr<FileDescriptorHandler> clone() override;
     std::shared_ptr<kfile> get_file() override;
+    bool can_seek() override;
     bool can_read() override;
+    intptr_t seek(intptr_t offset, SeekWhence whence) override;
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) override;
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;
@@ -52,7 +54,9 @@ public:
     FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &);
     std::shared_ptr<FileDescriptorHandler> clone() override;
     std::shared_ptr<kfile> get_file() override;
+    bool can_seek() override;
     bool can_read() override;
+    intptr_t seek(intptr_t offset, SeekWhence whence) override;
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) override;
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len, uintptr_t offset) override;
     intptr_t write(const void *ptr, intptr_t len) override;

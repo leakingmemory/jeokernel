@@ -79,8 +79,16 @@ std::shared_ptr<kfile> FileDescriptor::get_file() const {
     return handler->get_file();
 }
 
+bool FileDescriptor::can_seek() {
+    return handler->can_seek();
+}
+
 bool FileDescriptor::can_read() {
     return handler->can_read();
+}
+
+intptr_t FileDescriptor::seek(intptr_t offset, SeekWhence whence) {
+    return handler->seek(offset, whence);
 }
 
 resolve_return_value FileDescriptor::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {

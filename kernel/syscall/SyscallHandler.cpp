@@ -59,6 +59,7 @@
 #include "SchedGetaffinity.h"
 #include "Fstat.h"
 #include "Fadvise64.h"
+#include "Lseek.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -176,6 +177,7 @@ private:
     SchedGetaffinity getaffinity{*this};
     Fstat fstat{*this};
     Fadvise64 fadvise64{*this};
+    Lseek lseek{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

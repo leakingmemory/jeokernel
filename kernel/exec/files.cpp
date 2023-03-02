@@ -82,8 +82,25 @@ std::shared_ptr<kfile> FsFileDescriptorHandler::get_file() {
     return file;
 }
 
+bool FsFileDescriptorHandler::can_seek() {
+    return true;
+}
+
 bool FsFileDescriptorHandler::can_read() {
     return openRead;
+}
+
+intptr_t FsFileDescriptorHandler::seek(intptr_t offset, SeekWhence whence) {
+    std::lock_guard lock{mtx};
+    int64_t off = whence == SeekWhence::SET ? 0 : (whence == SeekWhence::CUR ? this->offset : file->Size());
+    off += offset;
+    if (off >= 0) {
+        if (off < file->Size()) {
+            this->offset = off;
+            return 0;
+        }
+    }
+    return -EINVAL;
 }
 
 resolve_return_value FsFileDescriptorHandler::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {
@@ -193,8 +210,16 @@ std::shared_ptr<kfile> FsDirectoryDescriptorHandler::get_file() {
     return f;
 }
 
+bool FsDirectoryDescriptorHandler::can_seek() {
+    return false;
+}
+
 bool FsDirectoryDescriptorHandler::can_read() {
     return true;
+}
+
+intptr_t FsDirectoryDescriptorHandler::seek(intptr_t offset, SeekWhence whence) {
+    return -EINVAL;
 }
 
 resolve_return_value FsDirectoryDescriptorHandler::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {

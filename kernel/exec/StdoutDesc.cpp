@@ -30,8 +30,16 @@ std::shared_ptr<kfile> StdoutDesc::get_file() {
     return {};
 }
 
+bool StdoutDesc::can_seek() {
+    return false;
+}
+
 bool StdoutDesc::can_read() {
     return false;
+}
+
+intptr_t StdoutDesc::seek(intptr_t offset, SeekWhence whence) {
+    return -EINVAL;
 }
 
 resolve_return_value StdoutDesc::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {
