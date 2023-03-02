@@ -38,9 +38,11 @@ class kfile {
     friend ksymlink;
 private:
     std::shared_ptr<fileitem> file;
+    std::string name;
 public:
-    kfile(const std::shared_ptr<fileitem> &file) : file(file) {}
+    kfile(const std::shared_ptr<fileitem> &file, const std::string &name) : file(file), name(name) {}
     virtual ~kfile() = default;
+    std::string Name() const;
     uint32_t Mode() const;
     int Gid() const;
     int Uid() const;
@@ -75,9 +77,8 @@ public:
 class kdirectory_impl : public kfile {
 private:
     std::shared_ptr<kfile> parent;
-    std::string kpath;
 public:
-    kdirectory_impl(const std::shared_ptr<kfile> &parent, const std::string &kpath, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem), parent(parent), kpath(kpath) {}
+    kdirectory_impl(const std::shared_ptr<kfile> &parent, const std::string &kpath, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem, kpath), parent(parent) {}
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries(std::shared_ptr<kfile> this_impl);
     void Mount(const std::shared_ptr<directory> &fsroot);
     std::string Kpath();
@@ -87,7 +88,7 @@ class kdirectory : public kfile {
 private:
     std::shared_ptr<kfile> impl;
 public:
-    kdirectory(const std::shared_ptr<kfile> &impl) : kfile(impl->file), impl(impl) {}
+    kdirectory(const std::shared_ptr<kfile> &impl, const std::string &name) : kfile(impl->file, name), impl(impl) {}
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries();
     kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root, std::string filename, int resolveSymlinks = 20);
     void Mount(const std::shared_ptr<directory> &fsroot);
@@ -99,14 +100,14 @@ class ksymlink_impl : public kfile {
 private:
     std::shared_ptr<kfile> parent;
 public:
-    ksymlink_impl(std::shared_ptr<kfile> parent, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem), parent(parent) {}
+    ksymlink_impl(std::shared_ptr<kfile> parent, const std::shared_ptr<fileitem> &fileitem, const std::string &name) : kfile(fileitem, name), parent(parent) {}
 };
 
 class ksymlink : public kfile {
 private:
     std::shared_ptr<ksymlink_impl> impl;
 public:
-    ksymlink(std::shared_ptr<ksymlink_impl> impl) : kfile(impl->file), impl(impl) {}
+    ksymlink(std::shared_ptr<ksymlink_impl> impl) : kfile(impl->file, impl->Name()), impl(impl) {}
     [[nodiscard]] kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root);
     [[nodiscard]] std::string GetLink();
 };

@@ -1177,17 +1177,51 @@ bool Process::page_fault(ProcThread &thread, task &current_task, Interrupt &intr
 }
 
 bool Process::exception(task &current_task, const std::string &name, Interrupt &intr) {
-    std::cerr << "Exception <"<< name <<"> in user process at " << std::hex << intr.rip() << " code " << intr.error_code() << std::dec << "\n";
+    std::shared_ptr<kfile> image{};
+    uintptr_t ivaddr;
+    uintptr_t offset;
+    auto rip = intr.rip();
+    for (const auto &mapping : mappings) {
+        auto file = mapping.image;
+        if (file) {
+            uintptr_t vaddr = mapping.pagenum;
+            vaddr = vaddr << 12;
+            if (rip > vaddr && (!image || vaddr > ivaddr)) {
+                image = file;
+                ivaddr = vaddr;
+                offset = mapping.image_skip_pages;
+                offset = offset << 12;
+            }
+            std::cerr << " - " << file->Name() << " " << std::hex << mapping.image_skip_pages << "000 " << vaddr << " - " << (mapping.pagenum + mapping.pages - 1) << "FFF\n";
+        }
+    }
+    std::cerr << "Exception <"<< name <<"> in user process at " << std::hex << rip << std::dec;
+    if (image) {
+        auto addr = rip;
+        addr -= ivaddr;
+        addr += offset;
+        std::cerr << " (" << image->Name() << "+" << std::hex << addr << std::dec << ")";
+    }
+    std::cerr << " code " << std::hex << intr.error_code() << std::dec << "\n";
     {
         auto &cpu = intr.get_cpu_frame();
         auto &state = intr.get_cpu_state();
+        auto &fpu = intr.get_fpu_state();
         std::cerr << std::hex << "ax=" << state.rax << " bx="<<state.rbx << " cx=" << state.rcx << " dx="<< state.rdx << "\n"
                   << "si=" << state.rsi << " di="<< state.rdi << " bp=" << state.rbp << " sp="<< cpu.rsp << "\n"
                   << "r8=" << state.r8 << " r9="<< state.r9 << " rA="<< state.r10 <<" rB=" << state.r11 << "\n"
                   << "rC=" << state.r12 << " rD="<< state.r13 <<" rE="<< state.r14 <<" rF="<< state.r15 << "\n"
                   << "cs=" << cpu.cs << " ds=" << state.ds << " es=" << state.es << " fs=" << state.fs << " gs="
                   << state.gs << " ss="<< cpu.ss <<"\n"
-                  << "fsbase=" << state.fsbase << "\n" << std::dec;
+                  << "fsbase=" << state.fsbase << "\n"
+                  << "xmm0 " << fpu.xmm0_high << " " << fpu.xmm0_low << "\n"
+                  << "xmm1 " << fpu.xmm1_high << " " << fpu.xmm1_low << "\n"
+                  << "xmm2 " << fpu.xmm2_high << " " << fpu.xmm2_low << "\n"
+                  << "xmm3 " << fpu.xmm3_high << " " << fpu.xmm3_low << "\n"
+                  << "xmm4 " << fpu.xmm4_high << " " << fpu.xmm4_low << "\n"
+                  << "xmm5 " << fpu.xmm5_high << " " << fpu.xmm5_low << "\n"
+                  << "xmm6 " << fpu.xmm6_high << " " << fpu.xmm6_low << "\n"
+                  << "xmm7 " << fpu.xmm7_high << " " << fpu.xmm7_low << "\n" << std::dec;
     }
     current_task.set_end(true);
     return true;

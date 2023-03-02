@@ -28,6 +28,10 @@ struct kmount {
 static std::vector<kmount> mounts{};
 static std::shared_ptr<kdirectory_impl> rootdir{new kdirectory_impl({}, "/", {})};
 
+std::string kfile::Name() const {
+    return name;
+}
+
 uint32_t kfile::Mode() const {
     return file ? file->Mode() : 0040555;
 }
@@ -92,7 +96,7 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
         listing = nullptr;
     }
     for (auto mnt : mounts) {
-        if (mnt.name == kpath) {
+        if (mnt.name == Name()) {
             listing_ref = mnt.rootdir;
             listing = &(*mnt.rootdir);
         }
@@ -115,7 +119,7 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
                 std::shared_ptr<fileitem> fsfile = fsent->Item();
                 directory *fsdir = dynamic_cast<directory *> (&(*fsfile));
                 if (fsdir != nullptr) {
-                    std::string subpath{kpath};
+                    std::string subpath{Name()};
                     if (subpath[subpath.size() - 1] != '/') {
                         subpath.append("/", 1);
                     }
@@ -125,10 +129,10 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
                 } else {
                     class symlink *syml = dynamic_cast<class symlink *>(&(*fsfile));
                     if (syml != nullptr) {
-                        std::shared_ptr<ksymlink_impl> symli = std::make_shared<ksymlink_impl>(this_ref, fsfile);
+                        std::shared_ptr<ksymlink_impl> symli = std::make_shared<ksymlink_impl>(this_ref, fsfile, name);
                         items.push_back(std::make_shared<kdirent>(name, symli));
                     } else {
-                        std::shared_ptr<kfile> file{new kfile(fsfile)};
+                        std::shared_ptr<kfile> file{new kfile(fsfile, name)};
                         items.push_back(std::make_shared<kdirent>(name, file));
                     }
                 }
@@ -139,11 +143,11 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
 }
 
 void kdirectory_impl::Mount(const std::shared_ptr<directory> &fsroot) {
-    mounts.push_back({.name = kpath, .rootdir = fsroot});
+    mounts.push_back({.name = Name(), .rootdir = fsroot});
 }
 
 std::string kdirectory_impl::Kpath() {
-    return kpath;
+    return Name();
 }
 
 kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
@@ -165,7 +169,7 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
                 entries.push_back(entry);
             }
         } else {
-            std::shared_ptr<kdirectory> file{new kdirectory(impl_entry->File())};
+            std::shared_ptr<kdirectory> file{new kdirectory(impl_entry->File(), name)};
             std::shared_ptr<kdirent> entry{new kdirent(impl_entry->Name(), file)};
             entries.push_back(entry);
         }
@@ -247,7 +251,7 @@ std::string kdirectory::Kpath() {
 }
 
 std::shared_ptr<kdirectory> get_kernel_rootdir() {
-    return std::make_shared<kdirectory>(rootdir);
+    return std::make_shared<kdirectory>(rootdir, "/");
 }
 
 kfile_result<std::shared_ptr<kfile>> ksymlink::Resolve(kdirectory *root) {
@@ -263,7 +267,7 @@ kfile_result<std::shared_ptr<kfile>> ksymlink::Resolve(kdirectory *root) {
     } else {
         auto rootimpl = dynamic_cast<kdirectory_impl *>(&(*(impl->parent)));
         if (rootimpl != nullptr) {
-            kdir = std::make_shared<kdirectory>(impl->parent);
+            kdir = std::make_shared<kdirectory>(impl->parent, syml);
             root = &(*kdir);
         } else {
             root = dynamic_cast<kdirectory *>(&(*(impl->parent)));
