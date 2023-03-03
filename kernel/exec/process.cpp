@@ -16,6 +16,7 @@
 #include "concurrency/raw_semaphore.h"
 #include "StdinDesc.h"
 #include "StdoutDesc.h"
+#include <limits>
 
 //#define DEBUG_PROCESS_PAGEENTR
 //#define DEBUG_PAGE_FAULT_RESOLVE
@@ -23,6 +24,8 @@
 //#define DEBUG_MEMMAPPING_DESTRUCTION_FREEPAGE
 //#define DEBUG_MMAP
 //#define DEBUG_MMAP_OVERLAP
+
+constexpr pid_t pid_max = std::numeric_limits<pid_t>::max();
 
 static hw_spinlock pidLock{};
 static std::vector<pid_t> pids{};
@@ -160,7 +163,7 @@ static pid_t FindNextPid() {
         }
         if (next == pids[i]) {
             ++next;
-            if (next < 1) {
+            if (next < 1 || next > pid_max) {
                 next = 1;
                 return FindNextPid();
             }
@@ -234,6 +237,10 @@ Process::~Process() {
             parentRef->ChildExitNotification(pid, exitCode);
         }
     }
+}
+
+pid_t Process::GetMaxPid() {
+    return pid_max;
 }
 
 void Process::ChildExitNotification(pid_t cpid, intptr_t status) {

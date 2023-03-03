@@ -211,6 +211,7 @@ public:
     Process &operator =(const Process &) = delete;
     Process &operator =(Process &&) = delete;
     ~Process();
+    static pid_t GetMaxPid();
 private:
     void ChildExitNotification(pid_t pid, intptr_t status);
 public:

@@ -119,6 +119,17 @@ entries_result procfs_kerneldir::Entries() {
         result.entries.push_back(
                 std::make_shared<directory_entry>("osrelease", file));
     }
+    {
+        std::string maxPidStr{};
+        {
+            std::stringstream strs{};
+            strs << std::dec << Process::GetMaxPid();
+            maxPidStr = strs.str();
+        }
+        auto file = std::make_shared<ProcStrfile>(maxPidStr);
+        file->SetMode(00444);
+        result.entries.push_back(std::make_shared<directory_entry>("pid_max", file));
+    }
     return result;
 }
 
