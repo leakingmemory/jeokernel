@@ -1012,11 +1012,23 @@ void setup_pvpage_stats() {
     {
         long long int visited_nonavail_phys = 0;
         std::lock_guard lock{get_pagetables_lock()};
-        total_ppages = 0;
         total_vpages = 0;
         allocated_ppages = 0;
         allocated_vpages = 0;
         auto *phys = get_physpagemap();
+        total_ppages = 0;
+        {
+            typeof(total_ppages) claimcount{0};
+            for (typeof(phys->max()) i = 0; i < phys->max(); i++) {
+                if (phys->claimed(i)) {
+                    ++claimcount;
+                } else {
+                    total_ppages = i;
+                    allocated_ppages += claimcount;
+                    claimcount = 0;
+                }
+            }
+        }
         pagetable &pml4t = _get_pml4t_cpu0();
         for (int i = 0; i < 512; i++) {
             if (pml4t[i].present) {
@@ -1042,15 +1054,6 @@ void setup_pvpage_stats() {
                                     paddr += k;
                                     paddr = paddr << 9;
                                     paddr += l;
-                                    if (paddr < phys->max() && !phys->claimed(paddr)) {
-                                        allocated_ppages += visited_nonavail_phys;
-                                        visited_nonavail_phys = 0;
-                                        if (total_vpages > total_ppages) {
-                                            total_ppages = total_vpages;
-                                        }
-                                    } else {
-                                        ++visited_nonavail_phys;
-                                    }
                                     if (pt[l].os_virt_avail == 0) {
                                         ++allocated_vpages;
                                     }
