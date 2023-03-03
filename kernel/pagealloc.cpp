@@ -1066,6 +1066,7 @@ void setup_pvpage_stats() {
 }
 
 void physmem_stats(sysinfo &info) {
+    std::lock_guard lock{get_pagetables_lock()};
     info.mem_unit = PAGESIZE;
     info.totalram = total_ppages;
     info.totalhigh = total_ppages;
