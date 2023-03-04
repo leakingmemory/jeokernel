@@ -60,8 +60,9 @@ private:
     static void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);
     static void MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset);
     static uintptr_t ProgramBreakAlign(uintptr_t pbrk);
-public:
     ExecResult Run(ProcThread *process, const std::function<void (bool success, const ExecStartVector &)> &);
+public:
+    ExecResult RunFromExistingProcess(ProcThread *process, const std::function<void (bool success, const ExecStartVector &)> &);
     std::shared_ptr<Process> Run();
 };
 

@@ -582,6 +582,11 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
     }
 }
 
+ExecResult Exec::RunFromExistingProcess(ProcThread *process, const std::function<void(bool, const ExecStartVector &)> &func) {
+    process->GetProcess()->SetCmdLine(name);
+    return Run(process, func);
+}
+
 std::shared_ptr<Process> Exec::Run() {
     std::string cmd_name = name;
     auto *process = new ProcThread(cwd_ref, tty, parent_pid, cmd_name);

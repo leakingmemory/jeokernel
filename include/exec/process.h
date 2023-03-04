@@ -294,6 +294,9 @@ public:
     std::shared_ptr<class tty> GetTty() const {
         return tty;
     }
+    void SetCmdLine(const std::string &cmdline) {
+        this->cmdline = cmdline;
+    }
     std::string GetCmdline() const {
         return cmdline;
     }
