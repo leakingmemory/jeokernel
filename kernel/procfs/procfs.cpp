@@ -13,6 +13,7 @@
 #include "ProcProcessStat.h"
 #include "ProcUptime.h"
 #include "ProcMeminfo.h"
+#include "ProcMounts.h"
 
 class procfs_symlink : public symlink {
 private:
@@ -171,6 +172,7 @@ entries_result procfs_root::Entries() {
     result.entries.push_back(std::make_shared<directory_entry>("sys", std::make_shared<procfs_sysdir>()));
     result.entries.push_back(std::make_shared<directory_entry>("uptime", std::make_shared<ProcUptime>()));
     result.entries.push_back(std::make_shared<directory_entry>("meminfo", std::make_shared<ProcMeminfo>()));
+    result.entries.push_back(std::make_shared<directory_entry>("mounts", std::make_shared<ProcMounts>()));
     pid_t self{0};
     {
         auto *scheduler = get_scheduler();

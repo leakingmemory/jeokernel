@@ -6,6 +6,8 @@
 #include <kfs/kfiles.h>
 #include <files/directory.h>
 #include <files/symlink.h>
+#include <concurrency/hw_spinlock.h>
+#include <mutex>
 
 std::string text(kfile_status status) {
     switch (status) {
@@ -21,12 +23,24 @@ std::string text(kfile_status status) {
 }
 
 struct kmount {
-    std::string name;
+    kmount_info info;
     std::shared_ptr<directory> rootdir;
 };
 
+static hw_spinlock mounts_lock{};
 static std::vector<kmount> mounts{};
 static std::shared_ptr<kdirectory_impl> rootdir{new kdirectory_impl({}, "/", {})};
+
+std::vector<kmount_info> GetKmounts() {
+    std::vector<kmount_info> kmounts{};
+    {
+        std::lock_guard lock{mounts_lock};
+        for (const auto &mnt: mounts) {
+            kmounts.emplace_back(mnt.info);
+        }
+    }
+    return kmounts;
+}
 
 std::string kfile::Name() const {
     return name;
@@ -95,10 +109,13 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
     } else {
         listing = nullptr;
     }
-    for (auto mnt : mounts) {
-        if (mnt.name == Name()) {
-            listing_ref = mnt.rootdir;
-            listing = &(*mnt.rootdir);
+    {
+        std::lock_guard lock{mounts_lock};
+        for (auto mnt: mounts) {
+            if (mnt.info.name == Name()) {
+                listing_ref = mnt.rootdir;
+                listing = &(*mnt.rootdir);
+            }
         }
     }
     std::vector<std::shared_ptr<kdirent>> items{};
@@ -142,8 +159,9 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
     return {.result = items, .status = kfile_status::SUCCESS};
 }
 
-void kdirectory_impl::Mount(const std::shared_ptr<directory> &fsroot) {
-    mounts.push_back({.name = Name(), .rootdir = fsroot});
+void kdirectory_impl::Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<directory> &fsroot) {
+    std::lock_guard lock{mounts_lock};
+    mounts.push_back({.info = {.devname = devname, .fstype = fstype, .mntopts = mntopts, .name = Name()}, .rootdir = fsroot});
 }
 
 std::string kdirectory_impl::Kpath() {
@@ -240,9 +258,9 @@ kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(kdirectory *root, std::
     return {.result = {}, .status = kfile_status::SUCCESS};
 }
 
-void kdirectory::Mount(const std::shared_ptr<directory> &fsroot) {
+void kdirectory::Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<directory> &fsroot) {
     auto *impl = dynamic_cast<kdirectory_impl *> (&(*(this->impl)));
-    impl->Mount(fsroot);
+    impl->Mount(devname, fstype, mntopts, fsroot);
 }
 
 std::string kdirectory::Kpath() {

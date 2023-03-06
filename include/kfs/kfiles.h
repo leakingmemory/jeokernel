@@ -11,6 +11,15 @@
 #include <vector>
 #include "filepage_data.h"
 
+struct kmount_info {
+    std::string devname;
+    std::string fstype;
+    std::string mntopts;
+    std::string name;
+};
+
+std::vector<kmount_info> GetKmounts();
+
 enum class kfile_status {
     SUCCESS,
     IO_ERROR,
@@ -80,7 +89,7 @@ private:
 public:
     kdirectory_impl(const std::shared_ptr<kfile> &parent, const std::string &kpath, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem, kpath), parent(parent) {}
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries(std::shared_ptr<kfile> this_impl);
-    void Mount(const std::shared_ptr<directory> &fsroot);
+    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<directory> &fsroot);
     std::string Kpath();
 };
 
@@ -91,7 +100,7 @@ public:
     kdirectory(const std::shared_ptr<kfile> &impl, const std::string &name) : kfile(impl->file, name), impl(impl) {}
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries();
     kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root, std::string filename, int resolveSymlinks = 20);
-    void Mount(const std::shared_ptr<directory> &fsroot);
+    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<directory> &fsroot);
     std::string Kpath();
 };
 
