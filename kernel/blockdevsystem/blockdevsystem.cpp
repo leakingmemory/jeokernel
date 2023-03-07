@@ -16,6 +16,7 @@
 #include <filesystems/filesystem.h>
 #include <devfs/devfsinit.h>
 #include <procfs/procfs.h>
+#include "blockdev_node.h"
 
 static parttable_readers *parttableReaders = nullptr;
 static blockdevsystem *blockdevSystem = nullptr;
@@ -72,7 +73,7 @@ class blockdevsystem_impl : public blockdevsystem {
 private:
     hw_spinlock _lock;
     std::vector<std::shared_ptr<blockdev_container>> blockdevs;
-    std::vector<std::tuple<std::string,std::shared_ptr<blockdev_with_partitions>>> availBlockdevs;
+    std::vector<blockdev_node> availBlockdevs;
     uintptr_t sysDevIds;
 public:
     blockdevsystem_impl();
@@ -109,9 +110,7 @@ void blockdev_with_partitions::FindSubs(const std::string &parent_name, blockdev
         {
             std::lock_guard lock{system._lock};
             subs.push_back(&(*partwp));
-            std::tuple<std::string,std::shared_ptr<blockdev_with_partitions>> t
-                = std::make_tuple<std::string,std::shared_ptr<blockdev_with_partitions>>(name.str(), partwp);
-            system.availBlockdevs.push_back(t);
+            system.availBlockdevs.emplace_back(name.str(), partwp);
         }
     }
     get_klogger() << str.str().c_str();
@@ -176,11 +175,8 @@ void blockdevsystem_impl::Add(const std::string &name, blockdev_interface *bdev)
         std::lock_guard lock{_lock};
         std::shared_ptr<hw_blockdev> hwbdev = std::make_shared<hw_blockdev>(_lock, bdev, ++sysDevIds);
         blockdevs.push_back(hwbdev);
-        std::shared_ptr<blockdev_with_partitions> bdevwpart = std::make_shared<blockdev_with_partitions>(hwbdev);
-        std::tuple<std::string,std::shared_ptr<blockdev_with_partitions>> t
-         = std::make_tuple<std::string,std::shared_ptr<blockdev_with_partitions>>(name, bdevwpart);
-        availBlockdevs.push_back(t);
-        partitions = std::get<1>(t);
+        partitions = std::make_shared<blockdev_with_partitions>(hwbdev);
+        availBlockdevs.emplace_back(name, partitions);
     }
     partitions->FindSubs(name, *this);
 }
@@ -204,7 +200,7 @@ void blockdevsystem_impl::Remove(blockdev_interface *bdev) {
         }
         auto iter = availBlockdevs.begin();
         while (iter != availBlockdevs.end()) {
-            blockdev_with_partitions *ptr = &(*(std::get<1>(*iter)));
+            blockdev_with_partitions *ptr = &(*((*iter).GetBlockdev()));
             if (&(*(ptr->bdev)) == bdevptr) {
                 break;
             }
@@ -213,7 +209,7 @@ void blockdevsystem_impl::Remove(blockdev_interface *bdev) {
         if (iter == availBlockdevs.end()) {
             return;
         }
-        sub = std::get<1>(*iter);
+        sub = (*iter).GetBlockdev();
         availBlockdevs.erase(iter);
     }
     sub->RemoveSubs(*this);
@@ -225,7 +221,7 @@ void blockdevsystem_impl::RemoveSub(blockdev_with_partitions *subbdev) {
         std::lock_guard lock{_lock};
         auto iter = availBlockdevs.begin();
         while (iter != availBlockdevs.end()) {
-            blockdev_with_partitions *ptr = &(*(std::get<1>(*iter)));
+            blockdev_with_partitions *ptr = &(*((*iter).GetBlockdev()));
             if (ptr == subbdev) {
                 break;
             }
@@ -234,7 +230,7 @@ void blockdevsystem_impl::RemoveSub(blockdev_with_partitions *subbdev) {
         if (iter == availBlockdevs.end()) {
             return;
         }
-        sub = std::get<1>(*iter);
+        sub = (*iter).GetBlockdev();
         availBlockdevs.erase(iter);
     }
     sub->RemoveSubs(*this);
@@ -244,7 +240,7 @@ std::vector<std::string> blockdevsystem_impl::GetBlockdevices() {
     std::vector<std::string> names{};
     std::lock_guard lock{_lock};
     for (const auto &t : availBlockdevs) {
-        names.push_back(std::get<0>(t));
+        names.push_back(t.GetName());
     }
     return names;
 }
@@ -252,8 +248,8 @@ std::vector<std::string> blockdevsystem_impl::GetBlockdevices() {
 std::shared_ptr<blockdev> blockdevsystem_impl::GetBlockdevice(const std::string &name) {
     std::lock_guard lock{_lock};
     for (auto &t : availBlockdevs) {
-        if (std::get<0>(t) == name) {
-            return std::get<1>(t)->bdev;
+        if (t.GetName() == name) {
+            return t.GetBlockdev()->bdev;
         }
     }
     return {};
