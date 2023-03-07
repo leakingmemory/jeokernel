@@ -60,6 +60,7 @@
 #include "Fstat.h"
 #include "Fadvise64.h"
 #include "Lseek.h"
+#include "Mkdir.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -178,6 +179,7 @@ private:
     Fstat fstat{*this};
     Fadvise64 fadvise64{*this};
     Lseek lseek{*this};
+    Mkdir mkdir{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
