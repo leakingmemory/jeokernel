@@ -3,11 +3,13 @@
 //
 
 #include "blockdev_node.h"
-#include "blockdev_devfs_node.h"
+#include <core/blockdev_devfs_node.h>
+#include <core/blockdevsystem.h>
+
 
 blockdev_node::blockdev_node(const std::string &name, std::shared_ptr<blockdev_with_partitions> blockdev) :
         name(name), node(), blockdev(blockdev) {
-    node = std::make_shared<blockdev_devfs_node>();
+    node = blockdev_devfs_node::Create(blockdev->GetBlockdev())->AsFileitem();
     GetDevfs()->GetRoot()->Add(name, node);
 }
 

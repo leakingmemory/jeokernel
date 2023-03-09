@@ -5,41 +5,24 @@
 #ifndef JEOKERNEL_DEVFS_H
 #define JEOKERNEL_DEVFS_H
 
-#include <concurrency/hw_spinlock.h>
-#include <files/directory.h>
+#include <memory>
+#include <string>
 
-class devfs_node : public fileitem {
-private:
-    uint32_t mode;
+class fileitem;
+
+class devfs_node {
 public:
-    devfs_node(uint32_t mode);
-    uint32_t Mode() override;
-    std::size_t Size() override;
-    uintptr_t InodeNum() override;
-    uint32_t BlockSize() override;
-    uintptr_t SysDevId() override;
-    file_getpage_result GetPage(std::size_t pagenum) override;
-    file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
+    virtual ~devfs_node() = default;
 };
 
-class devfs_directory : public directory {
-private:
-    hw_spinlock mtx;
-    std::vector<std::shared_ptr<directory_entry>> entries;
-    uint32_t mode;
+class devfs_directory {
 public:
-    devfs_directory(uint32_t mode);
-    uint32_t Mode() override;
-    std::size_t Size() override;
-    uintptr_t InodeNum() override;
-    uint32_t BlockSize() override;
-    uintptr_t SysDevId() override;
-    file_getpage_result GetPage(std::size_t pagenum) override;
-    file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
-    entries_result Entries() override;
-    void Add(const std::string &name, std::shared_ptr<fileitem> node);
-    void Remove(std::shared_ptr<fileitem> node);
+    virtual ~devfs_directory() = default;
+    virtual void Add(const std::string &name, std::shared_ptr<fileitem> node) = 0;
+    virtual void Remove(std::shared_ptr<fileitem> node) = 0;
 };
+
+class devfs_directory_impl;
 
 class devfs {
 private:

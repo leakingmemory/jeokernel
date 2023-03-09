@@ -30,6 +30,22 @@ public:
     virtual void Accept(std::shared_ptr<blockdev_block> result) = 0;
 };
 
+class blockdevsystem_impl;
+
+class blockdev_with_partitions {
+    friend blockdevsystem_impl;
+private:
+    std::shared_ptr<blockdev> bdev;
+    std::vector<blockdev_with_partitions *> subs;
+public:
+    blockdev_with_partitions(std::shared_ptr<blockdev> bdev);
+    void FindSubs(const std::string &parent_name, blockdevsystem_impl &);
+    void RemoveSubs(blockdevsystem_impl &);
+    [[nodiscard]] std::shared_ptr<blockdev> GetBlockdev() const {
+        return bdev;
+    }
+};
+
 class blockdev_interface {
 private:
     hw_spinlock &_lock;
@@ -49,6 +65,23 @@ public:
     void Submit(std::shared_ptr<blockdev_command> command);
 };
 
+enum class blockdevsystem_status {
+    SUCCESS,
+    IO_ERROR,
+    INTEGRITY_ERROR,
+    NOT_SUPPORTED_FS_FEATURE,
+    INVALID_REQUEST
+};
+
+template <typename T> struct blockdevsystem_get_node_result {
+    std::shared_ptr<T> node;
+    blockdevsystem_status status;
+};
+
+
+class filesystem;
+class directory;
+
 class blockdevsystem {
 public:
     blockdevsystem();
@@ -57,6 +90,9 @@ public:
     virtual void Remove(blockdev_interface *dev) = 0;
     virtual std::vector<std::string> GetBlockdevices() = 0;
     virtual std::shared_ptr<blockdev> GetBlockdevice(const std::string &name) = 0;
+    virtual std::shared_ptr<filesystem> OpenFilesystem(const std::string &provider_name, std::shared_ptr<blockdev> bdev) = 0;
+    virtual std::shared_ptr<filesystem> OpenFilesystem(const std::string &provider_name) = 0;
+    virtual blockdevsystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> fs) = 0;
 };
 
 void init_blockdevsystem();

@@ -2,72 +2,72 @@
 // Created by sigsegv on 9/20/22.
 //
 
-#include <devfs/devfs.h>
+#include <devfs/devfs_impl.h>
 #include <mutex>
 
-devfs_node::devfs_node(uint32_t mode) : mode(mode) {
+devfs_node_impl::devfs_node_impl(uint32_t mode) : mode(mode) {
 }
 
-uint32_t devfs_node::Mode() {
+uint32_t devfs_node_impl::Mode() {
     return mode;
 }
 
-std::size_t devfs_node::Size() {
+std::size_t devfs_node_impl::Size() {
     return 0;
 }
 
-uintptr_t devfs_node::InodeNum() {
+uintptr_t devfs_node_impl::InodeNum() {
     return 0;
 }
 
-uint32_t devfs_node::BlockSize() {
+uint32_t devfs_node_impl::BlockSize() {
     return 0;
 }
 
-uintptr_t devfs_node::SysDevId() {
+uintptr_t devfs_node_impl::SysDevId() {
     return 0;
 }
 
-file_getpage_result devfs_node::GetPage(std::size_t pagenum) {
+file_getpage_result devfs_node_impl::GetPage(std::size_t pagenum) {
     return {.page = {}, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
 }
 
-file_read_result devfs_node::Read(uint64_t offset, void *ptr, std::size_t length) {
+file_read_result devfs_node_impl::Read(uint64_t offset, void *ptr, std::size_t length) {
     return {.size = 0, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
 }
 
-devfs_directory::devfs_directory(uint32_t mode) : mtx(), entries(), mode(mode) {
+devfs_directory_impl::devfs_directory_impl(uint32_t mode) : mtx(), entries(), mode(mode) {
 }
 
-uint32_t devfs_directory::Mode() {
+uint32_t devfs_directory_impl::Mode() {
     return mode;
 }
 
-std::size_t devfs_directory::Size() {
+std::size_t devfs_directory_impl::Size() {
     return 0;
 }
 
-uintptr_t devfs_directory::InodeNum() {
+uintptr_t devfs_directory_impl::InodeNum() {
     return 0;
 }
 
-uint32_t devfs_directory::BlockSize() {
+uint32_t devfs_directory_impl::BlockSize() {
     return 0;
 }
 
-uintptr_t devfs_directory::SysDevId() {
+uintptr_t devfs_directory_impl::SysDevId() {
     return 0;
 }
 
-file_getpage_result devfs_directory::GetPage(std::size_t pagenum) {
+file_getpage_result devfs_directory_impl::GetPage(std::size_t pagenum) {
     return {.page = {}, .status = fileitem_status::INVALID_REQUEST};
 }
 
-file_read_result devfs_directory::Read(uint64_t offset, void *ptr, std::size_t length) {
+file_read_result devfs_directory_impl::Read(uint64_t offset, void *ptr, std::size_t length) {
     return {.size = 0, .status = fileitem_status::INVALID_REQUEST};
 }
 
-entries_result devfs_directory::Entries() {
+entries_result devfs_directory_impl::Entries() {
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
     {
         std::lock_guard lock{mtx};
@@ -78,12 +78,12 @@ entries_result devfs_directory::Entries() {
     return result;
 }
 
-void devfs_directory::Add(const std::string &name, std::shared_ptr<fileitem> node) {
+void devfs_directory_impl::Add(const std::string &name, std::shared_ptr<fileitem> node) {
     std::lock_guard lock{mtx};
     entries.emplace_back(std::make_shared<directory_entry>(name, node));
 }
 
-void devfs_directory::Remove(std::shared_ptr<fileitem> node) {
+void devfs_directory_impl::Remove(std::shared_ptr<fileitem> node) {
     std::lock_guard lock{mtx};
     auto iterator = entries.begin();
     while (iterator == entries.end()) {
@@ -94,7 +94,7 @@ void devfs_directory::Remove(std::shared_ptr<fileitem> node) {
     }
 }
 
-devfs::devfs() : root(new devfs_directory(00755)){
+devfs::devfs() : root(new devfs_directory_impl(00755)){
 }
 
 std::shared_ptr<devfs_directory> devfs::GetRoot() {

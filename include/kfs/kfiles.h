@@ -61,6 +61,7 @@ public:
     uintptr_t SysDevId() const;
     kfile_result<std::size_t> Read(uint64_t offset, void *ptr, std::size_t len);
     kfile_result<filepage_ref> GetPage(std::size_t pagenum);
+    std::shared_ptr<fileitem> GetImplementation() const;
 };
 
 class kstatable {

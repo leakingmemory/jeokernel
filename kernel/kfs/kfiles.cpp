@@ -101,6 +101,10 @@ kfile_result<filepage_ref> kfile::GetPage(std::size_t pagenum) {
     return {.result = {}, .status = kfile_status::IO_ERROR};
 }
 
+std::shared_ptr<fileitem> kfile::GetImplementation() const {
+    return file;
+}
+
 kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std::shared_ptr<kfile> this_ref) {
     std::shared_ptr<fileitem> listing_ref{file};
     directory *listing;

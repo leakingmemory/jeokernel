@@ -61,6 +61,7 @@
 #include "Fadvise64.h"
 #include "Lseek.h"
 #include "Mkdir.h"
+#include "Mount.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -180,6 +181,7 @@ private:
     Fadvise64 fadvise64{*this};
     Lseek lseek{*this};
     Mkdir mkdir{*this};
+    Mount mount{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

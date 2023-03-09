@@ -36,6 +36,7 @@ public:
     resolve_return_value NestedRead(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
     resolve_return_value NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
     resolve_return_value NestedReadNullterminatedArrayOfPointers(intptr_t ptr, std::function<resolve_return_value (void **, size_t)>);
+    resolve_return_value NestedReadString(intptr_t ptr, std::function<resolve_return_value (const std::string &)>) const;
     resolve_return_value NestedReadArrayOfStrings(void **vptr, size_t len, std::function<resolve_return_value (const std::vector<std::string> &)>);
     resolve_return_value Return(intptr_t result) const {
         return resolve_return_value::Return(result);

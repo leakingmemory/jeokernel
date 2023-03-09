@@ -168,6 +168,34 @@ resolve_return_value callctx_impl::NestedWrite(std::shared_ptr<callctx_impl> ref
     });
 }
 
+resolve_return_value callctx_impl::NestedReadString(std::shared_ptr<callctx_impl> ref, intptr_t ptr,
+                                                    std::function<resolve_return_value(const std::string &)> func) {
+    auto result = ref->process->resolve_read_nullterm(ptr, 1, ref->is_async, [ref] (intptr_t result) {
+        ref->async->returnAsync(result);
+    }, [ref, func, ptr] (bool success, bool async, size_t len, const std::function<void (uintptr_t)> &) mutable {
+        ref->is_async |= async;
+        if (!success) {
+            return resolve_return_value::Return(-EFAULT);
+        }
+        std::string str{};
+        {
+            UserMemory usermem{*(ref->process), (uintptr_t) ptr, ((uintptr_t) len)};
+            if (!usermem) {
+                return resolve_return_value::Return(-EFAULT);
+            }
+            str.append((const char *) usermem.Pointer(), len);
+        }
+        return func(str);
+    });
+    if (result.hasValue) {
+        return resolve_return_value::Return(result.result);
+    } else if (result.async) {
+        return resolve_return_value::AsyncReturn();
+    } else {
+        return resolve_return_value::NoReturn();
+    }
+}
+
 resolve_return_value callctx_impl::NestedReadNullterminatedArrayOfPointers(std::shared_ptr<callctx_impl> ref,
                                                                            intptr_t ptr,
                                                                            std::function<resolve_return_value(
@@ -352,6 +380,10 @@ resolve_return_value callctx::NestedRead(intptr_t ptr, intptr_t len, std::functi
 
 resolve_return_value callctx::NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value(void *)> func) const {
     return callctx_impl::NestedWrite(impl, ptr, len, func);
+}
+
+resolve_return_value callctx::NestedReadString(intptr_t ptr, std::function<resolve_return_value(const std::string &)> func) const {
+    return callctx_impl::NestedReadString(impl, ptr, func);
 }
 
 resolve_return_value
