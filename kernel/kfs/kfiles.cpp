@@ -287,13 +287,18 @@ kfile_result<std::shared_ptr<kfile>> ksymlink::Resolve(kdirectory *root) {
             remaining.clear();
         } while (syml.starts_with("/"));
     } else {
-        auto rootimpl = dynamic_cast<kdirectory_impl *>(&(*(impl->parent)));
-        if (rootimpl != nullptr) {
+        auto parentimpl = dynamic_cast<kdirectory_impl *>(&(*(impl->parent)));
+        kdirectory *parent;
+        if (parentimpl != nullptr) {
             kdir = std::make_shared<kdirectory>(impl->parent, syml);
-            root = &(*kdir);
+            parent = &(*kdir);
         } else {
-            root = dynamic_cast<kdirectory *>(&(*(impl->parent)));
+            parent = dynamic_cast<kdirectory *>(&(*(impl->parent)));
         }
+        if (parent == nullptr) {
+            return {.result = {}, .status = kfile_status::SUCCESS};
+        }
+        return parent->Resolve(root, syml);
     }
     if (root == nullptr) {
         return {.result = {}, .status = kfile_status::SUCCESS};

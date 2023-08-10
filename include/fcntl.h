@@ -17,7 +17,9 @@
 #define O_RDWR      2
 
 #define O_NONBLOCK          0x800
+#define O_LARGEFILE         0x8000
 #define O_DIRECTORY         0x10000
+#define O_NOFOLLOW          0x20000
 #define O_CLOEXEC           0x80000
 
 #define F_GETFL     3

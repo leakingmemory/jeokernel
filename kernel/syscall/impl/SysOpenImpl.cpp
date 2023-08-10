@@ -12,7 +12,7 @@
 
 //#define DEBUG_OPENAT_CALL
 
-constexpr int supportedOpenFlags = (3 | O_CLOEXEC | O_DIRECTORY | O_NONBLOCK);
+constexpr int supportedOpenFlags = (3 | O_CLOEXEC | O_DIRECTORY | O_NONBLOCK | O_NOFOLLOW | O_LARGEFILE);
 constexpr int notSupportedOpenFlags = ~supportedOpenFlags;
 
 int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int flags, int mode) {
@@ -53,6 +53,47 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
         std::cout << "openat: not found: " << filename << "\n";
 #endif
         return -ENOENT;
+    }
+
+    int followLim = 20;
+    while (true) {
+        std::shared_ptr<ksymlink> perhapsSymlink{file};
+        if (!perhapsSymlink) {
+            break;
+        }
+        if (followLim <= 0 || (flags & O_NOFOLLOW) != 0) {
+#ifdef DEBUG_OPENAT_CALL
+            std::cout << "openat: symlink nofollow or loop: " << filename << "\n";
+#endif
+            return -ELOOP;
+        }
+        --followLim;
+
+        auto rootdir = get_kernel_rootdir();
+        auto result = perhapsSymlink->Resolve(&(*rootdir));
+        if (result.status != kfile_status::SUCCESS) {
+#ifdef DEBUG_OPENAT_CALL
+            std::cout << "openat: error following symlink: " << filename << "\n";
+#endif
+            switch (result.status) {
+                case kfile_status::IO_ERROR:
+                    return -EIO;
+                case kfile_status::NOT_DIRECTORY:
+                    return -ENOTDIR;
+                default:
+                    return -EIO;
+            }
+        }
+        file = result.result;
+        if (!file) {
+#ifdef DEBUG_OPENAT_CALL
+            std::cout << "openat: not found while following symlink for: " << filename << "\n";
+#endif
+            return -ENOENT;
+        }
+#ifdef DEBUG_OPENAT_CALL
+        std::cout << "openat: symlink followed for: " << filename << "\n";
+#endif
     }
 
     auto fileMode = file->Mode();

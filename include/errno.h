@@ -23,6 +23,7 @@ extern int errno;
 #define EMFILE      24
 #define ERANGE      34
 #define ENOSYS      38 // Not a syscall
+#define ELOOP       40
 #define EOPNOTSUPP  95
 
 #endif //JEOKERNEL_ERRNO_H
