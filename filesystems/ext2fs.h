@@ -159,6 +159,9 @@ private:
 public:
     inode_read_block_result ReadBlock(std::size_t blki);
     inode_read_bytes_result ReadBytes(uint64_t offset, void *ptr, std::size_t length);
+    uint64_t GetFileSize() {
+        return filesize;
+    }
 };
 
 class ext2fs_inode_reader {

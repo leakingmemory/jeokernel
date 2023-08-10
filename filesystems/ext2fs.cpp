@@ -535,8 +535,15 @@ entries_result ext2fs_directory::Entries() {
     ext2fs_inode_reader reader{inode};
     {
         ext2dirent baseDirent{};
+        auto sizeRemaining = inode->GetFileSize();
         do {
-            auto readResult = reader.read(&baseDirent, sizeof(baseDirent));
+            inode_read_bytes_result readResult{};
+            if (sizeRemaining >= sizeof(baseDirent)) {
+                readResult = reader.read(&baseDirent, sizeof(baseDirent));
+            } else {
+                readResult = {.size = 0, .status = filesystem_status::SUCCESS};
+            }
+            sizeRemaining -= readResult.size;
             if (readResult.size == sizeof(baseDirent) &&
                 baseDirent.rec_len > sizeof(baseDirent) &&
                 baseDirent.name_len > 0) {
@@ -544,7 +551,12 @@ entries_result ext2fs_directory::Entries() {
                 auto *dirent = new (malloc(baseDirent.rec_len)) ext2dirent();
                 memcpy(dirent, &baseDirent, sizeof(*dirent));
                 static_assert(sizeof(*dirent) == sizeof(baseDirent));
-                auto readResult = reader.read(((uint8_t *) dirent) + sizeof(baseDirent), addLength);
+                if (sizeRemaining >= addLength) {
+                    readResult = reader.read(((uint8_t *) dirent) + sizeof(baseDirent), addLength);
+                    sizeRemaining -= readResult.size;
+                } else {
+                    readResult = {.size = 0, .status = filesystem_status::SUCCESS};
+                }
                 if (readResult.size == addLength) {
                     if (dirent->inode != 0) {
                         std::string name{dirent->Name()};
