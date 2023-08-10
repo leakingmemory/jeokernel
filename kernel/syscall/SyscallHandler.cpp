@@ -65,6 +65,7 @@
 #include "Open.h"
 #include "Getpgid.h"
 #include "Stat.h"
+#include "Fork.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -188,6 +189,7 @@ private:
     Open open{*this};
     Getpgid getpgid{*this};
     Stat stat{*this};
+    Fork fork{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
