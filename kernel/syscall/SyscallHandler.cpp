@@ -64,6 +64,7 @@
 #include "Mount.h"
 #include "Open.h"
 #include "Getpgid.h"
+#include "Stat.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -174,7 +175,7 @@ private:
     Execve execve{*this};
     Prctl prctl{*this};
     Getdents64 getdents64{*this};
-    Statx stat{*this};
+    Statx statx{*this};
     Chdir chdir{*this};
     Munmap munmap{*this};
     Getxattr getxattr{*this};
@@ -186,6 +187,7 @@ private:
     Mount mount{*this};
     Open open{*this};
     Getpgid getpgid{*this};
+    Stat stat{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
