@@ -49,6 +49,10 @@ bool ProcThread::IsFree(uint32_t pagenum, uint32_t pages) {
     return process->IsFree(pagenum, pages);
 }
 
+uint32_t ProcThread::FindFreeStart(uint32_t pages) {
+    return process->FindFreeStart(pages);
+}
+
 uint32_t ProcThread::FindFree(uint32_t pages) {
     return process->FindFree(pages);
 }

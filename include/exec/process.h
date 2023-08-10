@@ -174,6 +174,7 @@ struct child_result {
 };
 
 class ProcThread;
+struct MemoryArea;
 
 class Process {
 private:
@@ -242,6 +243,10 @@ public:
     bool IsInRange(uint32_t pagenum, uint32_t pages);
     void DisableRange(uint32_t pagenum, uint32_t pages);
     [[nodiscard]] std::vector<DeferredReleasePage> ClearRange(uint32_t pagenum, uint32_t pages);
+private:
+    std::vector<MemoryArea> FindFreeMemoryAreas();
+public:
+    uint32_t FindFreeStart(uint32_t pages);
     uint32_t FindFree(uint32_t pages);
     void TearDownMemory();
 private:

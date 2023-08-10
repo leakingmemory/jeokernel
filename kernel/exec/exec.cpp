@@ -471,13 +471,13 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
                     } else {
                         std::cerr << "(fail+fallback) Interpreter not relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
                                   << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
-                        auto startpage = process->FindFree(interpreterLoads.endpage - interpreterLoads.startpage);
+                        auto startpage = process->FindFreeStart(interpreterLoads.endpage - interpreterLoads.startpage);
                         if (startpage == 0) {
                             std::cerr << "Error: Could not allocate vspace for ELF interpreter\n";
                             func(false, {});
                             return;
                         }
-                        interpreterRelocate = interpreterLoads.startpage - startpage;
+                        interpreterRelocate = startpage - interpreterLoads.startpage;
                         std::cout << "Interpreter relocated to " << std::hex << (interpreterLoads.startpage + interpreterRelocate)
                                   << "-" << (interpreterLoads.endpage + interpreterRelocate) << std::dec << "\n";
                     }

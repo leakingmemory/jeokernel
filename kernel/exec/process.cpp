@@ -720,7 +720,7 @@ std::vector<DeferredReleasePage> Process::ClearRange(uint32_t pagenum, uint32_t 
     return release;
 }
 
-uint32_t Process::FindFree(uint32_t pages) {
+std::vector<MemoryArea> Process::FindFreeMemoryAreas() {
     std::vector<MemoryArea> freemem{};
     {
         std::vector<MemoryArea> mappings{};
@@ -772,6 +772,30 @@ uint32_t Process::FindFree(uint32_t pages) {
             freemem.push_back({.start = start, .end = highLim});
         }
     }
+    return freemem;
+}
+
+uint32_t Process::FindFreeStart(uint32_t pages) {
+    auto freemem = FindFreeMemoryAreas();
+    MemoryArea *memoryArea = nullptr;
+    for (auto &fmem : freemem) {
+        auto size = fmem.end - fmem.start;
+        if (size >= pages) {
+            if (memoryArea == nullptr) {
+                memoryArea = &fmem;
+            } else if (fmem.start < memoryArea->start) {
+                memoryArea = &fmem;
+            }
+        }
+    }
+    if (memoryArea == nullptr) {
+        return 0;
+    }
+    return memoryArea->start;
+}
+
+uint32_t Process::FindFree(uint32_t pages) {
+    auto freemem = FindFreeMemoryAreas();
     MemoryArea *memoryArea = nullptr;
     for (auto &fmem : freemem) {
         auto size = fmem.end - fmem.start;
