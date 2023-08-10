@@ -168,6 +168,10 @@ int ProcThread::setpgid(pid_t pid, pid_t pgid) {
     return process->setpgid(pid, pgid);
 }
 
+int ProcThread::getpgid(pid_t pid) {
+    return process->getpgid(pid);
+}
+
 pid_t ProcThread::getppid() const {
     return process->getppid();
 }

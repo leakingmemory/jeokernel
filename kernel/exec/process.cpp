@@ -2674,6 +2674,17 @@ int Process::setpgid(pid_t pid, pid_t pgid) {
     return -EPERM;
 }
 
+int Process::getpgid(pid_t pid) {
+    {
+        std::unique_lock lock{mtx};
+        if (pid == 0 || pid == this->pid) {
+            return pgrp;
+        }
+    }
+    std::cerr << "getpgid: "<<std::dec<<pid<< "\n";
+    return -EPERM;
+}
+
 int Process::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize) {
     if (sigsetsize < 0 || sigsetsize > sizeof(sigmask)) {
         return -EINVAL;

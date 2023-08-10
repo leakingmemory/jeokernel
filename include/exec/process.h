@@ -323,6 +323,7 @@ public:
     }
     pid_t getpgrp();
     int setpgid(pid_t pid, pid_t pgid);
+    int getpgid(pid_t pid);
     pid_t getppid() const {
         return parent_pid;
     }

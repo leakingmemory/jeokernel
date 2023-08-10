@@ -63,6 +63,7 @@
 #include "Mkdir.h"
 #include "Mount.h"
 #include "Open.h"
+#include "Getpgid.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -184,6 +185,7 @@ private:
     Mkdir mkdir{*this};
     Mount mount{*this};
     Open open{*this};
+    Getpgid getpgid{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
