@@ -62,6 +62,7 @@
 #include "Lseek.h"
 #include "Mkdir.h"
 #include "Mount.h"
+#include "Open.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -182,6 +183,7 @@ private:
     Lseek lseek{*this};
     Mkdir mkdir{*this};
     Mount mount{*this};
+    Open open{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

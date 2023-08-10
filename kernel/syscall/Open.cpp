@@ -1,12 +1,12 @@
 //
-// Created by sigsegv on 9/9/22.
+// Created by sigsegv on 8/10/23.
 //
 
-#include "OpenAt.h"
 #include <exec/procthread.h>
 #include "SyscallCtx.h"
+#include "Open.h"
 
-int64_t OpenAt::Call(int64_t dfd, int64_t uptr_filename, int64_t flags, int64_t mode, SyscallAdditionalParams &params) {
+int64_t Open::Call(int64_t dfd, int64_t uptr_filename, int64_t flags, int64_t mode, SyscallAdditionalParams &params) {
     SyscallCtx ctx{params};
 
     auto task_id = get_scheduler()->get_current_task_id();
