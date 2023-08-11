@@ -18,6 +18,7 @@ private:
     uintptr_t fsBase;
     uintptr_t tidAddress;
     uintptr_t robustListHead;
+    pid_t tid;
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
     bool threadFaulted;
 #endif
@@ -63,6 +64,7 @@ public:
     int32_t getgid() const;
     bool brk(intptr_t delta_addr, uintptr_t &result);
     pid_t getpid() const;
+    pid_t gettid() const;
     pid_t getpgrp() const;
     int setpgid(pid_t pid, pid_t pgid);
     int getpgid(pid_t pid);

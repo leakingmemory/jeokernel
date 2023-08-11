@@ -66,6 +66,7 @@
 #include "Getpgid.h"
 #include "Stat.h"
 #include "Fork.h"
+#include "Gettid.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -190,6 +191,7 @@ private:
     Getpgid getpgid{*this};
     Stat stat{*this};
     Fork fork{*this};
+    Gettid gettid{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
