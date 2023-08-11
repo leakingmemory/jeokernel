@@ -936,14 +936,12 @@ inode_read_bytes_result ext2fs_inode_reader::read(void *ptr, std::size_t bytes) 
             offset += bytes;
             if (offset == FILEPAGE_PAGE_SIZE) {
                 page = {};
-                ++blki;
                 offset = 0;
             }
             return {.size = bytes, .status = filesystem_status::SUCCESS};
         } else {
             memcpy(ptr, ((uint8_t *) page->Pointer()) + offset, remaining);
             page = {};
-            ++blki;
             offset = 0;
             auto nextrd = read(((uint8_t *) ptr) + remaining, bytes - remaining);
             return {.size = remaining + nextrd.size, .status = nextrd.status};
