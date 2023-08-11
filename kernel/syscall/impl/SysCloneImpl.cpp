@@ -10,8 +10,8 @@
 #include <errno.h>
 #include <exec/procthread.h>
 
-#define DEBUG_CLONE_CALL
-#define DEBUG_CLONE_TASK_STARTED
+//#define DEBUG_CLONE_CALL
+//#define DEBUG_CLONE_TASK_STARTED
 
 class TaskCloner : public SyscallInterruptFrameVisitor {
 private:
@@ -93,6 +93,7 @@ void TaskCloner::VisitInterruptFrame(Interrupt &intr) {
     }
     InterruptStackFrame stackFrame = intr.get_cpu_state();
     SpawnFromInterrupt(process, intr.get_fpu_state(), stackFrame, intr.get_cpu_frame());
+    Complete(false);
 }
 
 void TaskCloner::Complete(bool fault) {
