@@ -51,6 +51,24 @@ int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp
                                 ctx.ReturnWhenNotRunning(-EIO);
                                 return;
                             }
+                            int linkLimit = 20;
+                            while (binary.result) {
+                                std::shared_ptr<ksymlink> symlink{binary.result};
+                                if (!symlink) {
+                                    break;
+                                }
+                                if (linkLimit == 0) {
+                                    ctx.ReturnWhenNotRunning(-ELOOP);
+                                    return;
+                                }
+                                --linkLimit;
+                                auto rootdir = get_kernel_rootdir();
+                                binary = symlink->Resolve(&(*rootdir));
+                                if (binary.status != kfile_status::SUCCESS) {
+                                    ctx.ReturnWhenNotRunning(-EIO);
+                                    return;
+                                }
+                            }
                             if (!binary.result) {
                                 ctx.ReturnWhenNotRunning(-ENOENT);
                                 return;
