@@ -3,6 +3,7 @@
 //
 
 #include <exec/blockthread.h>
+#include <exec/WorkingForThread.h>
 
 blockthread::blockthread() : thr([this] () {
     while (true) {
@@ -32,9 +33,13 @@ blockthread::~blockthread() {
     Stop();
 }
 
-void blockthread::Queue(const std::function<void()> &func) {
+void blockthread::Queue(uint32_t task_id, const std::function<void()> &i_func) {
+    std::function<void ()> func{i_func};
     std::lock_guard lock{spinlock};
-    queue.push_back(func);
+    queue.push_back([func, task_id] () mutable {
+        WorkingForThread w{task_id};
+        func();
+    });
     sema.release();
 }
 

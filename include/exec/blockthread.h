@@ -25,7 +25,7 @@ public:
     blockthread(blockthread &&) = delete;
     blockthread &operator =(const blockthread &) = delete;
     blockthread &operator =(blockthread &&) = delete;
-    void Queue(const std::function<void ()> &);
+    void Queue(uint32_t task_id, const std::function<void ()> &);
 private:
     void Stop();
 };

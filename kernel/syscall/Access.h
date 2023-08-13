@@ -7,12 +7,13 @@
 
 #include "SyscallHandler.h"
 #include "SyscallAsyncThread.h"
+#include "impl/SysFaccessatImpl.h"
 
 class ProcThread;
 
-class Access : public Syscall, private SyscallAsyncThread {
+class Access : public Syscall, private SysFaccessatImpl {
 public:
-    Access(SyscallHandler &handler) : Syscall(handler, 21), SyscallAsyncThread("[faccess]") {}
+    Access(SyscallHandler &handler) : Syscall(handler, 21) {}
     int DoAccess(ProcThread &proc, std::string filename, int mode);
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;
 };

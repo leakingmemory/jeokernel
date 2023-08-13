@@ -124,7 +124,8 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
     auto handler = this->handler;
     std::shared_ptr<writev_state> state{new writev_state};
     state->remaining = iovcnt;
-    return ctx->Read(usersp_iov_ptr, sizeof(iovec) * iovcnt, [ctx, state, handler, iovcnt] (void *ptr) mutable {
+    auto task_id = get_scheduler()->get_current_task_id();
+    return ctx->Read(usersp_iov_ptr, sizeof(iovec) * iovcnt, [ctx, state, handler, iovcnt, task_id] (void *ptr) mutable {
         iovec *iov = (iovec *) ptr;
         for (int i = 0; i < iovcnt; i++) {
             state->iovecs.emplace_back(new kiovec(&(iov[i])));
@@ -139,7 +140,7 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
             if (iov[i].iov_len == 0) {
                 continue;
             }
-            auto nestedResult = ctx->NestedWrite((uintptr_t) iov[i].iov_base, iov[i].iov_len, [ctx, handler, iov, iovcnt, i, state] (void *bufptr) mutable {
+            auto nestedResult = ctx->NestedWrite((uintptr_t) iov[i].iov_base, iov[i].iov_len, [ctx, handler, iov, iovcnt, i, state, task_id] (void *bufptr) mutable {
                 std::unique_lock lock{state->lock};
                 if (state->failed) {
                     return resolve_return_value::NoReturn();
@@ -158,7 +159,7 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
                     }
                     auto processNext = std::make_shared<std::function<void ()>>();
                     auto totlen = std::make_shared<uintptr_t>(0);
-                    *processNext = [state, ctx, handler, queue, processNext, totlen] () mutable {
+                    *processNext = [state, ctx, handler, queue, processNext, totlen, task_id] () mutable {
                         std::shared_ptr<kiovec> iovec{};
                         {
                             auto iterator = queue->begin();
@@ -206,14 +207,14 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
                                 ctx->AsyncCtx()->returnAsync(*totlen);
                             }
                         } else {
-                            ctx->GetProcess().QueueBlocking(*processNext);
+                            ctx->GetProcess().QueueBlocking(task_id, *processNext);
                         }
                     };
                     if (!queue->empty()) {
 #ifdef READV_DEBUG
                         std::cout << "readv: start processing " << queue->size() << " iovecs\n";
 #endif
-                        ctx->GetProcess().QueueBlocking(*processNext);
+                        ctx->GetProcess().QueueBlocking(task_id, *processNext);
                         return resolve_return_value::AsyncReturn();
                     }
                     return resolve_return_value::Return(0);

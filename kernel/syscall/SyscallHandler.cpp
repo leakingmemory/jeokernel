@@ -68,6 +68,7 @@
 #include "Fork.h"
 #include "Gettid.h"
 #include "Readv.h"
+#include "Faccessat2.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -194,6 +195,7 @@ private:
     Fork fork{*this};
     Gettid gettid{*this};
     Readv readv{*this};
+    Faccessat2 faccessat2{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
