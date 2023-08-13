@@ -89,6 +89,7 @@ public:
     intptr_t seek(intptr_t offset, SeekWhence whence);
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *, intptr_t len);
     resolve_return_value read(std::shared_ptr<callctx> ctx, void *, intptr_t len, uintptr_t offset);
+    intptr_t readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, int iovcnt);
     file_descriptor_result write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func);
     file_descriptor_result writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void (intptr_t)> func);
     bool stat(struct stat &st) const;

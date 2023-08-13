@@ -67,6 +67,7 @@
 #include "Stat.h"
 #include "Fork.h"
 #include "Gettid.h"
+#include "Readv.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -192,6 +193,7 @@ private:
     Stat stat{*this};
     Fork fork{*this};
     Gettid gettid{*this};
+    Readv readv{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

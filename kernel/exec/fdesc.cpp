@@ -9,6 +9,7 @@
 #include <sys/uio.h>
 #include <iostream>
 
+//#define READV_DEBUG
 //#define WRITEV_DEBUG
 //#define WRITEV_IGNORE
 //#define SUBSCRIPTION_DEBUG
@@ -99,22 +100,6 @@ resolve_return_value FileDescriptor::read(std::shared_ptr<callctx> ctx, void *pt
     return handler->read(ctx, ptr, len, offset);
 }
 
-file_descriptor_result FileDescriptor::write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func) {
-    auto handler = this->handler;
-    auto result = process->resolve_read(usersp_ptr, len, false, func, [process, handler, usersp_ptr, len, func] (bool success, bool, std::function<void (intptr_t)>) mutable {
-        if (success) {
-            UserMemory umem{*process, usersp_ptr, (uintptr_t) len};
-            if (!umem) {
-                return resolve_return_value::Return(-EFAULT);
-            }
-            return resolve_return_value::Return(handler->write((const void *) umem.Pointer(), len));
-        } else {
-            return resolve_return_value::Return(-EFAULT);
-        }
-    });
-    return {.result = result.result, .async = result.async};
-}
-
 constexpr uintptr_t offset(uintptr_t ptr) {
     return ptr & (PAGESIZE-1);
 }
@@ -133,6 +118,136 @@ struct writev_state {
     bool failed{false};
     int remaining;
 };
+
+intptr_t
+FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, int iovcnt) {
+    auto handler = this->handler;
+    std::shared_ptr<writev_state> state{new writev_state};
+    state->remaining = iovcnt;
+    return ctx->Read(usersp_iov_ptr, sizeof(iovec) * iovcnt, [ctx, state, handler, iovcnt] (void *ptr) mutable {
+        iovec *iov = (iovec *) ptr;
+        for (int i = 0; i < iovcnt; i++) {
+            state->iovecs.emplace_back(new kiovec(&(iov[i])));
+            if (iov[i].iov_len == 0) {
+                state->remaining--;
+            }
+        }
+        if (state->remaining == 0) {
+            return resolve_return_value::Return(0);
+        }
+        for (int i = 0; i < iovcnt; i++) {
+            if (iov[i].iov_len == 0) {
+                continue;
+            }
+            auto nestedResult = ctx->NestedWrite((uintptr_t) iov[i].iov_base, iov[i].iov_len, [ctx, handler, iov, iovcnt, i, state] (void *bufptr) mutable {
+                std::unique_lock lock{state->lock};
+                if (state->failed) {
+                    return resolve_return_value::NoReturn();
+                }
+                state->remaining--;
+                auto &iovo = iov[i];
+                state->iovecs[i]->iov_base = bufptr;
+                state->iovecs[i]->iov_len = iovo.iov_len;
+                if (state->remaining == 0) {
+                    lock.release();
+                    auto queue = std::make_shared<std::vector<std::shared_ptr<kiovec>>>();
+                    for (int i = 0; i < iovcnt; i++) {
+                        if (state->iovecs[i]->iov_len >= 0) {
+                            queue->push_back(state->iovecs[i]);
+                        }
+                    }
+                    auto processNext = std::make_shared<std::function<void ()>>();
+                    auto totlen = std::make_shared<uintptr_t>(0);
+                    *processNext = [state, ctx, handler, queue, processNext, totlen] () mutable {
+                        std::shared_ptr<kiovec> iovec{};
+                        {
+                            auto iterator = queue->begin();
+                            if (iterator != queue->end()) {
+                                iovec = *iterator;
+                                queue->erase(iterator);
+                            }
+                        }
+                        if (iovec) {
+                            ctx->ReturnFilter([state, ctx, totlen, iovec, queue] (auto result) {
+                                std::unique_lock lock{state->lock};
+#ifdef READV_DEBUG
+                                std::cout << "iovec: result = " << result.result << "\n";
+#endif
+                                if (result.hasValue) {
+                                    auto rval = result.result;
+                                    if (rval >= 0) {
+                                        *totlen += rval;
+                                        if (rval < iovec->iov_len) {
+                                            queue->clear();
+                                        }
+                                    } else {
+                                        queue->clear();
+                                        if (*totlen == 0) {
+                                            state->failed = true;
+                                            lock.release();
+                                            ctx->AsyncCtx()->returnAsync(result.result);
+                                            return resolve_return_value::NoReturn();
+                                        }
+                                    }
+                                }
+                                lock.release();
+                                return resolve_return_value::NoReturn();
+                            }, [handler, iovec] (auto ctx) {
+                                return handler->read(ctx, iovec->iov_base, iovec->iov_len);
+                            });
+                        }
+                        if (queue->empty()) {
+                            std::unique_lock lock{state->lock};
+                            if (!state->failed) {
+                                lock.release();
+#ifdef READV_DEBUG
+                                std::cout << "iovec: all done = " << *totlen << "\n";
+#endif
+                                ctx->AsyncCtx()->returnAsync(*totlen);
+                            }
+                        } else {
+                            ctx->GetProcess().QueueBlocking(*processNext);
+                        }
+                    };
+                    if (!queue->empty()) {
+#ifdef READV_DEBUG
+                        std::cout << "readv: start processing " << queue->size() << " iovecs\n";
+#endif
+                        ctx->GetProcess().QueueBlocking(*processNext);
+                        return resolve_return_value::AsyncReturn();
+                    }
+                    return resolve_return_value::Return(0);
+                }
+                return resolve_return_value::NoReturn();
+            }, /*fault:*/ [state] () {
+                std::unique_lock lock{state->lock};
+                state->failed = true;
+                lock.release();
+                return resolve_return_value::Return(-EFAULT);
+            });
+            if (nestedResult.hasValue) {
+                return resolve_return_value::Return(nestedResult.result);
+            }
+        }
+        return resolve_return_value::AsyncReturn();
+    });
+}
+
+file_descriptor_result FileDescriptor::write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func) {
+    auto handler = this->handler;
+    auto result = process->resolve_read(usersp_ptr, len, false, func, [process, handler, usersp_ptr, len, func] (bool success, bool, std::function<void (intptr_t)>) mutable {
+        if (success) {
+            UserMemory umem{*process, usersp_ptr, (uintptr_t) len};
+            if (!umem) {
+                return resolve_return_value::Return(-EFAULT);
+            }
+            return resolve_return_value::Return(handler->write((const void *) umem.Pointer(), len));
+        } else {
+            return resolve_return_value::Return(-EFAULT);
+        }
+    });
+    return {.result = result.result, .async = result.async};
+}
 
 file_descriptor_result
 FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt, std::function<void(intptr_t)> func) {

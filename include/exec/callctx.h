@@ -26,6 +26,7 @@ class callctx {
 private:
     std::shared_ptr<callctx_impl> impl;
 public:
+    callctx() : impl() {}
     callctx(std::shared_ptr<callctx_async> async);
     ProcThread &GetProcess() const;
     resolve_return_value Async() const;
@@ -35,6 +36,7 @@ public:
     intptr_t ReadString(intptr_t ptr, std::function<resolve_return_value (const std::string &)>) const;
     resolve_return_value NestedRead(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
     resolve_return_value NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;
+    resolve_return_value NestedWrite(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>, std::function<resolve_return_value ()> fault) const;
     resolve_return_value NestedReadNullterminatedArrayOfPointers(intptr_t ptr, std::function<resolve_return_value (void **, size_t)>);
     resolve_return_value NestedReadString(intptr_t ptr, std::function<resolve_return_value (const std::string &)>) const;
     resolve_return_value NestedReadArrayOfStrings(void **vptr, size_t len, std::function<resolve_return_value (const std::vector<std::string> &)>);
@@ -45,6 +47,8 @@ public:
     void KillAsync() const;
     void EntrypointAsync(uintptr_t entrypoint, uintptr_t fsBase, uintptr_t stackPtr) const;
     std::shared_ptr<callctx_async> AsyncCtx() const;
+
+    resolve_return_value ReturnFilter(std::function<resolve_return_value (resolve_return_value rv)>, std::function<resolve_return_value (std::shared_ptr<callctx>)> cll);
 };
 
 #endif //JEOKERNEL_CALLCTX_H

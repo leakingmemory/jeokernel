@@ -5,13 +5,13 @@
 #include <exec/procthread.h>
 
 ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) :
-process(Process::Create(cwd, tty, parent_pid, cmdline)), rseq(), fsBase(0), tidAddress(0), robustListHead(0), tid(process->getpid())
+process(Process::Create(cwd, tty, parent_pid, cmdline)), blockthr(), rseq(), fsBase(0), tidAddress(0), robustListHead(0), tid(process->getpid())
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
 , threadFaulted(false)
 #endif
 {}
 
-ProcThread::ProcThread(std::shared_ptr<Process> process) : process(process), rseq(), fsBase(0), tidAddress(0), robustListHead(0), tid(process->getpid())
+ProcThread::ProcThread(std::shared_ptr<Process> process) : process(process), blockthr(), rseq(), fsBase(0), tidAddress(0), robustListHead(0), tid(process->getpid())
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
 , threadFaulted(false)
 #endif

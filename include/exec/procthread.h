@@ -8,12 +8,14 @@
 #include <sys/types.h>
 #include <exec/process.h>
 #include <exec/rseq.h>
+#include <exec/blockthread.h>
 
 //#define DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
 
 class ProcThread : public task_resource {
 private:
     std::shared_ptr<Process> process;
+    blockthread blockthr;
     ThreadRSeq rseq;
     uintptr_t fsBase;
     uintptr_t tidAddress;
@@ -32,6 +34,9 @@ public:
     resolve_and_run resolve_read_nullterm(uintptr_t addr, size_t item_size, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, size_t, std::function<void (intptr_t)>)> func);
     resolve_and_run resolve_read(uintptr_t addr, uintptr_t len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value (bool, bool, std::function<void (intptr_t)>)> func);
     bool resolve_write(uintptr_t addr, uintptr_t len);
+    void QueueBlocking(const std::function<void ()> &func) {
+        blockthr.Queue(func);
+    }
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
