@@ -69,6 +69,7 @@
 #include "Gettid.h"
 #include "Readv.h"
 #include "Faccessat2.h"
+#include "Membarrier.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -196,6 +197,7 @@ private:
     Gettid gettid{*this};
     Readv readv{*this};
     Faccessat2 faccessat2{*this};
+    Membarrier membarrier{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
