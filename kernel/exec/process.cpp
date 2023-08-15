@@ -1052,7 +1052,36 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
                 ++iterator;
             }
         }
-        if (prot == PROT_READ) {
+        if (prot == (PROT_READ | PROT_WRITE)) {
+            bool cow{false};
+            auto end = pmapping.mapping->pagenum + pmapping.mapping->pages;
+            for (auto p = pmapping.mapping->pagenum; p < end; p++) {
+                PhysMapping *pmap = nullptr;
+                for (auto &mapping : pmapping.mapping->mappings) {
+                    if (mapping.page == p) {
+                        pmap = &mapping;
+                        break;
+                    }
+                }
+                if (pmap != nullptr) {
+                    if (pmap->data || pmap->cow) {
+                        cow = true;
+                    } else if (pmap->phys_page != 0) {
+                        Pageentry(p, [](pageentr &pe) {
+                            pe.execution_disabled = 1;
+                            pe.writeable = 1;
+                        });
+                    }
+                } else {
+                    Pageentry(p, [](pageentr &pe) {
+                        pe.execution_disabled = 1;
+                        pe.writeable = 1;
+                    });
+                }
+            }
+            pmapping.mapping->read = true;
+            pmapping.mapping->cow = cow;
+        } else if (prot == PROT_READ) {
             auto end = pmapping.mapping->pagenum + pmapping.mapping->pages;
             for (auto p = pmapping.mapping->pagenum; p < end; p++) {
                 Pageentry(p, [](pageentr &pe) {

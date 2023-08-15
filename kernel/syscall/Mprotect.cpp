@@ -21,7 +21,7 @@ int64_t Mprotect::Call(int64_t addr, int64_t len , int64_t prot, int64_t, Syscal
         return -EINVAL;
     }
     int rwx = prot & (PROT_READ | PROT_WRITE | PROT_EXEC);
-    if (rwx != PROT_READ && rwx != PROT_NONE) {
+    if (rwx != PROT_READ && rwx != PROT_NONE && rwx != (PROT_READ | PROT_WRITE)) {
         std::cerr << "mprotect: not supported prot rwx flags 0x" << std::hex << rwx << std::dec << "\n";
         return -EINVAL;
     }
