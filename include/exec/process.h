@@ -213,6 +213,7 @@ public:
     Process &operator =(Process &&) = delete;
     ~Process();
     static pid_t GetMaxPid();
+    static pid_t AllocTid();
 private:
     void ChildExitNotification(pid_t pid, intptr_t status);
 public:

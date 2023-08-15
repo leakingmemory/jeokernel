@@ -19,11 +19,17 @@ private:
     hw_spinlock mtx;
     std::shared_ptr<Process> clonedProcess;
     uintptr_t uptr_child_tid;
+    uintptr_t tls;
+    uintptr_t stackPtr;
     std::function<void (bool fault)> completed;
+    pid_t tid;
     bool isCompleted;
     bool isFaulted;
+    bool setTls;
+    bool setStackPtr;
+    bool setTid;
 private:
-    TaskCloner(std::shared_ptr<Process> clonedProcess, uintptr_t uptr_clild_tid) : this_ref(), mtx(), clonedProcess(clonedProcess), uptr_child_tid(uptr_clild_tid), completed(), isCompleted(false) {}
+    TaskCloner(std::shared_ptr<Process> clonedProcess, uintptr_t uptr_clild_tid) : this_ref(), mtx(), clonedProcess(clonedProcess), uptr_child_tid(uptr_clild_tid), completed(), isCompleted(false), setTls(false), setStackPtr(false) {}
 public:
     static std::shared_ptr<TaskCloner> Create(std::shared_ptr<Process> clonedProcess, uintptr_t uptr_clild_tid) {
         std::shared_ptr<TaskCloner> obj{new TaskCloner(clonedProcess, uptr_clild_tid)};
@@ -32,6 +38,18 @@ public:
         return obj;
     }
     static void SpawnFromInterrupt(ProcThread *, const x86_fpu_state &fpuState, InterruptStackFrame &cpuState, const InterruptCpuFrame &cpuFrame);
+    void SetTid(pid_t tid) {
+        this->tid = tid;
+        this->setTid = true;
+    }
+    void SetTls(uintptr_t tls) {
+        this->tls = tls;
+        this->setTls = true;
+    }
+    void SetStackPtr(uintptr_t stackPtr) {
+        this->stackPtr = stackPtr;
+        this->setStackPtr = true;
+    }
     void VisitInterruptFrame(Interrupt &intr) override;
     void Complete(bool fault);
     bool CallbackIfAsyncOrCompletedNow(std::function<void (bool fault)> completed);
@@ -58,12 +76,22 @@ void TaskCloner::SpawnFromInterrupt(ProcThread *process, const x86_fpu_state &fp
 
 void TaskCloner::VisitInterruptFrame(Interrupt &intr) {
     auto *process = new ProcThread(clonedProcess);
+    if (setTid) {
+        process->SetTid(tid);
+    }
     if (uptr_child_tid != 0) {
         auto u_child_tid = uptr_child_tid;
         x86_fpu_state fpu = intr.get_fpu_state();
         InterruptStackFrame stackFrame = intr.get_cpu_state();
         InterruptCpuFrame cpuFrame = intr.get_cpu_frame();
         std::shared_ptr<TaskCloner> ref_self = this_ref.lock();
+        if (setTls) {
+            stackFrame.fsbase = tls;
+        }
+        if (setStackPtr) {
+            cpuFrame.rsp = stackPtr;
+        }
+        process->SetFsBase(stackFrame.fsbase);
         auto resolve = clonedProcess->resolve_read(*process, uptr_child_tid, sizeof(pid_t), false, [ref_self, process] (intptr_t res) {
             bool fault = res != 0;
             if (fault) {
@@ -92,7 +120,15 @@ void TaskCloner::VisitInterruptFrame(Interrupt &intr) {
         return;
     }
     InterruptStackFrame stackFrame = intr.get_cpu_state();
-    SpawnFromInterrupt(process, intr.get_fpu_state(), stackFrame, intr.get_cpu_frame());
+    InterruptCpuFrame cpuFrame = intr.get_cpu_frame();
+    if (setTls) {
+        stackFrame.fsbase = tls;
+    }
+    if (setStackPtr) {
+        cpuFrame.rsp = stackPtr;
+    }
+    process->SetFsBase(stackFrame.fsbase);
+    SpawnFromInterrupt(process, intr.get_fpu_state(), stackFrame, cpuFrame);
     Complete(false);
 }
 
@@ -118,33 +154,69 @@ bool TaskCloner::CallbackIfAsyncOrCompletedNow(std::function<void (bool fault)> 
     return true;
 }
 
+void SysCloneImpl::DoClone(std::shared_ptr<callctx_async> async, std::shared_ptr<Process> clonedProcess,
+                           std::shared_ptr<TaskCloner> taskCloner) {
+    auto childPid = clonedProcess->getpid();
+    bool completed = taskCloner->CallbackIfAsyncOrCompletedNow([async, childPid] (bool faulted) {
+        if (faulted) {
+            async->returnAsync(-EFAULT);
+            return;
+        }
+        async->returnAsync(childPid);
+    });
+    if (completed) {
+        if (taskCloner->IsFaulted()) {
+            async->returnAsync(-EFAULT);
+            return;
+        }
+        async->returnAsync(childPid);
+    }
+}
+
 int SysCloneImpl::DoClone(int64_t flags, int64_t new_stackp, int64_t uptr_parent_tidptr, int64_t uptr_child_tidptr, int64_t tls, SyscallAdditionalParams &params) {
 #ifdef DEBUG_CLONE_CALL
     std::cout << "clone(" << std::hex << flags << ", " << new_stackp << ", " << uptr_parent_tidptr << ", " << uptr_child_tidptr
               << ", " << tls << std::dec << ")\n";
 #endif
     if ((flags & CloneSupportedFlags) != flags) {
+        std::cerr << "clone: unsupported flags 0x" << std::hex << flags << std::dec << "\n";
         return -EOPNOTSUPP;
     }
     SyscallCtx ctx{params};
-    std::shared_ptr<Process> clonedProcess = ctx.GetProcess().Clone();
-    std::shared_ptr<TaskCloner> taskCloner = TaskCloner::Create(clonedProcess, flags & CLONE_CHILD_SETTID ? uptr_child_tidptr : 0);
-    params.Accept(*taskCloner);
-    auto childPid = clonedProcess->getpid();
-    bool completed = taskCloner->CallbackIfAsyncOrCompletedNow([ctx, childPid] (bool faulted) {
-        if (faulted) {
-            ctx.AsyncCtx()->returnAsync(-EFAULT);
-            return;
-        }
-        ctx.AsyncCtx()->returnAsync(childPid);
-    });
-    if (completed) {
-        if (taskCloner->IsFaulted()) {
-            return -EFAULT;
-        }
-        return childPid;
+    std::shared_ptr<Process> clonedProcess{};
+    if ((flags & ThreadFlags) == 0) {
+        clonedProcess = ctx.GetProcess().Clone();
     } else {
-        ctx.AsyncCtx()->async();
-        return 0;
+        if ((flags & ThreadFlags) != ThreadFlags) {
+            std::cerr << "clone: unsupported thread flags 0x" << std::hex << flags << std::dec << "\n";
+            return -EOPNOTSUPP;
+        }
+        clonedProcess = ctx.GetProcess().GetProcess();
     }
+    std::shared_ptr<TaskCloner> taskCloner = TaskCloner::Create(clonedProcess, flags & CLONE_CHILD_SETTID ? uptr_child_tidptr : 0);
+    pid_t tid;
+    if ((flags & ThreadFlags) == 0) {
+        tid = clonedProcess->getpid();
+    } else {
+        tid = Process::AllocTid();
+        taskCloner->SetTid(tid);
+    }
+    if ((flags & CLONE_SETTLS) != 0) {
+        taskCloner->SetTls(tls);
+    }
+    if (new_stackp != 0) {
+        taskCloner->SetStackPtr(new_stackp);
+    }
+    params.Accept(*taskCloner);
+    if ((flags & CLONE_PARENT_SETTID) != 0) {
+        return ctx.Write(uptr_parent_tidptr, sizeof(pid_t), [ctx, clonedProcess, taskCloner, tid] (void *parent_tidptr) {
+            auto *parent_tid = (pid_t *) parent_tidptr;
+            *parent_tid = tid;
+            DoClone(ctx.AsyncCtx(), clonedProcess, taskCloner);
+            return resolve_return_value::AsyncReturn();
+        });
+    }
+    DoClone(ctx.AsyncCtx(), clonedProcess, taskCloner);
+    ctx.AsyncCtx()->async();
+    return 0;
 }

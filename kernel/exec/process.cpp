@@ -243,6 +243,10 @@ pid_t Process::GetMaxPid() {
     return pid_max;
 }
 
+pid_t Process::AllocTid() {
+    return AllocPid();
+}
+
 void Process::ChildExitNotification(pid_t cpid, intptr_t status) {
     std::function<void (pid_t, intptr_t)> notify{};
     {
