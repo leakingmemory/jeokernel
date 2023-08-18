@@ -28,11 +28,13 @@ private:
     bool setTls;
     bool setStackPtr;
     bool setTid;
+    bool setChildTid;
+    bool clearChildTid;
 private:
-    TaskCloner(std::shared_ptr<Process> clonedProcess, uintptr_t uptr_clild_tid) : this_ref(), mtx(), clonedProcess(clonedProcess), uptr_child_tid(uptr_clild_tid), completed(), isCompleted(false), setTls(false), setStackPtr(false) {}
+    TaskCloner(std::shared_ptr<Process> clonedProcess, uintptr_t uptr_clild_tid, bool setChildTid, bool clearChildTid) : this_ref(), mtx(), clonedProcess(clonedProcess), uptr_child_tid(uptr_clild_tid), completed(), isCompleted(false), setTls(false), setStackPtr(false), setChildTid(setChildTid), clearChildTid(clearChildTid) {}
 public:
-    static std::shared_ptr<TaskCloner> Create(std::shared_ptr<Process> clonedProcess, uintptr_t uptr_clild_tid) {
-        std::shared_ptr<TaskCloner> obj{new TaskCloner(clonedProcess, uptr_clild_tid)};
+    static std::shared_ptr<TaskCloner> Create(std::shared_ptr<Process> clonedProcess, uintptr_t uptr_clild_tid, bool setChildTid, bool clearChildTid) {
+        std::shared_ptr<TaskCloner> obj{new TaskCloner(clonedProcess, uptr_clild_tid, setChildTid, clearChildTid)};
         std::weak_ptr<TaskCloner> weak{obj};
         obj->this_ref = weak;
         return obj;
@@ -76,10 +78,12 @@ void TaskCloner::SpawnFromInterrupt(ProcThread *process, const x86_fpu_state &fp
 
 void TaskCloner::VisitInterruptFrame(Interrupt &intr) {
     auto *process = new ProcThread(clonedProcess);
+    process->SetTidAddress(uptr_child_tid);
+    process->SetClearTidAddress(clearChildTid);
     if (setTid) {
         process->SetTid(tid);
     }
-    if (uptr_child_tid != 0) {
+    if (setChildTid) {
         auto u_child_tid = uptr_child_tid;
         x86_fpu_state fpu = intr.get_fpu_state();
         InterruptStackFrame stackFrame = intr.get_cpu_state();
@@ -193,7 +197,7 @@ int SysCloneImpl::DoClone(int64_t flags, int64_t new_stackp, int64_t uptr_parent
         }
         clonedProcess = ctx.GetProcess().GetProcess();
     }
-    std::shared_ptr<TaskCloner> taskCloner = TaskCloner::Create(clonedProcess, flags & CLONE_CHILD_SETTID ? uptr_child_tidptr : 0);
+    std::shared_ptr<TaskCloner> taskCloner = TaskCloner::Create(clonedProcess, uptr_child_tidptr, flags & CLONE_CHILD_SETTID, flags & CLONE_CHILD_CLEARTID);
     pid_t tid;
     if ((flags & ThreadFlags) == 0) {
         tid = clonedProcess->getpid();

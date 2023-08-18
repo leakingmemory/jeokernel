@@ -7,6 +7,7 @@
 
 #include <memory>
 
+class Process;
 class ProcThread;
 class vmem;
 
@@ -16,6 +17,7 @@ private:
     uintptr_t offset;
     bool valid;
 public:
+    UserMemory(Process &proc, uintptr_t uptr, uintptr_t len, bool write=false);
     UserMemory(ProcThread &proc, uintptr_t uptr, uintptr_t len, bool write=false);
     void *Pointer() const;
     operator bool () {

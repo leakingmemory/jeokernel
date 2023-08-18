@@ -21,12 +21,14 @@ private:
     uintptr_t tidAddress;
     uintptr_t robustListHead;
     pid_t tid;
+    bool clearTidAddr;
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
     bool threadFaulted;
 #endif
 public:
     ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
     explicit ProcThread(std::shared_ptr<Process> process);
+    ~ProcThread();
     std::shared_ptr<Process> GetProcess() const {
         return process;
     }
@@ -87,6 +89,9 @@ public:
     }
     void SetTidAddress(uintptr_t addr) {
         tidAddress = addr;
+    }
+    void SetClearTidAddress(bool clearTidAddress) {
+        this->clearTidAddr = clearTidAddress;
     }
     void SetRobustListHead(uintptr_t addr) {
         robustListHead = addr;

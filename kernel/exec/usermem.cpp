@@ -6,7 +6,7 @@
 #include <exec/usermem.h>
 #include <exec/procthread.h>
 
-UserMemory::UserMemory(ProcThread &proc, uintptr_t uptr, uintptr_t len, bool write) : vm(), valid(false) {
+UserMemory::UserMemory(Process &proc, uintptr_t uptr, uintptr_t len, bool write) : vm(), valid(false) {
     if (uptr == 0) {
         return;
     }
@@ -29,6 +29,8 @@ UserMemory::UserMemory(ProcThread &proc, uintptr_t uptr, uintptr_t len, bool wri
     vm->reload();
     valid = true;
 }
+
+UserMemory::UserMemory(ProcThread &proc, uintptr_t uptr, uintptr_t len, bool write) : UserMemory(*(proc.GetProcess()), uptr, len, write) {}
 
 void *UserMemory::Pointer() const {
     return (void *) ((uintptr_t) vm->pointer() + offset);

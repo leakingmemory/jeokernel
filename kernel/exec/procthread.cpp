@@ -22,6 +22,28 @@ ProcThread::ProcThread(std::shared_ptr<Process> process) : process(process), blo
 
 }
 
+ProcThread::~ProcThread() {
+    std::shared_ptr<Process> keepProcess = process;
+    uintptr_t tidaddr = tidAddress;
+    if (clearTidAddr) {
+        process->resolve_read(tidaddr, sizeof(pid_t), false, [] (intptr_t rv) {}, [keepProcess, tidaddr] (bool success, bool async, const std::function<void (uintptr_t)> &asyncReturn) {
+            if (!success || !keepProcess->resolve_write(tidaddr, sizeof(pid_t))) {
+                std::cerr << "Thread ID address does not resolve: Unable to clear and signal\n";
+                return resolve_return_value::NoReturn();
+            }
+            UserMemory umem{*keepProcess, tidaddr, sizeof(pid_t), true};
+            if (!umem) {
+                std::cerr << "Thread ID address does not resolve: Unable to clear and signal\n";
+                return resolve_return_value::NoReturn();
+            }
+            auto *tid = (pid_t *) umem.Pointer();
+            *tid = 0;
+            Futex::Instance().WakeAll(*keepProcess, tidaddr);
+            return resolve_return_value::NoReturn();
+        });
+    }
+}
+
 phys_t ProcThread::phys_addr(uintptr_t addr) {
     return process->phys_addr(addr);
 }

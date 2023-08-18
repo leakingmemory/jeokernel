@@ -1171,7 +1171,8 @@ void Process::task_leave() {
 
 struct process_pfault {
     task *pfaultTask;
-    ProcThread *process;
+    Process *process;
+    ProcThread *pthread;
     uintptr_t ip;
     uintptr_t address;
     std::function<void (bool)> func;
@@ -1213,9 +1214,11 @@ void Process::activate_pfault_thread() {
                     p_faults.erase(iterator);
                 }
                 if (pfault.pfaultTask != nullptr) {
-                    pfault.process->GetProcess()->resolve_page_fault(*(pfault.process), *(pfault.pfaultTask), pfault.ip, pfault.address);
+                    pfault.pthread->GetProcess()->resolve_page_fault(*(pfault.pthread), *(pfault.pfaultTask), pfault.ip, pfault.address);
+                } else if (pfault.pthread != nullptr) {
+                    pfault.pthread->GetProcess()->resolve_read_page(*(pfault.pthread), pfault.address, pfault.func);
                 } else {
-                    pfault.process->GetProcess()->resolve_read_page(*(pfault.process), pfault.address, pfault.func);
+                    pfault.process->resolve_read_page(pfault.address, pfault.func);
                 }
             }
         });
@@ -1234,7 +1237,7 @@ bool Process::page_fault(ProcThread &thread, task &current_task, Interrupt &intr
     }
     current_task.set_blocked(true);
     std::lock_guard lock{pfault_lck};
-    process_pfault pf{.pfaultTask = &current_task, .process = &thread, .ip = intr.rip(), .address = address, .func = [] (bool) {}};
+    process_pfault pf{.pfaultTask = &current_task, .pthread = &thread, .ip = intr.rip(), .address = address, .func = [] (bool) {}};
     activate_fault(pf);
     activate_pfault_thread();
     return true;
@@ -2295,6 +2298,14 @@ void Process::resolve_read_page(ProcThread &process, uintptr_t addr, std::functi
     }
 }
 
+void Process::resolve_read_page(uintptr_t addr, std::function<void(bool)> func) {
+    if (resolve_page(addr)) {
+        func(true);
+    } else {
+        func(false);
+    }
+}
+
 phys_t Process::phys_addr(uintptr_t addr) {
     uint64_t vpage{addr >> 12};
     uint32_t vpagerange{(uint32_t) vpage};
@@ -2355,7 +2366,7 @@ resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uin
         addr += i;
     }
     std::lock_guard lock{pfault_lck};
-    activate_fault({.pfaultTask = nullptr, .process = &thread, .ip = 0, .address = addr, .func = [this, &thread, addr, func, item_size, len, add_len, asyncReturn] (bool success) mutable {
+    activate_fault({.pfaultTask = nullptr, .pthread = &thread, .ip = 0, .address = addr, .func = [this, &thread, addr, func, item_size, len, add_len, asyncReturn] (bool success) mutable {
         if (!success) {
             auto result = func(false, true, 0, asyncReturn);
             if (!result.async) {
@@ -2412,7 +2423,7 @@ resolve_and_run Process::resolve_read_nullterm(ProcThread &thread, uintptr_t add
     return {.result = result.result, .async = result.async, .hasValue = result.hasValue};
 }
 
-resolve_and_run Process::resolve_read(ProcThread &thread, uintptr_t addr, uintptr_t len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, std::function<void (intptr_t)>)> func) {
+resolve_and_run Process::resolve_read(ProcThread *thread, uintptr_t addr, uintptr_t len, bool async, std::function<void (intptr_t)> asyncReturn, std::function<resolve_return_value(bool, bool, std::function<void (intptr_t)>)> func) {
     uintptr_t end = addr + len;
     if (addr == end) {
         auto result = func(true, async, asyncReturn);
@@ -2436,7 +2447,7 @@ resolve_and_run Process::resolve_read(ProcThread &thread, uintptr_t addr, uintpt
         }
     }
     std::lock_guard lock{pfault_lck};
-    activate_fault({.pfaultTask = nullptr, .process = &thread, .ip = 0, .address = addr, .func = [this, &thread, addr, len, end, func, asyncReturn] (bool success) mutable {
+    activate_fault({.pfaultTask = nullptr, .process = this, .pthread = thread, .ip = 0, .address = addr, .func = [this, &thread, addr, len, end, func, asyncReturn] (bool success) mutable {
         if (!success) {
             auto result = func(false, true, asyncReturn);
             if (!result.async) {
