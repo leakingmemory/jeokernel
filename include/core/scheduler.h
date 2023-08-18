@@ -466,6 +466,17 @@ public:
     void set_working_for_task_id(uint32_t id);
 };
 
+class task_nanos_handler : public task_event_handler {
+private:
+    uint64_t wakeup_time;
+    uint32_t current_task_id;
+public:
+    task_nanos_handler(uint32_t current_task_id, uint64_t wakeup_time);
+    ~task_nanos_handler() override;
+    void event(uint64_t event_id, uint64_t nanos, uint64_t cpu) override;
+};
+
+
 tasklist *get_scheduler();
 uint64_t get_ticks();
 

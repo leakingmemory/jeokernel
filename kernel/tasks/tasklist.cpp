@@ -664,27 +664,21 @@ void tasklist::event_with_lock(uint64_t v0, uint64_t v1, uint64_t v2, int8_t res
     }
 }
 
-class task_nanos_handler : public task_event_handler {
-private:
-    uint64_t wakeup_time;
-    uint32_t current_task_id;
-public:
-    task_nanos_handler(uint32_t current_task_id, uint64_t wakeup_time) :
-            task_event_handler(), current_task_id(current_task_id), wakeup_time(wakeup_time) {
-    }
+task_nanos_handler::task_nanos_handler(uint32_t current_task_id, uint64_t wakeup_time) :
+    task_event_handler(), current_task_id(current_task_id), wakeup_time(wakeup_time) {
+}
 
-    ~task_nanos_handler() {
-    }
+task_nanos_handler::~task_nanos_handler() {
+}
 
-    void event(uint64_t event_id, uint64_t nanos, uint64_t cpu) override {
-        if (event_id == TASK_EVENT_NANOTIME && nanos >= wakeup_time) {
-            task &t = get_scheduler()->get_task_with_lock(current_task_id);
-            t.set_blocked(false);
-            t.remove_event_handler(this);
-            delete this;
-        }
+void task_nanos_handler::event(uint64_t event_id, uint64_t nanos, uint64_t cpu) {
+    if (event_id == TASK_EVENT_NANOTIME && nanos >= wakeup_time) {
+        task &t = get_scheduler()->get_task_with_lock(current_task_id);
+        t.set_blocked(false);
+        t.remove_event_handler(this);
+        delete this;
     }
-};
+}
 
 class task_timer100hz_handler : public task_event_handler {
 private:

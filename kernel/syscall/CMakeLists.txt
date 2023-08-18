@@ -19,6 +19,7 @@ add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h W
         Prctl.cpp Prctl.h Getdents64.cpp Getdents64.h Statx.cpp Statx.h Chdir.cpp Chdir.h Munmap.cpp Munmap.h
         Getxattr.cpp Getxattr.h SchedGetaffinity.cpp SchedGetaffinity.h Fstat.cpp Fstat.h Fadvise64.cpp Fadvise64.h
         Lseek.cpp Lseek.h Mkdir.cpp Mkdir.h Mount.cpp Mount.h Open.cpp Open.h Getpgid.cpp Getpgid.h Stat.cpp Stat.h
-        Fork.cpp Fork.h Gettid.cpp Gettid.h Readv.cpp Readv.h Faccessat2.cpp Faccessat2.h Membarrier.cpp Membarrier.h)
+        Fork.cpp Fork.h Gettid.cpp Gettid.h Readv.cpp Readv.h Faccessat2.cpp Faccessat2.h Membarrier.cpp Membarrier.h
+        Nanosleep.cpp Nanosleep.h)
 
 target_include_directories(syscall PRIVATE ../../include)

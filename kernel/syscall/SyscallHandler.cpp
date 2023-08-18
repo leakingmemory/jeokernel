@@ -70,6 +70,7 @@
 #include "Readv.h"
 #include "Faccessat2.h"
 #include "Membarrier.h"
+#include "Nanosleep.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -198,6 +199,7 @@ private:
     Readv readv{*this};
     Faccessat2 faccessat2{*this};
     Membarrier membarrier{*this};
+    Nanosleep nanosleep{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
