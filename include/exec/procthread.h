@@ -78,7 +78,6 @@ public:
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
-    int wake_all(uintptr_t addr);
     std::shared_ptr<kfile> GetCwd() const;
     ThreadRSeq &RSeq() {
         return this->rseq;

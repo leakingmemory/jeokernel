@@ -3,6 +3,9 @@
 //
 
 #include <exec/procthread.h>
+#include <iostream>
+#include <exec/usermem.h>
+#include <exec/futex.h>
 
 ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) :
 process(Process::Create(cwd, tty, parent_pid, cmdline)), blockthr(), rseq(), fsBase(0), tidAddress(0), robustListHead(0), tid(process->getpid())
@@ -194,10 +197,6 @@ int ProcThread::setrlimit(int resource, const rlimit &lim) {
 
 int ProcThread::getrlimit(int resource, rlimit &lim) {
     return process->getrlimit(resource, lim);
-}
-
-int ProcThread::wake_all(uintptr_t addr) {
-    return process->wake_all(addr);
 }
 
 std::shared_ptr<kfile> ProcThread::GetCwd() const {

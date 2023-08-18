@@ -190,7 +190,6 @@ private:
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
     std::vector<FileDescriptor> fileDescriptors;
-    std::vector<std::shared_ptr<FutexWait>> fwaits;
     std::vector<BinaryRelocation> relocations;
     std::shared_ptr<kfile> cwd;
     std::string cmdline;
@@ -341,7 +340,6 @@ private:
 public:
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
-    int wake_all(uintptr_t addr);
     void RegisterExitNotification(const std::function<void (intptr_t)> &func);
     void SetExitCode(intptr_t code);
     void SetAuxv(const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv);

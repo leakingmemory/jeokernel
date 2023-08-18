@@ -156,7 +156,7 @@ private:
     Newfstatat newfstatat{*this};
     ExitGroup exitGroup{*this};
     Rseq rseq{*this};
-    Futex futex{*this};
+    SysFutex futex{*this};
     Access access{*this};
     OpenAt openat{*this};
     Read read{*this};
