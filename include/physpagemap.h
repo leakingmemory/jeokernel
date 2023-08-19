@@ -21,6 +21,24 @@ struct PhyspageMap {
         uint32_t bit = pageaddr & 0x1F;
         map[index] |= 1 << bit;
     }
+    constexpr void claim(uint32_t pageaddr, uint32_t num) {
+        while (num > 0) {
+            uint32_t index = pageaddr >> 5;
+            uint32_t bit = pageaddr & 0x1F;
+            if (bit == 0 && num > 0x1F) {
+                while (num > 0x1F) {
+                    map[index] = 0xFFFFFFFF;
+                    pageaddr += 0x20;
+                    num -= 0x20;
+                    ++index;
+                }
+                continue;
+            }
+            map[index] |= 1 << bit;
+            ++pageaddr;
+            --num;
+        }
+    }
     constexpr void release(uint32_t pageaddr) {
         uint32_t index = pageaddr >> 5;
         uint32_t bit = pageaddr & 0x1F;
@@ -58,6 +76,7 @@ public:
     physpagemap_managed &operator =(physpagemap_managed &&) = delete;
 
     virtual void claim(uint32_t pageaddr) = 0;
+    virtual void claim(uint32_t pageaddr, uint32_t num) = 0;
     virtual void release(uint32_t pageaddr) = 0;
     virtual bool claimed(uint32_t pageaddr) = 0;
     virtual uint32_t max() = 0;

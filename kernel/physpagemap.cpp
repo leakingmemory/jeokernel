@@ -20,6 +20,7 @@ public:
     explicit simple_physpagemap_managed(uint64_t addr) : physpagemap_managed(), map((PhyspageMap *) (void *) addr) {}
     ~simple_physpagemap_managed() override = default;
     void claim(uint32_t pageaddr) override;
+    void claim(uint32_t pageaddr, uint32_t num) override;
     void release(uint32_t pageaddr) override;
     bool claimed(uint32_t pageaddr) override;
     uint32_t max() override;
@@ -28,6 +29,10 @@ public:
 
 void simple_physpagemap_managed::claim(uint32_t pageaddr) {
     map->claim(pageaddr);
+}
+
+void simple_physpagemap_managed::claim(uint32_t pageaddr, uint32_t num) {
+    map->claim(pageaddr, num);
 }
 
 void simple_physpagemap_managed::release(uint32_t pageaddr) {

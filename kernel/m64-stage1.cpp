@@ -281,21 +281,17 @@ extern "C" {
                                 } else if (first_pass) {
                                     uint64_t start = entr.base_addr >= phys_mem_watermark ? entr.base_addr
                                                                                           : phys_mem_watermark;
-                                    for (uint64_t addr = start;
-                                         addr < (entr.base_addr + entr.length); addr += 0x1000) {
-                                        if (phys->max() <= (addr >> 12)) {
-                                            auto i = phys->max();
-                                            phys->set_max((addr >> 12) + 1);
-                                            while (i < phys->max()) {
-                                                phys->claim(i);
-                                                ++i;
-                                            }
+                                    uint64_t end = entr.base_addr + entr.length;
+                                    auto end_page = end >> 12;
+                                    {
+                                        auto prev_max = phys->max();
+                                        if (prev_max < end_page) {
+                                            phys->set_max(end_page);
+                                            phys->claim(prev_max, end_page - prev_max);
                                         }
-                                        if ((addr >> 12) < phys->max()) {
-                                            phys->claim(addr >> 12);
-                                        }
-                                        phys_mem_added += 0x1000;
                                     }
+                                    auto start_page = entr.base_addr >> 12;
+                                    phys->claim(start_page, end_page - start_page);
                                     reserved_mem.push_back(std::make_tuple<uint64_t,uint64_t>(entr.base_addr,entr.length));
                                 }
                             }
