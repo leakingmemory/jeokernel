@@ -99,9 +99,10 @@ void extendable_physpagemap_managed::set_max(uint32_t max) {
     if ((max % this->simple_physpagemap_managed::max()) != 0) {
         ++pages;
     }
-    if (pages > phys.size()) {
+    uint32_t pages_needed = ((sizeof(*map) * pages) + PAGESIZE - 1) / PAGESIZE;
+    if (pages_needed > phys.size()) {
         std::unique_ptr<vmem> nvm = std::make_unique<vmem>(sizeof(*map) * pages);
-        memmap(*nvm, phys, pages);
+        memmap(*nvm, phys, pages_needed);
         map = (PhyspageMap *) nvm->pointer();
         vm = std::move(nvm);
     }
