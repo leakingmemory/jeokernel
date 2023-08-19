@@ -234,13 +234,13 @@ uint64_t vpagealloc32(uint64_t size) {
 
 static VPerCpuPagetables vpercpuallocpagetable_setup(int i, int j, int k) {
     std::shared_ptr<vmem> vm3{};
-    if (is_v_multicpu && v_num_cpus > 1) {
+    if (is_v_multicpu) {
         typedef typeof per_cpu_pagetables[0][0] pt_typ;
         auto &cpu0pmlt4 = *((pt_typ *) (((uint8_t *) per_cpu_pagetables[0]) + get_pagetable_virt_offset()));
         auto &cpu1pmlt4 = *((pt_typ *) (((uint8_t *) per_cpu_pagetables[1]) + get_pagetable_virt_offset()));
         vmem vm1{sizeof(pagetable) * v_num_cpus};
         pagetable *tables1 = (pagetable *) vm1.pointer();
-        if (cpu0pmlt4[i].page_ppn == cpu1pmlt4[i].page_ppn) {
+        if (v_num_cpus > 1 && cpu0pmlt4[i].page_ppn == cpu1pmlt4[i].page_ppn) {
             auto phys = ppagealloc(sizeof(pagetable) * v_num_cpus);
             vm1.page(0).rwmap(((phys_t) cpu0pmlt4[i].page_ppn) << 12);
             for (int cpu = 1; cpu < v_num_cpus; cpu++) {
@@ -263,7 +263,7 @@ static VPerCpuPagetables vpercpuallocpagetable_setup(int i, int j, int k) {
         }
         vmem vm2{sizeof(pagetable) * v_num_cpus};
         pagetable *tables2 = (pagetable *) vm2.pointer();
-        if (tables1[0][j].page_ppn == tables1[1][j].page_ppn) {
+        if (v_num_cpus > 1 && tables1[0][j].page_ppn == tables1[1][j].page_ppn) {
             auto phys = ppagealloc(sizeof(pagetable) * v_num_cpus);
             vm2.page(0).rwmap(((phys_t) tables1[0][j].page_ppn) << 12);
             for (int cpu = 1; cpu < v_num_cpus; cpu++) {
@@ -286,7 +286,7 @@ static VPerCpuPagetables vpercpuallocpagetable_setup(int i, int j, int k) {
         }
         vm3 = std::make_shared<vmem>(sizeof(pagetable) * v_num_cpus);
         pagetable *tables3 = (pagetable *) vm3->pointer();
-        if (tables2[0][k].page_ppn == tables2[1][k].page_ppn) {
+        if (v_num_cpus > 1 && tables2[0][k].page_ppn == tables2[1][k].page_ppn) {
             auto phys = ppagealloc(sizeof(pagetable) * v_num_cpus);
             vm3->page(0).rwmap(((phys_t) tables2[0][k].page_ppn) << 12);
             for (int cpu = 1; cpu < v_num_cpus; cpu++) {
