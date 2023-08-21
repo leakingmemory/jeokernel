@@ -71,6 +71,7 @@
 #include "Faccessat2.h"
 #include "Membarrier.h"
 #include "Nanosleep.h"
+#include "Sigaltstack.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -200,6 +201,7 @@ private:
     Faccessat2 faccessat2{*this};
     Membarrier membarrier{*this};
     Nanosleep nanosleep{*this};
+    Sigaltstack sigaltstack{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }

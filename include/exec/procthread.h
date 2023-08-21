@@ -12,16 +12,26 @@
 
 //#define DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
 
+struct sigaltstack {
+    void *ss_sp;
+    int ss_flags;
+    size_t ss_size;
+};
+
 class ProcThread : public task_resource {
 private:
     std::shared_ptr<Process> process;
     blockthread blockthr;
     ThreadRSeq rseq;
+    struct sigaltstack sigaltstack;
+    struct sigaltstack prevSigaltstack;
     uintptr_t fsBase;
     uintptr_t tidAddress;
     uintptr_t robustListHead;
     pid_t tid;
     bool clearTidAddr;
+    bool hasSigaltstack;
+    bool hasPrevSigaltstack;
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
     bool threadFaulted;
 #endif
@@ -98,6 +108,23 @@ public:
     }
     void SetTid(pid_t tid) {
         this->tid = tid;
+    }
+    void SetSigaltstack(const struct sigaltstack &ss, struct sigaltstack &old_ss) {
+        if (hasSigaltstack) {
+            old_ss = sigaltstack;
+        } else {
+            old_ss = {};
+        }
+        prevSigaltstack = ss;
+        hasPrevSigaltstack = hasSigaltstack;
+        sigaltstack = ss;
+        hasSigaltstack = true;
+    }
+    void SetSigaltstack(const struct sigaltstack &ss) {
+        prevSigaltstack = ss;
+        hasPrevSigaltstack = hasSigaltstack;
+        sigaltstack = ss;
+        hasSigaltstack = true;
     }
     void SetExitCode(intptr_t code);
     bool WaitForAnyChild(child_result &immediateResult, const std::function<void (pid_t, intptr_t)> &orAsync);
