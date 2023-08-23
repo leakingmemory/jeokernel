@@ -60,7 +60,11 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             } else {
                 class Exec exec{shell.Tty(), dir_ref, *dir, litem, filename, args, env, 0};
                 Keyboard().consume(keycodeConsumer);
-                auto process = exec.Run();
+                auto process = exec.Run([] (const std::shared_ptr<Process> &process) {
+                    auto pgrp = process->getpgrp();
+                    auto tty = process->GetTty();
+                    tty->SetPgrp(pgrp);
+                });
                 if (process) {
                     raw_semaphore latch{-1};
                     process->RegisterExitNotification([&latch] (intptr_t exitCode) {

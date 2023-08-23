@@ -587,10 +587,12 @@ ExecResult Exec::RunFromExistingProcess(ProcThread *process, const std::function
     return Run(process, func);
 }
 
-std::shared_ptr<Process> Exec::Run() {
+std::shared_ptr<Process> Exec::Run(const std::function<void (const std::shared_ptr<Process> &)> &beforeStartI) {
     std::string cmd_name = name;
     auto *process = new ProcThread(cwd_ref, tty, parent_pid, cmd_name);
     std::shared_ptr<ProcessStart> processStart{new ProcessStart};
+    std::function<void (const std::shared_ptr<Process> &)> beforeStart{beforeStartI};
+    beforeStart(process->GetProcess());
     auto result = Run(process, [process, cmd_name, processStart] (bool success, const ExecStartVector &startVector) {
         std::vector<task_resource *> resources{};
         auto *scheduler = get_scheduler();

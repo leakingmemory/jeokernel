@@ -11,6 +11,7 @@
 #include <keyboard/keyboard.h>
 #include <concurrency/raw_semaphore.h>
 #include <thread>
+#include <sys/types.h>
 
 class FileDescriptorHandler;
 
@@ -24,6 +25,8 @@ private:
     std::string buffer;
     std::string linebuffer;
     std::vector<std::weak_ptr<FileDescriptorHandler>> subscribers;
+    pid_t pgrp;
+    bool hasPgrp;
     bool lineedit;
     bool signals;
     bool stop;
@@ -39,6 +42,7 @@ public:
     void Subscribe(std::shared_ptr<FileDescriptorHandler> handler);
     void Unsubscribe(FileDescriptorHandler *handler);
     int Read(void *ptr, int len);
+    void SetPgrp(pid_t pgrp);
 };
 
 #endif //JEOKERNEL_TTY_H

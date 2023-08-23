@@ -63,7 +63,7 @@ private:
     ExecResult Run(ProcThread *process, const std::function<void (bool success, const ExecStartVector &)> &);
 public:
     ExecResult RunFromExistingProcess(ProcThread *process, const std::function<void (bool success, const ExecStartVector &)> &);
-    std::shared_ptr<Process> Run();
+    std::shared_ptr<Process> Run(const std::function<void (const std::shared_ptr<Process> &)> &beforeStart = [] (const std::shared_ptr<Process> &) {});
 };
 
 #endif //JEOKERNEL_EXEC_H

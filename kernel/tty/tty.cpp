@@ -10,8 +10,9 @@
 #include <iostream>
 #include <termios.h>
 #include <exec/fdesc.h>
+#include <exec/process.h>
 
-tty::tty() : mtx(), self(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), lineedit(true), signals(false), stop(false) {
+tty::tty() : mtx(), self(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
 }
 
 std::shared_ptr<tty> tty::Create() {
@@ -106,6 +107,35 @@ intptr_t tty::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
                 std::lock_guard lock{ref->mtx};
                 ref->signals = (t.c_cflag & ISIG) != 0;
                 return ctx.Return(0);
+            });
+        }
+        case TIOCGPGRP: {
+            std::shared_ptr<tty> ref = self.lock();
+            return ctx.Write(arg, sizeof(pid_t), [ref, ctx](const void *ptr) mutable {
+                pid_t pgrp;
+                bool hasPgrp;
+                {
+                    std::lock_guard lock{ref->mtx};
+                    pgrp = ref->pgrp;
+                    hasPgrp = ref->hasPgrp;
+                }
+                if (!hasPgrp) {
+                    pgrp = Process::GetMaxPid() + 1;
+                    if (pgrp < Process::GetMaxPid()) {
+                        pgrp = Process::GetMaxPid();
+                    }
+                }
+                *((pid_t *) ptr) = pgrp;
+                return resolve_return_value::Return(0);
+            });
+        }
+        case TIOCSPGRP: {
+            std::shared_ptr<tty> ref = self.lock();
+            return ctx.Read(arg, sizeof(pid_t), [ref, ctx](const void *ptr) mutable {
+                pid_t pgrp = *((pid_t *) ptr);
+                std::cout << "TIOCSPGRP(" << pgrp << ")\n";
+                ref->SetPgrp(pgrp);
+                return resolve_return_value::Return(0);
             });
         }
         case TIOCGWINSZ:
@@ -214,6 +244,12 @@ int tty::Read(void *ptr, int len) {
     memcpy(ptr, buffer.data(), len);
     buffer.erase(0, len);
     return len;
+}
+
+void tty::SetPgrp(pid_t pgrp) {
+    std::lock_guard lock{mtx};
+    this->pgrp = pgrp;
+    this->hasPgrp = true;
 }
 
 void InitTty() {
