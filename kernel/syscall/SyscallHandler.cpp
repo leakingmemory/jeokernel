@@ -72,6 +72,7 @@
 #include "Membarrier.h"
 #include "Nanosleep.h"
 #include "Sigaltstack.h"
+#include "Pipe.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -202,6 +203,7 @@ private:
     Membarrier membarrier{*this};
     Nanosleep nanosleep{*this};
     Sigaltstack sigaltstack{*this};
+    Pipe pipe{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
