@@ -213,6 +213,10 @@ int ProcThread::sigaction(int signal, const struct sigaction *act, struct sigact
     return process->sigaction(signal, act, oact);
 }
 
+int ProcThread::GetAndClearSigpending() {
+    return process->GetAndClearSigpending();
+}
+
 int ProcThread::setrlimit(int resource, const rlimit &lim) {
     return process->setrlimit(resource, lim);
 }

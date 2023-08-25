@@ -11,6 +11,7 @@
 #include <termios.h>
 #include <exec/fdesc.h>
 #include <exec/process.h>
+#include <exec/procthread.h>
 
 tty::tty() : mtx(), self(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
 }
@@ -171,6 +172,39 @@ intptr_t tty::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
 bool tty::Consume(uint32_t keycode) {
     if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
         char ch[2] = {(char) codepage->Translate(keycode), 0};
+        if ((ch[0] == 'c' || ch[0] == 'C') && (keycode & (KEYBOARD_CODE_BIT_LCONTROL | KEYBOARD_CODE_BIT_RCONTROL)) != 0) {
+            get_klogger() << "^C\n";
+            if (pgrp > 0) {
+                auto *scheduler = get_scheduler();
+                auto processes = std::make_shared<std::vector<std::shared_ptr<Process>>>();
+                auto pids = std::make_shared<std::vector<pid_t>>();
+                scheduler->all_tasks([pids, processes] (task &t) {
+                    auto *procthread = t.get_resource<ProcThread>();
+                    if (procthread == nullptr) {
+                        return;
+                    }
+                    auto process = procthread->GetProcess();
+                    auto pid = process->getpid();
+                    bool found{false};
+                    for (const auto fpid : *pids) {
+                        if (pid == fpid) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        pids->push_back(pid);
+                        processes->push_back(process);
+                    }
+                });
+                for (const auto &process : *processes) {
+                    if (process->getpgrp() == pgrp) {
+                        process->setsignal(SIGINT);
+                    }
+                }
+            }
+            return true;
+        }
         std::lock_guard lock{mtx};
         if (lineedit) {
             if (ch[0] == '\n') {

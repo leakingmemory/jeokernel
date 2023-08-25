@@ -181,6 +181,7 @@ private:
     hw_spinlock mtx;
     std::weak_ptr<Process> self_ref;
     sigset_t sigmask;
+    sigset_t sigpending;
     RLimits rlimits;
     pid_t pid;
     pid_t pgrp;
@@ -344,6 +345,8 @@ public:
     }
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
+    int setsignal(int signal);
+    int GetAndClearSigpending();
 private:
     int setrlimit(rlimit &lim, const rlimit &val);
 public:

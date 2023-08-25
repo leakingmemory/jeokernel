@@ -8,7 +8,7 @@
 #include <dlfcn.h>
 
 extern "C" {
-    uint32_t errno = 0;
+    int errno = 0;
 
     void exit(int32_t code) {
         wild_panic("called exit(..) in kernel");

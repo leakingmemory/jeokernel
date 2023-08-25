@@ -10,6 +10,7 @@
 #include <concurrency/critical_section.h>
 #include <core/nanotime.h>
 #include <sstream>
+#include <exec/procthread.h>
 #include "PageFault.h"
 #include "CpuExceptionTrap.h"
 #include "KernelElf.h"
@@ -357,6 +358,20 @@ extern "C" {
             scheduler->user_exit(0xff);
             result = SyscallResult::CONTEXT_SWITCH;
 #endif
+        }
+        if (result == SyscallResult::FAST_RETURN) {
+            auto *scheduler = get_scheduler();
+            auto &task = scheduler->get_current_task();
+            auto *procthread = scheduler->get_resource<ProcThread>(task);
+            if (procthread != nullptr) {
+                int signal = procthread->GetAndClearSigpending();
+                if (signal > 0) {
+                    std::cerr << "Signal " << std::dec << signal << ":\n";
+                    interrupt.print_debug(false, false);
+                    scheduler->user_exit(0xff);
+                    result = SyscallResult::CONTEXT_SWITCH;
+                }
+            }
         }
         if (result == SyscallResult::CONTEXT_SWITCH) {
             uint8_t cpu{0};

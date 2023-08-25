@@ -6,15 +6,166 @@
 #define JEOKERNEL_SIGNAL_H
 
 #include <cstdint>
+#include <errno.h>
 
+#define SIGNALSET_MAX_V (64)
 #ifdef __cplusplus
-extern "C" {
+constexpr int SignalMax() { return SIGNALSET_MAX_V; }
+#define SIGNALSET_MAX (SignalMax())
+#else
+#define SIGNALSET_MAX SIGNALSET_MAX_V
 #endif
 
-typedef struct {
+#ifdef __cplusplus
+
+#include <type_traits>
+
+#endif
+
+struct __sigset_t {
     typedef uint32_t sigset_val_t;
-    sigset_val_t val[64 / (8*sizeof(sigset_val_t))];
-} sigset_t;
+    sigset_val_t val[SIGNALSET_MAX / (8 * sizeof(sigset_val_t))];
+
+#ifdef __cplusplus
+
+    constexpr __sigset_t() : val() {}
+
+    constexpr int Set(int signal, bool value = true) {
+        if (signal < 1 || signal > SignalMax()) {
+            return -EINVAL;
+        }
+        --signal;
+        auto bit = signal & ((sizeof(sigset_val_t) * 8) - 1);
+        sigset_val_t &ref = val[signal / (sizeof(sigset_val_t) * 8)];
+        sigset_val_t check = 1;
+        check = check << bit;
+        sigset_val_t mask = ~check;
+        check = value ? check : 0;
+        ref = (ref & mask) | check;
+        return 0;
+    }
+
+    constexpr void Clear(int signal) {
+        Set(signal, false);
+    }
+
+    constexpr bool Test(int signal) {
+        if (signal < 1 || signal > SignalMax()) {
+            return false;
+        }
+        --signal;
+        auto bit = signal & ((sizeof(sigset_val_t) * 8) - 1);
+        sigset_val_t &ref = val[signal / (sizeof(sigset_val_t) * 8)];
+        sigset_val_t check = 1;
+        check = check << bit;
+        return (ref & check) != 0;
+    }
+
+    constexpr int First() const {
+        for (int i = 0; i < (SignalMax() / (8 * sizeof(sigset_val_t))); i++) {
+            sigset_val_t value = val[i];
+            if (value != 0) {
+                int bit = 0;
+                while ((value & 1) == 0) {
+                    value = value >> 1;
+                    ++bit;
+                }
+                return (i * (8 * (int)sizeof(sigset_val_t))) + bit + 1;
+            }
+        }
+        return -1;
+    }
+
+#endif
+};
+
+typedef __sigset_t sigset_t;
+
+#ifdef __cplusplus
+
+namespace SignalTests {
+    template <typename = void> concept IsTestable = true;
+    template <typename T> concept TestableItem = requires (T item) {
+        { item.Check() ? true : false } -> IsTestable;
+    };
+
+    template <TestableItem ti> constexpr bool PerformTest() {
+        ti item{};
+        return item.Check();
+    };
+
+    struct Test0 {
+        sigset_t sigs{};
+
+        constexpr Test0() {}
+
+        constexpr bool Check() {
+            return !sigs.Test(1) && !sigs.Test(2) && sigs.val[0] == 0 && sigs.First() == -1;
+        }
+    };
+    struct Test1 {
+        sigset_t sigs{};
+
+        constexpr Test1() {}
+
+        constexpr bool Check() {
+            sigs.Set(1);
+            return sigs.Test(1) && !sigs.Test(2) && sigs.val[0] == 1 && sigs.First() == 1;
+        }
+    };
+    struct Test2 {
+        sigset_t sigs{};
+
+        constexpr Test2() {}
+
+        constexpr bool Check() {
+            sigs.Set(11);
+            return !sigs.Test(1) && !sigs.Test(2) && sigs.val[0] == (1 << 10) && sigs.First() == 11;
+        }
+    };
+    struct Test3 {
+        sigset_t sigs{};
+
+        constexpr Test3() {}
+
+        constexpr bool Check() {
+            sigs.Set(34);
+            return !sigs.Test(1) && sigs.Test(34) && sigs.val[1] == 2 && sigs.First() == 34;
+        }
+    };
+    struct Test4 {
+        sigset_t sigs{};
+
+        constexpr Test4() {}
+
+        constexpr bool Check() {
+            sigs.Set(34);
+            sigs.Clear(34);
+            return !sigs.Test(1) && !sigs.Test(34) && sigs.val[1] == 0 && sigs.First() == -1;
+        }
+    };
+    struct Test5 {
+        sigset_t sigs{};
+
+        constexpr Test5() {}
+
+        constexpr bool Check() {
+            sigs.Set(34);
+            sigs.Set(35);
+            sigs.Clear(34);
+            return !sigs.Test(1) && !sigs.Test(34) && sigs.val[1] == 4 && sigs.First() == 35;
+        }
+    };
+
+    static_assert(PerformTest<Test0>());
+    static_assert(PerformTest<Test1>());
+    static_assert(PerformTest<Test2>());
+    static_assert(PerformTest<Test3>());
+    static_assert(PerformTest<Test4>());
+    static_assert(PerformTest<Test5>());
+}
+extern "C" {
+#endif
 
 #define SIG_BLOCK   0
 #define SIG_UNBLOCK 1
