@@ -2794,11 +2794,19 @@ int Process::sigaction(int signal, const struct sigaction *act, struct sigaction
 
 int Process::setsignal(int signal) {
     std::lock_guard lock{mtx};
-    return sigpending.Set(signal);
+    int err = sigpending.Set(signal);
+    if (err == 0) {
+        if (!sigmask.Test(signal)) {
+            return 1;
+        }
+        return 0;
+    }
+    return err;
 }
 
 int Process::GetAndClearSigpending() {
     std::lock_guard lock{mtx};
+    sigset_t sigs{sigpending & (~sigmask)};
     auto sig = sigpending.First();
     if (sig != -1) {
         sigpending.Clear(sig);

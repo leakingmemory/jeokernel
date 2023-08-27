@@ -199,8 +199,9 @@ bool tty::Consume(uint32_t keycode) {
                 });
                 for (const auto &process : *processes) {
                     if (process->getpgrp() == pgrp) {
-                        process->setsignal(SIGINT);
-                        process->CallAbort();
+                        if (process->setsignal(SIGINT) > 0) {
+                            process->CallAbort();
+                        }
                     }
                 }
             }

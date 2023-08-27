@@ -30,6 +30,24 @@ struct __sigset_t {
 
     constexpr __sigset_t() : val() {}
 
+    constexpr __sigset_t operator ~() const {
+        __sigset_t res;
+        auto numPerItem = 8 * sizeof(sigset_val_t);
+        for (int i = 0; i < ((SignalMax() + numPerItem - 1) / numPerItem); i++) {
+            res.val[i] = ~val[i];
+        }
+        return res;
+    }
+
+    constexpr __sigset_t operator & (const __sigset_t &other) const {
+        __sigset_t res;
+        auto numPerItem = 8 * sizeof(sigset_val_t);
+        for (int i = 0; i < ((SignalMax() + numPerItem - 1) / numPerItem); i++) {
+            res.val[i] = val[i] & other.val[i];
+        }
+        return res;
+    }
+
     constexpr int Set(int signal, bool value = true) {
         if (signal < 1 || signal > SignalMax()) {
             return -EINVAL;
@@ -62,7 +80,8 @@ struct __sigset_t {
     }
 
     constexpr int First() const {
-        for (int i = 0; i < (SignalMax() / (8 * sizeof(sigset_val_t))); i++) {
+        auto numPerItem = 8 * sizeof(sigset_val_t);
+        for (int i = 0; i < ((SignalMax() + numPerItem - 1) / numPerItem); i++) {
             sigset_val_t value = val[i];
             if (value != 0) {
                 int bit = 0;
