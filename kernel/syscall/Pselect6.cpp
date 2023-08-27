@@ -107,6 +107,7 @@ public:
     static bool KeepSubscription(std::shared_ptr<SelectImpl> ref, int fd);
     static void CopyBack(std::shared_ptr<SelectImpl> ref);
     static void NotifyRead(std::shared_ptr<SelectImpl> ref, int fd);
+    static void NotifyIntr(std::shared_ptr<SelectImpl> ref);
 };
 
 SelectImpl::SelectImpl(const SyscallCtx &ctx, const std::function<void (const std::function<void ()> &)> &submitAsync) : ctx(ctx), mtx(), n(0), sig_n(0), u_inp(nullptr), u_outp(nullptr), u_exc(nullptr), inp_sel(nullptr), inp_sig(nullptr), submitAsync(submitAsync), wake(true) {}
@@ -258,22 +259,46 @@ void SelectImpl::NotifyRead(std::shared_ptr<SelectImpl> ref, int fd) {
     }
 }
 
+void SelectImpl::NotifyIntr(std::shared_ptr<SelectImpl> ref) {
+    bool wake;
+    {
+#ifdef SELECT_DEBUG
+        std::cout << "Notified read " << std::dec << fd << "\n";
+#endif
+        std::lock_guard lock{ref->mtx};
+        wake = ref->wake;
+        ref->wake = false;
+    }
+    if (wake) {
+        ref->submitAsync([ref] () {
+            ref->ctx.ReturnWhenNotRunning(-EINTR);
+        });
+    }
+}
+
 Select::Select(const SyscallCtx &ctx, const std::function<void (const std::function<void ()> &)> &submitAsync, int n, fdset *inp, fdset *outp, fdset *exc) : impl(new SelectImpl(ctx, submitAsync)) {
     SelectImpl::Select(impl, n, inp, outp, exc);
 }
 
-bool Select::KeepSubscription(int fd) {
+bool Select::KeepSubscription(int fd) const {
     return SelectImpl::KeepSubscription(impl, fd);
 }
 
-void Select::NotifyRead(int fd) {
+void Select::NotifyRead(int fd) const {
     SelectImpl::NotifyRead(impl, fd);
+}
+
+void Select::NotifyIntr() const {
+    SelectImpl::NotifyIntr(impl);
 }
 
 resolve_return_value
 Pselect6::DoSelect(SyscallCtx ctx, uint32_t task_id, int n, fdset *inp, fdset *outp, fdset *exc, const timespec *timeout,
                    const sigset_t *sigset) {
     Select select{ctx, [this, task_id] (const std::function<void ()> &func) { Queue(task_id, func); }, n, inp, outp, exc};
+    ctx.Aborter([select] () {
+        select.NotifyIntr();
+    });
     return ctx.Async();
 }
 

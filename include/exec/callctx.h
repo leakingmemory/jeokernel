@@ -29,6 +29,7 @@ public:
     callctx() : impl() {}
     callctx(std::shared_ptr<callctx_async> async);
     ProcThread &GetProcess() const;
+    void Aborter(const std::function<void ()> &);
     resolve_return_value Async() const;
     intptr_t Await(resolve_return_value returnValue) const;
     intptr_t Read(intptr_t ptr, intptr_t len, std::function<resolve_return_value (void *)>) const;

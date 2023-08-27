@@ -2806,6 +2806,33 @@ int Process::GetAndClearSigpending() {
     return sig;
 }
 
+int Process::AborterFunc(const std::function<void()> &func) {
+    typeof(aborterFuncHandle) handle;
+    {
+        std::lock_guard lock{mtx};
+        ++aborterFuncHandle;
+        handle = aborterFuncHandle;
+        aborterFunc = func;
+    }
+    return handle;
+}
+
+void Process::ClearAborterFunc(int handle) {
+    std::lock_guard lock{mtx};
+    if (handle == aborterFuncHandle) {
+        aborterFunc = [] () {};
+    }
+}
+
+void Process::CallAbort() {
+    std::function<void ()> aborter;
+    {
+        std::lock_guard lock{mtx};
+        aborter = aborterFunc;
+    }
+    aborter();
+}
+
 int Process::setrlimit(rlimit &lim, const rlimit &val) {
     if (val.rlim_max > lim.rlim_max || val.rlim_cur > lim.rlim_max) {
         return -EPERM;

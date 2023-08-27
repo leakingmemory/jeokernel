@@ -20,15 +20,18 @@ struct sigaltstack {
 
 class ProcThread : public task_resource {
 private:
+    hw_spinlock mtx{};
     std::shared_ptr<Process> process;
     blockthread blockthr;
     ThreadRSeq rseq;
     struct sigaltstack sigaltstack;
     struct sigaltstack prevSigaltstack;
+    std::function<void ()> aborterFunc{[] () {}};
     uintptr_t fsBase;
     uintptr_t tidAddress;
     uintptr_t robustListHead;
     pid_t tid;
+    int aborterFuncHandle;
     bool clearTidAddr;
     bool hasSigaltstack;
     bool hasPrevSigaltstack;
@@ -49,6 +52,9 @@ public:
     void QueueBlocking(uint32_t task_id, const std::function<void ()> &func) {
         blockthr.Queue(task_id, func);
     }
+    void AborterFunc(const std::function<void ()> &func);
+    void ClearAborterFunc();
+    void CallAbort();
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     int Protect(uint32_t pagenum, uint32_t pages, int prot);

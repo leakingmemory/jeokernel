@@ -182,6 +182,7 @@ private:
     std::weak_ptr<Process> self_ref;
     sigset_t sigmask;
     sigset_t sigpending;
+    std::function<void ()> aborterFunc{[] () {}};
     RLimits rlimits;
     pid_t pid;
     pid_t pgrp;
@@ -202,6 +203,7 @@ private:
     std::shared_ptr<const std::vector<ELF64_auxv>> auxv;
     intptr_t exitCode;
     uintptr_t program_brk;
+    int aborterFuncHandle{0};
     int32_t euid, egid, uid, gid;
 private:
     Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
@@ -347,6 +349,9 @@ public:
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
     int setsignal(int signal);
     int GetAndClearSigpending();
+    int AborterFunc(const std::function<void ()> &func);
+    void ClearAborterFunc(int handle);
+    void CallAbort();
 private:
     int setrlimit(rlimit &lim, const rlimit &val);
 public:

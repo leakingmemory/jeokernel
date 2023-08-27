@@ -23,6 +23,7 @@ public:
     callctx_impl &operator =(const callctx_impl &) = delete;
     callctx_impl &operator =(callctx_impl &&) = delete;
     ProcThread &GetProcess() const;
+    static void Aborter(std::shared_ptr<callctx_impl> ref, const std::function<void ()> &);
     static intptr_t Await(std::shared_ptr<callctx_impl> ref, resolve_return_value returnValue);
     static intptr_t Resolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value ()>);
     static resolve_return_value NestedResolve(std::shared_ptr<callctx_impl> ref, intptr_t ptr, intptr_t len, std::function<resolve_return_value ()>, std::function<resolve_return_value ()> fault);
@@ -53,6 +54,10 @@ callctx_impl::callctx_impl(const callctx_impl &cp) : async(cp.async), memRefs(cp
 
 ProcThread &callctx_impl::GetProcess() const {
     return *process;
+}
+
+void callctx_impl::Aborter(std::shared_ptr<callctx_impl> ref, const std::function<void()> &func) {
+    ref->process->AborterFunc(func);
 }
 
 intptr_t callctx_impl::Await(std::shared_ptr<callctx_impl> ref, resolve_return_value returnValue) {
@@ -338,6 +343,7 @@ resolve_return_value callctx_impl::NestedReadArrayOfStrings(std::shared_ptr<call
 }
 
 void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intptr_t value) {
+    ref->process->ClearAborterFunc();
     ref->scheduler->when_not_running(*(ref->current_task), [ref, value] {
         auto procthread = ref->current_task->get_resource<ProcThread>();
         auto signal = procthread != nullptr ? procthread->GetAndClearSigpending() : -1;
@@ -351,6 +357,7 @@ void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intpt
 }
 
 void callctx_impl::KillAsync(std::shared_ptr<callctx_impl> ref) {
+    ref->process->ClearAborterFunc();
     ref->scheduler->when_not_running(*(ref->current_task), [ref] {
         ref->current_task->set_end(true);
     });
@@ -358,6 +365,7 @@ void callctx_impl::KillAsync(std::shared_ptr<callctx_impl> ref) {
 
 void callctx_impl::EntrypointAsync(std::shared_ptr<callctx_impl> ref, uintptr_t entrypoint, uintptr_t fsBase,
                                    uintptr_t stackPtr) {
+    ref->process->ClearAborterFunc();
     ref->scheduler->when_not_running(*(ref->current_task), [ref, entrypoint, stackPtr, fsBase] {
         auto &fpu = get_fpu0_initial();
         uint32_t mxcsr = 0x1F80 & fpu.mxcsr_mask;
@@ -416,6 +424,10 @@ callctx::callctx(std::shared_ptr<callctx_async> async) : impl(new callctx_impl(a
 
 ProcThread &callctx::GetProcess() const {
     return impl->GetProcess();
+}
+
+void callctx::Aborter(const std::function<void()> &func) {
+    callctx_impl::Aborter(impl, func);
 }
 
 resolve_return_value callctx::Async() const {

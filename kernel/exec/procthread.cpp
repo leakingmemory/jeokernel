@@ -59,6 +59,29 @@ resolve_and_run ProcThread::resolve_read(uintptr_t addr, uintptr_t len, bool asy
 bool ProcThread::resolve_write(uintptr_t addr, uintptr_t len) {
     return process->resolve_write(addr, len);
 }
+
+void ProcThread::AborterFunc(const std::function<void()> &func) {
+    auto handle = process->AborterFunc(func);
+    std::lock_guard lock{mtx};
+    aborterFunc = func;
+    aborterFuncHandle = handle;
+}
+
+void ProcThread::ClearAborterFunc() {
+    process->ClearAborterFunc(aborterFuncHandle);
+    std::lock_guard lock{mtx};
+    aborterFunc = [] () {};
+}
+
+void ProcThread::CallAbort() {
+    std::function<void ()> aborter;
+    {
+        std::lock_guard lock{mtx};
+        aborter = aborterFunc;
+    }
+    aborter();
+}
+
 bool ProcThread::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
     return process->Map(image, pagenum, pages, image_skip_pages, load, write, execute, copyOnWrite, binaryMap);
 }
