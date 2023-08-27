@@ -406,6 +406,7 @@ public:
 
     void exit(uint8_t cpu, bool returnToCallerIfNotTerminatedImmediately = false);
     void user_exit(int64_t returnValue);
+    void evict_task_with_lock(task &t);
 
     uint32_t get_current_task_id();
     void join(uint32_t task_id);

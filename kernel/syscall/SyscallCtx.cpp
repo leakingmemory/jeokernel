@@ -33,7 +33,14 @@ void SyscallCtxAsync::async() {
 
 void SyscallCtxAsync::returnAsync(intptr_t value) {
     task *t = this->current_task;
-    scheduler->when_not_running(*t, [t, value] () {
+    auto *scheduler = this->scheduler;
+    scheduler->when_not_running(*t, [scheduler, t, value] () {
+        auto procthread = t->get_resource<ProcThread>();
+        auto signal = procthread != nullptr ? procthread->GetAndClearSigpending() : -1;
+        if (signal > 0) {
+            scheduler->evict_task_with_lock(*t);
+            return;
+        }
         t->get_cpu_state().rax = (uint64_t) value;
         t->set_blocked(false);
     });

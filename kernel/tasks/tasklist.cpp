@@ -460,6 +460,23 @@ void tasklist::user_exit(int64_t returnValue) {
     }
 }
 
+void tasklist::evict_task_with_lock(task &t) {
+    t.set_end(true);
+
+    auto taskid = t.get_id();
+    auto iterator = tasks.begin();
+    while (iterator != tasks.end()) {
+        task *tp = *iterator;
+        if (tp == &t) {
+            tasks.erase(iterator);
+            task_delete_prequeue.push_back(tp);
+        } else {
+            tp->event(event_handler_loop, TASK_EVENT_EXIT, taskid, 0);
+            ++iterator;
+        }
+    }
+}
+
 uint32_t tasklist::get_next_id() {
     while (true) {
         uint32_t id = ++serial;

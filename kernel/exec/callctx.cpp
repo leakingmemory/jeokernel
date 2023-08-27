@@ -339,6 +339,12 @@ resolve_return_value callctx_impl::NestedReadArrayOfStrings(std::shared_ptr<call
 
 void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intptr_t value) {
     ref->scheduler->when_not_running(*(ref->current_task), [ref, value] {
+        auto procthread = ref->current_task->get_resource<ProcThread>();
+        auto signal = procthread != nullptr ? procthread->GetAndClearSigpending() : -1;
+        if (signal > 0) {
+            ref->scheduler->evict_task_with_lock(*(ref->current_task));
+            return;
+        }
         ref->current_task->get_cpu_state().rax = value;
         ref->current_task->set_blocked(false);
     });
