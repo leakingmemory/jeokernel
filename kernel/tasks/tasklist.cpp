@@ -376,7 +376,7 @@ bool tasklist::terminate_blocked(task *end_task) {
         task *t = *iterator;
         if (t == end_task) {
             tasks.erase(iterator);
-            delete t;
+            task_delete_prequeue.push_back(t);
             return true;
         }
         ++iterator;
