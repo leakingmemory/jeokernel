@@ -371,18 +371,20 @@ private:
     std::vector<event_call> events_in_event_tmp;
     std::vector<task *> task_pool;
     std::vector<task *> next_task_pool;
+    std::vector<std::function<void ()>> do_when_out_of_lock;
 private:
     uint32_t get_next_id();
     void ticks_millisleep(uint64_t ms);
     void tsc_nanosleep(uint64_t nanos);
 public:
-    tasklist() : _lock(), _reaper_sema(-1), tick_counter(0), serial(0), multicpu(false), tasks(), task_delete_prequeue(), task_delete_queue(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool() {
+    tasklist() : _lock(), _reaper_sema(-1), tick_counter(0), serial(0), multicpu(false), tasks(), task_delete_prequeue(), task_delete_queue(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool(), do_when_out_of_lock() {
         tasks.reserve(PREALLOC_TASK_SLOTS);
         task_delete_prequeue.reserve(PREALLOC_REAPER_SLOTS);
         task_delete_queue.reserve(PREALLOC_REAPER_SLOTS);
         event_handler_loop.reserve(PREALLOC_EVENT_LOOP);
         task_pool.reserve(PREALLIC_SWITCH_TASK_TMP);
         next_task_pool.reserve(PREALLIC_SWITCH_TASK_TMP);
+        do_when_out_of_lock.reserve(2);
     }
     bool is_multicpu();
     uint32_t create_current_idle_task(uint8_t cpu);
@@ -417,6 +419,7 @@ public:
         return t.template get_resource<T>();
     }
     void when_not_running(task &t, std::function<void ()> func);
+    void when_out_of_lock(const std::function<void ()> &func);
 
     task &get_task_with_lock(uint32_t task_id);
     task *get_nullable_task_with_lock(uint32_t task_id);

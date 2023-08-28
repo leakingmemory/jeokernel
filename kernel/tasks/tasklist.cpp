@@ -66,155 +66,176 @@ void tasklist::start_multi_cpu(uint8_t cpu) {
 void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     task *current_task;
 
-    critical_section cli{};
-    std::unique_lock lock{_lock};
+    std::vector<std::function<void ()>> when_out_of_lock;
 
     {
-        bool activate_grim_reaper{false};
-        auto delete_iterator = task_delete_prequeue.begin();
-        while (delete_iterator != task_delete_prequeue.end()) {
-            auto *t = *delete_iterator;
-            if (t->get_cpu() == cpu) {
-                task_delete_prequeue.erase(delete_iterator);
-                task_delete_queue.push_back(t);
-                activate_grim_reaper = true;
-            } else {
-                ++delete_iterator;
+        critical_section cli{};
+        std::unique_lock lock{_lock};
+
+        {
+            bool activate_grim_reaper{false};
+            auto delete_iterator = task_delete_prequeue.begin();
+            while (delete_iterator != task_delete_prequeue.end()) {
+                auto *t = *delete_iterator;
+                if (t->get_cpu() == cpu) {
+                    task_delete_prequeue.erase(delete_iterator);
+                    task_delete_queue.push_back(t);
+                    activate_grim_reaper = true;
+                } else {
+                    ++delete_iterator;
+                }
+            }
+            if (activate_grim_reaper) {
+                lock.release();
+                _reaper_sema.release();
+                lock = std::unique_lock(_lock);
             }
         }
-        if (activate_grim_reaper) {
-            lock.release();
-            _reaper_sema.release();
-            lock = std::unique_lock(_lock);
-        }
-    }
 
-    task_pool.clear();
-    next_task_pool.clear();
+        task_pool.clear();
+        next_task_pool.clear();
 
-    bool nanos_avail = is_nanotime_available();
-    uint64_t nanos{nanos_avail ? get_nanotime_ref() : 0};
+        bool nanos_avail = is_nanotime_available();
+        uint64_t nanos{nanos_avail ? get_nanotime_ref() : 0};
 
-    for (task *t : tasks) {
-        if (nanos_avail) {
-            t->event(event_handler_loop, TASK_EVENT_NANOTIME, nanos, cpu);
-        }
-        if (!multicpu || t->get_cpu() == cpu) {
-            if (t->is_stack_quarantined()) {
-                t->set_stack_quarantine(false);
-            } else if (t->is_running()) {
-                current_task = t;
+        for (task *t: tasks) {
+            if (nanos_avail) {
+                t->event(event_handler_loop, TASK_EVENT_NANOTIME, nanos, cpu);
             }
-        } else if (t->is_cpu_pinned()) {
-            continue;
-        }
-
-        if (t->get_priority_group() == PRIO_GROUP_REALTIME && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
-            task_pool.push_back(t);
-        } else if (t->get_priority_group() == PRIO_GROUP_NORMAL && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())){
-            next_task_pool.push_back(t);
-        }
-    }
-    if (task_pool.empty()) {
-        task_pool = next_task_pool;
-    }
-    if (task_pool.empty()) {
-        for (task *t : tasks) {
-            if (multicpu && t->is_cpu_pinned() && t->get_cpu() != cpu) {
+            if (!multicpu || t->get_cpu() == cpu) {
+                if (t->is_stack_quarantined()) {
+                    t->set_stack_quarantine(false);
+                } else if (t->is_running()) {
+                    current_task = t;
+                }
+            } else if (t->is_cpu_pinned()) {
                 continue;
             }
-            if (t->get_priority_group() == PRIO_GROUP_LOW && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
+
+            if (t->get_priority_group() == PRIO_GROUP_REALTIME && !t->is_blocked() && !t->is_end() &&
+                !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
                 task_pool.push_back(t);
-            } else if (t->get_priority_group() == PRIO_GROUP_IDLE && !t->is_blocked() && !t->is_end() && !t->is_stack_quarantined() && (t == current_task || !t->is_running())){
+            } else if (t->get_priority_group() == PRIO_GROUP_NORMAL && !t->is_blocked() && !t->is_end() &&
+                       !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
                 next_task_pool.push_back(t);
             }
         }
-    }
-    if (task_pool.empty()) {
-        task_pool = next_task_pool;
-    }
-    if (task_pool.empty()) {
-        std::stringstream str{};
-        str << std::dec << "For cpu " << (unsigned int) cpu << " no viable tasks to pick\n" << std::hex;
-        for (task *t : tasks) {
-            str << std::hex << (uint64_t) (t) << ": " << (t->is_running() ? "R" : "S") << (t->is_blocked() ? "B" : "A") << std::dec << " cpu"<< (unsigned int) t->get_cpu() << ((t == current_task) ? "*" : "") << "\n";
+        if (task_pool.empty()) {
+            task_pool = next_task_pool;
         }
-        get_klogger() << str.str().c_str();
-        wild_panic("Task lists are empty");
-    }
-    bool in_current_pool = false;
-    for (auto *t : task_pool) {
-        if (t == current_task) {
-            in_current_pool = true;
-            break;
-        }
-    }
-    auto points_on_license = current_task->get_points();
-    if (points_on_license == MAX_POINTS) {
-        if (in_current_pool) {
-            for (auto *t : task_pool) {
-                auto points = t->get_points();
-                if (points > 0) {
-                    t->set_points(points - 1);
+        if (task_pool.empty()) {
+            for (task *t: tasks) {
+                if (multicpu && t->is_cpu_pinned() && t->get_cpu() != cpu) {
+                    continue;
+                }
+                if (t->get_priority_group() == PRIO_GROUP_LOW && !t->is_blocked() && !t->is_end() &&
+                    !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
+                    task_pool.push_back(t);
+                } else if (t->get_priority_group() == PRIO_GROUP_IDLE && !t->is_blocked() && !t->is_end() &&
+                           !t->is_stack_quarantined() && (t == current_task || !t->is_running())) {
+                    next_task_pool.push_back(t);
                 }
             }
         }
-    } else {
-        current_task->set_points(points_on_license + 1);
-    }
-    task *win = nullptr;
-    for (task *t : task_pool) {
-        auto points = t->get_points();
-        if (t == current_task) {
-            if (points > CONTINUE_RUNNING_BIAS) {
-                points -= CONTINUE_RUNNING_BIAS;
-            } else {
-                points = 0;
+        if (task_pool.empty()) {
+            task_pool = next_task_pool;
+        }
+        if (task_pool.empty()) {
+            std::stringstream str{};
+            str << std::dec << "For cpu " << (unsigned int) cpu << " no viable tasks to pick\n" << std::hex;
+            for (task *t: tasks) {
+                str << std::hex << (uint64_t) (t) << ": " << (t->is_running() ? "R" : "S")
+                    << (t->is_blocked() ? "B" : "A") << std::dec << " cpu" << (unsigned int) t->get_cpu()
+                    << ((t == current_task) ? "*" : "") << "\n";
+            }
+            get_klogger() << str.str().c_str();
+            wild_panic("Task lists are empty");
+        }
+        bool in_current_pool = false;
+        for (auto *t: task_pool) {
+            if (t == current_task) {
+                in_current_pool = true;
+                break;
             }
         }
-        if (t->get_resources() > 0) {
-            if (points > RESOURCE_PRIORITY_BIAS) {
-                points -= RESOURCE_PRIORITY_BIAS;
-            } else {
-                points = 0;
-            }
-        }
-        if (win == nullptr || (points < win->get_points())) {
-            win = t;
-        }
-    }
-    if (win != current_task) {
-        if (!current_task->is_end()) {
-            current_task->set_stack_quarantine(true);
-            current_task->save_state(interrupt);
-        }
-
-        current_task->set_not_running();
-
-        win->restore_state(interrupt);
-        win->set_running(&interrupt, multicpu ? cpu : 0);
-        if (multicpu) {
-            win->set_cpu(cpu);
-        }
-        if (current_task->is_end()) {
-            auto iterator = tasks.begin();
-            while (iterator != tasks.end()) {
-                task *t = *iterator;
-                if (t == current_task) {
-                    tasks.erase(iterator);
-                    task_delete_prequeue.push_back(t);
-                    goto evicted_task;
+        auto points_on_license = current_task->get_points();
+        if (points_on_license == MAX_POINTS) {
+            if (in_current_pool) {
+                for (auto *t: task_pool) {
+                    auto points = t->get_points();
+                    if (points > 0) {
+                        t->set_points(points - 1);
+                    }
                 }
-                ++iterator;
             }
-            wild_panic("Unable to find current<ending> task in list");
-evicted_task:
-            ;
+        } else {
+            current_task->set_points(points_on_license + 1);
         }
-    } else if (current_task == nullptr) {
-        wild_panic("No task is current");
-    } else if (current_task->is_end()) {
-        wild_panic("Current task has requested stop, but can't be");
+        task *win = nullptr;
+        for (task *t: task_pool) {
+            auto points = t->get_points();
+            if (t == current_task) {
+                if (points > CONTINUE_RUNNING_BIAS) {
+                    points -= CONTINUE_RUNNING_BIAS;
+                } else {
+                    points = 0;
+                }
+            }
+            if (t->get_resources() > 0) {
+                if (points > RESOURCE_PRIORITY_BIAS) {
+                    points -= RESOURCE_PRIORITY_BIAS;
+                } else {
+                    points = 0;
+                }
+            }
+            if (win == nullptr || (points < win->get_points())) {
+                win = t;
+            }
+        }
+        if (win != current_task) {
+            if (!current_task->is_end()) {
+                current_task->set_stack_quarantine(true);
+                current_task->save_state(interrupt);
+            }
+
+            current_task->set_not_running();
+
+            win->restore_state(interrupt);
+            win->set_running(&interrupt, multicpu ? cpu : 0);
+            if (multicpu) {
+                win->set_cpu(cpu);
+            }
+            if (current_task->is_end()) {
+                auto iterator = tasks.begin();
+                while (iterator != tasks.end()) {
+                    task *t = *iterator;
+                    if (t == current_task) {
+                        tasks.erase(iterator);
+                        task_delete_prequeue.push_back(t);
+                        goto evicted_task;
+                    }
+                    ++iterator;
+                }
+                wild_panic("Unable to find current<ending> task in list");
+                evicted_task:;
+            }
+        } else if (current_task == nullptr) {
+            wild_panic("No task is current");
+        } else if (current_task->is_end()) {
+            wild_panic("Current task has requested stop, but can't be");
+        }
+
+        when_out_of_lock.reserve(do_when_out_of_lock.size());
+
+        for (const auto &func : do_when_out_of_lock) {
+            when_out_of_lock.push_back(func);
+        }
+
+        do_when_out_of_lock.clear();
+    }
+
+    for (auto &func : when_out_of_lock) {
+        func();
     }
 }
 
@@ -555,6 +576,10 @@ void tasklist::when_not_running(task &t, std::function<void()> func) {
         return;
     }
     t.when_not_running(func);
+}
+
+void tasklist::when_out_of_lock(const std::function<void()> &func) {
+    do_when_out_of_lock.push_back(func);
 }
 
 uint32_t tasklist::get_current_task_id() {
