@@ -218,6 +218,42 @@ struct sigaction {
 
 #ifdef __cplusplus
 };
+
+#define SIGTRAMP_ADDR   0xFFFFFFFFFFFF6000ULL
+
+struct SignalStackFrame {
+    uintptr_t sigtramp;
+    /* */
+    uintptr_t r8;
+    uintptr_t r9;
+    uintptr_t r10;
+    uintptr_t r11;
+    uintptr_t r12;
+    uintptr_t r13;
+    uintptr_t r14;
+    uintptr_t r15;
+    uintptr_t rdi;
+    uintptr_t rsi;
+    uintptr_t rbp;
+    uintptr_t rbx;
+    uintptr_t rdx;
+    uintptr_t rax;
+    uintptr_t rcx;
+    uintptr_t rsp;
+    uintptr_t rip;
+    uintptr_t rflags;
+    uint16_t cs;
+    uint16_t gs;
+    uint16_t fs;
+    uint16_t zero0{};
+    uintptr_t err;
+    uintptr_t trapno;
+    uintptr_t oldmask;
+    uintptr_t cr2;
+    uintptr_t fpstate;
+    uintptr_t reserved0[8]{};
+};
+
 #endif
 
 #endif //JEOKERNEL_SIGNAL_H

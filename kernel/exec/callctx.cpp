@@ -7,6 +7,70 @@
 #include <exec/usermem.h>
 #include <errno.h>
 #include <core/x86fpu.h>
+#include <iostream>
+
+void callctx_async::HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction) {
+    scheduler->when_out_of_lock([scheduler, t, procthread, sigaction] () {
+        auto &cpuframe = t->get_cpu_frame();
+        auto &cpustate = t->get_cpu_state();
+        SignalStackFrame stackFrame{
+                .sigtramp = SIGTRAMP_ADDR,
+                .r8 = cpustate.r8,
+                .r9 = cpustate.r9,
+                .r10 = cpustate.r10,
+                .r11 = cpustate.r11,
+                .r12 = cpustate.r12,
+                .r13 = cpustate.r13,
+                .r14 = cpustate.r14,
+                .r15 = cpustate.r15,
+                .rdi = cpustate.rdi,
+                .rsi = cpustate.rsi,
+                .rbp = cpustate.rbp,
+                .rbx = cpustate.rbx,
+                .rdx = cpustate.rdx,
+                .rax = cpustate.rax,
+                .rcx = cpustate.rcx,
+                .rsp = cpuframe.rsp,
+                .rip = cpuframe.rip,
+                .rflags = cpuframe.rflags,
+                .cs = (uint16_t) cpuframe.cs,
+                .gs = cpustate.gs,
+                .fs = cpustate.fs,
+                .err = 0,
+                .trapno = 0,
+                .oldmask = 0,
+                .cr2 = 0,
+                .fpstate = 0
+        };
+        auto frameptr = cpuframe.rsp - 128 - sizeof(stackFrame);
+        frameptr &= ~((typeof(frameptr)) 0xF);
+        frameptr -= sizeof(uintptr_t);
+        procthread->resolve_read(frameptr, sizeof(stackFrame), false, [] (intptr_t) {}, [scheduler, t, procthread, sigaction, stackFrame, frameptr] (bool success, bool async, const std::function<void (uintptr_t)> &) {
+            if (success && procthread->resolve_write(frameptr, sizeof(stackFrame))) {
+                UserMemory umem{*procthread, frameptr, sizeof(stackFrame), true};
+                if (umem) {
+                    auto sa_handler = (uintptr_t) sigaction.sa_sigaction;
+                    std::cout << "Launching signal handler " << std::hex << sa_handler << " with frame at " << frameptr << std::dec << "\n";
+                    memcpy((typeof(stackFrame) *) umem.Pointer(), &stackFrame, sizeof(stackFrame));
+                    scheduler->when_not_running(*t, [t, sa_handler, frameptr] () {
+                        t->get_cpu_frame().rip = sa_handler;
+                        t->get_cpu_frame().rsp = frameptr;
+                        t->set_blocked(false);
+                    });
+                } else {
+                    scheduler->when_not_running(*t, [scheduler, t] () {
+                        scheduler->evict_task_with_lock(*t);
+                    });
+                }
+            } else {
+                scheduler->when_not_running(*t, [scheduler, t] () {
+                    scheduler->evict_task_with_lock(*t);
+                });
+            }
+            return resolve_return_value::AsyncReturn();
+        });
+    });
+}
 
 class callctx_impl {
 private:
@@ -348,7 +412,13 @@ void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intpt
         auto procthread = ref->current_task->get_resource<ProcThread>();
         auto signal = procthread != nullptr ? procthread->GetAndClearSigpending() : -1;
         if (signal > 0) {
-            ref->scheduler->evict_task_with_lock(*(ref->current_task));
+            auto optSigaction = procthread->GetSigaction(signal);
+            if (optSigaction) {
+                ref->current_task->get_cpu_state().rax = value;
+                callctx_async::HandleSignalInWhenNotRunning(ref->scheduler, ref->current_task, procthread, *optSigaction);
+            } else {
+                ref->scheduler->evict_task_with_lock(*(ref->current_task));
+            }
             return;
         }
         ref->current_task->get_cpu_state().rax = value;

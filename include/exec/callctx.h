@@ -11,9 +11,15 @@
 #include <exec/resolve_return.h>
 #include <string>
 #include <vector>
+#include <signal.h>
+
+class tasklist;
+class task;
+class ProcThread;
 
 class callctx_async {
 public:
+    static void HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction);
     virtual void async() = 0;
     virtual void returnAsync(intptr_t value) = 0;
 };

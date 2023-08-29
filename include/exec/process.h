@@ -347,6 +347,7 @@ public:
     }
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
+    std::optional<struct sigaction> GetSigaction(int signal);
     int setsignal(int signal);
     int GetAndClearSigpending();
     int AborterFunc(const std::function<void ()> &func);

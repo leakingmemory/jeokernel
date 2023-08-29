@@ -5,6 +5,7 @@
 #include "SyscallCtx.h"
 #include <core/scheduler.h>
 #include <exec/procthread.h>
+#include <exec/usermem.h>
 
 class SyscallCtxAsync : public callctx_async{
 private:
@@ -38,7 +39,13 @@ void SyscallCtxAsync::returnAsync(intptr_t value) {
         auto procthread = t->get_resource<ProcThread>();
         auto signal = procthread != nullptr ? procthread->GetAndClearSigpending() : -1;
         if (signal > 0) {
-            scheduler->evict_task_with_lock(*t);
+            auto optSigaction = procthread->GetSigaction(signal);
+            if (optSigaction) {
+                t->get_cpu_state().rax = (uint64_t) value;
+                callctx_async::HandleSignalInWhenNotRunning(scheduler, t, procthread, *optSigaction);
+            } else {
+                scheduler->evict_task_with_lock(*t);
+            }
             return;
         }
         t->get_cpu_state().rax = (uint64_t) value;

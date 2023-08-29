@@ -94,6 +94,7 @@ public:
     pid_t getppid() const;
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
+    std::optional<struct sigaction> GetSigaction(int signal);
     int GetAndClearSigpending();
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);

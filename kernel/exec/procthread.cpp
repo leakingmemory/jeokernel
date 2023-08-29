@@ -236,6 +236,10 @@ int ProcThread::sigaction(int signal, const struct sigaction *act, struct sigact
     return process->sigaction(signal, act, oact);
 }
 
+std::optional<struct sigaction> ProcThread::GetSigaction(int signal) {
+    return process->GetSigaction(signal);
+}
+
 int ProcThread::GetAndClearSigpending() {
     return process->GetAndClearSigpending();
 }

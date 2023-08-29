@@ -2792,6 +2792,16 @@ int Process::sigaction(int signal, const struct sigaction *act, struct sigaction
     return 0;
 }
 
+std::optional<struct sigaction> Process::GetSigaction(int signal) {
+    std::lock_guard lock{mtx};
+    for (auto &rec: sigactions) {
+        if (signal == rec.signal) {
+            return rec.sigaction;
+        }
+    }
+    return {};
+}
+
 int Process::setsignal(int signal) {
     std::lock_guard lock{mtx};
     int err = sigpending.Set(signal);
