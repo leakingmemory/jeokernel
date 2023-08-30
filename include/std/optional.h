@@ -26,15 +26,57 @@ namespace std {
         }
 
         constexpr optional( const optional& other ) : _data(), ptr(nullptr) {
+            static_assert(sizeof(*ptr) <= sizeof(_data));
+            static_assert(sizeof(*ptr) == sizeof(*other));
             if (other) {
                 ptr = new((void *) &(_data[0])) T(*other);
             }
         }
 
-        constexpr optional( optional&& other ) {
+        constexpr optional( optional&& other ) noexcept {
+            static_assert(sizeof(*ptr) <= sizeof(_data));
+            static_assert(sizeof(*ptr) == sizeof(*other));
             if (other) {
                 ptr = new((void *) &(_data[0])) T(std::move(*other));
+            } else {
+                ptr = nullptr;
             }
+        }
+
+        optional &operator =( const optional &other ) {
+            static_assert(sizeof(*ptr) <= sizeof(_data));
+            static_assert(sizeof(*ptr) == sizeof(*other));
+            if (!other) {
+                if (ptr != nullptr) {
+                    ptr->~T();
+                    ptr = nullptr;
+                }
+                return *this;
+            }
+            if (ptr != nullptr) {
+                *ptr = *other;
+            } else {
+                ptr = new((void *) &(_data[0])) T(*other);
+            }
+            return *this;
+        }
+
+        optional &operator =(optional &&other) noexcept {
+            static_assert(sizeof(*ptr) <= sizeof(_data));
+            static_assert(sizeof(*ptr) == sizeof(*other));
+            if (!other) {
+                if (ptr != nullptr) {
+                    ptr->~T();
+                    ptr = nullptr;
+                }
+                return *this;
+            }
+            if (ptr != nullptr) {
+                *ptr = std::move(*other);
+            } else {
+                ptr = new((void *) &(_data[0])) T(std::move(*other));
+            }
+            return *this;
         }
 
         ~optional() {
@@ -42,19 +84,6 @@ namespace std {
                 ptr->~T();
                 ptr = nullptr;
             }
-        }
-
-        std::optional<T> & operator = (const std::optional<T> &cp) {
-            if (ptr != nullptr) {
-                ptr->~T();
-                if (!cp) {
-                    ptr = nullptr;
-                    return *this;
-                }
-            }
-            const T &other = *cp;
-            ptr = new((void *) &(_data[0])) T(other);
-            return *this;
         }
 
         std::optional<T> & operator = (const T &cp) {
