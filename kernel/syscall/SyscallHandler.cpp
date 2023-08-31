@@ -73,6 +73,8 @@
 #include "Nanosleep.h"
 #include "Sigaltstack.h"
 #include "Pipe.h"
+#include "Sigreturn.h"
+#include "Kill.h"
 
 #include <exec/procthread.h>
 #include <iostream>
@@ -204,6 +206,8 @@ private:
     Nanosleep nanosleep{*this};
     Sigaltstack sigaltstack{*this};
     Pipe pipe{*this};
+    Sigreturn sigreturn{*this};
+    Kill kill{*this};
 public:
     SyscallHandlerImpl() : SyscallHandler() {
     }
