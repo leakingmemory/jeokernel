@@ -2737,8 +2737,9 @@ int Process::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t 
         return -EINVAL;
     }
     std::lock_guard lock{mtx};
+    typeof(*oldset) oldset_tmp{};
     if (oldset != nullptr) {
-        memcpy(oldset, &sigmask, sigsetsize);
+        memcpy(&oldset_tmp, &sigmask, sigsetsize);
     }
     if (set != nullptr) {
         switch (how) {
@@ -2765,25 +2766,41 @@ int Process::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t 
                 return -EINVAL;
         }
     }
+    if (oldset != nullptr) {
+        memcpy(oldset, &oldset_tmp, sigsetsize);
+    }
     return 0;
 }
+
+constexpr unsigned long sigactionSupportMask = (SA_SIGINFO | SA_RESTORER);
 
 int Process::sigaction(int signal, const struct sigaction *act, struct sigaction *oact) {
     {
         std::lock_guard lock{mtx};
         for (auto &rec: sigactions) {
             if (rec.signal == signal) {
+                struct sigaction oact_tmp{};
                 if (oact != nullptr) {
-                    memcpy(oact, &(rec.sigaction), sizeof(rec.sigaction));
+                    memcpy(&oact_tmp, &(rec.sigaction), sizeof(rec.sigaction));
                 }
                 if (act != nullptr) {
                     memcpy(&(rec.sigaction), act, sizeof(rec.sigaction));
+                    if ((rec.sigaction.sa_flags & SA_UNSUPPORTED) != 0) {
+                        rec.sigaction.sa_flags &= sigactionSupportMask;
+                    }
+                }
+                if (oact != nullptr) {
+                    memcpy(oact, &oact_tmp, sizeof(*oact));
                 }
                 return 0;
             }
         }
         if (act != nullptr) {
             sigactions.push_back({.signal = signal, .sigaction = *act});
+            auto &rec = sigactions.at(sigactions.size() - 1);
+            if ((rec.sigaction.sa_flags & SA_UNSUPPORTED) != 0) {
+                rec.sigaction.sa_flags &= sigactionSupportMask;
+            }
         }
         if (oact) {
             bzero(oact, sizeof(*oact));

@@ -198,6 +198,10 @@ sighandler_t signal(int signal, sighandler_t handler);
 
 #define SIGINT 2
 
+#define SA_SIGINFO              4
+#define SA_UNSUPPORTED      0x400
+#define SA_RESTORER     0x4000000
+
 typedef struct {
     int si_signo;
     int si_errno;
@@ -211,9 +215,9 @@ struct sigaction {
         sighandler_t sa_handler;
         void (*sa_sigaction)(int, siginfo_t *, void *);
     };
-    sigset_t sa_mask;
-    int sa_flags;
+    unsigned long sa_flags;
     void (*sa_restorer)();
+    sigset_t sa_mask;
 };
 
 #ifdef __cplusplus

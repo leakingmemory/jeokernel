@@ -151,6 +151,63 @@ void ProcThread::task_leave() {
     process->task_leave();
 }
 bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
+    if (intr.rip() == SIGTRAMP_ADDR) {
+        uintptr_t signalFrameAddr = intr.rsp() - 8;
+        auto *task = &current_task;
+        task->set_blocked(true);
+        process->resolve_read(signalFrameAddr, sizeof(SignalStackFrame), false, [] (uintptr_t) {}, [this, task, signalFrameAddr] (bool success, bool async, const std::function<void (uintptr_t)> &) {
+            auto *scheduler = get_scheduler();
+            UserMemory umem{*this, signalFrameAddr, sizeof(SignalStackFrame)};
+            if (!umem) {
+                scheduler->when_not_running(*task, [scheduler, task] () {
+                    scheduler->evict_task_with_lock(*task);
+                    scheduler->when_out_of_lock([] () {
+                        std::cerr << "Killed due to invalid signal return <page fault>\n";
+                    });
+                });
+                return resolve_return_value::NoReturn();
+            }
+            SignalStackFrame frame{*((SignalStackFrame *) umem.Pointer())};
+            sigset_t sig{};
+            sigprocmask(SIG_SETMASK, nullptr, &sig, sizeof(sig));
+            memcpy((void *) &sig, (void *) &(frame.oldmask), sizeof(sig) < sizeof(frame.oldmask) ? sizeof(sig) : sizeof(frame.oldmask));
+            sigprocmask(SIG_SETMASK, &sig, nullptr, sizeof(sig));
+            scheduler->when_not_running(*task, [scheduler, task, frame] () {
+                auto &cpustate = task->get_cpu_state();
+                auto &cpuframe = task->get_cpu_frame();
+                cpustate.r8 = frame.r8;
+                cpustate.r9 = frame.r9;
+                cpustate.r10 = frame.r10;
+                cpustate.r11 = frame.r11;
+                cpustate.r12 = frame.r12;
+                cpustate.r13 = frame.r13;
+                cpustate.r14 = frame.r14;
+                cpustate.r15 = frame.r15;
+                cpustate.rdi = frame.rdi;
+                cpustate.rsi = frame.rsi;
+                cpustate.rbp = frame.rbp;
+                cpustate.rbx = frame.rbx;
+                cpustate.rdx = frame.rdx;
+                cpustate.rax = frame.rax;
+                cpustate.rcx = frame.rcx;
+                cpuframe.rsp = frame.rsp;
+                cpuframe.rip = frame.rip;
+                cpuframe.rflags = frame.rflags;
+                cpuframe.cs = frame.cs | 3;
+                cpustate.gs = frame.gs | 3;
+                cpustate.fs = frame.fs | 3;
+                // err;
+                // TODO - oldmask;
+                task->set_blocked(false);
+                scheduler->when_out_of_lock([frame] () {
+                    std::cout << "Returned from signal handler to " << std::hex << frame.cs << ":" << frame.rip << std::dec << "\n";
+                    std::cout << "Likely syscall return with errno=" << std::dec << (0 - ((int) frame.rax)) << "\n";
+                });
+            });
+            return resolve_return_value::NoReturn();
+        });
+        return true;
+    }
     return process->page_fault(*this, current_task, intr);
 }
 bool ProcThread::exception(task &current_task, const std::string &name, Interrupt &intr) {
