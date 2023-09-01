@@ -190,13 +190,16 @@ extern "C" {
 #define SIG_UNBLOCK 1
 #define SIG_SETMASK 2
 
+
 typedef void (*sighandler_t)(int);
 
-#define SIG_IGN ((sighandler_t) (void *) 0)
+#define SIG_IGN ((sighandler_t) (void *) 1)
+#define SIG_DFL ((sighandler_t) (void *) 0)
 
 sighandler_t signal(int signal, sighandler_t handler);
 
 #define SIGINT 2
+#define SIGKILL 9
 
 #define SA_SIGINFO              4
 #define SA_UNSUPPORTED      0x400

@@ -2833,6 +2833,9 @@ int Process::setsignal(int signal) {
 
 int Process::GetAndClearSigpending() {
     std::lock_guard lock{mtx};
+    if (sigpending.Test(SIGKILL)) {
+        return SIGKILL;
+    }
     sigset_t sigs{sigpending & (~sigmask)};
     auto sig = sigpending.First();
     if (sig != -1) {

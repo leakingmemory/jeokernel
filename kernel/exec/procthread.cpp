@@ -298,6 +298,15 @@ int ProcThread::sigaction(int signal, const struct sigaction *act, struct sigact
 }
 
 std::optional<struct sigaction> ProcThread::GetSigaction(int signal) {
+    if (signal == SIGKILL) {
+        struct sigaction dfl{
+            .sa_handler = SIG_DFL,
+            .sa_flags = 0,
+            .sa_restorer = nullptr,
+            .sa_mask = {}
+        };
+        return dfl;
+    }
     return process->GetSigaction(signal);
 }
 

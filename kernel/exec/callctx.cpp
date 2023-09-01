@@ -93,6 +93,24 @@ static void LaunchSignal(struct sigaction sigaction, tasklist *scheduler, Interr
 }
 
 void callctx_async::HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction, int signum) {
+    if (signum == SIGKILL) {
+        scheduler->evict_task_with_lock(*t);
+        scheduler->when_out_of_lock([] () {
+            std::cerr << "Killed\n";
+        });
+        return;
+    }
+    if (sigaction.sa_handler == SIG_DFL)
+    {
+        auto tid = procthread->gettid();
+        Interrupt intr{&(t->get_cpu_frame()), &(t->get_cpu_state()), &(t->get_fpu_state()), 0x80};
+        scheduler->evict_task_with_lock(*t);
+        scheduler->when_out_of_lock([intr, signum, tid] () {
+            std::cerr << "Signal " << signum << "A tid=" << tid << "\n";
+            intr.print_debug();
+        });
+        return;
+    }
     scheduler->when_out_of_lock([scheduler, t, procthread, sigaction, signum] () {
         auto &cpuframe = t->get_cpu_frame();
         auto &cpustate = t->get_cpu_state();
