@@ -42,7 +42,7 @@ void SyscallCtxAsync::returnAsync(intptr_t value) {
             auto optSigaction = procthread->GetSigaction(signal);
             if (optSigaction) {
                 t->get_cpu_state().rax = (uint64_t) value;
-                callctx_async::HandleSignalInWhenNotRunning(scheduler, t, procthread, *optSigaction);
+                callctx_async::HandleSignalInWhenNotRunning(scheduler, t, procthread, *optSigaction, signal);
             } else {
                 scheduler->evict_task_with_lock(*t);
             }

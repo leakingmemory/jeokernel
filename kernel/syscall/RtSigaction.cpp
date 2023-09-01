@@ -14,9 +14,17 @@
 
 int RtSigaction::DoRtSigaction(ProcThread &process, int signal, const sigaction *act, sigaction *oact) {
 #ifdef DEBUG_RTSIGACTION
-    std::cout << "sigaction(" << std::dec << signal << ", 0x" << std::hex << (uintptr_t) act << ", 0x" << (uintptr_t) oact << std::dec << ")\n";
+    std::cout << "sigaction(" << std::dec << signal << ", 0x" << std::hex << (uintptr_t) act << ", 0x" << (uintptr_t) oact << std::dec << ") -> "
+        << std::hex << (act != nullptr ? (uintptr_t) act->sa_handler : 0) << " flags " << (act != nullptr ? act->sa_flags : 0) << std::dec << " => ";
+    auto rval =
+#else
+    return
 #endif
-    return process.sigaction(signal, act, oact);
+        process.sigaction(signal, act, oact);
+#ifdef DEBUG_RTSIGACTION
+    std::cout << rval << "\n";
+    return rval;
+#endif
 }
 
 int64_t RtSigaction::Call(int64_t signal, int64_t uptr_act, int64_t uptr_oact, int64_t sigsetsize, SyscallAdditionalParams &params) {

@@ -7,6 +7,8 @@
 #include <exec/usermem.h>
 #include <exec/futex.h>
 
+//#define DEBUG_SIGNAL_RETURN
+
 ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) :
 process(Process::Create(cwd, tty, parent_pid, cmdline)), blockthr(), rseq(), fsBase(0), tidAddress(0), robustListHead(0), tid(process->getpid())
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
@@ -199,10 +201,12 @@ bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
                 // err;
                 // TODO - oldmask;
                 task->set_blocked(false);
+#ifdef DEBUG_SIGNAL_RETURN
                 scheduler->when_out_of_lock([frame] () {
                     std::cout << "Returned from signal handler to " << std::hex << frame.cs << ":" << frame.rip << std::dec << "\n";
                     std::cout << "Likely syscall return with errno=" << std::dec << (0 - ((int) frame.rax)) << "\n";
                 });
+#endif
             });
             return resolve_return_value::NoReturn();
         });

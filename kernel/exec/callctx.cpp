@@ -8,68 +8,119 @@
 #include <errno.h>
 #include <core/x86fpu.h>
 #include <iostream>
+#include <interrupt_frame.h>
 
-void callctx_async::HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction) {
-    scheduler->when_out_of_lock([scheduler, t, procthread, sigaction] () {
-        auto &cpuframe = t->get_cpu_frame();
-        auto &cpustate = t->get_cpu_state();
-        SignalStackFrame stackFrame{
-                .sigtramp = SIGTRAMP_ADDR,
-                .r8 = cpustate.r8,
-                .r9 = cpustate.r9,
-                .r10 = cpustate.r10,
-                .r11 = cpustate.r11,
-                .r12 = cpustate.r12,
-                .r13 = cpustate.r13,
-                .r14 = cpustate.r14,
-                .r15 = cpustate.r15,
-                .rdi = cpustate.rdi,
-                .rsi = cpustate.rsi,
-                .rbp = cpustate.rbp,
-                .rbx = cpustate.rbx,
-                .rdx = cpustate.rdx,
-                .rax = cpustate.rax,
-                .rcx = cpustate.rcx,
-                .rsp = cpuframe.rsp,
-                .rip = cpuframe.rip,
-                .rflags = cpuframe.rflags,
-                .cs = (uint16_t) cpuframe.cs,
-                .gs = cpustate.gs,
-                .fs = cpustate.fs,
-                .err = 0,
-                .trapno = 0,
-                .oldmask = 0,
-                .cr2 = 0,
-                .fpstate = 0
-        };
-        auto frameptr = cpuframe.rsp - 128 - sizeof(stackFrame);
-        frameptr &= ~((typeof(frameptr)) 0xF);
-        frameptr -= sizeof(uintptr_t);
-        procthread->resolve_read(frameptr, sizeof(stackFrame), false, [] (intptr_t) {}, [scheduler, t, procthread, sigaction, stackFrame, frameptr] (bool success, bool async, const std::function<void (uintptr_t)> &) {
-            if (success && procthread->resolve_write(frameptr, sizeof(stackFrame))) {
-                UserMemory umem{*procthread, frameptr, sizeof(stackFrame), true};
-                if (umem) {
-                    auto sa_handler = (uintptr_t) sigaction.sa_sigaction;
-                    std::cout << "Launching signal handler " << std::hex << sa_handler << " with frame at " << frameptr << std::dec << "\n";
-                    memcpy((typeof(stackFrame) *) umem.Pointer(), &stackFrame, sizeof(stackFrame));
-                    scheduler->when_not_running(*t, [t, sa_handler, frameptr] () {
-                        t->get_cpu_frame().rip = sa_handler;
-                        t->get_cpu_frame().rsp = frameptr;
-                        t->set_blocked(false);
-                    });
+//#define DEBUG_LAUNCH_SIGNAL
+
+static void LaunchSignal(struct sigaction sigaction, tasklist *scheduler, InterruptCpuFrame &cpuframe, InterruptStackFrame &cpustate, task *t, ProcThread *procthread, int signum) {
+    uintptr_t oldmask = 0;
+    {
+        sigset_t sig{};
+        sig.Set(signum);
+        procthread->sigprocmask(SIG_BLOCK, &sig, &sig, sizeof(sig));
+        memcpy((void *) &oldmask, (void *) &sig, sizeof(oldmask) < sizeof(sig) ? sizeof(oldmask) : sizeof(sig));
+    }
+    uintptr_t sigtramp{(sigaction.sa_flags & SA_RESTORER) != 0 ? (uintptr_t) sigaction.sa_restorer : SIGTRAMP_ADDR};
+#ifdef DEBUG_LAUNCH_SIGNAL
+    std::cout << "Signal " << std::dec << signum << ", trampoline " << std::hex << sigtramp << "\n";
+#endif
+    SignalStackFrame stackFrame{
+            .sigtramp = sigtramp,
+            .r8 = cpustate.r8,
+            .r9 = cpustate.r9,
+            .r10 = cpustate.r10,
+            .r11 = cpustate.r11,
+            .r12 = cpustate.r12,
+            .r13 = cpustate.r13,
+            .r14 = cpustate.r14,
+            .r15 = cpustate.r15,
+            .rdi = cpustate.rdi,
+            .rsi = cpustate.rsi,
+            .rbp = cpustate.rbp,
+            .rbx = cpustate.rbx,
+            .rdx = cpustate.rdx,
+            .rax = cpustate.rax,
+            .rcx = cpustate.rcx,
+            .rsp = cpuframe.rsp,
+            .rip = cpuframe.rip,
+            .rflags = cpuframe.rflags,
+            .cs = (uint16_t) cpuframe.cs,
+            .gs = cpustate.gs,
+            .fs = cpustate.fs,
+            .err = 0,
+            .trapno = 0,
+            .oldmask = oldmask,
+            .cr2 = 0,
+            .fpstate = 0
+    };
+    auto frameptr = cpuframe.rsp - 128 - sizeof(stackFrame);
+    frameptr &= ~((typeof(frameptr)) 0xF);
+    frameptr -= sizeof(uintptr_t);
+    procthread->resolve_read(frameptr, sizeof(stackFrame), false, [] (intptr_t) {}, [scheduler, t, procthread, sigaction, stackFrame, frameptr, signum] (bool success, bool async, const std::function<void (uintptr_t)> &) {
+        if (success && procthread->resolve_write(frameptr, sizeof(stackFrame))) {
+            UserMemory umem{*procthread, frameptr, sizeof(stackFrame), true};
+            if (umem) {
+                uintptr_t sa_handler;
+                if ((sigaction.sa_flags & SA_SIGINFO) != 0) {
+                    sa_handler = (uintptr_t) sigaction.sa_sigaction;
                 } else {
-                    scheduler->when_not_running(*t, [scheduler, t] () {
-                        scheduler->evict_task_with_lock(*t);
-                    });
+                    sa_handler = (uintptr_t) sigaction.sa_handler;
                 }
+#ifdef DEBUG_LAUNCH_SIGNAL
+                std::cout << "Launching signal handler " << std::hex << sa_handler << " with frame at " << frameptr << " with flags " << sigaction.sa_flags << std::dec << "\n";
+#endif
+                memcpy((typeof(stackFrame) *) umem.Pointer(), &stackFrame, sizeof(stackFrame));
+                scheduler->when_not_running(*t, [t, sa_handler, frameptr, signum] () {
+                    auto &cpuframe = t->get_cpu_frame();
+                    auto &cpustate = t->get_cpu_state();
+                    cpuframe.rip = sa_handler;
+                    cpuframe.rsp = frameptr;
+                    cpustate.rdi = signum;
+                    t->set_blocked(false);
+                });
             } else {
                 scheduler->when_not_running(*t, [scheduler, t] () {
                     scheduler->evict_task_with_lock(*t);
                 });
             }
-            return resolve_return_value::AsyncReturn();
-        });
+        } else {
+            scheduler->when_not_running(*t, [scheduler, t] () {
+                scheduler->evict_task_with_lock(*t);
+            });
+        }
+        return resolve_return_value::AsyncReturn();
     });
+}
+
+void callctx_async::HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction, int signum) {
+    scheduler->when_out_of_lock([scheduler, t, procthread, sigaction, signum] () {
+        auto &cpuframe = t->get_cpu_frame();
+        auto &cpustate = t->get_cpu_state();
+        LaunchSignal(sigaction, scheduler, cpuframe, cpustate, t, procthread, signum);
+    });
+}
+
+bool callctx::HandleSignalInFastReturn(Interrupt &intr) {
+    auto *scheduler = get_scheduler();
+    auto &task = scheduler->get_current_task();
+    auto *pt = task.get_resource<ProcThread>();
+    if (pt == nullptr) {
+        return false;
+    }
+    int sig = pt->GetAndClearSigpending();
+    if (sig <= 0) {
+        return false;
+    }
+    task.set_blocked(true);
+    auto &cpuframe = intr.get_cpu_frame();
+    auto &cpustate = intr.get_cpu_state();
+    auto optSigaction = pt->GetSigaction(sig);
+    if (!optSigaction) {
+        task.set_end(true);
+        return true;
+    }
+    LaunchSignal(*optSigaction, scheduler, cpuframe, cpustate, &task, pt, sig);
+    return true;
 }
 
 class callctx_impl {
@@ -415,7 +466,7 @@ void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intpt
             auto optSigaction = procthread->GetSigaction(signal);
             if (optSigaction) {
                 ref->current_task->get_cpu_state().rax = value;
-                callctx_async::HandleSignalInWhenNotRunning(ref->scheduler, ref->current_task, procthread, *optSigaction);
+                callctx_async::HandleSignalInWhenNotRunning(ref->scheduler, ref->current_task, procthread, *optSigaction, signal);
             } else {
                 ref->scheduler->evict_task_with_lock(*(ref->current_task));
             }

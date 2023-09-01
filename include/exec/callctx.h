@@ -19,7 +19,7 @@ class ProcThread;
 
 class callctx_async {
 public:
-    static void HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction);
+    static void HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction, int signo);
     virtual void async() = 0;
     virtual void returnAsync(intptr_t value) = 0;
 };
@@ -27,6 +27,7 @@ public:
 
 class callctx_impl;
 class ProcThread;
+class Interrupt;
 
 class callctx {
 private:
@@ -34,6 +35,7 @@ private:
 public:
     callctx() : impl() {}
     callctx(std::shared_ptr<callctx_async> async);
+    static bool HandleSignalInFastReturn(Interrupt &intr);
     ProcThread &GetProcess() const;
     void Aborter(const std::function<void ()> &);
     resolve_return_value Async() const;

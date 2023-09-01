@@ -128,6 +128,9 @@ SyscallResult SyscallHandler::Call(Interrupt &intr) {
 #ifdef SYSCALL_DEBUG
                 std::cout << "Syscall fast returns\n";
 #endif
+                if (callctx::HandleSignalInFastReturn(intr)) {
+                    return SyscallResult::CONTEXT_SWITCH;
+                }
                 return SyscallResult::FAST_RETURN;
             }
         }
