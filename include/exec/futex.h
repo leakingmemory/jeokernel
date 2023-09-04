@@ -20,8 +20,9 @@ struct FutexWaiting {
     std::function<void ()> wakeup;
     uintptr_t addr;
     pid_t pid;
+    pid_t tid;
 
-    FutexWaiting(const std::function<void ()> &wakeup, uintptr_t addr, pid_t pid) : wakeup(wakeup), addr(addr), pid(pid) {}
+    FutexWaiting(const std::function<void ()> &wakeup, uintptr_t addr, pid_t pid, pid_t tid) : wakeup(wakeup), addr(addr), pid(pid), tid(tid) {}
 };
 
 class Process;

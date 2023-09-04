@@ -89,13 +89,37 @@ int Futex::Wait(std::shared_ptr<callctx> ctx, uintptr_t uptr_addr, uint32_t val)
                 std::cout << "Futex " << std::hex << uptr_addr << std::dec << " confirms going to sleep on tid="
                           << tid << "\n";
 #endif
+                auto pid = ctx->GetProcess().getpid();
+                auto tid = ctx->GetProcess().gettid();
                 waiting.emplace_back([asyncCtx, uptr_addr, tid]() {
 #ifdef FUTEX_DEBUG
                     std::cout << "Futex " << std::hex << uptr_addr << std::dec << " awakened on tid=" << tid
                               << "\n";
 #endif
                     asyncCtx->returnAsync(0);
-                }, uptr_addr, ctx->GetProcess().getpid());
+                }, uptr_addr, ctx->GetProcess().getpid(), ctx->GetProcess().gettid());
+                ctx->GetProcess().AborterFunc([this, asyncCtx, uptr_addr, pid, tid] () {
+                    bool found{false};
+                    {
+                        std::lock_guard lock{mtx};
+                        auto iterator = waiting.begin();
+                        while (iterator != waiting.end()) {
+                            if (iterator->addr == uptr_addr && iterator->pid == pid && iterator->tid == tid) {
+                                waiting.erase(iterator);
+                                found = true;
+                                break;
+                            }
+                            ++iterator;
+                        }
+                    }
+                    if (found) {
+#ifdef FUTEX_DEBUG
+                        std::cout << "Futex " << std::hex << uptr_addr << std::dec << " interrupted on tid=" << tid
+                                  << "\n";
+#endif
+                        asyncCtx->returnAsync(-EINTR);
+                    }
+                });
                 return resolve_return_value::AsyncReturn();
             } else {
                 lock.release();
