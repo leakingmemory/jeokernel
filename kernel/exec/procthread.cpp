@@ -64,9 +64,14 @@ bool ProcThread::resolve_write(uintptr_t addr, uintptr_t len) {
 
 void ProcThread::AborterFunc(const std::function<void()> &func) {
     auto handle = process->AborterFunc(func);
-    std::lock_guard lock{mtx};
-    aborterFunc = func;
-    aborterFuncHandle = handle;
+    typeof(handle) previousHandle;
+    {
+        std::lock_guard lock{mtx};
+        aborterFunc = func;
+        previousHandle = aborterFuncHandle;
+        aborterFuncHandle = handle;
+    }
+    process->ClearAborterFunc(previousHandle);
 }
 
 void ProcThread::ClearAborterFunc() {

@@ -2850,15 +2850,24 @@ int Process::AborterFunc(const std::function<void()> &func) {
         std::lock_guard lock{mtx};
         ++aborterFuncHandle;
         handle = aborterFuncHandle;
-        aborterFunc = func;
+        struct ProcessAborterFunc aborter{
+            .func = func,
+            .handle = handle
+        };
+        aborterFunc.push_back(aborter);
     }
     return handle;
 }
 
 void Process::ClearAborterFunc(int handle) {
     std::lock_guard lock{mtx};
-    if (handle == aborterFuncHandle) {
-        aborterFunc = [] () {};
+    auto iterator = aborterFunc.begin();
+    while (iterator != aborterFunc.end()) {
+        if (iterator->handle == handle) {
+            aborterFunc.erase(iterator);
+            return;
+        }
+        ++iterator;
     }
 }
 
@@ -2866,7 +2875,11 @@ void Process::CallAbort() {
     std::function<void ()> aborter;
     {
         std::lock_guard lock{mtx};
-        aborter = aborterFunc;
+        auto iterator = aborterFunc.begin();
+        if (iterator == aborterFunc.end()) {
+            return;
+        }
+        aborter = iterator->func;
     }
     aborter();
 }

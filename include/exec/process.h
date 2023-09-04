@@ -173,6 +173,11 @@ struct child_result {
     pid_t pid;
 };
 
+struct ProcessAborterFunc {
+    std::function<void ()> func;
+    int handle;
+};
+
 class ProcThread;
 struct MemoryArea;
 
@@ -182,7 +187,6 @@ private:
     std::weak_ptr<Process> self_ref;
     sigset_t sigmask;
     sigset_t sigpending;
-    std::function<void ()> aborterFunc{[] () {}};
     RLimits rlimits;
     pid_t pid;
     pid_t pgrp;
@@ -193,6 +197,7 @@ private:
     std::vector<MemMapping> mappings;
     std::vector<FileDescriptor> fileDescriptors;
     std::vector<BinaryRelocation> relocations;
+    std::vector<ProcessAborterFunc> aborterFunc{};
     std::shared_ptr<kfile> cwd;
     std::string cmdline;
     std::shared_ptr<class tty> tty;

@@ -133,8 +133,14 @@ bool callctx::HandleSignalInFastReturn(Interrupt &intr) {
     auto &cpuframe = intr.get_cpu_frame();
     auto &cpustate = intr.get_cpu_state();
     auto optSigaction = pt->GetSigaction(sig);
-    if (!optSigaction) {
+    if (!optSigaction || optSigaction->sa_handler == SIG_DFL) {
         task.set_end(true);
+        if (sig == SIGKILL) {
+            std::cerr << "Killed\n";
+        } else {
+            std::cerr << "Signal " << sig << " FR tid=" << pt->gettid() << "\n";
+            intr.print_debug();
+        }
         return true;
     }
     LaunchSignal(*optSigaction, scheduler, cpuframe, cpustate, &task, pt, sig);
