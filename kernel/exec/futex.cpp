@@ -114,12 +114,16 @@ int Futex::Wait(std::shared_ptr<callctx> ctx, uintptr_t uptr_addr, uint32_t val)
                     }
                     if (found) {
 #ifdef FUTEX_DEBUG
-                        std::cout << "Futex " << std::hex << uptr_addr << std::dec << " interrupted on tid=" << tid
+                        std::cout << "Futex " << std::hex << uptr_addr << std::dec << " awakened on tid=" << tid
                                   << "\n";
 #endif
                         asyncCtx->returnAsync(-EINTR);
                     }
                 });
+                lock.release();
+                if (ctx->GetProcess().HasPendingSignalOrKill()) {
+                    ctx->GetProcess().CallAbort();
+                }
                 return resolve_return_value::AsyncReturn();
             } else {
                 lock.release();
