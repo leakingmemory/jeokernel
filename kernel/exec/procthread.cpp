@@ -89,6 +89,10 @@ void ProcThread::CallAbort() {
     aborter();
 }
 
+void ProcThread::CallAbortAll() {
+    process->CallAbortAll();
+}
+
 bool ProcThread::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
     return process->Map(image, pagenum, pages, image_skip_pages, load, write, execute, copyOnWrite, binaryMap);
 }
@@ -315,8 +319,20 @@ std::optional<struct sigaction> ProcThread::GetSigaction(int signal) {
     return process->GetSigaction(signal);
 }
 
+bool ProcThread::HasPendingSignalOrKill() {
+    return process->HasPendingSignalOrKill();
+}
+
 int ProcThread::GetAndClearSigpending() {
     return process->GetAndClearSigpending();
+}
+
+void ProcThread::SetKilled() {
+    process->SetKilled();
+}
+
+bool ProcThread::IsKilled() const {
+    return process->IsKilled();
 }
 
 int ProcThread::setrlimit(int resource, const rlimit &lim) {

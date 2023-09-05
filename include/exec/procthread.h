@@ -55,6 +55,7 @@ public:
     void AborterFunc(const std::function<void ()> &func);
     void ClearAborterFunc();
     void CallAbort();
+    void CallAbortAll();
     bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
@@ -95,7 +96,10 @@ public:
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
     std::optional<struct sigaction> GetSigaction(int signal);
+    bool HasPendingSignalOrKill();
     int GetAndClearSigpending();
+    void SetKilled();
+    bool IsKilled() const;
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
     std::shared_ptr<kfile> GetCwd() const;

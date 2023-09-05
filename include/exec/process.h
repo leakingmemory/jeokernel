@@ -210,6 +210,7 @@ private:
     uintptr_t program_brk;
     int aborterFuncHandle{0};
     int32_t euid, egid, uid, gid;
+    bool killed{false};
 private:
     Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
     Process(std::shared_ptr<Process> cp);
@@ -354,10 +355,14 @@ public:
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
     std::optional<struct sigaction> GetSigaction(int signal);
     int setsignal(int signal);
+    bool HasPendingSignalOrKill();
     int GetAndClearSigpending();
+    void SetKilled();
+    bool IsKilled();
     int AborterFunc(const std::function<void ()> &func);
     void ClearAborterFunc(int handle);
     void CallAbort();
+    void CallAbortAll();
 private:
     int setrlimit(rlimit &lim, const rlimit &val);
 public:

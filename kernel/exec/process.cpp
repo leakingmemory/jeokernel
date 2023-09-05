@@ -2831,6 +2831,16 @@ int Process::setsignal(int signal) {
     return err;
 }
 
+bool Process::HasPendingSignalOrKill() {
+    std::lock_guard lock{mtx};
+    if (killed || sigpending.Test(SIGKILL)) {
+        return true;
+    }
+    sigset_t sigs{sigpending & (~sigmask)};
+    auto sig = sigpending.First();
+    return sig != -1;
+}
+
 int Process::GetAndClearSigpending() {
     std::lock_guard lock{mtx};
     if (sigpending.Test(SIGKILL)) {
@@ -2842,6 +2852,16 @@ int Process::GetAndClearSigpending() {
         sigpending.Clear(sig);
     }
     return sig;
+}
+
+void Process::SetKilled() {
+    std::lock_guard lock{mtx};
+    killed = true;
+}
+
+bool Process::IsKilled() {
+    std::lock_guard lock{mtx};
+    return killed;
 }
 
 int Process::AborterFunc(const std::function<void()> &func) {
@@ -2882,6 +2902,19 @@ void Process::CallAbort() {
         aborter = iterator->func;
     }
     aborter();
+}
+
+void Process::CallAbortAll() {
+    std::vector<std::function<void ()>> aborter{};
+    {
+        std::lock_guard lock{mtx};
+        for (const auto &func : aborterFunc) {
+            aborter.push_back(func.func);
+        }
+    }
+    for (auto &func : aborter) {
+        func();
+    }
 }
 
 int Process::setrlimit(rlimit &lim, const rlimit &val) {

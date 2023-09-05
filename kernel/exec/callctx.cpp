@@ -93,9 +93,16 @@ static void LaunchSignal(struct sigaction sigaction, tasklist *scheduler, Interr
 }
 
 void callctx_async::HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction, int signum) {
-    if (signum == SIGKILL) {
+    if (procthread->IsKilled()) {
         scheduler->evict_task_with_lock(*t);
-        scheduler->when_out_of_lock([] () {
+        return;
+    }
+    if (signum == SIGKILL) {
+        auto process = procthread->GetProcess();
+        scheduler->evict_task_with_lock(*t);
+        scheduler->when_out_of_lock([process] () {
+            process->SetKilled();
+            process->CallAbortAll();
             std::cerr << "Killed\n";
         });
         return;
@@ -103,9 +110,12 @@ void callctx_async::HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, P
     if (sigaction.sa_handler == SIG_DFL)
     {
         auto tid = procthread->gettid();
+        auto process = procthread->GetProcess();
         Interrupt intr{&(t->get_cpu_frame()), &(t->get_cpu_state()), &(t->get_fpu_state()), 0x80};
         scheduler->evict_task_with_lock(*t);
-        scheduler->when_out_of_lock([intr, signum, tid] () {
+        scheduler->when_out_of_lock([process, intr, signum, tid] () {
+            process->SetKilled();
+            process->CallAbortAll();
             std::cerr << "Signal " << signum << "A tid=" << tid << "\n";
             intr.print_debug();
         });
@@ -135,6 +145,9 @@ bool callctx::HandleSignalInFastReturn(Interrupt &intr) {
     auto optSigaction = pt->GetSigaction(sig);
     if (!optSigaction || optSigaction->sa_handler == SIG_DFL) {
         task.set_end(true);
+        auto process = pt->GetProcess();
+        process->SetKilled();
+        process->CallAbortAll();
         if (sig == SIGKILL) {
             std::cerr << "Killed\n";
         } else {

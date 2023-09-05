@@ -38,6 +38,10 @@ void SyscallCtxAsync::returnAsync(intptr_t value) {
     auto procthread = t->get_resource<ProcThread>();
     procthread->ClearAborterFunc();
     scheduler->when_not_running(*t, [scheduler, procthread, t, value] () {
+        if (procthread->IsKilled()) {
+            scheduler->evict_task_with_lock(*t);
+            return;
+        }
         auto signal = procthread != nullptr ? procthread->GetAndClearSigpending() : -1;
         if (signal > 0) {
             auto optSigaction = procthread->GetSigaction(signal);
