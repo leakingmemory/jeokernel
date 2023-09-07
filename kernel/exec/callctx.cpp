@@ -80,12 +80,12 @@ static void LaunchSignal(struct sigaction sigaction, tasklist *scheduler, Interr
                 });
             } else {
                 scheduler->when_not_running(*t, [scheduler, t] () {
-                    scheduler->evict_task_with_lock(*t);
+                    t->set_end(true);
                 });
             }
         } else {
             scheduler->when_not_running(*t, [scheduler, t] () {
-                scheduler->evict_task_with_lock(*t);
+                t->set_end(true);
             });
         }
         return resolve_return_value::AsyncReturn();
@@ -94,12 +94,12 @@ static void LaunchSignal(struct sigaction sigaction, tasklist *scheduler, Interr
 
 void callctx_async::HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, ProcThread *procthread, struct sigaction sigaction, int signum) {
     if (procthread->IsKilled()) {
-        scheduler->evict_task_with_lock(*t);
+        t->set_end(true);
         return;
     }
     if (signum == SIGKILL) {
         auto process = procthread->GetProcess();
-        scheduler->evict_task_with_lock(*t);
+        t->set_end(true);
         scheduler->when_out_of_lock([process] () {
             process->SetKilled();
             process->CallAbortAll();
@@ -112,7 +112,7 @@ void callctx_async::HandleSignalInWhenNotRunning(tasklist *scheduler, task *t, P
         auto tid = procthread->gettid();
         auto process = procthread->GetProcess();
         Interrupt intr{&(t->get_cpu_frame()), &(t->get_cpu_state()), &(t->get_fpu_state()), 0x80};
-        scheduler->evict_task_with_lock(*t);
+        t->set_end(true);
         scheduler->when_out_of_lock([process, intr, signum, tid] () {
             process->SetKilled();
             process->CallAbortAll();
@@ -498,6 +498,10 @@ void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intpt
     ref->process->ClearAborterFunc();
     ref->scheduler->when_not_running(*(ref->current_task), [ref, value] {
         auto procthread = ref->current_task->get_resource<ProcThread>();
+        if (procthread != nullptr && procthread->IsKilled()) {
+            ref->current_task->set_end(true);
+            return;
+        }
         auto signal = procthread != nullptr ? procthread->GetAndClearSigpending() : -1;
         if (signal > 0) {
             auto optSigaction = procthread->GetSigaction(signal);
@@ -505,7 +509,7 @@ void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intpt
                 ref->current_task->get_cpu_state().rax = value;
                 callctx_async::HandleSignalInWhenNotRunning(ref->scheduler, ref->current_task, procthread, *optSigaction, signal);
             } else {
-                ref->scheduler->evict_task_with_lock(*(ref->current_task));
+                ref->current_task->set_end(true);
             }
             return;
         }

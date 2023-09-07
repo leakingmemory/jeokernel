@@ -171,7 +171,7 @@ bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
             UserMemory umem{*this, signalFrameAddr, sizeof(SignalStackFrame)};
             if (!umem) {
                 scheduler->when_not_running(*task, [scheduler, task] () {
-                    scheduler->evict_task_with_lock(*task);
+                    task->set_end(true);
                     scheduler->when_out_of_lock([] () {
                         std::cerr << "Killed due to invalid signal return <page fault>\n";
                     });

@@ -39,7 +39,7 @@ void SyscallCtxAsync::returnAsync(intptr_t value) {
     procthread->ClearAborterFunc();
     scheduler->when_not_running(*t, [scheduler, procthread, t, value] () {
         if (procthread->IsKilled()) {
-            scheduler->evict_task_with_lock(*t);
+            t->set_end(true);
             return;
         }
         auto signal = procthread != nullptr ? procthread->GetAndClearSigpending() : -1;
@@ -49,7 +49,7 @@ void SyscallCtxAsync::returnAsync(intptr_t value) {
                 t->get_cpu_state().rax = (uint64_t) value;
                 callctx_async::HandleSignalInWhenNotRunning(scheduler, t, procthread, *optSigaction, signal);
             } else {
-                scheduler->evict_task_with_lock(*t);
+                t->set_end(true);
             }
             return;
         }

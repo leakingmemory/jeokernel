@@ -573,6 +573,9 @@ void tasklist::when_not_running(task &t, std::function<void()> func) {
     std::lock_guard lock{_lock};
     if (!t.is_running()) {
         func();
+        if (t.is_end()) {
+            evict_task_with_lock(t);
+        }
         return;
     }
     t.when_not_running(func);
