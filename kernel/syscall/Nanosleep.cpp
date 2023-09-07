@@ -6,6 +6,7 @@
 #include <time.h>
 #include <core/scheduler.h>
 #include <core/nanotime.h>
+#include <exec/procthread.h>
 #include "Nanosleep.h"
 #include "SyscallCtx.h"
 
@@ -16,7 +17,7 @@ void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, c
     nanos *= 1000000000ULL;
     nanos += request->tv_nsec;
     typeof(nano_start) nano_request = nano_start + nanos;
-    scheduler->when_not_running(task, [ctx, &task, remaining, nano_request] () {
+    scheduler->when_not_running(task, [ctx, scheduler, &task, remaining, nano_request] () {
         if (remaining != nullptr) {
             remaining->tv_nsec = 0;
             remaining->tv_sec = 0;
@@ -26,6 +27,35 @@ void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, c
             task.set_blocked(false);
         } else {
             task.add_event_handler(new task_nanos_handler(task.get_id(), nano_request));
+            auto *pt = task.get_resource<ProcThread>();
+            auto task_id = task.get_id();
+            pt->AborterFunc([ctx, scheduler, remaining, nano_request, task_id] () {
+                scheduler->all_tasks([ctx, scheduler, remaining, nano_request, task_id] (class task &task) {
+                    if (task_id == task.get_id()) {
+                        auto nanosHandler = task.get_event_handler<task_nanos_handler>();
+                        if (nanosHandler != nullptr) {
+                            task.remove_event_handler(nanosHandler);
+                            delete nanosHandler;
+                            scheduler->when_out_of_lock([ctx, remaining, nano_request] () {
+                                if (remaining != nullptr) {
+                                    auto nanos_ref = get_nanotime_ref();
+                                    if (nanos_ref < nano_request) {
+                                        auto nanos_remaining = nano_request - nanos_ref;
+                                        auto seconds_remaining = nanos_remaining / 1000000000;
+                                        nanos_remaining = nanos_remaining % 1000000000;
+                                        remaining->tv_sec = (time_t) seconds_remaining;
+                                        remaining->tv_nsec = (long) nanos_remaining;
+                                    }
+                                }
+                                ctx->ReturnWhenNotRunning(-EINTR);
+                            });
+                        }
+                    }
+                });
+            });
+            if (pt->HasPendingSignalOrKill()) {
+                pt->CallAbort();
+            }
         }
     });
 }

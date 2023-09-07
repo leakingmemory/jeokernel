@@ -291,6 +291,15 @@ public:
         }
         return false;
     }
+    template <class T> T *get_event_handler() {
+        for (auto *handler : event_handlers) {
+            T *eh = dynamic_cast<T *>(handler);
+            if (eh != nullptr) {
+                return eh;
+            }
+        }
+        return nullptr;
+    }
 
     void resource_acq(int8_t res_acq) {
         res_acq += this->bits.resources;
