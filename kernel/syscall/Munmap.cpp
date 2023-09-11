@@ -16,6 +16,6 @@ int64_t Munmap::Call(int64_t uptr_addr, int64_t len, int64_t, int64_t, SyscallAd
     auto &proc = ctx.GetProcess();
     auto discard = proc.ClearRange(pagenum, pages);
     proc.DisableRange(pagenum, pages);
-    discard.clear();
+    discard = {};
     return 0;
 }

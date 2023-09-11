@@ -27,6 +27,7 @@ private:
     struct sigaltstack sigaltstack;
     struct sigaltstack prevSigaltstack;
     std::function<void ()> aborterFunc{[] () {}};
+    MemoryMapSnapshotBarrier threadRunMemMapSnapshot{};
     uintptr_t fsBase;
     uintptr_t tidAddress;
     uintptr_t robustListHead;
@@ -62,7 +63,7 @@ public:
     bool IsFree(uint32_t pagenum, uint32_t pages);
     bool IsInRange(uint32_t pagenum, uint32_t pages);
     void DisableRange(uint32_t pagenum, uint32_t pages);
-    [[nodiscard]] std::vector<DeferredReleasePage> ClearRange(uint32_t pagenum, uint32_t pages);
+    [[nodiscard]] std::shared_ptr<std::vector<DeferredReleasePage>> ClearRange(uint32_t pagenum, uint32_t pages);
     uint32_t FindFreeStart(uint32_t pages);
     uint32_t FindFree(uint32_t pages);
     std::shared_ptr<Process> Clone();

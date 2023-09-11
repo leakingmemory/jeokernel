@@ -591,9 +591,9 @@ void Process::DisableRange(uint32_t pagenum, uint32_t pages) {
     }
 }
 
-std::vector<DeferredReleasePage> Process::ClearRange(uint32_t pagenum, uint32_t pages) {
-    std::vector<DeferredReleasePage> release{};
-    release.reserve(2);
+std::shared_ptr<std::vector<DeferredReleasePage>> Process::ClearRange(uint32_t pagenum, uint32_t pages) {
+    std::shared_ptr<std::vector<DeferredReleasePage>> release = std::make_shared<std::vector<DeferredReleasePage>>();
+    release->reserve(2);
     std::lock_guard lock{mtx};
     auto iterator = mappings.begin();
     std::vector<MemMapping> newMappings{};
@@ -635,7 +635,7 @@ std::vector<DeferredReleasePage> Process::ClearRange(uint32_t pagenum, uint32_t 
                                 const auto &check = *dropIterator;
                                 if (check.page >= overlap_page) {
                                     if (check.page < overlap_end) {
-                                        release.emplace_back(check.phys_page, check.data, check.cow);
+                                        release->emplace_back(check.phys_page, check.data, check.cow);
                                     } else {
 #ifdef DEBUG_MAP_CLEAR_FREE
                                         if (!check.data && check.phys_page != 0) {
@@ -666,7 +666,7 @@ std::vector<DeferredReleasePage> Process::ClearRange(uint32_t pagenum, uint32_t 
                             while (dropIterator != mapping.mappings.end()) {
                                 auto &check = *dropIterator;
                                 if (check.page >= overlap_page) {
-                                    release.emplace_back(check.phys_page, check.data, check.cow);
+                                    release->emplace_back(check.phys_page, check.data, check.cow);
                                     mapping.mappings.erase(dropIterator);
                                 } else {
                                     ++dropIterator;
@@ -691,7 +691,7 @@ std::vector<DeferredReleasePage> Process::ClearRange(uint32_t pagenum, uint32_t 
                         while (dropIterator != mapping.mappings.end()) {
                             auto &check = *dropIterator;
                             if (check.page < overlap_end) {
-                                release.emplace_back(check.phys_page, check.data, check.cow);
+                                release->emplace_back(check.phys_page, check.data, check.cow);
                                 mapping.mappings.erase(dropIterator);
                             } else {
                                 ++dropIterator;
@@ -721,7 +721,58 @@ std::vector<DeferredReleasePage> Process::ClearRange(uint32_t pagenum, uint32_t 
         }
         mapping.mappings.clear();
     }
+    {
+        auto iterator = memoryMapSnapshots.end();
+        if (iterator != memoryMapSnapshots.begin()) {
+            --iterator;
+            iterator->deferredRelease.push_back(release);
+        }
+    }
     return release;
+}
+
+MemoryMapSnapshotBarrier::MemoryMapSnapshotBarrier(const std::shared_ptr<Process> &process) : process(process), valid(true) {
+    std::lock_guard lock{process->mtx};
+    ++process->memoryMapSerial;
+    serial = process->memoryMapSerial;
+    process->memoryMapSnapshots.emplace_back(serial);
+}
+
+void MemoryMapSnapshotBarrier::Release() noexcept {
+    if (!valid) {
+        return;
+    }
+    valid = false;
+    std::vector<std::shared_ptr<std::vector<DeferredReleasePage>>> deferred{};
+    {
+        std::lock_guard lock{process->mtx};
+        auto iterator = process->memoryMapSnapshots.begin();
+        if (iterator == process->memoryMapSnapshots.end()) {
+            return;
+        }
+        if (iterator->serial == serial) {
+            deferred = iterator->deferredRelease;
+            iterator->deferredRelease.clear();
+            process->memoryMapSnapshots.erase(iterator);
+        } else {
+            auto *previous = &(*iterator);
+            ++iterator;
+            while (iterator != process->memoryMapSnapshots.end()) {
+                if (iterator->serial == serial) {
+                    deferred = iterator->deferredRelease;
+                    iterator->deferredRelease.clear();
+                    for (const auto &def : deferred) {
+                        previous->deferredRelease.push_back(def);
+                    }
+                    process->memoryMapSnapshots.erase(iterator);
+                    break;
+                }
+                previous = &(*iterator);
+                ++iterator;
+            }
+        }
+    }
+    deferred.clear();
 }
 
 std::vector<MemoryArea> Process::FindFreeMemoryAreas() {

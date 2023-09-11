@@ -128,7 +128,7 @@ void ProcThread::DisableRange(uint32_t pagenum, uint32_t pages) {
     process->DisableRange(pagenum, pages);
 }
 
-std::vector<DeferredReleasePage> ProcThread::ClearRange(uint32_t pagenum, uint32_t pages) {
+std::shared_ptr<std::vector<DeferredReleasePage>> ProcThread::ClearRange(uint32_t pagenum, uint32_t pages) {
     return process->ClearRange(pagenum, pages);
 }
 
@@ -149,6 +149,8 @@ BinaryRelocation ProcThread::GetRelocationFor(uintptr_t ptr) {
 }
 
 void ProcThread::task_enter(task &t, Interrupt *intr, uint8_t cpu) {
+    threadRunMemMapSnapshot = MemoryMapSnapshotBarrier(process);
+
     process->task_enter();
 
     rseq.Notify(*this, t, intr, cpu);
@@ -160,6 +162,8 @@ void ProcThread::task_leave() {
     rseq.Preempted();
 
     process->task_leave();
+
+    threadRunMemMapSnapshot.Release();
 }
 bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
     if (intr.rip() == SIGTRAMP_ADDR) {

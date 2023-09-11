@@ -52,7 +52,7 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
     }
 
     uintptr_t vpageaddr;
-    std::vector<DeferredReleasePage> discardPages{};
+    std::shared_ptr<std::vector<DeferredReleasePage>> discardPages{};
     if ((flags & MAP_FIXED) == 0) {
         vpageaddr = process->FindFree(pages);
         if (vpageaddr == 0) {

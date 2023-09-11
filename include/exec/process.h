@@ -178,10 +178,48 @@ struct ProcessAborterFunc {
     int handle;
 };
 
+struct MemoryMapSnapshot {
+    std::vector<std::shared_ptr<std::vector<DeferredReleasePage>>> deferredRelease;
+    int serial;
+    MemoryMapSnapshot(int serial) : deferredRelease(), serial(serial) {}
+};
+
+class MemoryMapSnapshotBarrier {
+private:
+    std::shared_ptr<Process> process;
+    int serial;
+    bool valid;
+public:
+    MemoryMapSnapshotBarrier(const std::shared_ptr<Process> &process);
+    MemoryMapSnapshotBarrier() : process(), serial(0), valid(false) {}
+    MemoryMapSnapshotBarrier(MemoryMapSnapshotBarrier &&mv) : process(mv.process), serial(mv.serial), valid(mv.valid) {
+        mv.process = {};
+        mv.valid = false;
+    }
+    MemoryMapSnapshotBarrier(const MemoryMapSnapshotBarrier &) = delete;
+    MemoryMapSnapshotBarrier &operator =(MemoryMapSnapshotBarrier &&mv) noexcept {
+        if (&mv != this) {
+            Release();
+            this->process = mv.process;
+            this->serial = mv.serial;
+            this->valid = mv.valid;
+            mv.process = {};
+            mv.valid = false;
+        }
+        return *this;
+    }
+    MemoryMapSnapshotBarrier &operator =(const MemoryMapSnapshotBarrier &) = delete;
+    ~MemoryMapSnapshotBarrier() {
+        Release();
+    }
+    void Release() noexcept;
+};
+
 class ProcThread;
 struct MemoryArea;
 
 class Process {
+    friend MemoryMapSnapshotBarrier;
 private:
     hw_spinlock mtx;
     std::weak_ptr<Process> self_ref;
@@ -195,6 +233,7 @@ private:
     std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<MemMapping> mappings;
+    std::vector<MemoryMapSnapshot> memoryMapSnapshots{};
     std::vector<FileDescriptor> fileDescriptors;
     std::vector<BinaryRelocation> relocations;
     std::vector<ProcessAborterFunc> aborterFunc{};
@@ -209,6 +248,7 @@ private:
     intptr_t exitCode;
     uintptr_t program_brk;
     int aborterFuncHandle{0};
+    int memoryMapSerial{0};
     int32_t euid, egid, uid, gid;
     bool killed{false};
 private:
@@ -260,7 +300,7 @@ public:
     bool IsFree(uint32_t pagenum, uint32_t pages);
     bool IsInRange(uint32_t pagenum, uint32_t pages);
     void DisableRange(uint32_t pagenum, uint32_t pages);
-    [[nodiscard]] std::vector<DeferredReleasePage> ClearRange(uint32_t pagenum, uint32_t pages);
+    [[nodiscard]] std::shared_ptr<std::vector<DeferredReleasePage>> ClearRange(uint32_t pagenum, uint32_t pages);
 private:
     std::vector<MemoryArea> FindFreeMemoryAreas();
 public:
