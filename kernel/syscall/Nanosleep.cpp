@@ -2,6 +2,8 @@
 // Created by sigsegv on 8/17/23.
 //
 
+//#define DEBUG_NANOSLEEP
+
 #include <errno.h>
 #include <time.h>
 #include <core/scheduler.h>
@@ -9,6 +11,9 @@
 #include <exec/procthread.h>
 #include "Nanosleep.h"
 #include "SyscallCtx.h"
+#ifdef DEBUG_NANOSLEEP
+#include <iostream>
+#endif
 
 void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, const timespec * const request, timespec * const remaining) {
     auto *scheduler = get_scheduler();
@@ -17,6 +22,9 @@ void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, c
     nanos *= 1000000000ULL;
     nanos += request->tv_nsec;
     typeof(nano_start) nano_request = nano_start + nanos;
+#ifdef DEBUG_NANOSLEEP
+    std::cout << "Nanosleep req " << nano_request << "\n";
+#endif
     scheduler->when_not_running(task, [ctx, scheduler, &task, remaining, nano_request] () {
         if (remaining != nullptr) {
             remaining->tv_nsec = 0;
@@ -25,6 +33,11 @@ void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, c
         auto nanos_ref = get_nanotime_ref();
         if (nanos_ref >= nano_request) {
             task.set_blocked(false);
+#ifdef DEBUG_NANOSLEEP
+            scheduler->when_out_of_lock([] () {
+                std::cout << "Nanosleep short\n";
+            });
+#endif
         } else {
             task.add_event_handler(new task_nanos_handler(task.get_id(), nano_request));
             auto *pt = task.get_resource<ProcThread>();
@@ -37,6 +50,9 @@ void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, c
                             task.remove_event_handler(nanosHandler);
                             delete nanosHandler;
                             scheduler->when_out_of_lock([ctx, remaining, nano_request] () {
+#ifdef DEBUG_NANOSLEEP
+                                std::cout << "Nanosleep aborted\n";
+#endif
                                 if (remaining != nullptr) {
                                     auto nanos_ref = get_nanotime_ref();
                                     if (nanos_ref < nano_request) {
