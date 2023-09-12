@@ -319,11 +319,12 @@ struct ELF64_header {
     }
     const char *get_strtab_cstring(ELF64_section_entry *section, uint32_t index) {
         if (section != nullptr) {
-        const int8_t *ptr = (int8_t *) ((void *) &start);
-        ptr += section->sh_offset;
-        const char *str = (const char *) ptr;
+            const int8_t *ptr = (int8_t *) ((void *) &start);
+            ptr += section->sh_offset;
+            const char *str = (const char *) ptr;
             return get_strtab_cstring(str, section->sh_size, index);
         }
+        return nullptr;
     }
 
     const char *get_cstring(uint32_t index) const {
