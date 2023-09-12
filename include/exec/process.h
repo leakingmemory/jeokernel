@@ -218,6 +218,18 @@ public:
 class ProcThread;
 struct MemoryArea;
 
+struct process_pfault_thread {
+    task *current_task;
+    ProcThread *pthread;
+    uintptr_t ip;
+    uintptr_t fault_addr;
+};
+
+struct process_pfault_callback {
+    ProcThread *pthread;
+    std::function<void (bool)> func;
+};
+
 class Process {
     friend MemoryMapSnapshotBarrier;
 private:
@@ -274,9 +286,7 @@ private:
     bool readable(uintptr_t addr);
     bool sync_resolve_page(uintptr_t fault_addr);
     bool resolve_page(uintptr_t fault_addr);
-    void resolve_page_fault(ProcThread &process, task &current_task, uintptr_t ip, uintptr_t fault_addr);
-    void resolve_read_page(ProcThread &process, uintptr_t addr, std::function<void (bool)> func);
-    void resolve_read_page(uintptr_t addr, std::function<void (bool)> func);
+    void resolve_read_page(uintptr_t addr, const std::vector<process_pfault_thread> &, const std::vector<process_pfault_callback> &);
     ResolveWrite resolve_write_page(uintptr_t addr);
 public:
     phys_t phys_addr(uintptr_t addr);

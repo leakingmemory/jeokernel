@@ -1221,12 +1221,10 @@ void Process::task_leave() {
 }
 
 struct process_pfault {
-    task *pfaultTask;
+    std::vector<process_pfault_thread> threads;
+    std::vector<process_pfault_callback> callbacks;
     Process *process;
-    ProcThread *pthread;
-    uintptr_t ip;
     uintptr_t address;
-    std::function<void (bool)> func;
 };
 
 static hw_spinlock pfault_lck{};
@@ -1264,13 +1262,7 @@ void Process::activate_pfault_thread() {
                     pfault = *iterator;
                     p_faults.erase(iterator);
                 }
-                if (pfault.pfaultTask != nullptr) {
-                    pfault.pthread->GetProcess()->resolve_page_fault(*(pfault.pthread), *(pfault.pfaultTask), pfault.ip, pfault.address);
-                } else if (pfault.pthread != nullptr) {
-                    pfault.pthread->GetProcess()->resolve_read_page(*(pfault.pthread), pfault.address, pfault.func);
-                } else {
-                    pfault.process->resolve_read_page(pfault.address, pfault.func);
-                }
+                pfault.process->resolve_read_page(pfault.address, pfault.threads, pfault.callbacks);
             }
         });
     }
@@ -1288,9 +1280,23 @@ bool Process::page_fault(ProcThread &thread, task &current_task, Interrupt &intr
     }
     current_task.set_blocked(true);
     std::lock_guard lock{pfault_lck};
-    process_pfault pf{.pfaultTask = &current_task, .pthread = &thread, .ip = intr.rip(), .address = address, .func = [] (bool) {}};
-    activate_fault(pf);
-    activate_pfault_thread();
+    constexpr auto pageaddr_mask = ~((typeof(address)) (PAGESIZE-1));
+    auto pageaddr_fault = address & pageaddr_mask;
+    bool found{false};
+    process_pfault_thread thrfault{.current_task = &current_task, .pthread = &thread, .ip = intr.rip(), .fault_addr = address};
+    for (auto &fault : p_faults) {
+        auto fault_pageaddr = fault.address & pageaddr_mask;
+        if (fault_pageaddr == pageaddr_fault) {
+            found = true;
+            fault.threads.push_back(thrfault);
+        }
+    }
+    if (!found) {
+        process_pfault pf{.threads = {}, .callbacks = {}, .process = &(*(thread.GetProcess())), .address = address};
+        pf.threads.push_back(thrfault);
+        activate_fault(pf);
+        activate_pfault_thread();
+    }
     return true;
 }
 
@@ -2305,55 +2311,54 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
     return ResolveWrite::ERROR;
 }
 
-void Process::resolve_page_fault(ProcThread &process, task &current_task, uintptr_t ip, uintptr_t fault_addr) {
-    if (resolve_page(fault_addr)) {
-#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
-        process.SetThreadFaulted(false);
-#endif
-        get_scheduler()->when_not_running(current_task, [&current_task] () {
-            current_task.set_blocked(false);
-        });
-        return;
-    }
-#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
-    process.SetThreadFaulted(false);
-#endif
-    auto relocation = GetRelocationFor(ip);
-    std::cerr << "PID " << current_task.get_id() << ": Page fault at " << std::hex << ip << " (" << relocation.filename
-              << "+" << (ip-relocation.offset) << ") addr " << fault_addr << std::dec << "\n";
-    {
-        auto &cpu = current_task.get_cpu_frame();
-        auto &state = current_task.get_cpu_state();
-        std::cerr << std::hex << "ax=" << state.rax << " bx="<<state.rbx << " cx=" << state.rcx << " dx="<< state.rdx << "\n"
-                 << "si=" << state.rsi << " di="<< state.rdi << " bp=" << state.rbp << " sp="<< cpu.rsp << "\n"
-                 << "r8=" << state.r8 << " r9="<< state.r9 << " rA="<< state.r10 <<" rB=" << state.r11 << "\n"
-                 << "rC=" << state.r12 << " rD="<< state.r13 <<" rE="<< state.r14 <<" rF="<< state.r15 << "\n"
-                 << "cs=" << cpu.cs << " ds=" << state.ds << " es=" << state.es << " fs=" << state.fs << " gs="
-                 << state.gs << " ss="<< cpu.ss <<"\n"
-                 << "fsbase=" << state.fsbase << "\n" << std::dec;
-    }
-    get_scheduler()->terminate_blocked(&current_task);
-}
-
-void Process::resolve_read_page(ProcThread &process, uintptr_t addr, std::function<void(bool)> func) {
+void Process::resolve_read_page(uintptr_t addr, const std::vector<process_pfault_thread> &threads, const std::vector<process_pfault_callback> &callbacks) {
     if (resolve_page(addr)) {
+        for (auto thr : threads) {
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
-        process.SetThreadFaulted(false);
+            thr.pthread.SetThreadFaulted(false);
 #endif
-        func(true);
-    } else {
+            auto *current_task = thr.current_task;
+            get_scheduler()->when_not_running(*current_task, [current_task] () {
+                current_task->set_blocked(false);
+            });
+        }
+        for (auto callback : callbacks) {
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
-        process.SetThreadFaulted(false);
+            if (callback.pthread != nullptr) {
+                callback.pthread->SetThreadFaulted(false);
+            }
 #endif
-        func(false);
-    }
-}
-
-void Process::resolve_read_page(uintptr_t addr, std::function<void(bool)> func) {
-    if (resolve_page(addr)) {
-        func(true);
+            callback.func(true);
+        }
     } else {
-        func(false);
+        for (auto thr : threads) {
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+            thr.pthread.SetThreadFaulted(false);
+#endif
+            auto relocation = GetRelocationFor(thr.ip);
+            std::cerr << "PID " << thr.current_task->get_id() << ": Page fault at " << std::hex << thr.ip << " (" << relocation.filename
+                      << "+" << (thr.ip-relocation.offset) << ") addr " << thr.fault_addr << std::dec << "\n";
+            {
+                auto &cpu = thr.current_task->get_cpu_frame();
+                auto &state = thr.current_task->get_cpu_state();
+                std::cerr << std::hex << "ax=" << state.rax << " bx="<<state.rbx << " cx=" << state.rcx << " dx="<< state.rdx << "\n"
+                          << "si=" << state.rsi << " di="<< state.rdi << " bp=" << state.rbp << " sp="<< cpu.rsp << "\n"
+                          << "r8=" << state.r8 << " r9="<< state.r9 << " rA="<< state.r10 <<" rB=" << state.r11 << "\n"
+                          << "rC=" << state.r12 << " rD="<< state.r13 <<" rE="<< state.r14 <<" rF="<< state.r15 << "\n"
+                          << "cs=" << cpu.cs << " ds=" << state.ds << " es=" << state.es << " fs=" << state.fs << " gs="
+                          << state.gs << " ss="<< cpu.ss <<"\n"
+                          << "fsbase=" << state.fsbase << "\n" << std::dec;
+            }
+            get_scheduler()->terminate_blocked(thr.current_task);
+        }
+        for (auto callback : callbacks) {
+#ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
+            if (callback.pthread != nullptr) {
+                callback.pthread->SetThreadFaulted(false);
+            }
+#endif
+            callback.func(false);
+        }
     }
 }
 
@@ -2417,7 +2422,7 @@ resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uin
         addr += i;
     }
     std::lock_guard lock{pfault_lck};
-    activate_fault({.pfaultTask = nullptr, .pthread = &thread, .ip = 0, .address = addr, .func = [this, &thread, addr, func, item_size, len, add_len, asyncReturn] (bool success) mutable {
+    process_pfault_callback pfaultCallback{.func = [this, &thread, addr, func, item_size, len, add_len, asyncReturn] (bool success) mutable {
         if (!success) {
             auto result = func(false, true, 0, asyncReturn);
             if (!result.async) {
@@ -2464,8 +2469,23 @@ resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uin
             addr += i;
             resolve_read_nullterm_impl(thread, addr, item_size, len + add_len, true, asyncReturn, func);
         }
-    }});
-    activate_pfault_thread();
+    }};
+    constexpr auto pageaddr_mask = ~((typeof(addr)) (PAGESIZE-1));
+    auto pageaddr_fault = addr & pageaddr_mask;
+    bool found{false};
+    for (auto &fault : p_faults) {
+        auto fault_pageaddr = fault.address & pageaddr_mask;
+        if (fault_pageaddr == pageaddr_fault) {
+            found = true;
+            fault.callbacks.push_back(pfaultCallback);
+        }
+    }
+    if (!found) {
+        process_pfault pflt{.threads = {}, .callbacks = {}, .process = &(*(thread.GetProcess())), .address = addr};
+        pflt.callbacks.push_back(pfaultCallback);
+        activate_fault(pflt);
+        activate_pfault_thread();
+    }
     return resolve_return_value::AsyncReturn();
 }
 
@@ -2497,8 +2517,7 @@ resolve_and_run Process::resolve_read(ProcThread *thread, uintptr_t addr, uintpt
             return {.result = result.result, .async = result.async, .hasValue = result.hasValue};
         }
     }
-    std::lock_guard lock{pfault_lck};
-    activate_fault({.pfaultTask = nullptr, .process = this, .pthread = thread, .ip = 0, .address = addr, .func = [this, &thread, addr, len, end, func, asyncReturn] (bool success) mutable {
+    process_pfault_callback pfaultCallback{.pthread = thread, .func = [this, &thread, addr, len, end, func, asyncReturn] (bool success) mutable {
         if (!success) {
             auto result = func(false, true, asyncReturn);
             if (!result.async) {
@@ -2520,8 +2539,24 @@ resolve_and_run Process::resolve_read(ProcThread *thread, uintptr_t addr, uintpt
                 }
             }
         }
-    }});
-    activate_pfault_thread();
+    }};
+    std::lock_guard lock{pfault_lck};
+    constexpr auto pageaddr_mask = ~((typeof(addr)) (PAGESIZE-1));
+    auto pageaddr_fault = addr & pageaddr_mask;
+    bool found{false};
+    for (auto &fault : p_faults) {
+        auto fault_pageaddr = fault.address & pageaddr_mask;
+        if (fault_pageaddr == pageaddr_fault) {
+            found = true;
+            fault.callbacks.push_back(pfaultCallback);
+        }
+    }
+    if (!found) {
+        process_pfault pf{.threads = {}, .callbacks = {}, .process = this, .address = addr};
+        pf.callbacks.push_back(pfaultCallback);
+        activate_fault(pf);
+        activate_pfault_thread();
+    }
     return {.result = 0, .async = true, .hasValue = false};
 }
 
