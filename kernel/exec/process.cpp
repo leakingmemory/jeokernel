@@ -1230,6 +1230,7 @@ struct process_pfault {
 static hw_spinlock pfault_lck{};
 static raw_semaphore pfault_sema{-1};
 static std::vector<process_pfault> p_faults{};
+static std::vector<std::shared_ptr<process_pfault>> p_faults_in_progress{};
 static std::thread *pfault_thread{nullptr};
 static hw_spinlock pfault_thread_activate_single{};
 
@@ -1252,17 +1253,35 @@ void Process::activate_pfault_thread() {
             std::this_thread::set_name("[pfault]");
             while (true) {
                 pfault_sema.acquire();
-                process_pfault pfault{};
+                std::shared_ptr<process_pfault> pfault = std::make_shared<process_pfault>();
                 {
                     std::lock_guard lock{pfault_lck};
                     auto iterator = p_faults.begin();
                     if (iterator == p_faults.end()) {
                         continue;
                     }
-                    pfault = *iterator;
+                    *pfault = *iterator;
                     p_faults.erase(iterator);
+                    p_faults_in_progress.push_back(pfault);
                 }
-                pfault.process->resolve_read_page(pfault.address, pfault.threads, pfault.callbacks);
+                bool success = pfault->process->resolve_page(pfault->address);
+                bool found{false};
+                {
+                    std::lock_guard lock{pfault_lck};
+                    auto iterator = p_faults_in_progress.begin();
+                    while (iterator != p_faults_in_progress.end()) {
+                        if (*iterator == pfault) {
+                            found = true;
+                            p_faults_in_progress.erase(iterator);
+                            break;
+                        }
+                        ++iterator;
+                    }
+                }
+                if (!found) {
+                    wild_panic("In progress not listed <pfault>");
+                }
+                pfault->process->resolved_read_page(pfault->address, pfault->threads, pfault->callbacks, success);
             }
         });
     }
@@ -1289,6 +1308,17 @@ bool Process::page_fault(ProcThread &thread, task &current_task, Interrupt &intr
         if (fault_pageaddr == pageaddr_fault) {
             found = true;
             fault.threads.push_back(thrfault);
+            break;
+        }
+    }
+    if (!found) {
+        for (auto &fault : p_faults_in_progress) {
+            auto fault_pageaddr = fault->address & pageaddr_mask;
+            if (fault_pageaddr == pageaddr_fault) {
+                found = true;
+                fault->threads.push_back(thrfault);
+                break;
+            }
         }
     }
     if (!found) {
@@ -2311,8 +2341,8 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
     return ResolveWrite::ERROR;
 }
 
-void Process::resolve_read_page(uintptr_t addr, const std::vector<process_pfault_thread> &threads, const std::vector<process_pfault_callback> &callbacks) {
-    if (resolve_page(addr)) {
+void Process::resolved_read_page(uintptr_t addr, const std::vector<process_pfault_thread> &threads, const std::vector<process_pfault_callback> &callbacks, bool success) {
+    if (success) {
         for (auto thr : threads) {
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
             thr.pthread.SetThreadFaulted(false);
@@ -2478,6 +2508,17 @@ resolve_return_value Process::resolve_read_nullterm_impl(ProcThread &thread, uin
         if (fault_pageaddr == pageaddr_fault) {
             found = true;
             fault.callbacks.push_back(pfaultCallback);
+            break;
+        }
+    }
+    if (!found) {
+        for (auto &fault : p_faults_in_progress) {
+            auto fault_pageaddr = fault->address & pageaddr_mask;
+            if (fault_pageaddr == pageaddr_fault) {
+                found = true;
+                fault->callbacks.push_back(pfaultCallback);
+                break;
+            }
         }
     }
     if (!found) {
@@ -2549,6 +2590,17 @@ resolve_and_run Process::resolve_read(ProcThread *thread, uintptr_t addr, uintpt
         if (fault_pageaddr == pageaddr_fault) {
             found = true;
             fault.callbacks.push_back(pfaultCallback);
+            break;
+        }
+    }
+    if (!found) {
+        for (auto &fault : p_faults_in_progress) {
+            auto fault_pageaddr = fault->address & pageaddr_mask;
+            if (fault_pageaddr == pageaddr_fault) {
+                found = true;
+                fault->callbacks.push_back(pfaultCallback);
+                break;
+            }
         }
     }
     if (!found) {

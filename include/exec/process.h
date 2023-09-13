@@ -286,7 +286,7 @@ private:
     bool readable(uintptr_t addr);
     bool sync_resolve_page(uintptr_t fault_addr);
     bool resolve_page(uintptr_t fault_addr);
-    void resolve_read_page(uintptr_t addr, const std::vector<process_pfault_thread> &, const std::vector<process_pfault_callback> &);
+    void resolved_read_page(uintptr_t addr, const std::vector<process_pfault_thread> &, const std::vector<process_pfault_callback> &, bool success);
     ResolveWrite resolve_write_page(uintptr_t addr);
 public:
     phys_t phys_addr(uintptr_t addr);
