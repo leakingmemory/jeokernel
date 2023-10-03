@@ -9,7 +9,7 @@ add_subdirectory(hashfunc)
 add_subdirectory(filesystems)
 add_subdirectory(files)
 
-add_executable(fsbits main.cpp filepage_impl.cpp ls.cpp ls.h cat.cpp cat.h)
+add_executable(fsbits main.cpp filepage_impl.cpp ls.cpp ls.h cat.cpp cat.h create.cpp create.h)
 
 target_link_libraries(fsbits PRIVATE fileaccess)
 target_link_libraries(fsbits PRIVATE blockdevs)

@@ -15,7 +15,9 @@ enum class fileitem_status {
     INTEGRITY_ERROR,
     NOT_SUPPORTED_FS_FEATURE,
     INVALID_REQUEST,
-    TOO_MANY_LINKS
+    TOO_MANY_LINKS,
+    NO_AVAIL_INODES,
+    NO_AVAIL_BLOCKS
 };
 
 std::string text(fileitem_status status);

@@ -30,12 +30,12 @@ std::size_t file_blockdev_block::Size() const {
 }
 
 file_blockdev::file_blockdev(const std::string &filename, std::size_t blocksize, uintptr_t sys_dev_id) : blocksize(blocksize), blocks(0), sys_dev_id(sys_dev_id), fd(-1) {
-    fd = open(filename.c_str(), O_RDONLY);
+    fd = open(filename.c_str(), O_RDWR);
     if (fd < 0) {
         std::cerr << filename << ": " << strerror(errno) << "\n";
         return;
     }
-    std::size_t length = lseek(fd, 0, SEEK_END);
+    auto length = lseek(fd, 0, SEEK_END);
     if (length < 0) {
         std::cerr << filename << ": lseek: " << strerror(errno) << "\n";
         close(fd);
@@ -67,6 +67,7 @@ std::size_t file_blockdev::GetNumBlocks() const {
 }
 
 std::shared_ptr<blockdev_block> file_blockdev::ReadBlock(size_t blocknum, size_t blocks) const {
+    std::cout << "Read block " << blocknum << ", num=" << blocks << "\n";
     if ((blocknum + blocks) >= this->blocks) {
         if (blocknum >= blocks) {
             return {};
@@ -94,4 +95,26 @@ std::shared_ptr<blockdev_block> file_blockdev::ReadBlock(size_t blocknum, size_t
     }
     std::shared_ptr<blockdev_block> block{new file_blockdev_block(ptr, bytes)};
     return block;
+}
+
+size_t file_blockdev::WriteBlock(const void *data, size_t blocknum, size_t blocks) const {
+    if ((blocknum + blocks) >= this->blocks) {
+        if (blocknum >= blocks) {
+            return 0;
+        }
+        blocks = this->blocks - blocknum;
+    }
+    std::size_t offset{blocknum * blocksize};
+    if (lseek(fd, offset, SEEK_SET) != offset) {
+        return 0;
+    }
+    size_t bytes{blocks * blocksize};
+    auto wr = write(fd, data, bytes);
+    if (wr < 0) {
+        return 0;
+    }
+    if (wr < bytes) {
+        std::cerr << "Short write " << wr << "<" << bytes << "\n";
+    }
+    return wr / blocksize;
 }

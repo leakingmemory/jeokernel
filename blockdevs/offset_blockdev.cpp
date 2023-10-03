@@ -25,3 +25,13 @@ std::shared_ptr<blockdev_block> offset_blockdev::ReadBlock(size_t blocknum, size
     }
     return upstream->ReadBlock(blocknum + offset, blocks);
 }
+
+size_t offset_blockdev::WriteBlock(const void *data, size_t blocknum, size_t blocks) const {
+    if (blocknum >= size) {
+        return {};
+    }
+    if ((blocknum + blocks) >= size) {
+        blocks = size - blocknum;
+    }
+    return upstream->WriteBlock(data, blocknum + offset, blocks);
+}

@@ -119,7 +119,7 @@ bool ext2fs::ReadBlockGroups() {
             auto blockBitmapPhysLength = FsBlocksToPhysBlocks(group.block_bitmap, 1);
             auto blockBitmapBlocks = bdev->ReadBlock(blockBitmapBlock, blockBitmapPhysLength);
             if (blockBitmapBlocks) {
-                std::shared_ptr<ext2bitmap> blockBitmap{new ext2bitmap(superblock->blocks_per_group)};
+                std::shared_ptr<ext2bitmap> blockBitmap{new ext2bitmap(superblock->blocks_per_group, BlockSize)};
                 {
                     auto size = superblock->blocks_per_group >> 3;
                     if ((superblock->blocks_per_group & 7) != 0) {
@@ -135,6 +135,7 @@ bool ext2fs::ReadBlockGroups() {
                 }
                 std::cout << "Found " << free_count << " free blocks at " << blockBitmapBlock << " offset "
                 << blockBitmapOffset << " and num " << blockBitmapPhysLength << "\n";
+                this->blockBitmap.push_back(blockBitmap);
             } else {
                 std::cerr << "Error reading block group block bitmap\n";
                 return false;
@@ -144,7 +145,7 @@ bool ext2fs::ReadBlockGroups() {
             auto inodeBitmapPhysLength = FsBlocksToPhysBlocks(group.inode_bitmap, 1);
             auto inodeBitmapBlocks = bdev->ReadBlock(inodeBitmapBlock, inodeBitmapPhysLength);
             if (inodeBitmapBlocks) {
-                std::shared_ptr<ext2bitmap> inodeBitmap{new ext2bitmap(superblock->inodes_per_group)};
+                std::shared_ptr<ext2bitmap> inodeBitmap{new ext2bitmap(superblock->inodes_per_group, BlockSize)};
                 {
                     auto size = superblock->inodes_per_group >> 3;
                     if ((superblock->inodes_per_group & 7) != 0) {
@@ -160,6 +161,7 @@ bool ext2fs::ReadBlockGroups() {
                 }
                 std::cout << "Found " << free_count << " free inodes at " << inodeBitmapBlock << " offset "
                           << inodeBitmapOffset << " and num " << inodeBitmapPhysLength << "\n";
+                this->inodeBitmap.push_back(inodeBitmap);
             } else {
                 std::cerr << "Error reading block group inode bitmap\n";
                 return false;
@@ -168,10 +170,15 @@ bool ext2fs::ReadBlockGroups() {
             groupObject.InodeTableOffset = FsBlockOffsetOnPhys(group.inode_table);
             auto inodeTableSize = superblock->inodes_per_group * InodeSize();
             auto inodeTablePhysBlocks = (inodeTableSize + groupObject.InodeTableOffset) / bdev->GetBlocksize();
+            auto inodeTableFileBlocks = (inodeTableSize + groupObject.InodeTableOffset) / FILEPAGE_PAGE_SIZE;
+            if (((inodeTableSize + groupObject.InodeTableOffset) % FILEPAGE_PAGE_SIZE) != 0) {
+                ++inodeTableFileBlocks;
+            }
             std::cout << "Inode table starts at " << groupObject.InodeTableBlock << " offset " << groupObject.InodeTableOffset
-            << " size of " << inodeTableSize << " and blocks " << inodeTablePhysBlocks << "\n";
-            groupObject.InodeTableBlocks.reserve(inodeTablePhysBlocks);
-            for (std::size_t i = 0; i < inodeTablePhysBlocks; i++) {
+            << " size of " << inodeTableSize << " and blocks " << inodeTablePhysBlocks << " internally represented as "
+            << inodeTableFileBlocks << " pages\n";
+            groupObject.InodeTableBlocks.reserve(inodeTableFileBlocks);
+            for (std::size_t i = 0; i < inodeTableFileBlocks; i++) {
                 groupObject.InodeTableBlocks.emplace_back();
             }
         }
@@ -194,38 +201,49 @@ ext2fs_get_inode_result ext2fs::LoadInode(std::size_t inode_num) {
     auto offset = inode_off * InodeSize();
     offset += group.InodeTableOffset;
     auto end = offset + InodeSize() - 1;
-    auto block_num = offset / bdev->GetBlocksize();
-    offset = offset % bdev->GetBlocksize();
-    auto block_end = end / bdev->GetBlocksize();
+    auto block_num = offset / FILEPAGE_PAGE_SIZE;
+    offset = offset % FILEPAGE_PAGE_SIZE;
+    auto block_end = end / FILEPAGE_PAGE_SIZE;
 #ifdef DEBUG_INODE
     std::cout << "Inode " << (inode_num + 1) << " at " << block_num << " - " << block_end << " off "
     << offset << "\n";
 #endif
+    auto blocksize = bdev->GetBlocksize();
+    auto rdStart = block_num * FILEPAGE_PAGE_SIZE;
+    auto rdEnd = rdStart + FILEPAGE_PAGE_SIZE + blocksize - 1;
+    auto rdOffset = rdStart % blocksize;
+    rdStart = rdStart / blocksize;
+    rdStart += group.InodeTableBlock;
     if (!group.InodeTableBlocks[block_num]) {
-        auto blocknum = block_num + group.InodeTableBlock;
         lock = {};
-        auto rd = bdev->ReadBlock(blocknum, 1);
+        rdEnd = rdEnd / blocksize;
+        rdEnd += group.InodeTableBlock;
+        auto rd = bdev->ReadBlock(rdStart, rdEnd - rdStart);
         lock = std::make_unique<std::lock_guard<std::mutex>>(mtx);
         if (rd && !group.InodeTableBlocks[block_num]) {
-            group.InodeTableBlocks[block_num] = std::make_shared<ext2fs_inode_table_block>(bdev->GetBlocksize());
-            memcpy(&(group.InodeTableBlocks[block_num]->data[0]), rd->Pointer(), bdev->GetBlocksize());
+            group.InodeTableBlocks[block_num] = std::make_shared<filepage>();
+            memcpy(group.InodeTableBlocks[block_num]->Pointer()->Pointer(), ((uint8_t *) rd->Pointer()) + rdOffset, FILEPAGE_PAGE_SIZE);
         }
     }
     if ((block_num + 1) == block_end && !group.InodeTableBlocks[block_end]) {
-        auto blocknum = block_end + group.InodeTableBlock;
         lock = {};
-        auto rd = bdev->ReadBlock(blocknum, 1);
+        auto rdStart = block_end * FILEPAGE_PAGE_SIZE; // intentionally scoped
+        auto rdEnd = rdStart + FILEPAGE_PAGE_SIZE + blocksize - 1;
+        auto rdOffset = rdStart % blocksize;
+        rdStart = rdStart / blocksize;
+        rdEnd = rdEnd / blocksize;
+        auto rd = bdev->ReadBlock(rdStart + group.InodeTableBlock, rdEnd - rdStart);
         lock = std::make_unique<std::lock_guard<std::mutex>>(mtx);
         if (rd && !group.InodeTableBlocks[block_end]) {
-            group.InodeTableBlocks[block_end] = std::make_shared<ext2fs_inode_table_block>(bdev->GetBlocksize());
-            memcpy(&(group.InodeTableBlocks[block_end]->data[0]), rd->Pointer(), bdev->GetBlocksize());
+            group.InodeTableBlocks[block_end] = std::make_shared<filepage>();
+            memcpy(group.InodeTableBlocks[block_end]->Pointer()->Pointer(), ((uint8_t *) rd->Pointer()) + rdOffset, FILEPAGE_PAGE_SIZE);
         }
     }
     std::shared_ptr<ext2fs_inode> inode_obj{};
     if (block_num == block_end) {
-        inode_obj = std::make_shared<ext2fs_inode>(bdev, group.InodeTableBlocks[block_num], offset, BlockSize);
+        inode_obj = std::make_shared<ext2fs_inode>(self_ref, bdev, group.InodeTableBlocks[block_num], offset, BlockSize, rdStart);
     } else if ((block_num + 1) == block_end) {
-        inode_obj = std::make_shared<ext2fs_inode>(bdev, group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, BlockSize);
+        inode_obj = std::make_shared<ext2fs_inode>(self_ref, bdev, group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, BlockSize, rdStart);
     } else {
         return {};
     }
@@ -509,10 +527,14 @@ std::string ext2fs_symlink::GetLink() {
 class ext2fs_directory : public directory, public ext2fs_file {
 private:
     std::vector<std::shared_ptr<directory_entry>> entries;
+    std::size_t actualSize;
     bool entriesRead;
 public:
     ext2fs_directory(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : directory(), ext2fs_file(fs, inode), entries(), entriesRead(false) {}
     entries_result Entries() override;
+
+    directory_resolve_result Create(std::string filename) override;
+
 private:
     ext2fs &Filesystem() {
         filesystem *fs = &(*(this->fs));
@@ -564,21 +586,21 @@ entries_result ext2fs_directory::Entries() {
                         std::cout << "Dir node " << dirent->inode << " type " << ((int) dirent->file_type) << " name "
                                   << name << "\n";
 #endif
-                        if (dirent->file_type == 2) {
+                        if (dirent->file_type == Ext2FileType_Directory) {
                             auto result = Filesystem().GetDirectory(fs, dirent->inode);
                             if (result.node) {
                                 entries.emplace_back(new directory_entry(name, result.node));
                             } else {
                                 return {.entries = {}, .status = Convert(result.status)};
                             }
-                        } else if (dirent->file_type == 1) {
+                        } else if (dirent->file_type == Ext2FileType_Regular) {
                             auto result = Filesystem().GetFile(fs, dirent->inode);
                             if (result.node) {
                                 entries.emplace_back(new directory_entry(name, result.node));
                             } else {
                                 return {.entries = {}, .status = Convert(result.status)};
                             }
-                        } else if (dirent->file_type == 7) {
+                        } else if (dirent->file_type == Ext2FileType_Symlink) {
                             auto result = Filesystem().GetSymlink(fs, dirent->inode);
                             if (result.node) {
                                 entries.emplace_back(new directory_entry(name, result.node));
@@ -602,6 +624,7 @@ entries_result ext2fs_directory::Entries() {
                 baseDirent.inode = 0;
             }
         } while (baseDirent.inode != 0);
+        actualSize = inode->GetFileSize() - sizeRemaining;
     }
     if (!entriesRead) {
         this->entries = entries;
@@ -636,6 +659,85 @@ file_getpage_result ext2fs_directory::GetPage(std::size_t pagenum) {
 
 file_read_result ext2fs_directory::Read(uint64_t offset, void *ptr, std::size_t length) {
     return {.size = 0, .status = fileitem_status::INVALID_REQUEST};
+}
+
+directory_resolve_result ext2fs_directory::Create(std::string filename) {
+    auto allocInode = Filesystem().AllocateInode();
+    if (allocInode.status != filesystem_status::SUCCESS) {
+        fileitem_status status;
+        switch (allocInode.status) {
+            case filesystem_status::IO_ERROR:
+                status = fileitem_status::IO_ERROR;
+                break;
+            case filesystem_status::INTEGRITY_ERROR:
+                status = fileitem_status::INTEGRITY_ERROR;
+                break;
+            case filesystem_status::NOT_SUPPORTED_FS_FEATURE:
+                status = fileitem_status::NOT_SUPPORTED_FS_FEATURE;
+                break;
+            case filesystem_status::INVALID_REQUEST:
+                status = fileitem_status::INVALID_REQUEST;
+                break;
+            case filesystem_status::NO_AVAIL_INODES:
+                status = fileitem_status::NO_AVAIL_INODES;
+                break;
+            default:
+                status = fileitem_status::IO_ERROR;
+        }
+        return {.file = {}, .status = status};
+    }
+    auto readResult = Entries();
+    if (readResult.status != fileitem_status::SUCCESS) {
+        return {.file = {}, .status = readResult.status};
+    }
+    allocInode.inode->Init();
+    allocInode.inode->dirty = true;
+    std::shared_ptr<ext2fs_file> file = std::make_shared<ext2fs_file>(fs, allocInode.inode);
+
+    auto seekTo = actualSize;
+    ext2fs_inode_reader reader{inode};
+    reader.seek_set(seekTo);
+
+    ext2dirent *dirent;
+    dirent = new (malloc(sizeof(*dirent) + filename.size())) ext2dirent();
+    dirent->inode = allocInode.inode->inode;
+    dirent->file_type = Ext2FileType_Regular;
+    dirent->name_len = filename.size();
+    dirent->rec_len = sizeof(*dirent) + filename.size();
+    char *filenameArea = ((char *) &dirent) + sizeof(*dirent);
+    memcpy(filenameArea, filename.data(), filename.size());
+
+    actualSize += dirent->rec_len;
+    if (actualSize > inode->GetFileSize()) {
+        auto blocksize = BlockSize();
+        auto blocks = actualSize / blocksize;
+        if ((actualSize % blocksize) != 0) {
+            ++blocks;
+        }
+        inode->SetFileSize(blocks * blocksize);
+    }
+
+    auto result = reader.write(dirent, dirent->rec_len);
+    dirent->~ext2dirent();
+    free(dirent);
+    if (result.status != filesystem_status::SUCCESS) {
+        switch (result.status) {
+            case filesystem_status::IO_ERROR:
+                return {.file = {}, .status = fileitem_status::IO_ERROR};
+            case filesystem_status::INTEGRITY_ERROR:
+                return {.file = {}, .status = fileitem_status::INTEGRITY_ERROR};
+            case filesystem_status::NOT_SUPPORTED_FS_FEATURE:
+                return {.file = {}, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
+            case filesystem_status::INVALID_REQUEST:
+                return {.file = {}, .status = fileitem_status::INVALID_REQUEST};
+            case filesystem_status::NO_AVAIL_INODES:
+                return {.file = {}, .status = fileitem_status::NO_AVAIL_INODES};
+            case filesystem_status::NO_AVAIL_BLOCKS:
+                return {.file = {}, .status = fileitem_status::NO_AVAIL_BLOCKS};
+        }
+    }
+
+    return {.file = file, .status = fileitem_status::SUCCESS};
 }
 
 filesystem_get_node_result<directory> ext2fs::GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
@@ -679,12 +781,102 @@ filesystem_get_node_result<fileitem> ext2fs::GetSymlink(std::shared_ptr<filesyst
     return {.node = as_symlink, .status = filesystem_status::SUCCESS};
 }
 
+ext2fs_get_inode_result ext2fs::AllocateInode() {
+    std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
+    for (auto i = 0; i < inodeBitmap.size(); i++) {
+        auto inodeNum = inodeBitmap[i]->FindFree();
+        if (inodeNum == 0) {
+            continue;
+        }
+        (*(inodeBitmap[i]))[inodeNum - 1] = true;
+        lock = {};
+        inodeNum += i * superblock->inodes_per_group;
+        return GetInode(inodeNum);
+    }
+    return {.inode = {}, .status = filesystem_status::NO_AVAIL_INODES};
+}
+
+ext2fs_allocate_blocks_result ext2fs::AllocateBlocks(std::size_t requestedCount) {
+    if (requestedCount <= 0) {
+        return {.block = 0, .count = 0, .status = filesystem_status::SUCCESS};
+    }
+    std::lock_guard lock{mtx};
+    for (auto i = 0; i < blockBitmap.size(); i++) {
+        auto block = blockBitmap[i]->FindFree();
+        if (block == 0) {
+            continue;
+        }
+        --block;
+        (*(blockBitmap[i]))[block] = true;
+        ext2fs_allocate_blocks_result result{.block = (superblock->blocks_per_group * i) + block, .count = 1, .status = filesystem_status::SUCCESS};
+        --requestedCount;
+        while (requestedCount > 0) {
+            ++block;
+            if (block >= superblock->blocks_per_group || (*(blockBitmap[i]))[block]) {
+                break;
+            }
+            (*(blockBitmap[i]))[block] = true;
+            --requestedCount;
+            ++result.count;
+        }
+        return result;
+    }
+    return {.block = 0, .count = 0, .status = filesystem_status::NO_AVAIL_BLOCKS};
+}
+
+filesystem_status ext2fs::ReleaseBlock(uint32_t blknum) {
+    auto group = blknum / superblock->blocks_per_group;
+    auto blk = blknum % superblock->blocks_per_group;
+    std::lock_guard lock{mtx};
+    (*(blockBitmap[group]))[blk] = false;
+}
+
+std::vector<std::vector<dirty_block>> ext2fs::GetWrites() {
+    std::vector<std::vector<dirty_block>> blocks{};
+    {
+        std::lock_guard lock{mtx};
+        for (auto &inode: inodes) {
+            auto writeGroups = inode.inode->GetWrites();
+            auto destIterator = blocks.begin();
+            auto sourceIterator = writeGroups.begin();
+            while (sourceIterator != writeGroups.end() && destIterator != blocks.end()) {
+                for (const auto &wr : *sourceIterator) {
+                    destIterator->emplace_back(wr);
+                }
+                ++sourceIterator;
+                ++destIterator;
+            }
+            while (sourceIterator != writeGroups.end()) {
+                auto &dest = blocks.emplace_back();
+                for (const auto &wr : *sourceIterator) {
+                    dest.emplace_back(wr);
+                }
+                ++sourceIterator;
+            }
+        }
+    }
+    return blocks;
+}
+
 filesystem_get_node_result<directory> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {
     return GetDirectory(shared_this, 2);
 }
 
+bool ext2fs_inode::Init() {
+    ext2inode inode{};
+    if (!Read(inode)) {
+        return false;
+    }
+    bzero(&inode, sizeof(inode));
+    inode.mode = 644;
+    if (!Write(inode)) {
+        return false;
+    }
+    return true;
+}
+
 bool ext2fs_inode::Read(ext2inode &inode) {
-    auto blocksize = bdev->GetBlocksize();
+    constexpr auto blocksize = FILEPAGE_PAGE_SIZE;
     auto sz1 = sizeof(inode);
     if ((sz1 + offset) > blocksize) {
         sz1 = blocksize - offset;
@@ -692,13 +884,35 @@ bool ext2fs_inode::Read(ext2inode &inode) {
         if (!blocks[1]) {
             return false;
         }
-        memcpy(((uint8_t *) (void *) &inode) + sz1, blocks[1]->data, sz2);
+        memcpy(((uint8_t *) (void *) &inode) + sz1, blocks[1]->Pointer()->Pointer(), sz2);
     }
     if (!blocks[0]) {
         return false;
     }
-    memcpy(&inode, ((uint8_t *) blocks[0]->data) + offset, sz1);
+    memcpy(&inode, ((uint8_t *) blocks[0]->Pointer()->Pointer()) + offset, sz1);
     return true;
+}
+
+bool ext2fs_inode::Write(ext2inode &inode) {
+    constexpr auto blocksize = FILEPAGE_PAGE_SIZE;
+    auto sz1 = sizeof(inode);
+    if ((sz1 + offset) > blocksize) {
+        sz1 = blocksize - offset;
+        auto sz2 = sizeof(inode) - sz1;
+        if (!blocks[1]) {
+            return false;
+        }
+        memcpy(blocks[1]->Pointer()->Pointer(), ((uint8_t *) (void *) &inode) + sz1, sz2);
+    }
+    if (!blocks[0]) {
+        return false;
+    }
+    memcpy(((uint8_t *) blocks[0]->Pointer()->Pointer()) + offset, &inode, sz1);
+    return true;
+}
+
+size_t ext2fs_inode::WriteSize() const {
+    return sizeof(struct ext2inode);
 }
 
 class ext2file_block : public blockdev_block {
@@ -831,7 +1045,70 @@ inode_read_blocks_result ext2fs_inode::ReadBlocks(uint32_t startingBlock, uint32
     return {.block = finalBlock, .status = filesystem_status::SUCCESS};
 }
 
-inode_read_blocks_raw_result ext2fs_inode::ReadBlockRaw(std::size_t blki) {
+filesystem_status ext2fs_inode::AllocToExtend(std::size_t blki, uint32_t sizeAlloc) {
+    std::shared_ptr<ext2fs> fs = this->fs.lock();
+    if (!fs) {
+        return filesystem_status::IO_ERROR;
+    }
+    std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
+    auto neededBlocks = blockRefs.size();
+    lock = {};
+
+    uint64_t startingAddr = blki;
+    startingAddr *= FILEPAGE_PAGE_SIZE;
+    uint64_t endingAddr = startingAddr + (sizeAlloc == 0 ? FILEPAGE_PAGE_SIZE : sizeAlloc);
+    uint64_t startingBlock = startingAddr / blocksize;
+    uint64_t endingBlock = endingAddr / blocksize;
+    {
+        uint64_t endingBlockAddr = endingBlock * blocksize;
+        if (endingBlockAddr < endingAddr) {
+            ++endingBlock;
+        }
+    }
+    if (endingBlock > neededBlocks) {
+        neededBlocks = endingBlock - neededBlocks;
+    } else {
+        neededBlocks = 0;
+    }
+
+    std::vector<uint32_t> blocks{};
+
+    for (typeof(neededBlocks) i = 0; i < neededBlocks; i++) {
+        auto allocBlockResult = fs->AllocateBlocks(1);
+        if (allocBlockResult.status != filesystem_status::SUCCESS || allocBlockResult.count != 1) {
+            for (auto blk : blocks) {
+                fs->ReleaseBlock(blk);
+            }
+            return allocBlockResult.count == 1 ? allocBlockResult.status : filesystem_status::NO_AVAIL_BLOCKS;
+        }
+        blocks.emplace_back(allocBlockResult.block);
+    }
+
+    lock = std::make_unique<std::lock_guard<std::mutex>>(mtx);
+    for (auto blk : blocks) {
+        blockRefs.push_back(blk);
+    }
+    while (blki > blockCache.size()) {
+        auto &ref = blockCache.emplace_back(new filepage());
+        ref->Zero();
+        ref->SetDirty(FILEPAGE_PAGE_SIZE);
+    }
+    if (blki >= blockCache.size()) {
+        auto &ref = blockCache.emplace_back(new filepage());
+        ref->Zero();
+        ref->SetDirty(sizeAlloc);
+    }
+    return filesystem_status::SUCCESS;
+}
+
+inode_read_blocks_raw_result ext2fs_inode::ReadBlockRaw(std::size_t blki, bool alloc, uint32_t sizeAlloc) {
+    if (alloc) {
+        AllocToExtend(blki, sizeAlloc);
+    }
+    std::shared_ptr<ext2fs> fs = this->fs.lock();
+    if (!fs) {
+        return {.page = {}, .status = filesystem_status::IO_ERROR};
+    }
     std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
     if (blki < blockCache.size()) {
         if (!blockCache[blki]) {
@@ -875,6 +1152,14 @@ inode_read_block_result ext2fs_inode::ReadBlock(std::size_t blki) {
     return {.page = {}, .status = block.status};
 }
 
+inode_read_block_result ext2fs_inode::ReadOrAllocBlock(std::size_t blki, std::size_t sizeAlloc) {
+    auto block = ReadBlockRaw(blki, true, sizeAlloc);
+    if (block.page) {
+        return {.page = block.page->Pointer(), .status = block.status};
+    }
+    return {.page = {}, .status = block.status};
+}
+
 inode_read_bytes_result ext2fs_inode::ReadBytes(uint64_t offset, void *ptr, std::size_t length) {
     uint8_t *p = (uint8_t *) ptr;
     if ((offset + ((uint64_t) length)) > filesize) {
@@ -908,6 +1193,114 @@ inode_read_bytes_result ext2fs_inode::ReadBytes(uint64_t offset, void *ptr, std:
     return {.size = length, .status = filesystem_status::SUCCESS};
 }
 
+inode_read_bytes_result ext2fs_inode::WriteBytes(uint64_t offset, void *ptr, std::size_t length) {
+    uint8_t *p = (uint8_t *) ptr;
+    std::size_t vec = 0;
+    while (vec < length) {
+        uint64_t cur = offset + vec;
+        uint64_t blk = cur / FILEPAGE_PAGE_SIZE;
+        uint32_t blkoff = (uint32_t) (cur % FILEPAGE_PAGE_SIZE);
+        uint32_t blklen = FILEPAGE_PAGE_SIZE;
+        if (blklen > (length - vec)) {
+            blklen = length - vec;
+        }
+        if (blklen > (FILEPAGE_PAGE_SIZE - blkoff)) {
+            blklen = FILEPAGE_PAGE_SIZE - blkoff;
+        }
+
+        auto requestedLength = length - vec;
+
+        auto blkp = ReadOrAllocBlock(blk, blkoff + blklen);
+        if (blkp.page) {
+            memcpy(((uint8_t *) blkp.page->Pointer()) + blkoff, p + vec, blklen);
+            blkp.page->SetDirty(blkoff + blklen);
+        } else {
+            if ((offset + ((uint64_t) vec)) > filesize) {
+                filesize = offset + ((uint64_t) vec);
+                dirty = true;
+            }
+            return {.size = vec, .status = blkp.status};
+        }
+
+        vec += blklen;
+    }
+    return {.size = length, .status = filesystem_status::SUCCESS};
+}
+
+void ext2fs_inode::SetFileSize(uint64_t filesize) {
+    this->filesize = filesize;
+    this->dirty = true;
+}
+
+std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
+    std::vector<dirty_block> inodeBlocks{};
+    auto dirty = this->dirty;
+    if (dirty) {
+        ext2inode inode{};
+        if (!Read(inode)) {
+            return {};
+        }
+        inode.size = filesize;
+        inode.blocks = blockRefs.size();
+        auto blockIterator = blockRefs.begin();
+        {
+            int i = 0;
+            while (i < EXT2_NUM_DIRECT_BLOCK_PTRS && blockIterator != blockRefs.end()) {
+                inode.block[i] = *blockIterator;
+                ++blockIterator;
+                ++i;
+            }
+            while (i < EXT2_NUM_DIRECT_BLOCK_PTRS) {
+                inode.block[i] = 0;
+                ++i;
+            }
+        }
+        if (!Write(inode)) {
+            return {};
+        }
+        dirty_block blk{.page1 = blocks[0], .page2 = blocks[1], .blockaddr = blocknum, .offset = 0, .length = (uint32_t) (GetOffset() + WriteSize())};
+        inodeBlocks.emplace_back(blk);
+        this->dirty = false;
+    }
+
+    std::vector<std::vector<dirty_block>> writeGroups{};
+    {
+        std::vector<dirty_block> blocks{};
+        for (int i = 0; i < blockCache.size(); i++) {
+            auto block = blockCache[i];
+            if (block && block->IsDirty()) {
+                uint64_t startingAddr = i;
+                startingAddr *= FILEPAGE_PAGE_SIZE;
+                uint64_t endingAddr = startingAddr + block->GetDirtyLength();
+                uint64_t startingBlock = startingAddr / blocksize;
+                uint64_t endingBlock = endingAddr / blocksize;
+                if ((endingAddr % blocksize) == 0) {
+                    --endingBlock;
+                }
+
+                for (typeof(startingBlock) i = startingBlock; i <= endingBlock; i++) {
+                    auto addr = i * blocksize;
+                    uint32_t fileblock = (uint32_t) (addr / FILEPAGE_PAGE_SIZE);
+                    uint32_t fileblock_offset = (uint32_t) (addr % FILEPAGE_PAGE_SIZE);
+                    uint64_t blockaddr = blockRefs[i];
+                    blockaddr = blockaddr * blocksize;
+                    blockaddr /= bdev->GetBlocksize();
+                    dirty_block blk{.page1 = blockCache[fileblock], .page2 = {}, .blockaddr = blockaddr, .offset = fileblock_offset, .length = (uint32_t) blocksize};
+                    if ((fileblock_offset + blocksize) > FILEPAGE_PAGE_SIZE) {
+                        blk.page2 = blockCache[fileblock + 1];
+                    }
+                    blocks.emplace_back(blk);
+                }
+            }
+        }
+        writeGroups.push_back(blocks);
+    }
+    if (!inodeBlocks.empty()) {
+        writeGroups.emplace_back(inodeBlocks);
+    }
+    return writeGroups;
+}
+
 ext2fs_provider::ext2fs_provider() {
 }
 
@@ -917,6 +1310,10 @@ std::string ext2fs_provider::name() const {
 
 std::shared_ptr<blockdev_filesystem> ext2fs_provider::open(std::shared_ptr<blockdev> bdev) const {
     std::shared_ptr<ext2fs> fs{new ext2fs(bdev)};
+    {
+        std::weak_ptr<ext2fs> weakPtr{fs};
+        fs->self_ref = weakPtr;
+    }
     if (fs->HasSuperblock() && fs->FsSignature() == EXT2_SIGNATURE) {
         std::cout << "Ext2 signature " << fs->FsSignature() << " " << fs->VersionMajor() << "." << fs->VersionMinor() << "\n";
         if (!fs->ReadBlockGroups()) {
@@ -926,6 +1323,16 @@ std::shared_ptr<blockdev_filesystem> ext2fs_provider::open(std::shared_ptr<block
     } else {
         return {};
     }
+}
+
+filesystem_status ext2fs_inode_reader::seek_set(std::size_t offset) {
+    next_blki = offset / FILEPAGE_PAGE_SIZE;
+    this->offset = offset % FILEPAGE_PAGE_SIZE;
+    cur_blki = next_blki;
+    auto result = inode->ReadBlock(cur_blki);
+    page = result.page;
+    next_blki++;
+    return result.status;
 }
 
 inode_read_bytes_result ext2fs_inode_reader::read(void *ptr, std::size_t bytes) {
@@ -947,12 +1354,51 @@ inode_read_bytes_result ext2fs_inode_reader::read(void *ptr, std::size_t bytes) 
             return {.size = remaining + nextrd.size, .status = nextrd.status};
         }
     } else {
-        auto result = inode->ReadBlock(blki);
+        cur_blki = next_blki;
+        auto result = inode->ReadBlock(cur_blki);
         page = result.page;
-        ++blki;
+        ++next_blki;
         if (!page) {
             return {.size = 0, .status = result.status};
         }
         return read(ptr, bytes);
+    }
+}
+
+inode_read_bytes_result ext2fs_inode_reader::write(const void *ptr, std::size_t bytes) {
+    if (page) {
+        auto remaining = FILEPAGE_PAGE_SIZE - offset;
+        if (bytes <= remaining) {
+            inode->AllocToExtend(cur_blki, offset + bytes);
+            memcpy(((uint8_t *) page->Pointer()) + offset, ptr, bytes);
+            page->SetDirty(offset + bytes);
+            offset += bytes;
+            if (offset == FILEPAGE_PAGE_SIZE) {
+                page = {};
+                offset = 0;
+            }
+            return {.size = bytes, .status = filesystem_status::SUCCESS};
+        } else {
+            inode->AllocToExtend(cur_blki, offset + remaining);
+            memcpy(((uint8_t *) page->Pointer()) + offset, ptr, remaining);
+            page->SetDirty(offset + remaining);
+            page = {};
+            offset = 0;
+            auto nextrd = write(((uint8_t *) ptr) + remaining, bytes - remaining);
+            return {.size = remaining + nextrd.size, .status = nextrd.status};
+        }
+    } else {
+        auto length = offset + bytes;
+        if (length > FILEPAGE_PAGE_SIZE) {
+            length = FILEPAGE_PAGE_SIZE;
+        }
+        cur_blki = next_blki;
+        auto result = inode->ReadOrAllocBlock(cur_blki, length);
+        page = result.page;
+        ++next_blki;
+        if (!page) {
+            return {.size = 0, .status = result.status};
+        }
+        return write(ptr, bytes);
     }
 }

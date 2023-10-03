@@ -21,6 +21,7 @@ public:
     std::size_t GetBlocksize() const override;
     std::size_t GetNumBlocks() const override;
     std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const override;
+    size_t WriteBlock(const void *data, size_t blocknum, size_t blocks) const override;
 };
 
 
