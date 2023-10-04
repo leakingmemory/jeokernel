@@ -1241,7 +1241,12 @@ std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
             return {};
         }
         inode.size = filesize;
-        inode.blocks = blockRefs.size();
+        {
+            uint64_t i_blocks = blockRefs.size();
+            i_blocks = i_blocks * blocksize;
+            i_blocks = i_blocks / 512;
+            inode.blocks = i_blocks;
+        }
         auto blockIterator = blockRefs.begin();
         {
             int i = 0;
