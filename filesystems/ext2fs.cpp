@@ -704,7 +704,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename) {
     dirent->file_type = Ext2FileType_Regular;
     dirent->name_len = filename.size();
     dirent->rec_len = sizeof(*dirent) + filename.size();
-    char *filenameArea = ((char *) &dirent) + sizeof(*dirent);
+    char *filenameArea = ((char *) dirent) + sizeof(*dirent);
     memcpy(filenameArea, filename.data(), filename.size());
 
     actualSize += dirent->rec_len;
