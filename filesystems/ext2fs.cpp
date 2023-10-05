@@ -141,6 +141,7 @@ bool ext2fs::ReadBlockGroups() {
                 return false;
             }
             auto inodeBitmapBlock = FsBlockToPhysBlock(group.inode_bitmap);
+            groupObject.InodeBitmapBlock = inodeBitmapBlock;
             auto inodeBitmapOffset = FsBlockOffsetOnPhys(group.inode_bitmap);
             auto inodeBitmapPhysLength = FsBlocksToPhysBlocks(group.inode_bitmap, 1);
             auto inodeBitmapBlocks = bdev->ReadBlock(inodeBitmapBlock, inodeBitmapPhysLength);
@@ -852,6 +853,38 @@ std::vector<std::vector<dirty_block>> ext2fs::GetWrites() {
                     dest.emplace_back(wr);
                 }
                 ++sourceIterator;
+            }
+        }
+    }
+    {
+        std::vector<dirty_block> bitmapBlocks{};
+        std::remove_const<typeof(groups.size())>::type groupIdx = 0;
+        while (groupIdx < groups.size()) {
+            const auto &group = groups[groupIdx];
+            const auto &inodeBitmap = this->inodeBitmap[groupIdx];
+            const auto &blockBitmap = this->blockBitmap[groupIdx];
+            auto inodeBlockNums = inodeBitmap->DirtyBlocks();
+            if (!inodeBlockNums.empty()) {
+                for (auto bmBlock : inodeBlockNums) {
+                    const void *blockPtr = inodeBitmap->PointerToBlock(bmBlock);
+                    std::shared_ptr<filepage> page = std::make_shared<filepage>();
+                    memcpy(page->Pointer()->Pointer(), blockPtr, BlockSize);
+                    uint64_t physBlock{bmBlock};
+                    physBlock = physBlock * BlockSize;
+                    physBlock = physBlock / bdev->GetBlocksize();
+                    dirty_block dirtyBlock{.page1 = page, .page2 = {}, .blockaddr = group.InodeBitmapBlock + physBlock, .offset = 0, .length = BlockSize};
+                    bitmapBlocks.emplace_back(dirtyBlock);
+                }
+            }
+            ++groupIdx;
+        }
+        if (!bitmapBlocks.empty()) {
+            if (blocks.empty()) {
+                blocks.emplace_back();
+            }
+            auto &writeList = blocks[0];
+            for (const auto &bitmapBlock : bitmapBlocks) {
+                writeList.emplace_back(bitmapBlock);
             }
         }
     }

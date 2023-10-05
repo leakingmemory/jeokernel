@@ -170,6 +170,20 @@ public:
     void *Pointer() {
         return bitmap;
     }
+    [[nodiscard]] std::vector<uint32_t> DirtyBlocks() const {
+        std::vector<uint32_t> result{};
+        for (std::remove_const<typeof(blocks)>::type i = 0; i < blocks; i++) {
+            if (dirty[i]) {
+                result.push_back(i);
+            }
+        }
+        return result;
+    }
+    const void *PointerToBlock(std::size_t blk) const {
+        uintptr_t offset = blk;
+        offset = offset * blocksize;
+        return ((uint8_t *) bitmap) + offset;
+    }
 };
 
 #define EXT2_NUM_DIRECT_BLOCK_PTRS  12

@@ -50,6 +50,7 @@ class ext2fs_group {
     friend ext2fs;
 private:
     std::vector<std::shared_ptr<filepage>> InodeTableBlocks;
+    std::size_t InodeBitmapBlock;
     std::size_t InodeTableBlock;
     std::size_t InodeTableOffset;
 public:
