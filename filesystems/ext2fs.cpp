@@ -5,6 +5,7 @@
 #include "ext2fs.h"
 #include "ext2fs_inode.h"
 #include "ext2fs_inode_reader.h"
+#include "ext2fs_file.h"
 #include <blockdevs/blockdev.h>
 #include <cstring>
 #include <strings.h>
@@ -386,78 +387,6 @@ ext2fs_get_inode_result ext2fs::GetInode(std::size_t inode_num) {
         return {.inode = with_id.inode, .status = filesystem_status::SUCCESS};
     }
     return loadedInode;
-}
-
-class ext2fs_file : public fileitem {
-protected:
-    std::shared_ptr<filesystem> fs;
-    std::shared_ptr<ext2fs_inode> inode;
-public:
-    ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode);
-    uint32_t Mode() override;
-    std::size_t Size() override;
-    uintptr_t InodeNum() override;
-    uint32_t BlockSize() override;
-    uintptr_t SysDevId() override;
-    file_getpage_result GetPage(std::size_t pagenum) override;
-    file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
-};
-
-ext2fs_file::ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : fs(fs), inode(inode) {
-}
-
-uint32_t ext2fs_file::Mode() {
-    return inode->mode;
-}
-
-std::size_t ext2fs_file::Size() {
-    return inode->filesize;
-}
-
-uintptr_t ext2fs_file::InodeNum() {
-    return inode->inode;
-}
-
-uint32_t ext2fs_file::BlockSize() {
-    return inode->blocksize;
-}
-
-uintptr_t ext2fs_file::SysDevId() {
-    return inode->sys_dev_id;
-}
-
-constexpr fileitem_status Convert(filesystem_status ino_stat) {
-    fileitem_status status{fileitem_status::SUCCESS};
-    switch (ino_stat) {
-        case filesystem_status::SUCCESS:
-            status = fileitem_status::SUCCESS;
-            break;
-        case filesystem_status::IO_ERROR:
-            status = fileitem_status::IO_ERROR;
-            break;
-        case filesystem_status::INTEGRITY_ERROR:
-            status = fileitem_status::INTEGRITY_ERROR;
-            break;
-        case filesystem_status::NOT_SUPPORTED_FS_FEATURE:
-            status = fileitem_status::NOT_SUPPORTED_FS_FEATURE;
-            break;
-        case filesystem_status::INVALID_REQUEST:
-            status = fileitem_status::INVALID_REQUEST;
-            break;
-        default:
-            status = fileitem_status::IO_ERROR;
-    }
-    return status;
-}
-
-file_getpage_result ext2fs_file::GetPage(std::size_t pagenum) {
-    auto result = inode->ReadBlockRaw(pagenum);
-    return {.page = result.page, .status = Convert(result.status)};
-}
-
-file_read_result ext2fs_file::Read(uint64_t offset, void *ptr, std::size_t length) {
-    auto result = inode->ReadBytes(offset, ptr, length);
-    return {.size = result.size, .status = Convert(result.status)};
 }
 
 class ext2fs_symlink : public symlink, public ext2fs_file {
