@@ -47,7 +47,7 @@ int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
 
         std::cout << "Will create " << createFileName << "\n";
 
-        auto createResult = dir->Create(createFileName);
+        auto createResult = dir->Create(createFileName, 00644);
         if (!createResult.file || createResult.status != fileitem_status::SUCCESS) {
             switch (createResult.status) {
                 case fileitem_status::IO_ERROR:

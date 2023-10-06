@@ -10,6 +10,8 @@
 #include <filesystems/filesystem.h>
 #include <cstring>
 
+constexpr uint16_t modeTypeFile = 00100000;
+
 entries_result ext2fs_directory::Entries() {
     if (entriesRead) {
         return {.entries = entries, .status = fileitem_status::SUCCESS};
@@ -122,7 +124,7 @@ file_read_result ext2fs_directory::Read(uint64_t offset, void *ptr, std::size_t 
     return {.size = 0, .status = fileitem_status::INVALID_REQUEST};
 }
 
-directory_resolve_result ext2fs_directory::Create(std::string filename) {
+directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t mode) {
     auto allocInode = Filesystem().AllocateInode();
     if (allocInode.status != filesystem_status::SUCCESS) {
         fileitem_status status;
@@ -153,6 +155,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename) {
     }
     allocInode.inode->Init();
     allocInode.inode->linkCount = 1;
+    allocInode.inode->mode = mode | modeTypeFile;
     allocInode.inode->dirty = true;
     std::shared_ptr<ext2fs_file> file = std::make_shared<ext2fs_file>(fs, allocInode.inode);
 
