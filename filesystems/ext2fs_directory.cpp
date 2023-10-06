@@ -152,6 +152,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename) {
         return {.file = {}, .status = readResult.status};
     }
     allocInode.inode->Init();
+    allocInode.inode->linkCount = 1;
     allocInode.inode->dirty = true;
     std::shared_ptr<ext2fs_file> file = std::make_shared<ext2fs_file>(fs, allocInode.inode);
 

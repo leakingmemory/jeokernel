@@ -394,6 +394,8 @@ std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
             i_blocks = i_blocks / 512;
             inode.blocks = i_blocks;
         }
+        inode.mode = mode;
+        inode.links_count = linkCount;
         auto blockIterator = blockRefs.begin();
         {
             int i = 0;

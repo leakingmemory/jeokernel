@@ -352,6 +352,7 @@ ext2fs_get_inode_result ext2fs::LoadInode(std::size_t inode_num) {
     inode_obj->inode = inode_num + 1;
     inode_obj->filesize = inode.size;
     inode_obj->mode = inode.mode;
+    inode_obj->linkCount = inode.links_count;
     auto pages = inode_obj->filesize / FILEPAGE_PAGE_SIZE;
     if ((inode_obj->filesize % FILEPAGE_PAGE_SIZE) != 0) {
         ++pages;

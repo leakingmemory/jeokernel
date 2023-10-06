@@ -44,6 +44,7 @@ private:
     uint64_t filesize;
     uint64_t blocknum;
     uint16_t mode;
+    uint16_t linkCount;
     bool dirty{false};
 public:
     ext2fs_inode(const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk, std::size_t offset, std::size_t blocksize, uint64_t blocknum) : mtx(), fs(fs), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), symlinkPointer(), blockCache(), sys_dev_id(), inode(0), filesize(0), blocknum(blocknum), mode(0) {
