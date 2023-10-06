@@ -127,7 +127,13 @@ public:
             ++sz;
         }
         bitmap = (little_endian<uint32_t> *) malloc(sz * sizeof(uint32_t));
+        for (typeof(sz) i = 0 ; i < sz; i++) {
+            bitmap[i] = ~((typeof(bitmap[i])) 0);
+        }
         dirty = (bool *) malloc(blocks * sizeof(*dirty));
+        for (typeof(blocks) i = 0; i < blocks; i++) {
+            dirty[i] = false;
+        }
     }
     ext2bitmap(const ext2bitmap &) = delete;
     ext2bitmap(ext2bitmap &&) = delete;

@@ -54,6 +54,7 @@ private:
     std::size_t InodeBitmapBlock;
     std::size_t InodeTableBlock;
     std::size_t InodeTableOffset;
+    std::size_t BlockBitmapBlock;
 public:
     ext2fs_group() : InodeTableBlocks(), InodeTableBlock(0), InodeTableOffset(0) {}
 };

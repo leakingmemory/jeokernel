@@ -119,6 +119,7 @@ bool ext2fs::ReadBlockGroups() {
             << " free inodes, " << group.block_bitmap << "/" << group.inode_bitmap << " block/inode bitmaps, "
             << group.inode_table << " inode table, " << group.used_dirs_count << " dirs.\n";
             auto blockBitmapBlock = FsBlockToPhysBlock(group.block_bitmap);
+            groupObject.BlockBitmapBlock = blockBitmapBlock;
             auto blockBitmapOffset = FsBlockOffsetOnPhys(group.block_bitmap);
             auto blockBitmapPhysLength = FsBlocksToPhysBlocks(group.block_bitmap, 1);
             auto blockBitmapBlocks = bdev->ReadBlock(blockBitmapBlock, blockBitmapPhysLength);
@@ -590,6 +591,19 @@ std::vector<std::vector<dirty_block>> ext2fs::GetWrites() {
                     physBlock = physBlock * BlockSize;
                     physBlock = physBlock / bdev->GetBlocksize();
                     dirty_block dirtyBlock{.page1 = page, .page2 = {}, .blockaddr = group.InodeBitmapBlock + physBlock, .offset = 0, .length = BlockSize};
+                    bitmapBlocks.emplace_back(dirtyBlock);
+                }
+            }
+            auto blockBitmapNums = blockBitmap->DirtyBlocks();
+            if (!blockBitmapNums.empty()) {
+                for (auto bmBlock : blockBitmapNums) {
+                    const void *blockPtr = blockBitmap->PointerToBlock(bmBlock);
+                    std::shared_ptr<filepage> page = std::make_shared<filepage>();
+                    memcpy(page->Pointer()->Pointer(), blockPtr, BlockSize);
+                    uint64_t physBlock{bmBlock};
+                    physBlock = physBlock * BlockSize;
+                    physBlock = physBlock / bdev->GetBlocksize();
+                    dirty_block dirtyBlock{.page1 = page, .page2 = {}, .blockaddr = group.BlockBitmapBlock + physBlock, .offset = 0, .length = BlockSize};
                     bitmapBlocks.emplace_back(dirtyBlock);
                 }
             }
