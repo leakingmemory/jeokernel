@@ -41,6 +41,8 @@ public:
     }
     filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override = 0;
     virtual std::vector<std::vector<dirty_block>> GetWrites() = 0;
+    virtual std::vector<dirty_block> OpenForWrite() = 0;
+    virtual std::vector<dirty_block> FlushOrClose() = 0;
 };
 
 class filesystem_provider {

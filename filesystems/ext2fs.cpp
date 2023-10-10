@@ -17,23 +17,23 @@
 //#define DEBUG_INODE
 //#define DEBUG_DIR
 
-ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(), superblock(), groups(), inodes(), BlockSize(0) {
+ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(), superblock(), groups(), inodes(), superblock_offset(0), superblock_start(0), superblock_size(0), BlockSize(0), filesystemWasValid(false) {
     sys_dev_id = bdev->GetDevId();
     auto blocksize = bdev->GetBlocksize();
     {
         std::shared_ptr<blockdev_block> blocks;
-        std::size_t superblock_offset;
         {
-            auto superblock_start = 1024 / blocksize;
+            superblock_start = 1024 / blocksize;
             {
                 auto start_offset = superblock_start * blocksize;
                 superblock_offset = (std::size_t) (1024 - start_offset);
             }
-            auto superblock_size = (2048 / blocksize) - superblock_start;
+            superblock_size = (2048 / blocksize) - superblock_start;
             if (superblock_size < 1) {
                 superblock_size = 1;
             }
             blocks = bdev->ReadBlock(superblock_start, superblock_size);
+            superblock_blocks = blocks;
         }
         superblock = std::make_unique<ext2super>();
         memmove(&(*superblock), ((uint8_t *) blocks->Pointer()) + superblock_offset, sizeof(*superblock));
@@ -620,6 +620,26 @@ std::vector<std::vector<dirty_block>> ext2fs::GetWrites() {
         }
     }
     return blocks;
+}
+
+std::vector<dirty_block> ext2fs::OpenForWrite() {
+    std::vector<dirty_block> result{};
+    superblock->last_mount = superblock->last_mount + 1;
+    superblock->last_write = superblock->last_mount;
+    superblock->mounts_since_check = superblock->mounts_since_check + 1;
+    filesystemWasValid = superblock->fs_state == EXT2_VALID_FS;
+    superblock->fs_state = EXT2_ERROR_FS;
+    memmove(((uint8_t *) superblock_blocks->Pointer()) + superblock_offset, &(*superblock), sizeof(*superblock));
+    std::shared_ptr<filepage> page = std::make_shared<filepage>();
+    uint32_t length = superblock_size * bdev->GetBlocksize();
+    memmove(page->Pointer()->Pointer(), superblock_blocks->Pointer(), length);
+    dirty_block db{.page1 = page, .page2 = {}, .blockaddr = superblock_start, .offset = 0, .length = length};
+    result.emplace_back(db);
+    return result;
+}
+
+std::vector<dirty_block> ext2fs::FlushOrClose() {
+    return {};
 }
 
 filesystem_get_node_result<directory> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {

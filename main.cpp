@@ -10,6 +10,17 @@
 #include "cat.h"
 #include "create.h"
 
+bool is_fswrite(std::vector<std::string>::iterator args, const std::vector<std::string>::iterator &args_end) {
+    if (args != args_end) {
+        auto cmd = *args;
+        ++args;
+        if (cmd == "create") {
+            return true;
+        }
+    }
+    return false;
+}
+
 int fsmain(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
     if (args != args_end) {
         auto cmd = *args;
@@ -37,6 +48,69 @@ int fsmain(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
     return 0;
 }
 
+void writetodev(std::shared_ptr<blockdev> bdev, const std::vector<dirty_block> &grp) {
+    auto blocksize = bdev->GetBlocksize();
+    for (const auto &wr : grp) {
+        std::cout << "  Write block " << wr.blockaddr << " offset=" << wr.offset << " length=" << wr.length
+                  << std::hex << " ptr1=" << ((uintptr_t) wr.page1->Pointer()->Pointer()) << " ptr2="
+                  << (wr.page2 ? ((uintptr_t) wr.page2->Pointer()->Pointer()) : 0) << std::dec << "\n";
+        auto blockaddr = wr.blockaddr;
+        auto offset = wr.offset;
+        std::remove_const<typeof(wr.length)>::type i = 0;
+        while (i < wr.length) {
+            auto chunkLength = wr.length - i;
+            if (chunkLength < blocksize) {
+                chunkLength = blocksize;
+            }
+            {
+                auto overshoot = chunkLength % blocksize;
+                if (overshoot != 0) {
+                    chunkLength += blocksize - overshoot;
+                }
+            }
+            const auto blocks = chunkLength / blocksize;
+            std::remove_const<typeof(blocks)>::type wrBlocks;
+            if ((chunkLength + offset) < FILEPAGE_PAGE_SIZE) {
+                wrBlocks = bdev->WriteBlock(
+                        ((uint8_t *) (wr.page1->Pointer()->Pointer())) + offset,
+                        blockaddr, blocks);
+            } else if (offset >= FILEPAGE_PAGE_SIZE) {
+                if (!wr.page2) {
+                    std::cerr << "Buffer overrun\n";
+                    throw std::exception();
+                }
+                wrBlocks = bdev->WriteBlock(
+                        ((uint8_t *) (wr.page2->Pointer()->Pointer())) + offset - FILEPAGE_PAGE_SIZE,
+                        blockaddr, blocks);
+            } else {
+                chunkLength = blocksize;
+                void *buf = malloc(blocksize);
+                if (buf == nullptr) {
+                    std::cerr << "Memory alloc\n";
+                    throw std::exception();
+                }
+                auto endLength = FILEPAGE_PAGE_SIZE - offset;
+                memcpy(buf, ((uint8_t *) (wr.page1->Pointer()->Pointer())) + offset, endLength);
+                memcpy(((uint8_t *) buf) + endLength, wr.page2->Pointer()->Pointer(), chunkLength - endLength);
+                wrBlocks = bdev->WriteBlock(buf, blockaddr, 1);
+                free(buf);
+            }
+            if (wrBlocks <= 0) {
+                std::cerr << "Write error\n";
+                throw std::exception();
+            }
+            blockaddr += wrBlocks;
+            i += wrBlocks * blocksize;
+        }
+    }
+}
+void writetodev(std::shared_ptr<blockdev> bdev, std::vector<std::vector<dirty_block>> &writes) {
+    for (const auto &grp : writes) {
+        std::cout << "Write blocks grouping:\n";
+        writetodev(bdev, grp);
+    }
+}
+
 int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
     std::shared_ptr<blockdev_filesystem> bdev_fs = open_filesystem(fsname, bdev);
     std::shared_ptr<filesystem> fs = bdev_fs;
@@ -54,65 +128,14 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         }
         return 1;
     }
-    auto result = fsmain(rootdir, args, args_end);
-    auto blocksize = bdev->GetBlocksize();
-    auto writes = bdev_fs->GetWrites();
-    for (const auto &grp : writes) {
-        std::cout << "Write blocks grouping:\n";
-        for (const auto &wr : grp) {
-            std::cout << "  Write block " << wr.blockaddr << " offset=" << wr.offset << " length=" << wr.length
-            << std::hex << " ptr1=" << ((uintptr_t) wr.page1->Pointer()->Pointer()) << " ptr2="
-            << (wr.page2 ? ((uintptr_t) wr.page2->Pointer()->Pointer()) : 0) << std::dec << "\n";
-            auto blockaddr = wr.blockaddr;
-            auto offset = wr.offset;
-            std::remove_const<typeof(wr.length)>::type i = 0;
-            while (i < wr.length) {
-                auto chunkLength = wr.length - i;
-                if (chunkLength < blocksize) {
-                    chunkLength = blocksize;
-                }
-                {
-                    auto overshoot = chunkLength % blocksize;
-                    if (overshoot != 0) {
-                        chunkLength += blocksize - overshoot;
-                    }
-                }
-                const auto blocks = chunkLength / blocksize;
-                std::remove_const<typeof(blocks)>::type wrBlocks;
-                if ((chunkLength + offset) < FILEPAGE_PAGE_SIZE) {
-                    wrBlocks = bdev->WriteBlock(
-                            ((uint8_t *) (wr.page1->Pointer()->Pointer())) + offset,
-                            blockaddr, blocks);
-                } else if (offset >= FILEPAGE_PAGE_SIZE) {
-                    if (!wr.page2) {
-                        std::cerr << "Buffer overrun\n";
-                        throw std::exception();
-                    }
-                    wrBlocks = bdev->WriteBlock(
-                            ((uint8_t *) (wr.page2->Pointer()->Pointer())) + offset - FILEPAGE_PAGE_SIZE,
-                            blockaddr, blocks);
-                } else {
-                    chunkLength = blocksize;
-                    void *buf = malloc(blocksize);
-                    if (buf == nullptr) {
-                        std::cerr << "Memory alloc\n";
-                        throw std::exception();
-                    }
-                    auto endLength = FILEPAGE_PAGE_SIZE - offset;
-                    memcpy(buf, ((uint8_t *) (wr.page1->Pointer()->Pointer())) + offset, endLength);
-                    memcpy(((uint8_t *) buf) + endLength, wr.page2->Pointer()->Pointer(), chunkLength - endLength);
-                    wrBlocks = bdev->WriteBlock(buf, blockaddr, 1);
-                    free(buf);
-                }
-                if (wrBlocks <= 0) {
-                    std::cerr << "Write error\n";
-                    throw std::exception();
-                }
-                blockaddr += wrBlocks;
-                i += wrBlocks * blocksize;
-            }
-        }
+    auto isWrite = is_fswrite(args, args_end);
+    if (isWrite) {
+        auto writes = bdev_fs->OpenForWrite();
+        writetodev(bdev, writes);
     }
+    auto result = fsmain(rootdir, args, args_end);
+    auto writes = bdev_fs->GetWrites();
+    writetodev(bdev, writes);
     return result;
 }
 

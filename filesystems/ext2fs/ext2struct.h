@@ -9,6 +9,9 @@
 
 #define EXT2_SIGNATURE 0xEF53
 
+#define EXT2_VALID_FS 1
+#define EXT2_ERROR_FS 2
+
 struct ext2super {
     little_endian<uint32_t> total_inodes;
     little_endian<uint32_t> total_blocks;
