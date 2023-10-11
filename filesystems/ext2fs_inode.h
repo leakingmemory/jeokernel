@@ -76,6 +76,7 @@ public:
         return filesize;
     }
     void SetFileSize(uint64_t filesize);
+    std::vector<dirty_block> GetDataWrites();
     std::vector<std::vector<dirty_block>> GetWrites();
 };
 

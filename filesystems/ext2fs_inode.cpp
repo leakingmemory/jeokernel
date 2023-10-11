@@ -379,6 +379,38 @@ void ext2fs_inode::SetFileSize(uint64_t filesize) {
     this->dirty = true;
 }
 
+std::vector<dirty_block> ext2fs_inode::GetDataWrites() {
+    std::vector<dirty_block> blocks{};
+    for (int i = 0; i < blockCache.size(); i++) {
+        auto block = blockCache[i];
+        if (block && block->IsDirty()) {
+            uint64_t startingAddr = i;
+            startingAddr *= FILEPAGE_PAGE_SIZE;
+            uint64_t endingAddr = startingAddr + block->GetDirtyLength();
+            uint64_t startingBlock = startingAddr / blocksize;
+            uint64_t endingBlock = endingAddr / blocksize;
+            if ((endingAddr % blocksize) == 0) {
+                --endingBlock;
+            }
+
+            for (typeof(startingBlock) i = startingBlock; i <= endingBlock; i++) {
+                auto addr = i * blocksize;
+                uint32_t fileblock = (uint32_t) (addr / FILEPAGE_PAGE_SIZE);
+                uint32_t fileblock_offset = (uint32_t) (addr % FILEPAGE_PAGE_SIZE);
+                uint64_t blockaddr = blockRefs[i];
+                blockaddr = blockaddr * blocksize;
+                blockaddr /= bdev->GetBlocksize();
+                dirty_block blk{.page1 = blockCache[fileblock], .page2 = {}, .blockaddr = blockaddr, .offset = fileblock_offset, .length = (uint32_t) blocksize};
+                if ((fileblock_offset + blocksize) > FILEPAGE_PAGE_SIZE) {
+                    blk.page2 = blockCache[fileblock + 1];
+                }
+                blocks.emplace_back(blk);
+            }
+        }
+    }
+    return blocks;
+}
+
 std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
     std::vector<dirty_block> inodeBlocks{};
     auto dirty = this->dirty;
@@ -419,35 +451,10 @@ std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
 
     std::vector<std::vector<dirty_block>> writeGroups{};
     {
-        std::vector<dirty_block> blocks{};
-        for (int i = 0; i < blockCache.size(); i++) {
-            auto block = blockCache[i];
-            if (block && block->IsDirty()) {
-                uint64_t startingAddr = i;
-                startingAddr *= FILEPAGE_PAGE_SIZE;
-                uint64_t endingAddr = startingAddr + block->GetDirtyLength();
-                uint64_t startingBlock = startingAddr / blocksize;
-                uint64_t endingBlock = endingAddr / blocksize;
-                if ((endingAddr % blocksize) == 0) {
-                    --endingBlock;
-                }
-
-                for (typeof(startingBlock) i = startingBlock; i <= endingBlock; i++) {
-                    auto addr = i * blocksize;
-                    uint32_t fileblock = (uint32_t) (addr / FILEPAGE_PAGE_SIZE);
-                    uint32_t fileblock_offset = (uint32_t) (addr % FILEPAGE_PAGE_SIZE);
-                    uint64_t blockaddr = blockRefs[i];
-                    blockaddr = blockaddr * blocksize;
-                    blockaddr /= bdev->GetBlocksize();
-                    dirty_block blk{.page1 = blockCache[fileblock], .page2 = {}, .blockaddr = blockaddr, .offset = fileblock_offset, .length = (uint32_t) blocksize};
-                    if ((fileblock_offset + blocksize) > FILEPAGE_PAGE_SIZE) {
-                        blk.page2 = blockCache[fileblock + 1];
-                    }
-                    blocks.emplace_back(blk);
-                }
-            }
+        auto blocks = GetDataWrites();
+        if (!blocks.empty()) {
+            writeGroups.push_back(blocks);
         }
-        writeGroups.push_back(blocks);
     }
     if (!inodeBlocks.empty()) {
         writeGroups.emplace_back(inodeBlocks);

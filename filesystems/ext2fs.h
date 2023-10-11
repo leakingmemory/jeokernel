@@ -120,6 +120,7 @@ public:
     ext2fs_get_inode_result AllocateInode();
     ext2fs_allocate_blocks_result AllocateBlocks(std::size_t requestedCount);
     filesystem_status ReleaseBlock(uint32_t blknum);
+    std::vector<dirty_block> GetDataWrites();
     std::vector<std::vector<dirty_block>> GetWrites() override;
     std::vector<dirty_block> OpenForWrite() override;
     std::vector<dirty_block> FlushOrClose() override;

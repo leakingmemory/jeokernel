@@ -550,6 +550,18 @@ filesystem_status ext2fs::ReleaseBlock(uint32_t blknum) {
     (*(blockBitmap[group]))[blk] = false;
 }
 
+std::vector<dirty_block> ext2fs::GetDataWrites() {
+    std::vector<dirty_block> blocks{};
+    std::lock_guard lock{mtx};
+    for (auto &inode: inodes) {
+        auto writes = inode.inode->GetDataWrites();
+        for (const auto &wr : writes) {
+            blocks.emplace_back(wr);
+        }
+    }
+    return blocks;
+}
+
 std::vector<std::vector<dirty_block>> ext2fs::GetWrites() {
     std::vector<std::vector<dirty_block>> blocks{};
     {
