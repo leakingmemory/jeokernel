@@ -411,7 +411,7 @@ std::vector<dirty_block> ext2fs_inode::GetDataWrites() {
     return blocks;
 }
 
-std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
+std::vector<dirty_block> ext2fs_inode::GetMetaWrites() {
     std::vector<dirty_block> inodeBlocks{};
     auto dirty = this->dirty;
     if (dirty) {
@@ -448,6 +448,10 @@ std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
         inodeBlocks.emplace_back(blk);
         this->dirty = false;
     }
+    return inodeBlocks;
+}
+
+std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
 
     std::vector<std::vector<dirty_block>> writeGroups{};
     {
@@ -456,6 +460,7 @@ std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
             writeGroups.push_back(blocks);
         }
     }
+    auto inodeBlocks = GetMetaWrites();
     if (!inodeBlocks.empty()) {
         writeGroups.emplace_back(inodeBlocks);
     }
