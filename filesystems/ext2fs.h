@@ -50,13 +50,16 @@ public:
 class ext2fs_group {
     friend ext2fs;
 private:
-    std::vector<std::shared_ptr<filepage>> InodeTableBlocks;
-    std::size_t InodeBitmapBlock;
-    std::size_t InodeTableBlock;
-    std::size_t InodeTableOffset;
-    std::size_t BlockBitmapBlock;
+    std::vector<std::shared_ptr<filepage>> InodeTableBlocks{};
+    std::size_t InodeBitmapBlock{0};
+    std::size_t InodeTableBlock{0};
+    std::size_t InodeTableOffset{0};
+    std::size_t BlockBitmapBlock{0};
+    uint32_t freeInodesCount{0};
+    uint32_t freeBlocksCount{0};
+    bool dirty{false};
 public:
-    ext2fs_group() : InodeTableBlocks(), InodeTableBlock(0), InodeTableOffset(0) {}
+    ext2fs_group() = default;
 };
 
 class ext2fs_inode;
@@ -78,6 +81,7 @@ struct ext2fs_allocate_blocks_result {
 };
 
 class ext2bitmap;
+class ext2blockgroups;
 
 class ext2fs : public blockdev_filesystem {
     friend ext2fs_provider;
@@ -86,6 +90,8 @@ private:
     std::weak_ptr<ext2fs> self_ref;
     std::shared_ptr<blockdev_block> superblock_blocks;
     std::unique_ptr<ext2super> superblock;
+    std::shared_ptr<blockdev_block> groups_blocks;
+    std::shared_ptr<ext2blockgroups> RawBlockGroups;
     std::vector<ext2fs_group> groups;
     std::vector<ext2fs_inode_with_id> inodes;
     std::vector<std::shared_ptr<ext2bitmap>> blockBitmap{};
@@ -94,7 +100,8 @@ private:
     std::size_t superblock_offset;
     uint32_t superblock_start, superblock_size;
     uint32_t BlockSize;
-    bool filesystemWasValid;
+    uint32_t PhysBlockGroupsBlock, PhysBlockGroupsOffset, BlockGroupsTotalBlocks;
+    bool filesystemWasValid, filesystemOpenForWrite;
 public:
     ext2fs(std::shared_ptr<blockdev> bdev);
     bool HasSuperblock() const;

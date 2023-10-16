@@ -386,7 +386,7 @@ std::vector<dirty_block> ext2fs_inode::GetDataWrites() {
         if (block && block->IsDirty()) {
             uint64_t startingAddr = i;
             startingAddr *= FILEPAGE_PAGE_SIZE;
-            uint64_t endingAddr = startingAddr + block->GetDirtyLength();
+            uint64_t endingAddr = startingAddr + block->GetDirtyLengthAndClear();
             uint64_t startingBlock = startingAddr / blocksize;
             uint64_t endingBlock = endingAddr / blocksize;
             if ((endingAddr % blocksize) == 0) {

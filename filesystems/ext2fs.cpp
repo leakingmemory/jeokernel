@@ -17,7 +17,7 @@
 //#define DEBUG_INODE
 //#define DEBUG_DIR
 
-ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(), superblock(), groups(), inodes(), superblock_offset(0), superblock_start(0), superblock_size(0), BlockSize(0), filesystemWasValid(false) {
+ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(), superblock(), groups(), inodes(), superblock_offset(0), superblock_start(0), superblock_size(0), BlockSize(0), PhysBlockGroupsBlock(0), PhysBlockGroupsOffset(0), BlockGroupsTotalBlocks(0), filesystemWasValid(false), filesystemOpenForWrite(false) {
     sys_dev_id = bdev->GetDevId();
     auto blocksize = bdev->GetBlocksize();
     {
@@ -98,23 +98,25 @@ bool ext2fs::ReadBlockGroups() {
               << " gives block groups " << blockGroups << "\n";
     auto superblockBlock = 1024 / BlockSize;
     uint64_t blockGroupsBlock = superblockBlock + 1;
-    uint64_t onDiskBlockGRoups = FsBlockToPhysBlock(blockGroupsBlock);
-    uint64_t onDiskBlockGroupsOffset = FsBlockOffsetOnPhys(blockGroupsBlock);
-    std::cout << "Superblock in block " << superblockBlock << " gives block groups in " << blockGroupsBlock << " on disk " << onDiskBlockGRoups << "\n";
-    uint32_t blockGroupsSize = onDiskBlockGroupsOffset + (blockGroups * sizeof(ext2blockgroup));
-    uint32_t blockGroupsTotalBlocks = blockGroupsSize / bdev->GetBlocksize();
+    PhysBlockGroupsBlock = FsBlockToPhysBlock(blockGroupsBlock);
+    PhysBlockGroupsOffset = FsBlockOffsetOnPhys(blockGroupsBlock);
+    std::cout << "Superblock in block " << superblockBlock << " gives block groups in " << blockGroupsBlock << " on disk " << PhysBlockGroupsBlock << "\n";
+    uint32_t blockGroupsSize = PhysBlockGroupsOffset + (blockGroups * sizeof(ext2blockgroup));
+    BlockGroupsTotalBlocks = blockGroupsSize / bdev->GetBlocksize();
     if ((blockGroupsSize % bdev->GetBlocksize()) != 0) {
-        ++blockGroupsTotalBlocks;
+        ++BlockGroupsTotalBlocks;
     }
-    std::cout << "Block groups size " << blockGroupsSize << " phys blocks " << blockGroupsTotalBlocks << "\n";
-    auto physBlockGroups = bdev->ReadBlock(onDiskBlockGRoups, blockGroupsTotalBlocks);
-    if (physBlockGroups) {
+    std::cout << "Block groups size " << blockGroupsSize << " phys blocks " << BlockGroupsTotalBlocks << "\n";
+    groups_blocks = bdev->ReadBlock(PhysBlockGroupsBlock, BlockGroupsTotalBlocks);
+    if (groups_blocks) {
         groups.reserve(blockGroups);
-        std::shared_ptr<ext2blockgroups> groups{new ext2blockgroups(blockGroups)};
-        memcpy(&((*groups)[0]), ((uint8_t *) physBlockGroups->Pointer()) + onDiskBlockGroupsOffset, sizeof((*groups)[0]) * blockGroups);
+        RawBlockGroups = std::make_shared<ext2blockgroups>(blockGroups);
+        memcpy(&((*RawBlockGroups)[0]), ((uint8_t *) groups_blocks->Pointer()) + PhysBlockGroupsOffset, sizeof((*RawBlockGroups)[0]) * blockGroups);
         for (std::size_t i = 0; i < blockGroups; i++) {
             auto &groupObject = this->groups.emplace_back();
-            auto &group = (*groups)[i];
+            auto &group = (*RawBlockGroups)[i];
+            groupObject.freeInodesCount = group.free_inodes_count;
+            groupObject.freeBlocksCount = group.free_blocks_count;
             std::cout << "Block group " << group.free_blocks_count << " free block, " << group.free_inodes_count
             << " free inodes, " << group.block_bitmap << "/" << group.inode_bitmap << " block/inode bitmaps, "
             << group.inode_table << " inode table, " << group.used_dirs_count << " dirs.\n";
@@ -502,12 +504,22 @@ filesystem_get_node_result<fileitem> ext2fs::GetSymlink(std::shared_ptr<filesyst
 
 ext2fs_get_inode_result ext2fs::AllocateInode() {
     std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
-    for (auto i = 0; i < inodeBitmap.size(); i++) {
+    if (superblock->unallocated_inodes <= 0) {
+        return {.inode = {}, .status = filesystem_status::NO_AVAIL_INODES};
+    }
+    for (auto i = 0; i < inodeBitmap.size() && i < groups.size(); i++) {
+        auto &group = groups[i];
+        if (group.freeInodesCount <= 0) {
+            continue;
+        }
         auto inodeNum = inodeBitmap[i]->FindFree();
         if (inodeNum == 0) {
             continue;
         }
         (*(inodeBitmap[i]))[inodeNum - 1] = true;
+        superblock->unallocated_inodes = superblock->unallocated_inodes - 1;
+        group.freeInodesCount--;
+        group.dirty = true;
         lock = {};
         inodeNum += i * superblock->inodes_per_group;
         return GetInode(inodeNum);
@@ -520,21 +532,36 @@ ext2fs_allocate_blocks_result ext2fs::AllocateBlocks(std::size_t requestedCount)
         return {.block = 0, .count = 0, .status = filesystem_status::SUCCESS};
     }
     std::lock_guard lock{mtx};
-    for (auto i = 0; i < blockBitmap.size(); i++) {
+    if (superblock->unallocated_blocks <= 0) {
+        return {.block = 0, .count = 0, .status = filesystem_status::NO_AVAIL_BLOCKS};
+    }
+    for (auto i = 0; i < blockBitmap.size() && i < groups.size(); i++) {
+        auto &group = groups[i];
+        if (group.freeBlocksCount <= 0) {
+            continue;
+        }
         auto block = blockBitmap[i]->FindFree();
         if (block == 0) {
             continue;
         }
         --block;
         (*(blockBitmap[i]))[block] = true;
+        superblock->unallocated_blocks = superblock->unallocated_blocks - 1;
+        group.freeBlocksCount--;
+        group.dirty = true;
         ext2fs_allocate_blocks_result result{.block = (superblock->blocks_per_group * i) + block, .count = 1, .status = filesystem_status::SUCCESS};
         --requestedCount;
         while (requestedCount > 0) {
+            if (superblock->unallocated_blocks <= 0 || group.freeBlocksCount <= 0) {
+                break;
+            }
             ++block;
             if (block >= superblock->blocks_per_group || (*(blockBitmap[i]))[block]) {
                 break;
             }
             (*(blockBitmap[i]))[block] = true;
+            superblock->unallocated_blocks = superblock->unallocated_blocks - 1;
+            group.freeBlocksCount--;
             --requestedCount;
             ++result.count;
         }
@@ -579,7 +606,7 @@ std::vector<dirty_block> ext2fs::GetBitmapWrites() {
         const auto &group = groups[groupIdx];
         const auto &inodeBitmap = this->inodeBitmap[groupIdx];
         const auto &blockBitmap = this->blockBitmap[groupIdx];
-        auto inodeBlockNums = inodeBitmap->DirtyBlocks();
+        auto inodeBlockNums = inodeBitmap->GetAndClearDirtyBlocks();
         if (!inodeBlockNums.empty()) {
             for (auto bmBlock : inodeBlockNums) {
                 const void *blockPtr = inodeBitmap->PointerToBlock(bmBlock);
@@ -592,7 +619,7 @@ std::vector<dirty_block> ext2fs::GetBitmapWrites() {
                 bitmapBlocks.emplace_back(dirtyBlock);
             }
         }
-        auto blockBitmapNums = blockBitmap->DirtyBlocks();
+        auto blockBitmapNums = blockBitmap->GetAndClearDirtyBlocks();
         if (!blockBitmapNums.empty()) {
             for (auto bmBlock : blockBitmapNums) {
                 const void *blockPtr = blockBitmap->PointerToBlock(bmBlock);
@@ -612,8 +639,8 @@ std::vector<dirty_block> ext2fs::GetBitmapWrites() {
 
 std::vector<std::vector<dirty_block>> ext2fs::GetWrites() {
     std::vector<std::vector<dirty_block>> blocks{};
+    std::lock_guard lock{mtx};
     {
-        std::lock_guard lock{mtx};
         for (auto &inode: inodes) {
             auto writeGroups = inode.inode->GetWrites();
             auto destIterator = blocks.begin();
@@ -651,10 +678,12 @@ std::vector<std::vector<dirty_block>> ext2fs::GetWrites() {
 
 std::vector<dirty_block> ext2fs::OpenForWrite() {
     std::vector<dirty_block> result{};
+    std::lock_guard lock{mtx};
     superblock->last_mount = superblock->last_mount + 1;
     superblock->last_write = superblock->last_mount;
     superblock->mounts_since_check = superblock->mounts_since_check + 1;
     filesystemWasValid = superblock->fs_state == EXT2_VALID_FS;
+    filesystemOpenForWrite = true;
     superblock->fs_state = EXT2_ERROR_FS;
     memmove(((uint8_t *) superblock_blocks->Pointer()) + superblock_offset, &(*superblock), sizeof(*superblock));
     std::shared_ptr<filepage> page = std::make_shared<filepage>();
@@ -666,7 +695,64 @@ std::vector<dirty_block> ext2fs::OpenForWrite() {
 }
 
 std::vector<dirty_block> ext2fs::FlushOrClose() {
-    return {};
+    std::lock_guard lock{mtx};
+    if (!filesystemOpenForWrite) {
+        return {};
+    }
+    {
+        auto writes = GetDataWrites();
+        if (!writes.empty()) {
+            return writes;
+        }
+    }
+    {
+        auto writes = GetMetaWrites();
+        if (!writes.empty()) {
+            return writes;
+        }
+    }
+    {
+        auto writes = GetBitmapWrites();
+        if (!writes.empty()) {
+            return writes;
+        }
+    }
+    {
+        bool dirty = false;
+        for (typeof(groups.size()) i = 0; i < groups.size() && i < RawBlockGroups->Size(); i++) {
+            auto &group = groups[i];
+            if (!group.dirty) {
+                continue;
+            }
+            group.dirty = false;
+            dirty = true;
+            auto &raw = (*RawBlockGroups)[i];
+            raw.free_inodes_count = group.freeInodesCount;
+            raw.free_blocks_count = group.freeBlocksCount;
+        }
+        if (dirty) {
+            std::vector<dirty_block> result{};
+            auto bdevBlocksize = bdev->GetBlocksize();
+            memcpy(((uint8_t *) groups_blocks->Pointer()) + PhysBlockGroupsOffset, &((*RawBlockGroups)[0]), sizeof((*RawBlockGroups)[0]) * RawBlockGroups->Size());
+            for (typeof(BlockGroupsTotalBlocks) i = 0; i < BlockGroupsTotalBlocks; i++) {
+                std::shared_ptr<filepage> page = std::make_shared<filepage>();
+                auto blockOffset = i * bdevBlocksize;
+                memcpy(page->Pointer()->Pointer(), ((uint8_t *) groups_blocks->Pointer()) + blockOffset, bdevBlocksize);
+                dirty_block db{.page1 = page, .page2 = {}, .blockaddr = PhysBlockGroupsBlock + i, .offset = 0, .length = (uint32_t) bdevBlocksize};
+                result.emplace_back(db);
+            }
+            return result;
+        }
+    }
+    std::vector<dirty_block> result{};
+    memmove(((uint8_t *) superblock_blocks->Pointer()) + superblock_offset, &(*superblock), sizeof(*superblock));
+    std::shared_ptr<filepage> page = std::make_shared<filepage>();
+    uint32_t length = superblock_size * bdev->GetBlocksize();
+    memmove(page->Pointer()->Pointer(), superblock_blocks->Pointer(), length);
+    dirty_block db{.page1 = page, .page2 = {}, .blockaddr = superblock_start, .offset = 0, .length = length};
+    result.emplace_back(db);
+    filesystemOpenForWrite = false;
+    return result;
 }
 
 filesystem_get_node_result<directory> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {

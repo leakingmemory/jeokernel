@@ -122,12 +122,12 @@ private:
 public:
     ext2bitmap(std::size_t n, std::size_t blocksize) : bitmap(nullptr), n(n), sz(0), blocks(0), blocksize(blocksize) {
         sz = n / sizeof(uint32_t);
+        if ((n % sizeof(uint32_t)) != 0) {
+            ++sz;
+        }
         blocks = sz / blocksize;
         if ((sz % blocksize) != 0) {
             ++blocks;
-        }
-        if ((n % sizeof(uint32_t)) != 0) {
-            ++sz;
         }
         bitmap = (little_endian<uint32_t> *) malloc(sz * sizeof(uint32_t));
         for (typeof(sz) i = 0 ; i < sz; i++) {
@@ -184,6 +184,16 @@ public:
         for (std::remove_const<typeof(blocks)>::type i = 0; i < blocks; i++) {
             if (dirty[i]) {
                 result.push_back(i);
+            }
+        }
+        return result;
+    }
+    [[nodiscard]] std::vector<uint32_t> GetAndClearDirtyBlocks() {
+        std::vector<uint32_t> result{};
+        for (std::remove_const<typeof(blocks)>::type i = 0; i < blocks; i++) {
+            if (dirty[i]) {
+                result.push_back(i);
+                dirty[i] = false;
             }
         }
         return result;

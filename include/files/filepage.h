@@ -30,6 +30,7 @@ public:
     void SetDirty(size_t length);
     bool IsDirty() const;
     size_t GetDirtyLength() const;
+    size_t GetDirtyLengthAndClear();
 };
 
 struct dirty_block {

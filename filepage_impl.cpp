@@ -23,6 +23,7 @@ public:
     void Zero();
     bool IsDirty() const;
     size_t GetDirtyLength() const;
+    size_t GetDirtyLengthAndClear();
 };
 
 filepage_data::filepage_data() : ptr(nullptr), dirty(0) {
@@ -53,6 +54,12 @@ bool filepage_data::IsDirty() const {
 }
 
 size_t filepage_data::GetDirtyLength() const {
+    return dirty;
+}
+
+size_t filepage_data::GetDirtyLengthAndClear() {
+    auto dirty = this->dirty;
+    this->dirty = 0;
     return dirty;
 }
 
@@ -108,4 +115,8 @@ bool filepage::IsDirty() const {
 
 size_t filepage::GetDirtyLength() const {
     return page ? page->GetDirtyLength() : 0;
+}
+
+size_t filepage::GetDirtyLengthAndClear() {
+    return page ? page->GetDirtyLengthAndClear() : 0;
 }

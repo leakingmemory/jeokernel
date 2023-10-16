@@ -134,8 +134,17 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         writetodev(bdev, writes);
     }
     auto result = fsmain(rootdir, args, args_end);
-    auto writes = bdev_fs->GetWrites();
-    writetodev(bdev, writes);
+    {
+        auto writes = bdev_fs->GetWrites();
+        writetodev(bdev, writes);
+    }
+    while (true) {
+        auto writes = bdev_fs->FlushOrClose();
+        if (writes.empty()) {
+            break;
+        }
+        writetodev(bdev, writes);
+    }
     return result;
 }
 
