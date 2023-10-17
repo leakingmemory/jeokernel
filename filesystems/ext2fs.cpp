@@ -744,6 +744,7 @@ std::vector<dirty_block> ext2fs::FlushOrClose() {
             return result;
         }
     }
+    superblock->fs_state = EXT2_VALID_FS;
     std::vector<dirty_block> result{};
     memmove(((uint8_t *) superblock_blocks->Pointer()) + superblock_offset, &(*superblock), sizeof(*superblock));
     std::shared_ptr<filepage> page = std::make_shared<filepage>();
