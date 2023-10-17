@@ -251,6 +251,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     memcpy(filenameArea, filename.data(), filename.size());
     bzero(dirent->PaddingPtr(), padding);
 
+    lastDirentPos = seekTo;
     actualSize = seekTo + dirent->rec_len;
     if (actualSize > inode->GetFileSize()) {
         auto blocksize = BlockSize();
