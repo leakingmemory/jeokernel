@@ -9,11 +9,16 @@
 filesystem_status ext2fs_inode_reader::seek_set(std::size_t offset) {
     next_blki = offset / FILEPAGE_PAGE_SIZE;
     this->offset = offset % FILEPAGE_PAGE_SIZE;
-    cur_blki = next_blki;
-    auto result = inode->ReadBlock(cur_blki);
-    page = result.page;
-    next_blki++;
-    return result.status;
+    if (cur_blki != next_blki || !page) {
+        cur_blki = next_blki;
+        auto result = inode->ReadBlock(cur_blki);
+        page = result.page;
+        next_blki++;
+        return result.status;
+    } else {
+        next_blki++;
+        return filesystem_status::SUCCESS;
+    }
 }
 
 inode_read_bytes_result ext2fs_inode_reader::read(void *ptr, std::size_t bytes) {

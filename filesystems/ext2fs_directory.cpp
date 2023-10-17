@@ -24,6 +24,7 @@ entries_result ext2fs_directory::Entries() {
         do {
             inode_read_bytes_result readResult{};
             if (sizeRemaining >= sizeof(baseDirent)) {
+                lastDirentPos = inode->GetFileSize() - sizeRemaining;
                 readResult = reader.read(&baseDirent, sizeof(baseDirent));
             } else {
                 readResult = {.size = 0, .status = filesystem_status::SUCCESS};
@@ -159,20 +160,98 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     allocInode.inode->dirty = true;
     std::shared_ptr<ext2fs_file> file = std::make_shared<ext2fs_file>(fs, allocInode.inode);
 
-    auto seekTo = actualSize;
+    auto seekTo = lastDirentPos;
     ext2fs_inode_reader reader{inode};
     reader.seek_set(seekTo);
 
-    ext2dirent *dirent;
-    dirent = new (malloc(sizeof(*dirent) + filename.size())) ext2dirent();
+    ext2dirent *lastDirent, *dirent;
+    auto sizeofLast = actualSize - lastDirentPos;
+
+    {
+        lastDirent = sizeofLast >= sizeof(*dirent) ? new(malloc(sizeofLast)) ext2dirent() : nullptr;
+        if (lastDirent != nullptr) {
+            auto result = reader.read(lastDirent, sizeofLast);
+            if (result.status != filesystem_status::SUCCESS) {
+                lastDirent->~ext2dirent();
+                free(lastDirent);
+                switch (result.status) {
+                    case filesystem_status::IO_ERROR:
+                        return {.file = {}, .status = fileitem_status::IO_ERROR};
+                    case filesystem_status::INTEGRITY_ERROR:
+                        return {.file = {}, .status = fileitem_status::INTEGRITY_ERROR};
+                    case filesystem_status::NOT_SUPPORTED_FS_FEATURE:
+                        return {.file = {}, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
+                    case filesystem_status::INVALID_REQUEST:
+                        return {.file = {}, .status = fileitem_status::INVALID_REQUEST};
+                    case filesystem_status::NO_AVAIL_INODES:
+                        return {.file = {}, .status = fileitem_status::NO_AVAIL_INODES};
+                    case filesystem_status::NO_AVAIL_BLOCKS:
+                        return {.file = {}, .status = fileitem_status::NO_AVAIL_BLOCKS};
+                    default:
+                        return {.file = {}, .status = fileitem_status::IO_ERROR};
+                }
+            }
+            if (result.size != sizeofLast) {
+                lastDirent->~ext2dirent();
+                free(lastDirent);
+                return {.file = {}, .status = fileitem_status::INTEGRITY_ERROR};
+            }
+            auto minimumLength = lastDirent->MinimumLength();
+            auto padding = 4 - (minimumLength & 3);
+            auto minimumPaddedLength = minimumLength + padding;
+            if (minimumPaddedLength < lastDirent->rec_len) {
+                lastDirent->rec_len = minimumPaddedLength;
+                bzero(lastDirent->PaddingPtr(), padding);
+                auto status = reader.seek_set(seekTo);
+                if (status == filesystem_status::SUCCESS) {
+                    auto result = reader.write(lastDirent, lastDirent->rec_len);
+                    if (result.status == filesystem_status::SUCCESS) {
+                        if (result.size != lastDirent->rec_len) {
+                            status = filesystem_status::IO_ERROR;
+                        }
+                    } else {
+                        status = result.status;
+                    }
+                }
+                if (status != filesystem_status::SUCCESS) {
+                    lastDirent->~ext2dirent();
+                    free(lastDirent);
+                    switch (status) {
+                        case filesystem_status::IO_ERROR:
+                            return {.file = {}, .status = fileitem_status::IO_ERROR};
+                        case filesystem_status::INTEGRITY_ERROR:
+                            return {.file = {}, .status = fileitem_status::INTEGRITY_ERROR};
+                        case filesystem_status::NOT_SUPPORTED_FS_FEATURE:
+                            return {.file = {}, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
+                        case filesystem_status::INVALID_REQUEST:
+                            return {.file = {}, .status = fileitem_status::INVALID_REQUEST};
+                        case filesystem_status::NO_AVAIL_INODES:
+                            return {.file = {}, .status = fileitem_status::NO_AVAIL_INODES};
+                        case filesystem_status::NO_AVAIL_BLOCKS:
+                            return {.file = {}, .status = fileitem_status::NO_AVAIL_BLOCKS};
+                        default:
+                            return {.file = {}, .status = fileitem_status::IO_ERROR};
+                    }
+                }
+                seekTo += lastDirent->rec_len;
+            }
+            lastDirent->~ext2dirent();
+            free(lastDirent);
+        }
+    }
+    auto direntSize = sizeof(*dirent) + filename.size();
+    auto padding = 4 - (direntSize & 3);
+    direntSize += padding;
+    dirent = new (malloc(direntSize)) ext2dirent();
     dirent->inode = allocInode.inode->inode;
     dirent->file_type = Ext2FileType_Regular;
     dirent->name_len = filename.size();
-    dirent->rec_len = sizeof(*dirent) + filename.size();
+    dirent->rec_len = direntSize;
     char *filenameArea = ((char *) dirent) + sizeof(*dirent);
     memcpy(filenameArea, filename.data(), filename.size());
+    bzero(dirent->PaddingPtr(), padding);
 
-    actualSize += dirent->rec_len;
+    actualSize = seekTo + dirent->rec_len;
     if (actualSize > inode->GetFileSize()) {
         auto blocksize = BlockSize();
         auto blocks = actualSize / blocksize;
@@ -181,8 +260,11 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
         }
         inode->SetFileSize(blocks * blocksize);
     }
+    actualSize = inode->GetFileSize();
+    auto rec_len = dirent->rec_len;
+    dirent->rec_len = actualSize - seekTo;
 
-    auto result = reader.write(dirent, dirent->rec_len);
+    auto result = reader.write(dirent, rec_len);
     dirent->~ext2dirent();
     free(dirent);
     if (result.status != filesystem_status::SUCCESS) {
@@ -199,6 +281,8 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
                 return {.file = {}, .status = fileitem_status::NO_AVAIL_INODES};
             case filesystem_status::NO_AVAIL_BLOCKS:
                 return {.file = {}, .status = fileitem_status::NO_AVAIL_BLOCKS};
+            default:
+                return {.file = {}, .status = fileitem_status::IO_ERROR};
         }
     }
 

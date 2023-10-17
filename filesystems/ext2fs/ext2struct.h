@@ -246,14 +246,20 @@ struct ext2dirent {
     uint8_t file_type;
 
 private:
-    const char *NamePtr() {
+    constexpr const char *NamePtr() const {
         return ((const char *) this) + sizeof(*this);
     }
 public:
-    std::string Name() {
+    [[nodiscard]] std::string Name() const {
         std::string name{};
         name.append(NamePtr(), name_len);
         return name;
+    }
+    [[nodiscard]] constexpr uint16_t MinimumLength() const {
+        return sizeof(*this) + name_len;
+    }
+    [[nodiscard]] constexpr void *PaddingPtr() const {
+        return (void *) (NamePtr() + name_len);
     }
 } __attribute__((__packed__));
 static_assert(sizeof(ext2dirent) == 8);

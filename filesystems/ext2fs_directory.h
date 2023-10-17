@@ -14,10 +14,10 @@ class ext2fs;
 class ext2fs_directory : public directory, public ext2fs_file {
 private:
     std::vector<std::shared_ptr<directory_entry>> entries;
-    std::size_t actualSize;
+    std::size_t lastDirentPos, actualSize;
     bool entriesRead;
 public:
-    ext2fs_directory(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : directory(), ext2fs_file(fs, inode), entries(), entriesRead(false) {}
+    ext2fs_directory(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : directory(), ext2fs_file(fs, inode), entries(), lastDirentPos(0), actualSize(0), entriesRead(false) {}
     entries_result Entries() override;
 
     directory_resolve_result Create(std::string filename, uint16_t mode) override;
