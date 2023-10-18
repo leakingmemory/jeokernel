@@ -17,7 +17,8 @@ enum class fileitem_status {
     INVALID_REQUEST,
     TOO_MANY_LINKS,
     NO_AVAIL_INODES,
-    NO_AVAIL_BLOCKS
+    NO_AVAIL_BLOCKS,
+    EXISTS
 };
 
 std::string text(fileitem_status status);

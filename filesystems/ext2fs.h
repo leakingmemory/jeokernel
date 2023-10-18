@@ -125,6 +125,7 @@ public:
     filesystem_get_node_result<fileitem> GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
     filesystem_get_node_result<fileitem> GetSymlink(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
     ext2fs_get_inode_result AllocateInode();
+    filesystem_status ReleaseInode(uint32_t inodeNum);
     ext2fs_allocate_blocks_result AllocateBlocks(std::size_t requestedCount);
     filesystem_status ReleaseBlock(uint32_t blknum);
 private:

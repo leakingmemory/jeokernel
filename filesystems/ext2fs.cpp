@@ -527,6 +527,29 @@ ext2fs_get_inode_result ext2fs::AllocateInode() {
     return {.inode = {}, .status = filesystem_status::NO_AVAIL_INODES};
 }
 
+filesystem_status ext2fs::ReleaseInode(uint32_t inodeNum) {
+    if (inodeNum <= 0) {
+        return filesystem_status::INVALID_REQUEST;
+    }
+    --inodeNum;
+    std::unique_ptr<std::lock_guard<std::mutex>> lock{new std::lock_guard(mtx)};
+    auto groupNum = inodeNum / superblock->inodes_per_group;
+    inodeNum = inodeNum % superblock->inodes_per_group;
+    if (groupNum >= inodeBitmap.size() || groupNum >= groups.size()) {
+        return filesystem_status::INVALID_REQUEST;
+    }
+    auto bitmap = inodeBitmap[groupNum];
+    auto &grp = groups[groupNum];
+    if (!(*bitmap)[inodeNum]) {
+        return filesystem_status::INVALID_REQUEST;
+    }
+    (*bitmap)[inodeNum] = false;
+    grp.freeInodesCount++;
+    grp.dirty = true;
+    superblock->unallocated_inodes = superblock->unallocated_inodes + 1;
+    return  filesystem_status::SUCCESS;
+}
+
 ext2fs_allocate_blocks_result ext2fs::AllocateBlocks(std::size_t requestedCount) {
     if (requestedCount <= 0) {
         return {.block = 0, .count = 0, .status = filesystem_status::SUCCESS};

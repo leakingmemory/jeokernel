@@ -12,6 +12,38 @@
 
 constexpr uint16_t modeTypeFile = 00100000;
 
+static directory_entry *CreateDirectoryEntry(std::shared_ptr<filesystem> fs, ext2dirent *dirent, filesystem_status &error) {
+    std::string name{dirent->Name()};
+    auto *e2fs = (ext2fs *) &(*fs);
+    if (dirent->file_type == Ext2FileType_Directory) {
+        auto result = e2fs->GetDirectory(fs, dirent->inode);
+        if (result.node) {
+            return new directory_entry(name, result.node);
+        } else {
+            error = result.status;
+            return nullptr;
+        }
+    } else if (dirent->file_type == Ext2FileType_Regular) {
+        auto result = e2fs->GetFile(fs, dirent->inode);
+        if (result.node) {
+            return new directory_entry(name, result.node);
+        } else {
+            error = result.status;
+            return nullptr;
+        }
+    } else if (dirent->file_type == Ext2FileType_Symlink) {
+        auto result = e2fs->GetSymlink(fs, dirent->inode);
+        if (result.node) {
+            return new directory_entry(name, result.node);
+        } else {
+            error = result.status;
+            return nullptr;
+        }
+    }
+    error = filesystem_status::NOT_SUPPORTED_FS_FEATURE;
+    return nullptr;
+}
+
 entries_result ext2fs_directory::Entries() {
     if (entriesRead) {
         return {.entries = entries, .status = fileitem_status::SUCCESS};
@@ -45,32 +77,12 @@ entries_result ext2fs_directory::Entries() {
                 }
                 if (readResult.size == addLength) {
                     if (dirent->inode != 0) {
-                        std::string name{dirent->Name()};
-#ifdef DEBUG_DIR
-                        std::cout << "Dir node " << dirent->inode << " type " << ((int) dirent->file_type) << " name "
-                                  << name << "\n";
-#endif
-                        if (dirent->file_type == Ext2FileType_Directory) {
-                            auto result = Filesystem().GetDirectory(fs, dirent->inode);
-                            if (result.node) {
-                                entries.emplace_back(new directory_entry(name, result.node));
-                            } else {
-                                return {.entries = {}, .status = Convert(result.status)};
-                            }
-                        } else if (dirent->file_type == Ext2FileType_Regular) {
-                            auto result = Filesystem().GetFile(fs, dirent->inode);
-                            if (result.node) {
-                                entries.emplace_back(new directory_entry(name, result.node));
-                            } else {
-                                return {.entries = {}, .status = Convert(result.status)};
-                            }
-                        } else if (dirent->file_type == Ext2FileType_Symlink) {
-                            auto result = Filesystem().GetSymlink(fs, dirent->inode);
-                            if (result.node) {
-                                entries.emplace_back(new directory_entry(name, result.node));
-                            } else {
-                                return {.entries = {}, .status = Convert(result.status)};
-                            }
+                        filesystem_status error{};
+                        auto *direntObj = CreateDirectoryEntry(fs, dirent, error);
+                        if (direntObj != nullptr) {
+                            entries.emplace_back(direntObj);
+                        }  else {
+                            return {.entries = {}, .status = Convert(error)};
                         }
                     }
                 } else {
@@ -152,8 +164,17 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     }
     auto readResult = Entries();
     if (readResult.status != fileitem_status::SUCCESS) {
+        Filesystem().ReleaseInode(allocInode.inode->inode);
         return {.file = {}, .status = readResult.status};
     }
+
+    for (auto &entry : readResult.entries) {
+        if (entry->Name() == filename) {
+            Filesystem().ReleaseInode(allocInode.inode->inode);
+            return {.file = {}, .status = fileitem_status::EXISTS};
+        }
+    }
+
     allocInode.inode->Init();
     allocInode.inode->linkCount = 1;
     allocInode.inode->mode = mode | modeTypeFile;
@@ -172,6 +193,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
         if (lastDirent != nullptr) {
             auto result = reader.read(lastDirent, sizeofLast);
             if (result.status != filesystem_status::SUCCESS) {
+                Filesystem().ReleaseInode(allocInode.inode->inode);
                 lastDirent->~ext2dirent();
                 free(lastDirent);
                 switch (result.status) {
@@ -192,6 +214,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
                 }
             }
             if (result.size != sizeofLast) {
+                Filesystem().ReleaseInode(allocInode.inode->inode);
                 lastDirent->~ext2dirent();
                 free(lastDirent);
                 return {.file = {}, .status = fileitem_status::INTEGRITY_ERROR};
@@ -214,6 +237,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
                     }
                 }
                 if (status != filesystem_status::SUCCESS) {
+                    Filesystem().ReleaseInode(allocInode.inode->inode);
                     lastDirent->~ext2dirent();
                     free(lastDirent);
                     switch (status) {
@@ -266,8 +290,20 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     dirent->rec_len = actualSize - seekTo;
 
     auto result = reader.write(dirent, rec_len);
+
+    if (result.status == filesystem_status::SUCCESS) {
+        filesystem_status error{};
+        auto *direntObj = CreateDirectoryEntry(fs, dirent, error);
+        if (direntObj != nullptr) {
+            entries.emplace_back(direntObj);
+        }  else {
+            result.status = error;
+        }
+    }
+
     dirent->~ext2dirent();
     free(dirent);
+
     if (result.status != filesystem_status::SUCCESS) {
         switch (result.status) {
             case filesystem_status::IO_ERROR:
