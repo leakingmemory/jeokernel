@@ -179,7 +179,6 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     allocInode.inode->linkCount = 1;
     allocInode.inode->mode = mode | modeTypeFile;
     allocInode.inode->dirty = true;
-    std::shared_ptr<ext2fs_file> file = std::make_shared<ext2fs_file>(fs, allocInode.inode);
 
     auto seekTo = lastDirentPos;
     ext2fs_inode_reader reader{inode};
@@ -291,12 +290,17 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
 
     auto result = reader.write(dirent, rec_len);
 
+    std::shared_ptr<fileitem> file{};
     if (result.status == filesystem_status::SUCCESS) {
         filesystem_status error{};
         auto *direntObj = CreateDirectoryEntry(fs, dirent, error);
         if (direntObj != nullptr) {
-            entries.emplace_back(direntObj);
+            auto &item = entries.emplace_back(direntObj);
+            file = item->Item();
         }  else {
+            if (error == filesystem_status::SUCCESS) {
+                error = filesystem_status::INTEGRITY_ERROR;
+            }
             result.status = error;
         }
     }
@@ -324,4 +328,8 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     }
 
     return {.file = file, .status = fileitem_status::SUCCESS};
+}
+
+directory_resolve_result ext2fs_directory::CreateFile(std::string filename, uint16_t mode) {
+    return Create(filename, mode);
 }
