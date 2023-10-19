@@ -88,3 +88,7 @@ directory_resolve_result directory::Resolve(std::string filename, directory *roo
 directory_resolve_result directory::CreateFile(std::string filename, uint16_t mode) {
     return {.file = {}, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
 }
+
+directory_resolve_result directory::CreateDirectory(std::string filename, uint16_t mode) {
+    return {.file = {}, .status = fileitem_status::NOT_SUPPORTED_FS_FEATURE};
+}

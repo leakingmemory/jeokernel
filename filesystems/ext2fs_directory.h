@@ -20,8 +20,10 @@ public:
     ext2fs_directory(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : directory(), ext2fs_file(fs, inode), entries(), lastDirentPos(0), actualSize(0), entriesRead(false) {}
     entries_result Entries() override;
 
-    directory_resolve_result Create(std::string filename, uint16_t mode);
+    directory_resolve_result Create(std::string filename, uint16_t mode, uint8_t filetype);
     directory_resolve_result CreateFile(std::string filename, uint16_t mode) override;
+    void InitializeDirectory(uint32_t parentInode, uint32_t blocknum);
+    directory_resolve_result CreateDirectory(std::string filename, uint16_t mode) override;
 
 private:
     ext2fs &Filesystem() {

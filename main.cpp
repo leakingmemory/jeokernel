@@ -9,12 +9,16 @@
 #include "ls.h"
 #include "cat.h"
 #include "create.h"
+#include "mkdir.h"
 
 bool is_fswrite(std::vector<std::string>::iterator args, const std::vector<std::string>::iterator &args_end) {
     if (args != args_end) {
         auto cmd = *args;
         ++args;
         if (cmd == "create") {
+            return true;
+        }
+        if (cmd == "mkdir") {
             return true;
         }
     }
@@ -31,6 +35,8 @@ int fsmain(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
             return cat(rootdir, args, args_end);
         } else if (cmd == "create") {
             return create(rootdir, args, args_end);
+        } else if (cmd == "mkdir") {
+            return mkdir(rootdir, args, args_end);
         } else {
             std::cerr << "Invalid command: " << cmd << "\n";
             return 1;

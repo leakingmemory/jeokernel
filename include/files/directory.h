@@ -43,6 +43,7 @@ public:
     virtual entries_result Entries() = 0;
     directory_resolve_result Resolve(std::string filename, directory *rootdir = nullptr, int followSymlink = maxLinkRecurse);
     virtual directory_resolve_result CreateFile(std::string filename, uint16_t mode);
+    virtual directory_resolve_result CreateDirectory(std::string filename, uint16_t mode);
 };
 
 #endif //FSBITS_DIRECTORY_H

@@ -10,7 +10,8 @@
 #include <filesystems/filesystem.h>
 #include <cstring>
 
-constexpr uint16_t modeTypeFile = 00100000;
+constexpr uint16_t modeTypeFile =      00100000;
+constexpr uint16_t modeTypeDirectory = 00040000;
 
 static directory_entry *CreateDirectoryEntry(std::shared_ptr<filesystem> fs, ext2dirent *dirent, filesystem_status &error) {
     std::string name{dirent->Name()};
@@ -137,7 +138,7 @@ file_read_result ext2fs_directory::Read(uint64_t offset, void *ptr, std::size_t 
     return {.size = 0, .status = fileitem_status::INVALID_REQUEST};
 }
 
-directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t mode) {
+directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t mode, uint8_t filetype) {
     auto allocInode = Filesystem().AllocateInode();
     if (allocInode.status != filesystem_status::SUCCESS) {
         fileitem_status status;
@@ -177,7 +178,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
 
     allocInode.inode->Init();
     allocInode.inode->linkCount = 1;
-    allocInode.inode->mode = mode | modeTypeFile;
+    allocInode.inode->mode = mode;
     allocInode.inode->dirty = true;
 
     auto seekTo = lastDirentPos;
@@ -267,7 +268,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     direntSize += padding;
     dirent = new (malloc(direntSize)) ext2dirent();
     dirent->inode = allocInode.inode->inode;
-    dirent->file_type = Ext2FileType_Regular;
+    dirent->file_type = filetype;
     dirent->name_len = filename.size();
     dirent->rec_len = direntSize;
     char *filenameArea = ((char *) dirent) + sizeof(*dirent);
@@ -331,5 +332,53 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
 }
 
 directory_resolve_result ext2fs_directory::CreateFile(std::string filename, uint16_t mode) {
-    return Create(filename, mode);
+    return Create(filename, mode | modeTypeFile, Ext2FileType_Regular);
+}
+
+void ext2fs_directory::InitializeDirectory(uint32_t parentInode, uint32_t blocknum) {
+    auto blocksize = BlockSize();
+    auto *page = new filepage();
+    page->Zero();
+    constexpr auto sz2e = sizeof(ext2dirent);
+    constexpr auto pad2e = 4 - ((sz2e + 2) & 3);
+    constexpr auto totsize = sz2e + pad2e + 2;
+    std::shared_ptr<ext2dirent> d2{new (malloc(totsize)) ext2dirent()};
+    static_assert(sizeof(*d2) == sz2e);
+    char *nameptr = ((char *) &(*d2)) + sz2e;
+    nameptr[0] = '.';
+    nameptr[1] = '.';
+    bzero(nameptr + 2, pad2e);
+    d2->inode = inode->inode;
+    d2->rec_len = totsize;
+    d2->name_len = 1;
+    d2->file_type = Ext2FileType_Directory;
+    memcpy(page->Pointer()->Pointer(), &(*d2), d2->MinimumLength());
+    uint16_t offset = d2->rec_len;
+    d2->inode = parentInode;
+    d2->rec_len = blocksize - offset;
+    d2->name_len = 2;
+    memcpy(((uint8_t *) page->Pointer()->Pointer()) + offset, &(*d2), d2->MinimumLength());
+    page->SetDirty(blocksize);
+    inode->blockRefs.push_back(blocknum);
+    inode->blockCache.emplace_back(page);
+    inode->filesize = blocksize;
+    inode->dirty = true;
+}
+
+directory_resolve_result ext2fs_directory::CreateDirectory(std::string filename, uint16_t mode) {
+    auto emptyDirectoryBlock = Filesystem().AllocateBlocks(1);
+    if (emptyDirectoryBlock.status != filesystem_status::SUCCESS) {
+        return {.file = {}, .status = Convert(emptyDirectoryBlock.status)};
+    }
+    auto inodeCreateResult = Create(filename, mode | modeTypeDirectory, Ext2FileType_Directory);
+    auto *dir = dynamic_cast<ext2fs_directory *>(&(*(inodeCreateResult.file)));
+    if (inodeCreateResult.status == fileitem_status::SUCCESS && dir == nullptr) {
+        inodeCreateResult.status = fileitem_status::INTEGRITY_ERROR;
+    }
+    if (inodeCreateResult.status != fileitem_status::SUCCESS) {
+        Filesystem().ReleaseBlock(emptyDirectoryBlock.block);
+        return inodeCreateResult;
+    }
+    dir->InitializeDirectory(inode->inode, emptyDirectoryBlock.block);
+    return inodeCreateResult;
 }
