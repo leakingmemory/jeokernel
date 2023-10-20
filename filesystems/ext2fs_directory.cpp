@@ -362,6 +362,7 @@ void ext2fs_directory::InitializeDirectory(uint32_t parentInode, uint32_t blockn
     inode->blockRefs.push_back(blocknum);
     inode->blockCache.emplace_back(page);
     inode->filesize = blocksize;
+    inode->linkCount = 2;
     inode->dirty = true;
 }
 
@@ -379,6 +380,10 @@ directory_resolve_result ext2fs_directory::CreateDirectory(std::string filename,
         Filesystem().ReleaseBlock(emptyDirectoryBlock.block);
         return inodeCreateResult;
     }
-    dir->InitializeDirectory(inode->inode, emptyDirectoryBlock.block);
+    auto inodeNum = inode->inode;
+    dir->InitializeDirectory(inodeNum, emptyDirectoryBlock.block);
+    inode->linkCount++;
+    inode->dirty = true;
+    Filesystem().IncrementDirCount(inodeNum);
     return inodeCreateResult;
 }

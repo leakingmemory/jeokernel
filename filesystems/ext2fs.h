@@ -57,6 +57,7 @@ private:
     std::size_t BlockBitmapBlock{0};
     uint32_t freeInodesCount{0};
     uint32_t freeBlocksCount{0};
+    uint32_t directoryCount{0};
     bool dirty{false};
 public:
     ext2fs_group() = default;
@@ -128,6 +129,7 @@ public:
     filesystem_status ReleaseInode(uint32_t inodeNum);
     ext2fs_allocate_blocks_result AllocateBlocks(std::size_t requestedCount);
     filesystem_status ReleaseBlock(uint32_t blknum);
+    void IncrementDirCount(uint32_t inodeNum);
 private:
     std::vector<dirty_block> GetDataWrites();
     std::vector<dirty_block> GetMetaWrites();

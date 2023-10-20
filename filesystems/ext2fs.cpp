@@ -117,6 +117,7 @@ bool ext2fs::ReadBlockGroups() {
             auto &group = (*RawBlockGroups)[i];
             groupObject.freeInodesCount = group.free_inodes_count;
             groupObject.freeBlocksCount = group.free_blocks_count;
+            groupObject.directoryCount = group.used_dirs_count;
             std::cout << "Block group " << group.free_blocks_count << " free block, " << group.free_inodes_count
             << " free inodes, " << group.block_bitmap << "/" << group.inode_bitmap << " block/inode bitmaps, "
             << group.inode_table << " inode table, " << group.used_dirs_count << " dirs.\n";
@@ -600,6 +601,14 @@ filesystem_status ext2fs::ReleaseBlock(uint32_t blknum) {
     (*(blockBitmap[group]))[blk] = false;
 }
 
+void ext2fs::IncrementDirCount(uint32_t inodeNum) {
+    auto group = (inodeNum - 1) / superblock->inodes_per_group;
+    if (group < groups.size()) {
+        groups[group].directoryCount++;
+        groups[group].dirty = true;
+    }
+}
+
 std::vector<dirty_block> ext2fs::GetDataWrites() {
     std::vector<dirty_block> blocks{};
     for (auto &inode: inodes) {
@@ -752,6 +761,7 @@ std::vector<dirty_block> ext2fs::FlushOrClose() {
             auto &raw = (*RawBlockGroups)[i];
             raw.free_inodes_count = group.freeInodesCount;
             raw.free_blocks_count = group.freeBlocksCount;
+            raw.used_dirs_count = group.directoryCount;
         }
         if (dirty) {
             std::vector<dirty_block> result{};
