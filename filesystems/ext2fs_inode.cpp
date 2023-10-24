@@ -76,18 +76,34 @@ bool ext2fs_inode::Read(ext2inode &inode) {
 bool ext2fs_inode::Write(ext2inode &inode) {
     constexpr auto blocksize = FILEPAGE_PAGE_SIZE;
     auto sz1 = sizeof(inode);
-    if ((sz1 + offset) > blocksize) {
-        sz1 = blocksize - offset;
-        auto sz2 = sizeof(inode) - sz1;
-        if (!blocks[1]) {
-            return false;
+    auto fullInodeSize = inodesize > sz1 ? inodesize : sz1;
+    auto extendedSize = fullInodeSize - sz1;
+    if ((fullInodeSize + offset) > blocksize) {
+        if ((sz1 + offset) > blocksize) {
+            sz1 = blocksize - offset;
+            auto sz2 = sizeof(inode) - sz1;
+            if (!blocks[1]) {
+                return false;
+            }
+            memcpy(blocks[1]->Pointer()->Pointer(), ((uint8_t *) (void *) &inode) + sz1, sz2);
+            if (extendedSize > 0) {
+                bzero(((uint8_t *) blocks[1]->Pointer()->Pointer()) + sz2, extendedSize);
+                extendedSize = 0;
+            }
+        } else {
+            auto clear0 = blocksize - offset - sz1;
+            auto clear1 = extendedSize - clear0;
+            extendedSize = clear0;
+            bzero(blocks[1]->Pointer()->Pointer(), clear1);
         }
-        memcpy(blocks[1]->Pointer()->Pointer(), ((uint8_t *) (void *) &inode) + sz1, sz2);
     }
     if (!blocks[0]) {
         return false;
     }
     memcpy(((uint8_t *) blocks[0]->Pointer()->Pointer()) + offset, &inode, sz1);
+    if (extendedSize > 0) {
+        bzero(((uint8_t *) blocks[0]->Pointer()->Pointer()) + offset + sz1, extendedSize);
+    }
     return true;
 }
 
@@ -419,7 +435,6 @@ std::vector<dirty_block> ext2fs_inode::GetMetaWrites() {
         if (!Read(inode)) {
             return {};
         }
-        inode.size = filesize;
         {
             uint64_t i_blocks = blockRefs.size();
             i_blocks = i_blocks * blocksize;
@@ -427,6 +442,23 @@ std::vector<dirty_block> ext2fs_inode::GetMetaWrites() {
             inode.blocks = i_blocks;
         }
         inode.mode = mode;
+        inode.uid = (uint16_t) (uid & 0xFFFF);
+        inode.size = filesize;
+        inode.atime = atime;
+        inode.ctime = ctime;
+        inode.mtime = mtime;
+        inode.dtime = dtime;
+        inode.gid = (uint16_t) (gid & 0xFFFF);
+        inode.flags = flags;
+        inode.reserved1 = 0;
+        inode.generation = generation;
+        inode.file_acl = file_acl;
+        inode.dir_acl = dir_acl;
+        inode.fragment_address = fragment_address;
+        inode.fragment_number = fragment_number;
+        inode.fragment_size = fragment_size;
+        inode.uid_high = (uint16_t) ((uid & 0xFFFF0000) >> 16);
+        inode.gid_high = (uint16_t) ((gid & 0xFFFF0000) >> 16);
         inode.links_count = linkCount;
         auto blockIterator = blockRefs.begin();
         {
@@ -440,11 +472,16 @@ std::vector<dirty_block> ext2fs_inode::GetMetaWrites() {
                 inode.block[i] = 0;
                 ++i;
             }
+            while (i < EXT2_NUM_BLOCK_POINTERS) {
+                inode.block[i] = 0;
+                ++i;
+            }
         }
         if (!Write(inode)) {
             return {};
         }
-        dirty_block blk{.page1 = blocks[0], .page2 = blocks[1], .blockaddr = blocknum, .offset = 0, .length = (uint32_t) (GetOffset() + WriteSize())};
+        auto wsize = WriteSize() < inodesize ? inodesize : WriteSize();
+        dirty_block blk{.page1 = blocks[0], .page2 = blocks[1], .blockaddr = blocknum, .offset = 0, .length = (uint32_t) (GetOffset() + wsize)};
         inodeBlocks.emplace_back(blk);
         this->dirty = false;
     }

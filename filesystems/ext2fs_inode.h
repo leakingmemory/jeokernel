@@ -35,7 +35,7 @@ private:
     std::shared_ptr<filepage> blocks[2];
     std::size_t offset;
     std::size_t blocksize;
-
+    std::size_t inodesize;
     std::vector<uint32_t> blockRefs;
     std::string symlinkPointer;
     std::vector<std::shared_ptr<filepage>> blockCache;
@@ -45,12 +45,25 @@ private:
     uint64_t blocknum;
     uint16_t mode;
     uint16_t linkCount;
+    uint32_t uid;
+    uint32_t atime;
+    uint32_t ctime;
+    uint32_t mtime;
+    uint32_t dtime;
+    uint32_t gid;
+    uint32_t flags;
+    uint32_t generation;
+    uint32_t file_acl;
+    uint32_t dir_acl;
+    uint32_t fragment_address;
+    uint8_t fragment_number;
+    uint8_t fragment_size;
     bool dirty{false};
 public:
-    ext2fs_inode(const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk, std::size_t offset, std::size_t blocksize, uint64_t blocknum) : mtx(), fs(fs), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), blockRefs(), symlinkPointer(), blockCache(), sys_dev_id(), inode(0), filesize(0), blocknum(blocknum), mode(0) {
+    ext2fs_inode(const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk, std::size_t offset, std::size_t blocksize, std::size_t inodesize, uint64_t blocknum) : mtx(), fs(fs), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), inodesize(inodesize), blockRefs(), symlinkPointer(), blockCache(), sys_dev_id(), inode(0), filesize(0), blocknum(blocknum), mode(0) {
         blocks[0] = blk;
     }
-    ext2fs_inode(const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk1, std::shared_ptr<filepage> blk2, std::size_t offset, std::size_t blocksize, uint64_t blocknum) : ext2fs_inode(fs, bdev, blk1, offset, blocksize, blocknum) {
+    ext2fs_inode(const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk1, std::shared_ptr<filepage> blk2, std::size_t offset, std::size_t blocksize, std::size_t inodesize, uint64_t blocknum) : ext2fs_inode(fs, bdev, blk1, offset, blocksize, inodesize, blocknum) {
         blocks[1] = blk2;
     }
     bool Init();

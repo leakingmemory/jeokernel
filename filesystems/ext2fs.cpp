@@ -250,9 +250,9 @@ ext2fs_get_inode_result ext2fs::LoadInode(std::size_t inode_num) {
     }
     std::shared_ptr<ext2fs_inode> inode_obj{};
     if (block_num == block_end) {
-        inode_obj = std::make_shared<ext2fs_inode>(self_ref, bdev, group.InodeTableBlocks[block_num], offset, BlockSize, rdStart);
+        inode_obj = std::make_shared<ext2fs_inode>(self_ref, bdev, group.InodeTableBlocks[block_num], offset, BlockSize, InodeSize(), rdStart);
     } else if ((block_num + 1) == block_end) {
-        inode_obj = std::make_shared<ext2fs_inode>(self_ref, bdev, group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, BlockSize, rdStart);
+        inode_obj = std::make_shared<ext2fs_inode>(self_ref, bdev, group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, BlockSize, InodeSize(), rdStart);
     } else {
         return {};
     }
@@ -356,6 +356,21 @@ ext2fs_get_inode_result ext2fs::LoadInode(std::size_t inode_num) {
     inode_obj->inode = inode_num + 1;
     inode_obj->filesize = inode.size;
     inode_obj->mode = inode.mode;
+    inode_obj->uid = inode.uid;
+    inode_obj->uid += ((uint32_t) inode.uid_high) << 16;
+    inode_obj->gid += ((uint32_t) inode.gid_high) << 16;
+    inode_obj->atime = inode.atime;
+    inode_obj->ctime = inode.ctime;
+    inode_obj->mtime = inode.mtime;
+    inode_obj->dtime = inode.dtime;
+    inode_obj->gid = inode.gid;
+    inode_obj->flags = inode.flags;
+    inode_obj->generation = inode.generation;
+    inode_obj->file_acl = inode.file_acl;
+    inode_obj->dir_acl = inode.dir_acl;
+    inode_obj->fragment_address = inode.fragment_address;
+    inode_obj->fragment_number = inode.fragment_number;
+    inode_obj->fragment_size = inode.fragment_size;
     inode_obj->linkCount = inode.links_count;
     auto pages = inode_obj->filesize / FILEPAGE_PAGE_SIZE;
     if ((inode_obj->filesize % FILEPAGE_PAGE_SIZE) != 0) {
@@ -568,8 +583,7 @@ ext2fs_allocate_blocks_result ext2fs::AllocateBlocks(std::size_t requestedCount)
         if (block == 0) {
             continue;
         }
-        --block;
-        (*(blockBitmap[i]))[block] = true;
+        (*(blockBitmap[i]))[block - 1] = true;
         superblock->unallocated_blocks = superblock->unallocated_blocks - 1;
         group.freeBlocksCount--;
         group.dirty = true;
@@ -579,11 +593,11 @@ ext2fs_allocate_blocks_result ext2fs::AllocateBlocks(std::size_t requestedCount)
             if (superblock->unallocated_blocks <= 0 || group.freeBlocksCount <= 0) {
                 break;
             }
-            ++block;
             if (block >= superblock->blocks_per_group || (*(blockBitmap[i]))[block]) {
                 break;
             }
             (*(blockBitmap[i]))[block] = true;
+            ++block;
             superblock->unallocated_blocks = superblock->unallocated_blocks - 1;
             group.freeBlocksCount--;
             --requestedCount;
@@ -786,6 +800,7 @@ std::vector<dirty_block> ext2fs::FlushOrClose() {
     dirty_block db{.page1 = page, .page2 = {}, .blockaddr = superblock_start, .offset = 0, .length = length};
     result.emplace_back(db);
     filesystemOpenForWrite = false;
+    std::cout << "Closed FS for write, free_blocks=" << superblock->unallocated_blocks << "\n";
     return result;
 }
 

@@ -179,6 +179,19 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     allocInode.inode->Init();
     allocInode.inode->linkCount = 1;
     allocInode.inode->mode = mode;
+    allocInode.inode->uid = 0;
+    allocInode.inode->atime = 0;
+    allocInode.inode->ctime = 0;
+    allocInode.inode->mtime = 0;
+    allocInode.inode->dtime = 0;
+    allocInode.inode->gid = 0;
+    allocInode.inode->flags = 0;
+    allocInode.inode->generation = 0;
+    allocInode.inode->file_acl = 0;
+    allocInode.inode->dir_acl = 0;
+    allocInode.inode->fragment_address = 0;
+    allocInode.inode->fragment_number = 0;
+    allocInode.inode->fragment_size = 0;
     allocInode.inode->dirty = true;
 
     auto seekTo = lastDirentPos;
