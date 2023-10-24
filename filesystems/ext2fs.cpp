@@ -609,10 +609,20 @@ ext2fs_allocate_blocks_result ext2fs::AllocateBlocks(std::size_t requestedCount)
 }
 
 filesystem_status ext2fs::ReleaseBlock(uint32_t blknum) {
+    if (blknum < 1) {
+        return filesystem_status::INTEGRITY_ERROR;
+    }
     auto group = blknum / superblock->blocks_per_group;
     auto blk = blknum % superblock->blocks_per_group;
+    if (group >= blockBitmap.size()) {
+        return filesystem_status::INTEGRITY_ERROR;
+    }
     std::lock_guard lock{mtx};
-    (*(blockBitmap[group]))[blk] = false;
+    (*(blockBitmap[group]))[blk - 1] = false;
+    groups[group].freeBlocksCount++;
+    groups[group].dirty = true;
+    superblock->unallocated_blocks = superblock->unallocated_blocks + 1;
+    return filesystem_status::SUCCESS;
 }
 
 void ext2fs::IncrementDirCount(uint32_t inodeNum) {
