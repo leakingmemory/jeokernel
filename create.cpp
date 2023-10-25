@@ -3,14 +3,40 @@
 //
 
 #include "create.h"
+#include "mkdir.h"
 #include <iostream>
 
 int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
     std::shared_ptr<fileitem> file{};
     std::string createFileName{};
+    bool pathCreate{false};
+    bool nextDir{false};
+
     while (args != args_end) {
+        auto arg = *args;
+        if (nextDir) {
+            nextDir = false;
+        } else if (arg == "-") {
+            nextDir = true;
+            ++args;
+            continue;
+        } else if (arg.starts_with("-")) {
+            arg.erase(0);
+            for (auto opt : arg) {
+                switch (opt) {
+                    case 'p':
+                        pathCreate = true;
+                        break;
+                    default:
+                        std::cerr << "Invalid option: " << opt << "\n";
+                        return 1;
+                }
+            }
+            ++args;
+            continue;
+        }
         {
-            std::string path = *args;
+            std::string path = arg;
             createFileName = path;
             ++args;
             while (path.ends_with('/')) {
@@ -24,11 +50,19 @@ int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
                 file = result.file;
                 if (!file) {
                     if (result.status == fileitem_status::SUCCESS) {
-                        std::cerr << "Path not found: " << path << "\n";
+                        if (pathCreate) {
+                            file = mkdir(rootdir, path, true);
+                            if (!file) {
+                                return 2;
+                            }
+                        } else {
+                            std::cerr << "Path not found: " << path << "\n";
+                            return 2;
+                        }
                     } else {
                         std::cerr << "Path error: " << path << ": " << text(result.status) << "\n";
+                        return 2;
                     }
-                    return 2;
                 }
             } else {
                 file = rootdir;
