@@ -56,6 +56,13 @@ namespace std {
     template< class T >
     using remove_reference_t = typename remove_reference<T>::type;
 
+    template <class T> struct remove_const {
+        typedef T type;
+    };
+    template <class T> struct remove_const<const T> {
+        typedef T type;
+    };
+
     template <class T> struct remove_cv {
         typedef T type;
     };
