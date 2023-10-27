@@ -5,6 +5,7 @@
 #include "ext2fs_inode.h"
 #include "ext2fs.h"
 #include "ext2fs/ext2struct.h"
+#include <strings.h>
 #include <cstring>
 #include <iostream>
 #include <blockdevs/blockdev.h>
