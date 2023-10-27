@@ -16,7 +16,9 @@ enum class filesystem_status {
     IO_ERROR,
     INTEGRITY_ERROR,
     NOT_SUPPORTED_FS_FEATURE,
-    INVALID_REQUEST
+    INVALID_REQUEST,
+    NO_AVAIL_INODES,
+    NO_AVAIL_BLOCKS
 };
 
 std::string text(filesystem_status status);
@@ -38,6 +40,9 @@ public:
     blockdev_filesystem(std::shared_ptr<blockdev> bdev) : bdev(bdev) {
     }
     filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override = 0;
+    virtual std::vector<std::vector<dirty_block>> GetWrites() = 0;
+    virtual std::vector<dirty_block> OpenForWrite() = 0;
+    virtual std::vector<dirty_block> FlushOrClose() = 0;
 };
 
 class filesystem_provider {

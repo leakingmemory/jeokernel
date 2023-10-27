@@ -9,6 +9,9 @@
 
 #define EXT2_SIGNATURE 0xEF53
 
+#define EXT2_VALID_FS 1
+#define EXT2_ERROR_FS 2
+
 struct ext2super {
     little_endian<uint32_t> total_inodes;
     little_endian<uint32_t> total_blocks;
@@ -87,21 +90,25 @@ public:
 class ext2bitmap_bit {
 private:
     little_endian<uint32_t> &entry;
+    bool &dirty;
     uint32_t bit;
 public:
-    ext2bitmap_bit(little_endian<uint32_t> &entry, uint32_t bit) : entry(entry), bit(bit) {
+    ext2bitmap_bit(little_endian<uint32_t> &entry, bool &dirty, uint32_t bit) : entry(entry), dirty(dirty), bit(bit) {
     }
     operator bool() {
         uint32_t val = entry;
-        return (val & bit) != 0;
+        return (val & (((typeof(val)) 1) << bit)) != 0;
     }
     ext2bitmap_bit &operator =(bool value) {
         if (value) {
             uint32_t prev = entry;
-            entry = prev | bit;
+            entry = prev | (((typeof(prev)) 1) << bit);
+            if (prev != entry) {
+                dirty = true;
+            }
         } else {
             uint32_t prev = entry;
-            entry = prev & ~bit;
+            entry = prev & ~(((typeof(prev)) 1) << bit);
         }
         return *this;
     }
@@ -110,31 +117,91 @@ public:
 class ext2bitmap {
 private:
     little_endian<uint32_t> *bitmap;
-    std::size_t n;
+    bool *dirty;
+    std::size_t n, sz, blocks, blocksize;
 public:
-    ext2bitmap(std::size_t n) : bitmap(nullptr), n(n) {
-        auto sz = n / sizeof(uint32_t);
+    ext2bitmap(std::size_t n, std::size_t blocksize) : bitmap(nullptr), n(n), sz(0), blocks(0), blocksize(blocksize) {
+        sz = n / sizeof(uint32_t);
         if ((n % sizeof(uint32_t)) != 0) {
             ++sz;
         }
+        blocks = sz / blocksize;
+        if ((sz % blocksize) != 0) {
+            ++blocks;
+        }
         bitmap = (little_endian<uint32_t> *) malloc(sz * sizeof(uint32_t));
+        for (typeof(sz) i = 0 ; i < sz; i++) {
+            bitmap[i] = ~((typeof(bitmap[i])) 0);
+        }
+        dirty = (bool *) malloc(blocks * sizeof(*dirty));
+        for (typeof(blocks) i = 0; i < blocks; i++) {
+            dirty[i] = false;
+        }
     }
     ext2bitmap(const ext2bitmap &) = delete;
     ext2bitmap(ext2bitmap &&) = delete;
     ext2bitmap &operator =(const ext2bitmap &) = delete;
     ext2bitmap &operator =(ext2bitmap &&) = delete;
     ~ext2bitmap() {
+        free(dirty);
+        dirty = nullptr;
         free(bitmap);
         bitmap = nullptr;
     }
-    ext2bitmap_bit operator[] (std::size_t i) {
+    ext2bitmap_bit operator[] (std::size_t i) const {
         auto bit = i & 31;
         i = i >> 5;
-        ext2bitmap_bit ref{bitmap[i], (uint32_t) bit};
+        auto block = i / blocksize;
+        ext2bitmap_bit ref{bitmap[i], dirty[block], (uint32_t) bit};
         return ref;
+    }
+    std::size_t FindFree(int after = 0) const {
+        for (std::size_t i = after; i < sz; i++) {
+            typeof(bitmap[i]) bits = bitmap[i];
+            constexpr typeof(bits) allOne = ~((typeof(bits)) 0);
+            if (bits != allOne) {
+                for (int b = 0; b < 32; b++) {
+                    uint32_t bitmask = ((uint32_t) 1) << b;
+                    if ((bits & bitmask) == 0) {
+                        std::size_t inodenum = i * 32;
+                        inodenum += b;
+                        if (inodenum < n) {
+                            return inodenum + 1;
+                        } else {
+                            return 0;
+                        }
+                    }
+                }
+            }
+        }
+        return 0;
     }
     void *Pointer() {
         return bitmap;
+    }
+    [[nodiscard]] std::vector<uint32_t> DirtyBlocks() const {
+        std::vector<uint32_t> result{};
+        for (std::remove_const<typeof(blocks)>::type i = 0; i < blocks; i++) {
+            if (dirty[i]) {
+                result.push_back(i);
+            }
+        }
+        return result;
+    }
+    [[nodiscard]] std::vector<uint32_t> GetAndClearDirtyBlocks() {
+        std::vector<uint32_t> result{};
+        for (std::remove_const<typeof(blocks)>::type i = 0; i < blocks; i++) {
+            if (dirty[i]) {
+                result.push_back(i);
+                dirty[i] = false;
+            }
+        }
+        return result;
+    }
+    const void *PointerToBlock(std::size_t blk) const {
+        uintptr_t offset = blk;
+        offset = offset * blocksize;
+        return ((uint8_t *) bitmap) + offset;
     }
 };
 
@@ -168,6 +235,10 @@ struct ext2inode {
 };
 static_assert(sizeof(ext2inode) == 128);
 
+constexpr uint8_t Ext2FileType_Regular = 1;
+constexpr uint8_t Ext2FileType_Directory = 2;
+constexpr uint8_t Ext2FileType_Symlink = 7;
+
 struct ext2dirent {
     little_endian<uint32_t> inode;
     little_endian<uint16_t> rec_len;
@@ -175,14 +246,20 @@ struct ext2dirent {
     uint8_t file_type;
 
 private:
-    const char *NamePtr() {
+    constexpr const char *NamePtr() const {
         return ((const char *) this) + sizeof(*this);
     }
 public:
-    std::string Name() {
+    [[nodiscard]] std::string Name() const {
         std::string name{};
         name.append(NamePtr(), name_len);
         return name;
+    }
+    [[nodiscard]] constexpr uint16_t MinimumLength() const {
+        return sizeof(*this) + name_len;
+    }
+    [[nodiscard]] constexpr void *PaddingPtr() const {
+        return (void *) (NamePtr() + name_len);
     }
 } __attribute__((__packed__));
 static_assert(sizeof(ext2dirent) == 8);

@@ -15,7 +15,8 @@ class filepage_raw;
 
 class filepage_pointer {
 public:
-    virtual void *Pointer() = 0;
+    virtual void *Pointer() const = 0;
+    virtual void SetDirty(size_t length) = 0;
 };
 
 class filepage {
@@ -25,6 +26,18 @@ public:
     filepage();
     std::shared_ptr<filepage_pointer> Pointer();
     std::shared_ptr<filepage_data> Raw();
+    void Zero();
+    void SetDirty(size_t length);
+    bool IsDirty() const;
+    size_t GetDirtyLength() const;
+    size_t GetDirtyLengthAndClear();
+};
+
+struct dirty_block {
+    std::shared_ptr<filepage> page1{};
+    std::shared_ptr<filepage> page2{};
+    uint64_t blockaddr;
+    uint32_t offset, length;
 };
 
 #endif //FSBITS_FILEPAGE_H
