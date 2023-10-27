@@ -53,7 +53,7 @@ int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp
                             }
                             int linkLimit = 20;
                             while (binary.result) {
-                                std::shared_ptr<ksymlink> symlink{binary.result};
+                                std::shared_ptr<ksymlink> symlink = std::dynamic_pointer_cast<ksymlink>(binary.result);
                                 if (!symlink) {
                                     break;
                                 }
@@ -75,7 +75,7 @@ int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp
                             }
                             ctx.GetProcess().GetProcess()->TearDownMemory();
                             auto cwd = ctx.GetProcess().GetCwd();
-                            std::shared_ptr<kdirectory> cwd_dir{cwd};
+                            std::shared_ptr<kdirectory> cwd_dir = std::dynamic_pointer_cast<kdirectory>(cwd);
                             std::shared_ptr<tty> tty{};
                             Exec exec{tty, cwd, *cwd_dir, binary.result, filename, argv, env, 0};
                             auto result = exec.RunFromExistingProcess(&(ctx.GetProcess()), [ctx] (bool success, const ExecStartVector &startVector) {

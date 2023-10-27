@@ -30,7 +30,7 @@ Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir
     if (!mountpointResult.result) {
         return ctx.Return(-ENOENT);
     }
-    std::shared_ptr<kdirectory> mountpoint{mountpointResult.result};
+    std::shared_ptr<kdirectory> mountpoint = std::dynamic_pointer_cast<kdirectory>(mountpointResult.result);
     if (!mountpoint) {
         return ctx.Return(-ENOTDIR);
     }

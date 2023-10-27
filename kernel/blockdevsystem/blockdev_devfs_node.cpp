@@ -21,8 +21,7 @@ std::shared_ptr<blockdev_devfs_node> blockdev_devfs_node::Create(const std::shar
 }
 
 std::shared_ptr<blockdev_devfs_node> blockdev_devfs_node::FromFileItem(const std::shared_ptr<fileitem> &fitem) {
-    std::shared_ptr<blockdev_devfs_node> node{fitem};
-    return node;
+    return std::dynamic_pointer_cast<blockdev_devfs_node>(fitem);
 }
 
 std::shared_ptr<fileitem> blockdev_devfs_node::AsFileitem() {

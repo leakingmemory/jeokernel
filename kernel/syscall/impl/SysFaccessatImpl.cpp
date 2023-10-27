@@ -23,7 +23,7 @@ int SysFaccessatImpl::DoFaccessat(ProcThread &proc, int dfd, std::string filenam
         auto fdesc = proc.get_file_descriptor(dfd);
         auto handler = fdesc.GetHandler();
         auto file = handler->get_file();
-        std::shared_ptr<kdirectory> dir{file};
+        std::shared_ptr<kdirectory> dir = std::dynamic_pointer_cast<kdirectory>(file);
         if (!dir) {
             return -ENOTDIR;
         }
@@ -43,7 +43,7 @@ int SysFaccessatImpl::DoFaccessat(ProcThread &proc, int dfd, std::string filenam
     if ((flags & AT_SYMLINK_NOFOLLOW) == 0) {
         int linkLimit = 20;
         while (true) {
-            std::shared_ptr<ksymlink> symlink{fileResolve.result};
+            std::shared_ptr<ksymlink> symlink = std::dynamic_pointer_cast<ksymlink>(fileResolve.result);
             if (!symlink) {
                 break;
             }

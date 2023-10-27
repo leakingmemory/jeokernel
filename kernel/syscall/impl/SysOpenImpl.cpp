@@ -57,7 +57,7 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
 
     int followLim = 20;
     while (true) {
-        std::shared_ptr<ksymlink> perhapsSymlink{file};
+        std::shared_ptr<ksymlink> perhapsSymlink = std::dynamic_pointer_cast<ksymlink>(file);
         if (!perhapsSymlink) {
             break;
         }
@@ -139,7 +139,7 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
         }
     }
 
-    std::shared_ptr<kdirectory> perhapsDir{file};
+    std::shared_ptr<kdirectory> perhapsDir = std::dynamic_pointer_cast<kdirectory>(file);
     if (perhapsDir) {
         if (openWrite) {
             return -EISDIR;

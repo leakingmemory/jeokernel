@@ -289,9 +289,14 @@ namespace std {
         };
     }
 
+    namespace impl {
+        template<class T> class dynamic_pointer_cast;
+    }
+
     template <class T, class Deleter = std::default_delete<T>> class shared_ptr {
         friend shared_ptr;
         template <class W, class X> friend class shared_ptr;
+        template <class W> friend class impl::dynamic_pointer_cast;
         friend class weak_ptr<T,Deleter>;
     public:
         typedef T *pointer;
@@ -312,8 +317,8 @@ namespace std {
             }
         }
 
-        template <class P,class PDeleter> shared_ptr(shared_ptr<P,Deleter> &&mv) : container(mv.container), ptr(dynamic_cast<T*>(mv.ptr)) {
-            static_assert(std::is_assignable<T*,P*>::value || std::is_assignable<P*,T*>::value);
+        template <class P,class PDeleter> shared_ptr(shared_ptr<P,Deleter> &&mv) : container(mv.container), ptr(mv.ptr) {
+            static_assert(std::is_assignable<T*,P*>::value);
             if (ptr != nullptr) {
                 mv.container = nullptr;
                 mv.ptr = nullptr;
@@ -330,12 +335,7 @@ namespace std {
                 container->acquire();
             }
         }
-        template <class P,class PDeleter> shared_ptr(const shared_ptr<P,PDeleter> &cp) : container(cp.Container()), ptr((T *) cp.ptr) {
-            if constexpr(is_polymorphic<P>::value) {
-                ptr = dynamic_cast<T*>(cp.ptr);
-            } else {
-                ptr = cp.ptr;
-            }
+        template <class P,class PDeleter> shared_ptr(const shared_ptr<P,PDeleter> &cp) : container(cp.Container()), ptr(cp.ptr) {
             if (container != nullptr && ptr != nullptr) {
                 container->acquire();
             } else {
@@ -349,23 +349,18 @@ namespace std {
         }
 
         template <class P,class PDeleter> shared_ptr &operator = (shared_ptr<P,PDeleter> &&mv) {
-            static_assert(is_assignable<T*,P*>::value || is_assignable<P*,T*>::value);
+            static_assert(is_assignable<T*,P*>::value);
             if (((void *) this) == ((void *) &mv)) {
                 return *this;
             }
-            ptr = dynamic_cast<T*>(mv.ptr);
+            ptr = mv.ptr;
             if (container != nullptr) {
                 if (container->release() == 0) {
                     delete container;
                 }
             }
-            if (ptr != nullptr) {
-                container = mv.container;
-                mv.container = nullptr;
-            } else {
-                container = nullptr;
-                ptr = nullptr;
-            }
+            container = mv.container;
+            mv.container = nullptr;
             return *this;
         }
 
@@ -473,8 +468,57 @@ namespace std {
         }
     };
 
+    namespace impl {
+        template<class T>
+        class dynamic_pointer_cast {
+        private:
+            std::shared_ptr<T> shptr{};
+        public:
+            template<class P, class PDeleter>
+            dynamic_pointer_cast(shared_ptr<P, PDeleter> &&mv) {
+                T *ptr = dynamic_cast<T *>(mv.ptr);
+                if (ptr != nullptr) {
+                    shptr.container = mv.container;
+                    shptr.ptr = ptr;
+                    mv.container = nullptr;
+                    mv.ptr = nullptr;
+                }
+            }
+
+            template<class P, class PDeleter>
+            dynamic_pointer_cast(const shared_ptr<P, PDeleter> &cp) {
+                T *ptr;
+                if constexpr (is_polymorphic<P>::value) {
+                    ptr = dynamic_cast<T *>(cp.ptr);
+                } else {
+                    ptr = cp.ptr;
+                }
+                auto *container = cp.container;
+                if (container != nullptr && ptr != nullptr) {
+                    container->acquire();
+                    shptr.ptr = ptr;
+                    shptr.container = container;
+                }
+            }
+
+            std::shared_ptr<T> Get() {
+                return shptr;
+            }
+        };
+    }
+
     template<class T, class... Args> shared_ptr<T> make_shared(Args&&... args) {
         return shared_ptr<T>(new T(args...));
+    }
+
+    template<class T, class S> shared_ptr<T> dynamic_pointer_cast(const std::shared_ptr<S> &src) {
+        impl::dynamic_pointer_cast<T> cst{src};
+        return cst.Get();
+    }
+
+    template<class T, class S> shared_ptr<T> dynamic_pointer_cast(std::shared_ptr<S> &&src) {
+        impl::dynamic_pointer_cast<T> cst{std::move(src)};
+        return cst.Get();
     }
 
     template <class T, class Deleter = std::default_delete<T>> class weak_ptr {

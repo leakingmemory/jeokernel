@@ -20,7 +20,7 @@ int Chdir::DoChdir(std::shared_ptr<Process> proc, const std::string &filename) {
     if (!file.result) {
         return -ENOENT;
     }
-    std::shared_ptr<kdirectory> dir{file.result};
+    std::shared_ptr<kdirectory> dir = std::dynamic_pointer_cast<kdirectory>(file.result);
     if (!dir) {
         return -ENOTDIR;
     }

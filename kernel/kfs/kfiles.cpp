@@ -182,7 +182,7 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
     std::vector<std::shared_ptr<kdirent>> entries{};
     for (auto impl_entry : impl_entries.result) {
         if (dynamic_cast<kdirectory_impl *>(&(*(impl_entry->File()))) == nullptr) {
-            std::shared_ptr<ksymlink_impl> symli{impl_entry->File()};
+            std::shared_ptr<ksymlink_impl> symli = std::dynamic_pointer_cast<ksymlink_impl>(impl_entry->File());
             if (!symli) {
                 entries.push_back(impl_entry);
             } else {

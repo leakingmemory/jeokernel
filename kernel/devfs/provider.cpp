@@ -18,7 +18,7 @@ public:
 };
 
 filesystem_get_node_result<directory> devfs_filesystem::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {
-    return {.node = GetDevfs()->GetRoot(), .status = filesystem_status::SUCCESS};
+    return {.node = std::dynamic_pointer_cast<directory>(GetDevfs()->GetRoot()), .status = filesystem_status::SUCCESS};
 }
 
 std::string devfs_provider::name() const {
