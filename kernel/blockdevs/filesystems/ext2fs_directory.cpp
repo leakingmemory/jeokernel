@@ -9,6 +9,7 @@
 #include "ext2fs.h"
 #include <filesystems/filesystem.h>
 #include <cstring>
+#include <strings.h>
 
 constexpr uint16_t modeTypeFile =      00100000;
 constexpr uint16_t modeTypeDirectory = 00040000;
