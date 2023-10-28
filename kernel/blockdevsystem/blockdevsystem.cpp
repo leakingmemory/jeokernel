@@ -53,6 +53,7 @@ public:
     std::size_t GetBlocksize() const override;
     std::size_t GetNumBlocks() const override;
     std::shared_ptr<blockdev_block> ReadBlock(size_t blocknum, size_t blocks) const override;
+    size_t WriteBlock(const void *data, size_t blocknum, size_t blocks) const override;
 };
 
 class blockdevsystem_impl;
@@ -153,6 +154,10 @@ std::shared_ptr<blockdev_block> hw_blockdev::ReadBlock(size_t blocknum, size_t b
         bdev->Submit(command);
     }
     return command->Await();
+}
+
+size_t hw_blockdev::WriteBlock(const void *data, size_t blocknum, size_t blocks) const {
+    return 0;
 }
 
 blockdevsystem_impl::blockdevsystem_impl() : _lock(), blockdevs(), sysDevIds(0) {}

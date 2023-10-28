@@ -8,6 +8,7 @@
 #include <pagealloc.h>
 #include <klogger.h>
 #include <core/vmem.h>
+#include <strings.h>
 
 #define FP_PAGESIZE FILEPAGE_PAGE_SIZE
 
@@ -18,11 +19,15 @@ public:
     filepage_pointer_impl(uintptr_t addr) : vm(FP_PAGESIZE) {
         vm.page(0).rwmap(addr);
     }
-    void *Pointer() override;
+    void *Pointer() const override;
+    void SetDirty(size_t length) override;
 };
 
-void *filepage_pointer_impl::Pointer() {
+void *filepage_pointer_impl::Pointer() const {
     return vm.pointer();
+}
+
+void filepage_pointer_impl::SetDirty(size_t length) {
 }
 
 filepage::filepage() : page(new filepage_data) {}
@@ -37,6 +42,26 @@ std::shared_ptr<filepage_pointer> filepage::Pointer() {
 
 std::shared_ptr<filepage_data> filepage::Raw() {
     return page;
+}
+
+void filepage::Zero() {
+    bzero(Pointer()->Pointer(), FP_PAGESIZE);
+}
+
+void filepage::SetDirty(size_t length) {
+    page->setDirty(length);
+}
+
+bool filepage::IsDirty() const {
+    return page->getDirty() > 0;
+}
+
+size_t filepage::GetDirtyLength() const {
+    return page->getDirty();
+}
+
+size_t filepage::GetDirtyLengthAndClear() {
+    return page->getDirtyAndClear();
 }
 
 filepage_data::filepage_data() : physpage(0), ref(1) {
@@ -68,4 +93,44 @@ void filepage_data::initDone() {
         std::cout << "Clearing initial ref for block\n";
         down();
     }
+}
+
+void filepage_data::setDirty(uint32_t dirty) {
+    uint64_t set{dirty};
+    uint64_t expectdirty{0};
+    uint64_t olddirty{0};
+    do {
+        uint64_t expect{expectdirty};
+        expectdirty = olddirty;
+        if (expect > set) {
+            break;
+        }
+        asm(""
+            "mov %1, %%rax;" // set
+            "mov %2, %%rcx;" // expect
+            "lock cmpxchgl %%ecx, %0;"
+            "mov %%rcx, %3"
+                : "+m"(this->dirty), "=r"(set), "=r"(expect), "=rm"(olddirty) :: "%rax", "%rcx");
+    } while (olddirty != expectdirty);
+}
+
+uint32_t filepage_data::getDirty() {
+    asm("mfence");
+    return dirty;
+}
+
+uint32_t filepage_data::getDirtyAndClear() {
+    asm("mfence");
+    uint64_t beforeClear;
+    uint64_t atClear{dirty};
+    do {
+        beforeClear = atClear;
+        asm(""
+            "xor %%rax, %%rax;" // set
+            "mov %1, %%rcx;" // expect
+            "lock cmpxchgl %%ecx, %0;"
+            "mov %%rcx, %2"
+                : "+m"(this->dirty), "=r"(beforeClear), "=rm"(atClear) :: "%rax", "%rcx");
+    } while (atClear != beforeClear);
+    return beforeClear;
 }

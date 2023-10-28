@@ -19,6 +19,7 @@ private:
     uintptr_t physpage;
     uint32_t ref;
     uint32_t initRef;
+    uint32_t dirty;
 public:
     filepage_data();
     ~filepage_data();
@@ -30,6 +31,9 @@ private:
     void up();
     void down();
     void initDone();
+    void setDirty(uint32_t dirty);
+    uint32_t getDirty();
+    uint32_t getDirtyAndClear();
 };
 
 class filepage_ref {
