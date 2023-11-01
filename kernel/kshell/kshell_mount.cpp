@@ -4,6 +4,7 @@
 
 #include <core/blockdevsystem.h>
 #include <filesystems/filesystem.h>
+#include <kfs/blockdev_writer.h>
 #include "kshell_mount.h"
 #include "kshell_argsparser.h"
 #include "iostream"
@@ -109,7 +110,9 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     if (!fs) {
         fs = open_filesystem(fstype, blockdev);
     }
-    if (!fs) {
+    if (fs) {
+        blockdev_writer::GetInstance().OpenForWrite(fs);
+    } else {
         std::cerr << "Failed to mount filesystem " << fstype << " on device " << deviceName << "\n";
         return;
     }

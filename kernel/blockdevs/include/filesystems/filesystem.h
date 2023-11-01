@@ -39,6 +39,9 @@ protected:
 public:
     blockdev_filesystem(std::shared_ptr<blockdev> bdev) : bdev(bdev) {
     }
+    [[nodiscard]] std::shared_ptr<blockdev> GetBlockdev() const {
+        return bdev;
+    }
     filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override = 0;
     virtual std::vector<std::vector<dirty_block>> GetWrites() = 0;
     virtual std::vector<dirty_block> OpenForWrite() = 0;

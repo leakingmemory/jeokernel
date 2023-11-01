@@ -9,6 +9,7 @@
 #include <iostream>
 #include <errno.h>
 #include <exec/procthread.h>
+#include <kfs/blockdev_writer.h>
 
 resolve_return_value
 Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir, const std::string &i_type,
@@ -57,7 +58,9 @@ Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir
             }
             openfs = [ctx, dev, type, blockdev] () {
                 auto fs = get_blockdevsystem().OpenFilesystem(type, blockdev);
-                if (!fs) {
+                if (fs) {
+                    blockdev_writer::GetInstance().OpenForWrite(fs);
+                } else {
                     std::cerr << "OpenFilesystem failed for " << type << " on " << dev << "\n";
                 }
                 return fs;
