@@ -47,14 +47,15 @@ namespace std {
             _invoke = new instructive_caller<F, R, Args...>(f);
         }
         function(const function &cp) {
-            _invoke = cp._invoke->copy();
+            auto *inv = cp._invoke;
+            _invoke = inv != nullptr ? inv->copy() : nullptr;
         }
         function(function &&mv) : _invoke(mv._invoke) {
             mv._invoke = nullptr;
         }
 
         function &operator = (const function &cp) {
-            auto *cop = cp._invoke->copy();
+            auto *cop = cp._invoke != nullptr ? cp._invoke->copy() : nullptr;
             if (_invoke != nullptr) {
                 delete _invoke;
             }
