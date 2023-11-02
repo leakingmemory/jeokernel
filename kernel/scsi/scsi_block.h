@@ -370,4 +370,28 @@ struct Read6 {
     }
 } __attribute__((__packed__));
 
+struct Write6 {
+    uint8_t OpCode;
+    uint8_t LBA_high_5bits;
+    big_endian<uint16_t> LBA_low;
+    uint8_t TransferLengthBlocks0is256;
+    uint8_t Control;
+
+    Write6(uint32_t LBA, uint16_t TransferLengthBlocks, bool naca = false) : OpCode(0x0A),
+    LBA_high_5bits((uint8_t) ((LBA >> 16) & 0x01F)), LBA_low((uint16_t) (LBA & 0x0FFFF)),
+    TransferLengthBlocks0is256(TransferLengthBlocks != 256 ? ((uint8_t) (TransferLengthBlocks & 0x0FF)) : 0),
+    Control(naca ? SCSI_CONTROL_NACA : 0) {}
+
+    uint32_t LBA() {
+        uint32_t LBA_n{(uint32_t) (LBA_high_5bits & 0x1F)};
+        LBA_n = LBA_n << 16;
+        LBA_n |= LBA_low;
+        return LBA_n;
+    }
+    uint16_t TransferLengthBlocks() {
+        uint16_t blocks{(uint16_t) TransferLengthBlocks0is256};
+        return blocks != 0 ? blocks : 256;
+    }
+} __attribute__((__packed__));
+
 #endif //JEOKERNEL_SCSI_BLOCK_H

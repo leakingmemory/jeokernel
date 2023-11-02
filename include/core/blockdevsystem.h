@@ -17,14 +17,19 @@ class blockdev_block;
 
 class blockdev_command {
 private:
+    const void *buf;
     size_t blocknum;
     size_t blocks;
 public:
-    blockdev_command(size_t blocknum, size_t blocks) : blocknum(blocknum), blocks(blocks) {}
-    size_t Blocknum() {
+    blockdev_command(size_t blocknum, size_t blocks) : buf(nullptr), blocknum(blocknum), blocks(blocks) {}
+    blockdev_command(size_t blocknum, const void *buffer, size_t blocks) : buf(buffer), blocknum(blocknum), blocks(blocks) {}
+    const void *Buffer() const {
+        return buf;
+    }
+    size_t Blocknum() const {
         return blocknum;
     }
-    size_t Blocks() {
+    size_t Blocks() const {
         return blocks;
     }
     virtual void Accept(std::shared_ptr<blockdev_block> result) = 0;

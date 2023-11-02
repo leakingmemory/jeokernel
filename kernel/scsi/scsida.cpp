@@ -215,10 +215,19 @@ void scsida::iothread() {
         if (!cmd) {
             break;
         }
-        auto result = CmdRead6(cmd->Blocknum(), cmd->Blocks());
-        if (result) {
-            std::shared_ptr<blockdev_block> wrap = std::make_shared<scsida_result>(result);
-            cmd->Accept(wrap);
+        const void *buffer = cmd->Buffer();
+        if (buffer == nullptr) {
+            auto result = CmdRead6(cmd->Blocknum(), cmd->Blocks());
+            if (result) {
+                std::shared_ptr<blockdev_block> wrap = std::make_shared<scsida_result>(result);
+                cmd->Accept(wrap);
+            }
+        } else {
+            auto result = CmdWrite6(cmd->Blocknum(), cmd->Blocks(), buffer);
+            if (result) {
+                std::shared_ptr<blockdev_block> wrap = std::make_shared<scsida_result>(result);
+                cmd->Accept(wrap);
+            }
         }
     }
 }
@@ -283,6 +292,40 @@ void scsida::ReportFailed(std::shared_ptr<ScsiDevCommand> command) {
         auto sense = RequestSense_Fixed();
         if (sense) {
             ReportSense(*sense);
+        }
+    }
+}
+
+std::shared_ptr<ScsiDevCommand>
+scsida::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const void *buffer) {
+    int retry = 5;
+    while (true) {
+        std::shared_ptr<CallbackLatch> latch = std::make_shared<CallbackLatch>();
+        auto command = devInfo->ExecuteCommand(cmd, cmdLength, dataTransferLength, buffer, [latch]() mutable {
+            latch->open();
+        });
+        if (!latch->wait(10000)) {
+            std::stringstream str{};
+            str << DeviceType() << DeviceId() << ": transfer error: timeout\n";
+            get_klogger() << str.str().c_str();
+            if (!reset()) {
+                std::stringstream str{};
+                str << DeviceType() << DeviceId() << ": transfer error: reset failed\n";
+                get_klogger() << str.str().c_str();
+                return {};
+            }
+            if (--retry > 0) {
+                continue;
+            }
+            return {};
+        }
+        auto isSuccessful = command->IsSuccessful();
+        auto successful = isSuccessful && command->Size() == dataTransferLength;
+        if (!successful && isSuccessful) {
+            std::cerr << DeviceType() << DeviceId() << ": transfer error: truncated transfer\n";
+        }
+        if (successful || --retry == 0) {
+            return command;
         }
     }
 }
@@ -443,6 +486,24 @@ std::shared_ptr<ScsiDevCommand> scsida::CmdRead6(uint32_t LBA, uint16_t blocks) 
     std::size_t size{blocks};
     size *= BlockSize();
     auto command = ExecuteCommand(read6, size, scsivariabledata_fixed());
+    if (command) {
+        if (command->IsSuccessful()) {
+            return command;
+        } else {
+            ReportFailed(command);
+        }
+    }
+    return {};
+}
+
+std::shared_ptr<ScsiDevCommand> scsida::CmdWrite6(uint32_t LBA, uint16_t blocks, const void *buffer) {
+    Write6 write6{LBA, blocks};
+    if (write6.LBA() != LBA || write6.TransferLengthBlocks() != blocks) {
+        return {};
+    }
+    std::size_t size{blocks};
+    size *= BlockSize();
+    auto command = ExecuteCommand(write6, size, buffer);
     if (command) {
         if (command->IsSuccessful()) {
             return command;

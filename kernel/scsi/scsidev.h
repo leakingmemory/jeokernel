@@ -32,6 +32,7 @@ public:
     virtual uint8_t GetLun() const = 0;
     virtual void SetDevice(Device *device) = 0;
     virtual std::shared_ptr<InquiryResult> GetInquiryResult() = 0;
+    virtual std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const void *buffer, const std::function<void ()> &done) = 0;
     virtual std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength, const std::function<void ()> &done) = 0;
     template <class Cmd> std::shared_ptr<ScsiDevCommand> ExecuteCommand(const Cmd &cmd, std::size_t dataTransferLength, const std::function<void ()> &done) {
         return ExecuteCommand((const void *) &cmd, sizeof(cmd), dataTransferLength, scsivariabledata_fixed(), done);

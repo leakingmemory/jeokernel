@@ -48,9 +48,13 @@ public:
     }
 
     void ReportFailed(std::shared_ptr<ScsiDevCommand> command);
+    std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const void *buffer);
     std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength);
     template <class Cmd> std::shared_ptr<ScsiDevCommand> ExecuteCommand(const Cmd &cmd, std::size_t dataTransferLength, const scsivariabledata &varlength) {
         return ExecuteCommand(&cmd, sizeof(Cmd), dataTransferLength, varlength);
+    }
+    template <class Cmd> std::shared_ptr<ScsiDevCommand> ExecuteCommand(const Cmd &cmd, std::size_t dataTransferLength, const void *buffer) {
+        return ExecuteCommand(&cmd, sizeof(Cmd), dataTransferLength, buffer);
     }
     template <class Cmd, class Result> std::shared_ptr<Result> ExecuteCommand(const Cmd &cmd, const scsivariabledata &varlength) {
         auto command = ExecuteCommand(cmd, sizeof(Result), varlength);
@@ -79,6 +83,7 @@ public:
     std::optional<bool> IsSpinning();
     bool SetPower(UnitPowerCondition powerCondition, bool immediateResponse = true);
     std::shared_ptr<ScsiDevCommand> CmdRead6(uint32_t LBA, uint16_t blocks);
+    std::shared_ptr<ScsiDevCommand> CmdWrite6(uint32_t LBA, uint16_t blocks, const void *buffer);
 };
 
 class scsida_driver : public Driver {

@@ -15,6 +15,7 @@ private:
     std::shared_ptr<blockdev_block> result;
 public:
     blockdev_async_command(hw_spinlock &_lock, size_t blocknum, size_t blocks) : blockdev_command(blocknum, blocks), semaphore(), _lock(_lock), result() {}
+    blockdev_async_command(hw_spinlock &_lock, size_t blocknum, const void *buffer, size_t blocks) : blockdev_command(blocknum, buffer, blocks), semaphore(), _lock(_lock), result() {}
     void Accept(std::shared_ptr<blockdev_block> result) override;
     std::shared_ptr<blockdev_block> Await();
 };

@@ -157,7 +157,13 @@ std::shared_ptr<blockdev_block> hw_blockdev::ReadBlock(size_t blocknum, size_t b
 }
 
 size_t hw_blockdev::WriteBlock(const void *data, size_t blocknum, size_t blocks) const {
-    return 0;
+    std::shared_ptr<blockdev_async_command> command = std::make_shared<blockdev_async_command>(_lock, blocknum, data, blocks);
+    {
+        std::lock_guard lock{_lock};
+        bdev->Submit(command);
+    }
+    auto result = command->Await();
+    return result->Size() / GetBlocksize();
 }
 
 blockdevsystem_impl::blockdevsystem_impl() : _lock(), blockdevs(), sysDevIds(0) {}

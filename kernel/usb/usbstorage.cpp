@@ -73,21 +73,33 @@ private:
     void *buffer;
     CommandStatusWrapper status;
     uint8_t flags;
+    bool freeBuffer;
 public:
     usbstorage_command_impl(usbstorage &device, uint32_t dataTransferLength, const scsivariabledata &varlength, uint8_t lun, const void *cmd,
                             uint8_t cmdLength, const std::function<void (usbstorage_command &, size_t)> &done)
     : usbstorage_command(dataTransferLength, varlength, lun, cmd, cmdLength, true, done), device(device), buffer(nullptr),
-      flags(USBSTORAGE_FLAG_IN) {
+      flags(USBSTORAGE_FLAG_IN), freeBuffer(true) {
         if (dataTransferLength != 0) {
             buffer = malloc(dataTransferLength);
         }
     }
+    usbstorage_command_impl(usbstorage &device, const void *buffer, uint32_t dataTransferLength, uint8_t lun, const void *cmd,
+                            uint8_t cmdLength, const std::function<void (usbstorage_command &)> &done)
+    : usbstorage_command(dataTransferLength, lun, cmd, cmdLength, false, done), device(device), buffer(nullptr), flags(0), freeBuffer(false) {
+        this->buffer = (void *) buffer;
+    }
     ~usbstorage_command_impl() {
-        if (buffer != nullptr) {
+        if (buffer != nullptr && freeBuffer) {
             free(buffer);
             buffer = nullptr;
         }
+
     }
+    usbstorage_command_impl(const usbstorage_command_impl &) = delete;
+    usbstorage_command_impl(usbstorage_command_impl &&) = delete;
+    usbstorage_command_impl &operator =(const usbstorage_command_impl &) = delete;
+    usbstorage_command_impl &operator =(usbstorage_command_impl &&) = delete;
+
     void Transfer(const void *data, std::size_t size, const std::function<void ()> &done);
     void InTransfer(void *data, std::size_t size, const std::function<void (usb_transfer_status, std::size_t)> &done);
     void Start();
@@ -425,15 +437,27 @@ void usbstorage_command_impl::LookForStatusStage(std::size_t transferredLength, 
                         memcpy(&status, buffer->ptr, sizeof(status));
 
                         std::function<void (usbstorage_command &, size_t)> done = this->done;
+                        std::function<void (usbstorage_command &)> doneOut = this->doneOut;
                         device.ExecuteQueueItem();
-                        done(*this, transferredLength);
+                        if (done) {
+                            done(*this, transferredLength);
+                        }
+                        if (doneOut) {
+                            doneOut(*this);
+                        }
                     });
                     return;
                 }
 
                 std::function<void (usbstorage_command &, size_t)> done = this->done;
+                std::function<void (usbstorage_command &)> doneOut = this->doneOut;
                 device.ExecuteQueueItem();
-                done(*this, transferredLength);
+                if (done) {
+                    done(*this, transferredLength);
+                }
+                if (doneOut) {
+                    doneOut(*this);
+                }
             } else {
 #ifdef USBSTORAGE_COMMAND_DEBUG
                 std::stringstream str{};
@@ -514,15 +538,27 @@ void usbstorage_command_impl::StatusStage(size_t transferredLength) {
                     std::lock_guard lock{device.devInfo.port.Hub().HcdSpinlock()};
                     InTransfer(&status, sizeof(status), [this, transferredLength] (usb_transfer_status transferStatus, std::size_t sizeRead) {
                         std::function<void(usbstorage_command &, size_t)> done = this->done;
+                        std::function<void(usbstorage_command &)> doneOut = this->doneOut;
                         device.ExecuteQueueItem();
-                        done(*this, transferredLength);
+                        if (done) {
+                            done(*this, transferredLength);
+                        }
+                        if (doneOut) {
+                            doneOut(*this);
+                        }
                     });
                 }
             });
         } else {
             std::function<void(usbstorage_command &, size_t)> done = this->done;
+            std::function<void(usbstorage_command &)> doneOut = this->doneOut;
             device.ExecuteQueueItem();
-            done(*this, transferredLength);
+            if (done) {
+                done(*this, transferredLength);
+            }
+            if (doneOut) {
+                doneOut(*this);
+            }
         }
     });
 }
@@ -578,6 +614,7 @@ public:
     uint8_t GetLun() const override;
     std::shared_ptr<InquiryResult> GetInquiryResult() override;
     void SetDevice(Device *device) override;
+    std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const void *buffer, const std::function<void ()> &done) override;
     std::shared_ptr<ScsiDevCommand> ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength, const std::function<void ()> &done) override;
     bool ResetDevice() override;
 };
@@ -633,6 +670,18 @@ ScsiCmdNonSuccessfulStatus usbstorage_scsi_devcmd::NonSuccessfulStatus() const {
 
 const char *usbstorage_scsi_devcmd::NonSuccessfulStatusString() const {
     return usbstoragecmd->NonSucessfulStatusString();
+}
+
+std::shared_ptr<ScsiDevCommand>
+usbstorage_scsi_dev::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength,
+                                    const void *buffer, const std::function<void()> &done) {
+    std::function<void ()> doneCallback{done};
+    std::shared_ptr<usbstorage_scsi_devcmd> subcmd =
+            std::make_shared<usbstorage_scsi_devcmd>(device.QueueCommand(dataTransferLength, buffer, lun, cmd, cmdLength, [doneCallback] (usbstorage_command &usbcmd) mutable {
+                doneCallback();
+            }));
+    std::shared_ptr<ScsiDevCommand> scsiDevCommand{subcmd};
+    return scsiDevCommand;
 }
 
 std::shared_ptr<ScsiDevCommand> usbstorage_scsi_dev::ExecuteCommand(const void *cmd, std::size_t cmdLength, std::size_t dataTransferLength, const scsivariabledata &varlength, const std::function<void ()> &done) {
@@ -846,6 +895,22 @@ int usbstorage::GetMaxLun() {
     uint8_t maxLun;
     buffer->CopyTo(maxLun);
     return maxLun;
+}
+
+std::shared_ptr<usbstorage_command>
+usbstorage::QueueCommand(uint32_t dataTransferLength, const void *buffer, uint8_t lun, const void *cmd,
+                         uint8_t cmdLength, const std::function<void(usbstorage_command &)> &done) {
+    std::shared_ptr<usbstorage_command_impl> cmd_pt{new usbstorage_command_impl(*this, buffer, dataTransferLength, lun, cmd, cmdLength, done)};
+
+    {
+        std::lock_guard lock{devInfo.port.Hub().HcdSpinlock()};
+        commandQueue.push_back(cmd_pt);
+        if (!currentCommand) {
+            ExecuteQueueItem();
+        }
+    }
+    std::shared_ptr<usbstorage_command> cmdsh{cmd_pt};
+    return cmdsh;
 }
 
 std::shared_ptr<usbstorage_command>
