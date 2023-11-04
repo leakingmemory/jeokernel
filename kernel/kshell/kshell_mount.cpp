@@ -121,7 +121,7 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     if (result.node) {
         std::string name{"/dev/"};
         name.append(deviceName);
-        dir->Mount(name, fstype, "ro", result.node);
+        dir->Mount(name, fstype, "ro", fs, result.node);
     } else {
         std::cerr << "Failed to mount filesystem " << fstype << " on device " << deviceName << ": "
                   << text(result.status) << "\n";

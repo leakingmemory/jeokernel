@@ -90,14 +90,16 @@ public:
     }
 };
 
+class filesystem;
+
 class kdirectory_impl : public kfile {
 private:
     std::shared_ptr<kfile> parent;
 public:
     kdirectory_impl(const std::shared_ptr<kfile> &parent, const std::string &kpath, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem, kpath), parent(parent) {}
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries(std::shared_ptr<kfile> this_impl);
-    bool Unmount();
-    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<directory> &fsroot);
+    std::shared_ptr<filesystem> Unmount();
+    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs, const std::shared_ptr<directory> &fsroot);
     std::string Kpath();
 };
 
@@ -108,8 +110,8 @@ public:
     kdirectory(const std::shared_ptr<kfile> &impl, const std::string &name) : kfile(impl->file, name), impl(impl) {}
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries();
     kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root, std::string filename, int resolveSymlinks = 20);
-    bool Unmount();
-    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<directory> &fsroot);
+    std::shared_ptr<filesystem> Unmount();
+    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs, const std::shared_ptr<directory> &fsroot);
     std::string Kpath();
 };
 

@@ -3,6 +3,7 @@
 //
 
 #include "kshell_umount.h"
+#include <kfs/blockdev_writer.h>
 #include <iostream>
 
 void kshell_umount::Exec(kshell &sh, const std::vector<std::string> &cmd) {
@@ -59,7 +60,11 @@ void kshell_umount::Exec(kshell &sh, const std::vector<std::string> &cmd) {
         return;
     }
 
-    if (!dir->Unmount()) {
+    auto fs = dir->Unmount();
+
+    if (!fs) {
         std::cerr << mountpoint_orig << ": Not mounted\n";
     }
+
+    blockdev_writer::GetInstance().CloseForWrite(fs);
 }

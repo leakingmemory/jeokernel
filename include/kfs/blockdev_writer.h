@@ -18,6 +18,8 @@ private:
     std::thread collectWritesThread;
     std::thread submitWritesThread;
     std::vector<std::shared_ptr<blockdev_writeable_filesystem>> filesystems{};
+    std::vector<std::shared_ptr<blockdev_writeable_filesystem>> flush{};
+    std::vector<std::shared_ptr<blockdev_writeable_filesystem>> finish{};
     bool stop;
 public:
     static blockdev_writer &GetInstance();
@@ -31,6 +33,8 @@ public:
     void Submit();
     void OpenForWrite(const std::shared_ptr<blockdev_filesystem> &fs);
     void OpenForWrite(const std::shared_ptr<filesystem> &fs);
+    void CloseForWrite(const std::shared_ptr<blockdev_filesystem> &fs);
+    void CloseForWrite(const std::shared_ptr<filesystem> &fs);
 };
 
 

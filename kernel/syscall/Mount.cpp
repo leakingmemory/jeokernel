@@ -100,7 +100,7 @@ Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir
             }
         }
         if (result.node) {
-            mountpoint->Mount(dev, type, "ro", result.node);
+            mountpoint->Mount(dev, type, "ro", fs, result.node);
             ctx.ReturnWhenNotRunning(0);
         } else {
             ctx.ReturnWhenNotRunning(-EOPNOTSUPP);

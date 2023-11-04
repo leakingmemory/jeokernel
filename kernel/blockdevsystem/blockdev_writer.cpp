@@ -50,9 +50,11 @@ void blockdev_writer::Collect() {
             std::this_thread::sleep_for(10s);
         }
         std::vector<std::shared_ptr<blockdev_writeable_filesystem>> filesystems{};
+        std::vector<std::shared_ptr<blockdev_writeable_filesystem>> flushFilesystems{};
         {
             std::lock_guard lock{bdevwriterinstance};
             filesystems = this->filesystems;
+            flushFilesystems = this->flush;
         }
         for (auto &fsw: filesystems) {
             auto blocks = fsw->fs->GetWrites();
@@ -74,6 +76,41 @@ void blockdev_writer::Collect() {
                 ++inIterator;
             }
         }
+        std::vector<std::shared_ptr<blockdev_writeable_filesystem>> flushedFilesystems{};
+        for (auto &fsw : flushFilesystems) {
+            auto result = fsw->fs->FlushOrClose();
+            auto outIterator = fsw->dirtyBlocks.begin();
+            if (outIterator != fsw->dirtyBlocks.end()) {
+                auto &list = *outIterator;
+                for (auto &db : result.blocks) {
+                    list.push_back(db);
+                }
+            } else {
+                auto &list = fsw->dirtyBlocks.emplace_back();
+                for (auto &db : result.blocks) {
+                    list.push_back(db);
+                }
+            }
+            if (result.completed) {
+                flushedFilesystems.push_back(fsw);
+            }
+        }
+        if (!flushedFilesystems.empty()) {
+            std::lock_guard lock{bdevwriterinstance};
+            for (auto &fsw : flushedFilesystems) {
+                auto iterator = flush.begin();
+                while (iterator != flush.end()) {
+                    auto &ff = *iterator;
+                    if (fsw == ff) {
+                        std::cout << "Filesystem writes on queue\n";
+                        flush.erase(iterator);
+                        finish.push_back(fsw);
+                    } else {
+                        ++iterator;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -93,6 +130,20 @@ void blockdev_writer::Submit() {
         {
             std::lock_guard lock{bdevwriterinstance};
             filesystems = this->filesystems;
+            for (auto &fsw : this->flush) {
+                filesystems.push_back(fsw);
+            }
+            auto iterator = this->finish.begin();
+            while (iterator != this->finish.end()) {
+                auto &fsw = *iterator;
+                if (fsw->dirtyBlocks.empty() && fsw->flushNow.empty()) {
+                    std::cout << "Filesystem flushed and closed\n";
+                    this->finish.erase(iterator);
+                } else {
+                    filesystems.push_back(fsw);
+                    ++iterator;
+                }
+            }
         }
         std::vector<blockdev_dirty_block> flushNow{};
         {
@@ -183,5 +234,27 @@ void blockdev_writer::OpenForWrite(const std::shared_ptr<filesystem> &fs) {
     auto bfs = std::dynamic_pointer_cast<blockdev_filesystem>(fs);
     if (bfs) {
         OpenForWrite(bfs);
+    }
+}
+
+void blockdev_writer::CloseForWrite(const std::shared_ptr<blockdev_filesystem> &fs) {
+    std::lock_guard lock{bdevwriterinstance};
+    auto iterator = filesystems.begin();
+    while (iterator != filesystems.end()) {
+        std::shared_ptr<blockdev_writeable_filesystem> fsw = *iterator;
+        if (fsw->fs == fs) {
+            std::cout << "Queueing filesystem for flush\n";
+            filesystems.erase(iterator);
+            flush.push_back(fsw);
+            return;
+        }
+        ++iterator;
+    }
+}
+
+void blockdev_writer::CloseForWrite(const std::shared_ptr<filesystem> &fs) {
+    auto bfs = std::dynamic_pointer_cast<blockdev_filesystem>(fs);
+    if (bfs) {
+        CloseForWrite(bfs);
     }
 }
