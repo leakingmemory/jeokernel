@@ -163,6 +163,29 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
     return {.result = items, .status = kfile_status::SUCCESS};
 }
 
+bool kdirectory_impl::Unmount() {
+    std::shared_ptr<fileitem> listing_ref{file};
+    directory *listing;
+    if (listing_ref) {
+        listing = dynamic_cast<directory *> (&(*listing_ref));
+    } else {
+        listing = nullptr;
+    }
+    {
+        std::lock_guard lock{mounts_lock};
+        auto iterator = mounts.end();
+        while (iterator != mounts.begin()) {
+            --iterator;
+            auto &mnt = *iterator;
+            if (mnt.info.name == Name()) {
+                mounts.erase(iterator);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void kdirectory_impl::Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<directory> &fsroot) {
     std::lock_guard lock{mounts_lock};
     mounts.push_back({.info = {.devname = devname, .fstype = fstype, .mntopts = mntopts, .name = Name()}, .rootdir = fsroot});
@@ -260,6 +283,11 @@ kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(kdirectory *root, std::
         }
     }
     return {.result = {}, .status = kfile_status::SUCCESS};
+}
+
+bool kdirectory::Unmount() {
+    auto *impl = dynamic_cast<kdirectory_impl *> (&(*(this->impl)));
+    return impl->Unmount();
 }
 
 void kdirectory::Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<directory> &fsroot) {
