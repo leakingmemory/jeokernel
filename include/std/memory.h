@@ -233,6 +233,11 @@ namespace std {
                 return xref;
             }
 
+            uint32_t use_count() const noexcept {
+                asm("mfence");
+                return ref;
+            }
+
             uint32_t create_ticket() noexcept {
                 uint32_t ticket;
                 asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ticketgen), "=rm"(ticket) :: "%rax");
@@ -442,6 +447,13 @@ namespace std {
                 container = nullptr;
             }
             return *this;
+        }
+
+        long use_count() const noexcept {
+            if (container != nullptr) {
+                return container->use_count();
+            }
+            return 0;
         }
 
         T &operator * () const {
