@@ -33,6 +33,11 @@ public:
     virtual filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) = 0;
 };
 
+struct FlushOrCloseResult {
+    std::vector<dirty_block> blocks;
+    bool completed;
+};
+
 class blockdev_filesystem : public filesystem {
 protected:
     std::shared_ptr<blockdev> bdev;
@@ -45,7 +50,7 @@ public:
     filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override = 0;
     virtual std::vector<std::vector<dirty_block>> GetWrites() = 0;
     virtual std::vector<dirty_block> OpenForWrite() = 0;
-    virtual std::vector<dirty_block> FlushOrClose() = 0;
+    virtual FlushOrCloseResult FlushOrClose() = 0;
 };
 
 class filesystem_provider {

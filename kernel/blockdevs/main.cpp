@@ -45,8 +45,14 @@ int fsmain(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
     auto entriesResult = rootdir->Entries();
     if (entriesResult.status == fileitem_status::SUCCESS) {
         for (auto entry: entriesResult.entries) {
-            auto item = entry->Item();
-            std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << entry->Name() << "\n";
+            auto itemResult = entry->LoadItem();
+            if (itemResult.status == fileitem_status::SUCCESS) {
+                auto item = itemResult.file;
+                std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << entry->Name()
+                          << "\n";
+            } else {
+                std::cerr << "Directory entry: " << entry->Name() << ": " << text(itemResult.status) << "\n";
+            }
         }
     } else {
         std::cerr << "Root dir error: " << text(entriesResult.status) << "\n";
@@ -124,15 +130,18 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         std::cerr << "Failed to open filesystem " << fsname << "\n";
         return 1;
     }
-    auto rootdirResult = fs->GetRootDirectory(fs);
-    auto rootdir = rootdirResult.node;
-    if (!rootdir) {
-        if (rootdirResult.status == filesystem_status::SUCCESS) {
-            std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
-        } else {
-            std::cerr << "Rootdir error on " << fsname << ": " << text(rootdirResult.status) << "\n";
+    std::shared_ptr<directory> rootdir{};
+    {
+        auto rootdirResult = fs->GetRootDirectory(fs);
+        rootdir = rootdirResult.node;
+        if (!rootdir) {
+            if (rootdirResult.status == filesystem_status::SUCCESS) {
+                std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
+            } else {
+                std::cerr << "Rootdir error on " << fsname << ": " << text(rootdirResult.status) << "\n";
+            }
+            return 1;
         }
-        return 1;
     }
     auto isWrite = is_fswrite(args, args_end);
     if (isWrite) {
@@ -140,16 +149,19 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         writetodev(bdev, writes);
     }
     auto result = fsmain(rootdir, args, args_end);
+    rootdir = {};
     {
         auto writes = bdev_fs->GetWrites();
         writetodev(bdev, writes);
     }
     while (true) {
         auto writes = bdev_fs->FlushOrClose();
-        if (writes.empty()) {
+        if (!writes.blocks.empty()) {
+            writetodev(bdev, writes.blocks);
+        }
+        if (writes.completed) {
             break;
         }
-        writetodev(bdev, writes);
     }
     return result;
 }

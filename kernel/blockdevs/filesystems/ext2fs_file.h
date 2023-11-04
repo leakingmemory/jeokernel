@@ -16,7 +16,7 @@ class ext2fs_file : public fileitem {
 protected:
     std::shared_ptr<filesystem> fs;
     std::shared_ptr<ext2fs_inode> inode;
-protected:
+public:
     constexpr static fileitem_status Convert(filesystem_status ino_stat) {
         fileitem_status status{fileitem_status::SUCCESS};
         switch (ino_stat) {
@@ -40,7 +40,6 @@ protected:
         }
         return status;
     }
-public:
     ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode);
     uint32_t Mode() override;
     std::size_t Size() override;

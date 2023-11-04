@@ -89,9 +89,10 @@ public:
         return filesize;
     }
     void SetFileSize(uint64_t filesize);
+    bool FlushData();
     std::vector<dirty_block> GetDataWrites();
-    std::vector<dirty_block> GetMetaWrites();
-    std::vector<std::vector<dirty_block>> GetWrites();
+    std::vector<dirty_block> GetMetaWrites(const std::shared_ptr<ext2fs_inode> &selfRef);
+    std::vector<std::vector<dirty_block>> GetWrites(const std::shared_ptr<ext2fs_inode> &selfRef);
 };
 
 #endif //FSBITS_EXT2FS_INODE_H

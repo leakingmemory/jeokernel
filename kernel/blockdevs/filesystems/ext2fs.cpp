@@ -12,6 +12,7 @@
 #include <strings.h>
 #include <iostream>
 #include <files/symlink.h>
+#include <algorithm>
 #include "ext2fs/ext2struct.h"
 
 //#define DEBUG_INODE
@@ -633,12 +634,39 @@ void ext2fs::IncrementDirCount(uint32_t inodeNum) {
     }
 }
 
-std::vector<dirty_block> ext2fs::GetDataWrites() {
+std::vector<dirty_block> ext2fs::GetDataWritesForFlush() {
     std::vector<dirty_block> blocks{};
+    std::vector<uint32_t> dropInodes{};
     for (auto &inode: inodes) {
-        auto writes = inode.inode->GetDataWrites();
-        for (const auto &wr : writes) {
-            blocks.emplace_back(wr);
+        bool flushData{true};
+        auto flushInode = inode.inode.use_count();
+        if (flushInode == 1) {
+            if (inode.inode->FlushData()) {
+                flushData = false;
+                auto writes = inode.inode->GetMetaWrites(inode.inode);
+                for (const auto &wr : writes) {
+                    blocks.emplace_back(wr);
+                }
+                if (writes.empty()) {
+                    dropInodes.push_back(inode.inode_num);
+                }
+            }
+        }
+        if (flushData) {
+            auto writes = inode.inode->GetDataWrites();
+            for (const auto &wr: writes) {
+                blocks.emplace_back(wr);
+            }
+        }
+    }
+    if (!dropInodes.empty()) {
+        auto iterator = inodes.begin();
+        while (iterator != inodes.end()) {
+            if (std::find(dropInodes.begin(), dropInodes.end(), iterator->inode_num) != dropInodes.end()) {
+                inodes.erase(iterator);
+            } else {
+                ++iterator;
+            }
         }
     }
     return blocks;
@@ -647,7 +675,7 @@ std::vector<dirty_block> ext2fs::GetDataWrites() {
 std::vector<dirty_block> ext2fs::GetMetaWrites() {
     std::vector<dirty_block> blocks{};
     for (auto &inode: inodes) {
-        auto writes = inode.inode->GetMetaWrites();
+        auto writes = inode.inode->GetMetaWrites(inode.inode);
         for (const auto &wr : writes) {
             blocks.emplace_back(wr);
         }
@@ -698,7 +726,7 @@ std::vector<std::vector<dirty_block>> ext2fs::GetWrites() {
     std::lock_guard lock{mtx};
     {
         for (auto &inode: inodes) {
-            auto writeGroups = inode.inode->GetWrites();
+            auto writeGroups = inode.inode->GetWrites(inode.inode);
             auto destIterator = blocks.begin();
             auto sourceIterator = writeGroups.begin();
             while (sourceIterator != writeGroups.end() && destIterator != blocks.end()) {
@@ -750,27 +778,27 @@ std::vector<dirty_block> ext2fs::OpenForWrite() {
     return result;
 }
 
-std::vector<dirty_block> ext2fs::FlushOrClose() {
+FlushOrCloseResult ext2fs::FlushOrClose() {
     std::lock_guard lock{mtx};
     if (!filesystemOpenForWrite) {
-        return {};
+        return {{}, true};
     }
     {
-        auto writes = GetDataWrites();
+        auto writes = GetDataWritesForFlush();
         if (!writes.empty()) {
-            return writes;
+            return {writes, false};
         }
     }
     {
         auto writes = GetMetaWrites();
         if (!writes.empty()) {
-            return writes;
+            return {writes, false};
         }
     }
     {
         auto writes = GetBitmapWrites();
         if (!writes.empty()) {
-            return writes;
+            return {writes, false};
         }
     }
     {
@@ -798,8 +826,11 @@ std::vector<dirty_block> ext2fs::FlushOrClose() {
                 dirty_block db{.page1 = page, .page2 = {}, .blockaddr = PhysBlockGroupsBlock + i, .offset = 0, .length = (uint32_t) bdevBlocksize};
                 result.emplace_back(db);
             }
-            return result;
+            return {result, false};
         }
+    }
+    if (!inodes.empty()) {
+        return {{}, false};
     }
     superblock->fs_state = EXT2_VALID_FS;
     std::vector<dirty_block> result{};
@@ -811,7 +842,7 @@ std::vector<dirty_block> ext2fs::FlushOrClose() {
     result.emplace_back(db);
     filesystemOpenForWrite = false;
     std::cout << "Closed FS for write, free_blocks=" << superblock->unallocated_blocks << "\n";
-    return result;
+    return {result, true};
 }
 
 filesystem_get_node_result<directory> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {
