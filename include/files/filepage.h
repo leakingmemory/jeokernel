@@ -33,7 +33,11 @@ public:
     size_t GetDirtyLengthAndClear();
 };
 
+struct dirty_block_fsref {
+};
+
 struct dirty_block {
+    std::shared_ptr<dirty_block_fsref> fsref{};
     std::shared_ptr<filepage> page1{};
     std::shared_ptr<filepage> page2{};
     uint64_t blockaddr;

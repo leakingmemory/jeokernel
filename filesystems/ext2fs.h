@@ -131,13 +131,13 @@ public:
     filesystem_status ReleaseBlock(uint32_t blknum);
     void IncrementDirCount(uint32_t inodeNum);
 private:
-    std::vector<dirty_block> GetDataWrites();
+    std::vector<dirty_block> GetDataWritesForFlush();
     std::vector<dirty_block> GetMetaWrites();
     std::vector<dirty_block> GetBitmapWrites();
 public:
     std::vector<std::vector<dirty_block>> GetWrites() override;
     std::vector<dirty_block> OpenForWrite() override;
-    std::vector<dirty_block> FlushOrClose() override;
+    FlushOrCloseResult FlushOrClose() override;
 public:
     filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
 };

@@ -30,14 +30,20 @@ int ls(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &a
             auto entriesResult = dir->Entries();
             if (entriesResult.status == fileitem_status::SUCCESS) {
                 for (auto entry : entriesResult.entries) {
-                    auto item = entry->Item();
-                    std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << item->SysDevId()
-                              << ":" << item->InodeNum() << " " << entry->Name();
-                    class symlink* syml = dynamic_cast<class symlink *>(&(*item));
-                    if (syml == nullptr) {
-                        std::cout << "\n";
+                    auto itemResult = entry->LoadItem();
+                    if (itemResult.status == fileitem_status::SUCCESS) {
+                        auto item = itemResult.file;
+                        std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " "
+                                  << item->SysDevId()
+                                  << ":" << item->InodeNum() << " " << entry->Name();
+                        class symlink* syml = dynamic_cast<class symlink *>(&(*item));
+                        if (syml == nullptr) {
+                            std::cout << "\n";
+                        } else {
+                            std::cout << " -> " << syml->GetLink() << "\n";
+                        }
                     } else {
-                        std::cout << " -> " << syml->GetLink() << "\n";
+                        std::cerr << "Directory entry: " << entry->Name() << ": " << text(itemResult.status) << "\n";
                     }
                 }
             } else {

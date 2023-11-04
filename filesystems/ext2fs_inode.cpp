@@ -396,6 +396,26 @@ void ext2fs_inode::SetFileSize(uint64_t filesize) {
     this->dirty = true;
 }
 
+bool ext2fs_inode::FlushData() {
+    bool allFlushed{true};
+    auto iterator = blockCache.begin();
+    while (iterator != blockCache.end()) {
+        auto &block = *iterator;
+        if (block) {
+            bool flushed{false};
+            if (block.use_count() == 1 && !block->IsDirty()) {
+                block = {};
+                flushed = true;
+            }
+            if (!flushed) {
+                allFlushed = false;
+            }
+        }
+        ++iterator;
+    }
+    return allFlushed;
+}
+
 std::vector<dirty_block> ext2fs_inode::GetDataWrites() {
     std::vector<dirty_block> blocks{};
     for (int i = 0; i < blockCache.size(); i++) {
@@ -428,7 +448,14 @@ std::vector<dirty_block> ext2fs_inode::GetDataWrites() {
     return blocks;
 }
 
-std::vector<dirty_block> ext2fs_inode::GetMetaWrites() {
+struct ext2fs_inode_dirty_block_fsref : dirty_block_fsref {
+    std::shared_ptr<ext2fs_inode> inodeRef;
+
+    ext2fs_inode_dirty_block_fsref(const std::shared_ptr<ext2fs_inode> &inodeRef) : inodeRef(inodeRef) {
+    }
+};
+
+std::vector<dirty_block> ext2fs_inode::GetMetaWrites(const std::shared_ptr<ext2fs_inode> &selfRef) {
     std::vector<dirty_block> inodeBlocks{};
     auto dirty = this->dirty;
     if (dirty) {
@@ -482,14 +509,14 @@ std::vector<dirty_block> ext2fs_inode::GetMetaWrites() {
             return {};
         }
         auto wsize = WriteSize() < inodesize ? inodesize : WriteSize();
-        dirty_block blk{.page1 = blocks[0], .page2 = blocks[1], .blockaddr = blocknum, .offset = 0, .length = (uint32_t) (GetOffset() + wsize)};
+        dirty_block blk{.fsref = std::make_shared<ext2fs_inode_dirty_block_fsref>(selfRef), .page1 = blocks[0], .page2 = blocks[1], .blockaddr = blocknum, .offset = 0, .length = (uint32_t) (GetOffset() + wsize)};
         inodeBlocks.emplace_back(blk);
         this->dirty = false;
     }
     return inodeBlocks;
 }
 
-std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
+std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites(const std::shared_ptr<ext2fs_inode> &selfRef) {
 
     std::vector<std::vector<dirty_block>> writeGroups{};
     {
@@ -498,7 +525,7 @@ std::vector<std::vector<dirty_block>> ext2fs_inode::GetWrites() {
             writeGroups.push_back(blocks);
         }
     }
-    auto inodeBlocks = GetMetaWrites();
+    auto inodeBlocks = GetMetaWrites(selfRef);
     if (!inodeBlocks.empty()) {
         writeGroups.emplace_back(inodeBlocks);
     }

@@ -14,36 +14,62 @@
 constexpr uint16_t modeTypeFile =      00100000;
 constexpr uint16_t modeTypeDirectory = 00040000;
 
-static directory_entry *CreateDirectoryEntry(std::shared_ptr<filesystem> fs, ext2dirent *dirent, filesystem_status &error) {
-    std::string name{dirent->Name()};
-    auto *e2fs = (ext2fs *) &(*fs);
-    if (dirent->file_type == Ext2FileType_Directory) {
-        auto result = e2fs->GetDirectory(fs, dirent->inode);
-        if (result.node) {
-            return new directory_entry(name, result.node);
+class ext2fs_directory_entry : public directory_entry {
+private:
+    std::weak_ptr<ext2fs> e2fs;
+    uint32_t inode;
+    uint8_t fileType;
+public:
+    ext2fs_directory_entry(const std::shared_ptr<ext2fs> &e2fs, std::string name, uint32_t inode, uint8_t fileType) : directory_entry(name), e2fs(e2fs), inode(inode), fileType(fileType) {}
+    directory_entry_result LoadItem() override;
+};
+
+directory_entry_result ext2fs_directory_entry::LoadItem() {
+    std::shared_ptr<ext2fs> e2fs = this->e2fs.lock();
+    if (!e2fs) {
+        return {{}, fileitem_status::IO_ERROR};
+    }
+    if (fileType == Ext2FileType_Directory) {
+        auto result = e2fs->GetDirectory(e2fs, inode);
+        if (result.status == filesystem_status::SUCCESS) {
+            if (result.node) {
+                return {result.node, fileitem_status::SUCCESS};
+            } else {
+                return {{}, fileitem_status::IO_ERROR};
+            }
         } else {
-            error = result.status;
-            return nullptr;
+            return {{}, ext2fs_file::Convert(result.status)};
         }
-    } else if (dirent->file_type == Ext2FileType_Regular) {
-        auto result = e2fs->GetFile(fs, dirent->inode);
-        if (result.node) {
-            return new directory_entry(name, result.node);
+    } else if (fileType == Ext2FileType_Regular) {
+        auto result = e2fs->GetFile(e2fs, inode);
+        if (result.status == filesystem_status::SUCCESS) {
+            if (result.node) {
+                return {result.node, fileitem_status::SUCCESS};
+            } else {
+                return {{}, fileitem_status::IO_ERROR};
+            }
         } else {
-            error = result.status;
-            return nullptr;
+            return {{}, ext2fs_file::Convert(result.status)};
         }
-    } else if (dirent->file_type == Ext2FileType_Symlink) {
-        auto result = e2fs->GetSymlink(fs, dirent->inode);
-        if (result.node) {
-            return new directory_entry(name, result.node);
+    } else if (fileType == Ext2FileType_Symlink) {
+        auto result = e2fs->GetSymlink(e2fs, inode);
+        if (result.status == filesystem_status::SUCCESS) {
+            if (result.node) {
+                return {result.node, fileitem_status::SUCCESS};
+            } else {
+                return {{}, fileitem_status::IO_ERROR};
+            }
         } else {
-            error = result.status;
-            return nullptr;
+            return {{}, ext2fs_file::Convert(result.status)};
         }
     }
-    error = filesystem_status::NOT_SUPPORTED_FS_FEATURE;
-    return nullptr;
+    return {{}, fileitem_status::NOT_SUPPORTED_FS_FEATURE};
+}
+
+static directory_entry *CreateDirectoryEntry(std::shared_ptr<filesystem> fs, ext2dirent *dirent, filesystem_status &error) {
+    std::string name{dirent->Name()};
+    auto e2fs = std::dynamic_pointer_cast<ext2fs>(fs);
+    return new ext2fs_directory_entry(e2fs, name, dirent->inode, dirent->file_type);
 }
 
 entries_result ext2fs_directory::Entries() {
@@ -311,7 +337,14 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
         auto *direntObj = CreateDirectoryEntry(fs, dirent, error);
         if (direntObj != nullptr) {
             auto &item = entries.emplace_back(direntObj);
-            file = item->Item();
+            auto fileResult = item->LoadItem();
+            if (fileResult.status != fileitem_status::SUCCESS) {
+                error = filesystem_status::INTEGRITY_ERROR;
+            } else if (!fileResult.file) {
+                error = filesystem_status::INTEGRITY_ERROR;
+            } else {
+                file = fileResult.file;
+            }
         }  else {
             if (error == filesystem_status::SUCCESS) {
                 error = filesystem_status::INTEGRITY_ERROR;

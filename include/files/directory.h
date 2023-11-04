@@ -10,18 +10,20 @@
 #include <memory>
 #include <files/fileitem.h>
 
+struct directory_entry_result {
+    std::shared_ptr<fileitem> file;
+    fileitem_status status;
+};
+
 class directory_entry {
 private:
     std::string name;
-    std::shared_ptr<fileitem> item;
 public:
-    directory_entry(const std::string &name, std::shared_ptr<fileitem> item) : name(name), item(item) {}
+    directory_entry(const std::string &name) : name(name) {}
     std::string Name() {
         return name;
     }
-    std::shared_ptr<fileitem> Item() {
-        return item;
-    }
+    virtual directory_entry_result LoadItem() = 0;
 };
 
 struct entries_result {

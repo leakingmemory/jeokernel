@@ -34,7 +34,17 @@ directory_resolve_result directory::Resolve(std::string filename, directory *roo
     }
     for (auto entry : entriesResult.entries) {
         if (component == entry->Name()) {
-            std::shared_ptr<fileitem> fileItem{entry->Item()};
+            std::shared_ptr<fileitem> fileItem{};
+            {
+                auto result = entry->LoadItem();
+                if (result.status != fileitem_status::SUCCESS) {
+                    return {.file = {}, .status = result.status};
+                }
+                fileItem = result.file;
+                if (!fileItem) {
+                    return {.file = {}, .status = fileitem_status::INTEGRITY_ERROR};
+                }
+            }
             if (followSymlink > 0) {
                 auto *item = &(*(fileItem));
                 class symlink *syml = dynamic_cast<class symlink *>(item);
