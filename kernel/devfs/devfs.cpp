@@ -78,19 +78,47 @@ entries_result devfs_directory_impl::Entries() {
     return result;
 }
 
+class devfs_directory_entry : public directory_entry {
+private:
+    std::weak_ptr<fileitem> file{};
+public:
+    devfs_directory_entry(const std::string &name, const std::shared_ptr<fileitem> &fileitem) : directory_entry(name), file(fileitem) {}
+    directory_entry_result LoadItem() override;
+};
+
+directory_entry_result devfs_directory_entry::LoadItem() {
+    std::shared_ptr<fileitem> fileitem = file.lock();
+    if (fileitem) {
+        return {.file = fileitem, .status = fileitem_status::SUCCESS};
+    } else {
+        return {.file = {}, .status = fileitem_status::IO_ERROR};
+    }
+}
+
 void devfs_directory_impl::Add(const std::string &name, std::shared_ptr<fileitem> node) {
     std::lock_guard lock{mtx};
-    entries.emplace_back(std::make_shared<directory_entry>(name, node));
+    auto iterator = entries.begin();
+    while (iterator != entries.end()) {
+        auto ld = (*iterator)->LoadItem();
+        if (!ld.file) {
+            entries.erase(iterator);
+            return;
+        }
+        ++iterator;
+    }
+    entries.emplace_back(std::make_shared<devfs_directory_entry>(name, node));
 }
 
 void devfs_directory_impl::Remove(std::shared_ptr<fileitem> node) {
     std::lock_guard lock{mtx};
     auto iterator = entries.begin();
-    while (iterator == entries.end()) {
-        if ((*iterator)->Item() == node) {
+    while (iterator != entries.end()) {
+        auto ld = (*iterator)->LoadItem();
+        if (!ld.file || ld.file == node) {
             entries.erase(iterator);
             return;
         }
+        ++iterator;
     }
 }
 

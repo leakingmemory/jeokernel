@@ -105,6 +105,58 @@ std::shared_ptr<fileitem> kfile::GetImplementation() const {
     return file;
 }
 
+class kdirectory_impl_ref : public lazy_kfile {
+private:
+    std::shared_ptr<kfile> ref;
+public:
+    kdirectory_impl_ref(const std::shared_ptr<kfile> &ref) : ref(ref) {}
+    std::shared_ptr<kfile> Load() override;
+};
+
+std::shared_ptr<kfile> kdirectory_impl_ref::Load() {
+    return ref;
+}
+
+class kdirectory_impl_lazy : public lazy_kfile {
+private:
+    std::shared_ptr<kfile> ref;
+    std::shared_ptr<directory_entry> dirent;
+    std::string dirname;
+public:
+    kdirectory_impl_lazy(const std::shared_ptr<kfile> &ref, const std::shared_ptr<directory_entry> &dirent, const std::string &dirname) : ref(ref), dirent(dirent), dirname(dirname) {}
+    std::shared_ptr<kfile> Load() override;
+};
+
+std::shared_ptr<kfile> kdirectory_impl_lazy::Load() {
+    std::shared_ptr<fileitem> fsfile{};
+    {
+        auto ld = dirent->LoadItem();
+        if (ld.status != fileitem_status::SUCCESS || !ld.file) {
+            return {};
+        }
+        fsfile = ld.file;
+    }
+    directory *fsdir = dynamic_cast<directory *> (&(*fsfile));
+    if (fsdir != nullptr) {
+        std::string subpath{dirname};
+        if (subpath[subpath.size() - 1] != '/') {
+            subpath.append("/", 1);
+        }
+        subpath.append(dirent->Name());
+        std::shared_ptr<kdirectory_impl> dir{new kdirectory_impl(ref, subpath, fsfile)};
+        return dir;
+    } else {
+        class symlink *syml = dynamic_cast<class symlink *>(&(*fsfile));
+        if (syml != nullptr) {
+            std::shared_ptr<ksymlink_impl> symli = std::make_shared<ksymlink_impl>(ref, fsfile, dirent->Name());
+            return symli;
+        } else {
+            std::shared_ptr<kfile> file{new kfile(fsfile, dirent->Name())};
+            return file;
+        }
+    }
+}
+
 kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std::shared_ptr<kfile> this_ref) {
     std::shared_ptr<fileitem> listing_ref{file};
     directory *listing;
@@ -123,11 +175,11 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
         }
     }
     std::vector<std::shared_ptr<kdirent>> items{};
-    items.push_back(std::make_shared<kdirent>(".", this_ref));
+    items.push_back(std::make_shared<kdirent>(".", std::make_shared<kdirectory_impl_ref>(this_ref)));
     if (parent) {
-        items.push_back(std::make_shared<kdirent>("..", parent));
+        items.push_back(std::make_shared<kdirent>("..", std::make_shared<kdirectory_impl_ref>(parent)));
     } else {
-        items.push_back(std::make_shared<kdirent>("..", this_ref));
+        items.push_back(std::make_shared<kdirent>("..", std::make_shared<kdirectory_impl_ref>(this_ref)));
     }
     if (listing != nullptr) {
         auto entriesResult = listing->Entries();
@@ -135,28 +187,10 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
             return {.result = {}, .status = kfile_status::IO_ERROR};
         }
         for (auto fsent : entriesResult.entries) {
-            std::string name = fsent->Name();
+            auto name = fsent->Name();
             if (name != ".." && name != ".") {
-                std::shared_ptr<fileitem> fsfile = fsent->Item();
-                directory *fsdir = dynamic_cast<directory *> (&(*fsfile));
-                if (fsdir != nullptr) {
-                    std::string subpath{Name()};
-                    if (subpath[subpath.size() - 1] != '/') {
-                        subpath.append("/", 1);
-                    }
-                    subpath.append(name);
-                    std::shared_ptr<kdirectory_impl> dir{new kdirectory_impl(this_ref, subpath, fsfile)};
-                    items.push_back(std::make_shared<kdirent>(name, dir));
-                } else {
-                    class symlink *syml = dynamic_cast<class symlink *>(&(*fsfile));
-                    if (syml != nullptr) {
-                        std::shared_ptr<ksymlink_impl> symli = std::make_shared<ksymlink_impl>(this_ref, fsfile, name);
-                        items.push_back(std::make_shared<kdirent>(name, symli));
-                    } else {
-                        std::shared_ptr<kfile> file{new kfile(fsfile, name)};
-                        items.push_back(std::make_shared<kdirent>(name, file));
-                    }
-                }
+                std::shared_ptr<lazy_kfile> fsfile = std::make_shared<kdirectory_impl_lazy>(this_ref, fsent, Name());
+                items.push_back(std::make_shared<kdirent>(name, fsfile));
             }
         }
     }
@@ -195,6 +229,32 @@ std::string kdirectory_impl::Kpath() {
     return Name();
 }
 
+class kdirectory_lazy_file : public lazy_kfile {
+private:
+    std::shared_ptr<kdirent> dirent;
+    std::string name;
+public:
+    kdirectory_lazy_file(const std::shared_ptr<kdirent> &dirent, const std::string &name) : dirent(dirent), name(name) {}
+    std::shared_ptr<kfile> Load() override;
+};
+
+std::shared_ptr<kfile> kdirectory_lazy_file::Load() {
+    auto file = dirent->File();
+    if (dynamic_cast<kdirectory_impl *>(&(*file)) == nullptr) {
+        std::shared_ptr<ksymlink_impl> symli = std::dynamic_pointer_cast<ksymlink_impl>(file);
+        if (!symli) {
+            return file;
+        } else {
+            std::shared_ptr<ksymlink> syml = std::make_shared<ksymlink>(symli);
+            return syml;
+        }
+    } else {
+        std::shared_ptr<kdirectory> dir{new kdirectory(file, name)};
+        return dir;
+    }
+    return {};
+}
+
 kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
     kfile *cwd_file = &(*impl);
     kdirectory_impl *dir = dynamic_cast<kdirectory_impl *>(cwd_file);
@@ -204,20 +264,8 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
     }
     std::vector<std::shared_ptr<kdirent>> entries{};
     for (auto impl_entry : impl_entries.result) {
-        if (dynamic_cast<kdirectory_impl *>(&(*(impl_entry->File()))) == nullptr) {
-            std::shared_ptr<ksymlink_impl> symli = std::dynamic_pointer_cast<ksymlink_impl>(impl_entry->File());
-            if (!symli) {
-                entries.push_back(impl_entry);
-            } else {
-                std::shared_ptr<ksymlink> syml = std::make_shared<ksymlink>(symli);
-                std::shared_ptr<kdirent> entry = std::make_shared<kdirent>(impl_entry->Name(), syml);
-                entries.push_back(entry);
-            }
-        } else {
-            std::shared_ptr<kdirectory> file{new kdirectory(impl_entry->File(), name)};
-            std::shared_ptr<kdirent> entry{new kdirent(impl_entry->Name(), file)};
-            entries.push_back(entry);
-        }
+        std::shared_ptr<lazy_kfile> lz = std::make_shared<kdirectory_lazy_file>(impl_entry, name);
+        entries.push_back(std::make_shared<kdirent>(impl_entry->Name(), lz));
     }
     return {.result = entries, .status = kfile_status::SUCCESS};
 }

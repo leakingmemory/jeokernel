@@ -107,6 +107,18 @@ public:
     entries_result Entries() override;
 };
 
+class procfs_directory_entry : public directory_entry {
+private:
+    std::function<directory_entry_result ()> load;
+public:
+    procfs_directory_entry(const std::string &name, const std::function<directory_entry_result ()> &load) : directory_entry(name), load(load) {}
+    directory_entry_result LoadItem() override;
+};
+
+directory_entry_result procfs_directory_entry::LoadItem() {
+    return load();
+}
+
 entries_result procfs_kerneldir::Entries() {
     auto uname = get_uname_info();
     std::string osrelease{uname.linux_level};
@@ -116,10 +128,13 @@ entries_result procfs_kerneldir::Entries() {
     osrelease.append(uname.arch);
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
     {
-        auto file = std::make_shared<ProcStrfile>(osrelease);
-        file->SetMode(00444);
         result.entries.push_back(
-                std::make_shared<directory_entry>("osrelease", file));
+                std::make_shared<procfs_directory_entry>("osrelease", [osrelease] () {
+                    auto file = std::make_shared<ProcStrfile>(osrelease);
+                    file->SetMode(00444);
+                    directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+                    return result;
+                }));
     }
     {
         std::string maxPidStr{};
@@ -128,9 +143,12 @@ entries_result procfs_kerneldir::Entries() {
             strs << std::dec << Process::GetMaxPid();
             maxPidStr = strs.str();
         }
-        auto file = std::make_shared<ProcStrfile>(maxPidStr);
-        file->SetMode(00444);
-        result.entries.push_back(std::make_shared<directory_entry>("pid_max", file));
+        result.entries.push_back(std::make_shared<procfs_directory_entry>("pid_max", [maxPidStr] () {
+            auto file = std::make_shared<ProcStrfile>(maxPidStr);
+            file->SetMode(00444);
+            directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+            return result;
+        }));
     }
     return result;
 }
@@ -142,23 +160,57 @@ public:
 
 entries_result procfs_sysdir::Entries() {
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
-    result.entries.push_back(std::make_shared<directory_entry>("kernel", std::make_shared<procfs_kerneldir>()));
+    result.entries.push_back(std::make_shared<procfs_directory_entry>("kernel", [] () {
+        auto file = std::make_shared<procfs_kerneldir>();
+        directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+        return result;
+    }));
     return result;
 }
 
 class procfs_procdir : public procfs_directory {
 private:
-    std::shared_ptr<Process> process;
+    std::weak_ptr<Process> w_process;
 public:
-    explicit procfs_procdir(const std::shared_ptr<Process> &process) : process(process) {}
-    pid_t getpid() { return process->getpid(); };
+    explicit procfs_procdir(const std::weak_ptr<Process> &process) : w_process(process) {}
+    pid_t getpid();
     entries_result Entries() override;
 };
 
+pid_t procfs_procdir::getpid() {
+    auto process = w_process.lock();
+    if (!process) {
+        return -1;
+    }
+    return process->getpid();
+}
+
 entries_result procfs_procdir::Entries() {
+    auto w_process = this->w_process;
+    auto process = w_process.lock();
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
-    result.entries.emplace_back(std::make_shared<directory_entry>("auxv", std::make_shared<ProcAuxv>(process->GetAuxv())));
-    result.entries.emplace_back(std::make_shared<directory_entry>("stat", std::make_shared<ProcProcessStat>(process)));
+    if (process) {
+        result.entries.emplace_back(std::make_shared<procfs_directory_entry>("auxv", [w_process]() mutable {
+            auto process = w_process.lock();
+            if (!process) {
+                directory_entry_result result{.file = {}, .status = fileitem_status::IO_ERROR};
+                return result;
+            }
+            auto file = std::make_shared<ProcAuxv>(process->GetAuxv());
+            directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+            return result;
+        }));
+        result.entries.emplace_back(std::make_shared<procfs_directory_entry>("stat", [w_process]() mutable {
+            auto process = w_process.lock();
+            if (!process) {
+                directory_entry_result result{.file = {}, .status = fileitem_status::IO_ERROR};
+                return result;
+            }
+            auto file = std::make_shared<ProcProcessStat>(process);
+            directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+            return result;
+        }));
+    }
     return result;
 }
 
@@ -167,12 +219,20 @@ public:
     entries_result Entries() override;
 };
 
+template <typename T> std::shared_ptr<directory_entry> procfs_stateless_directory(const std::string &name) {
+    return std::make_shared<procfs_directory_entry>(name, [] () {
+        auto file = std::make_shared<T>();
+        directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+        return result;
+    });
+}
+
 entries_result procfs_root::Entries() {
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
-    result.entries.push_back(std::make_shared<directory_entry>("sys", std::make_shared<procfs_sysdir>()));
-    result.entries.push_back(std::make_shared<directory_entry>("uptime", std::make_shared<ProcUptime>()));
-    result.entries.push_back(std::make_shared<directory_entry>("meminfo", std::make_shared<ProcMeminfo>()));
-    result.entries.push_back(std::make_shared<directory_entry>("mounts", std::make_shared<ProcMounts>()));
+    result.entries.push_back(procfs_stateless_directory<procfs_sysdir>("sys"));
+    result.entries.push_back(procfs_stateless_directory<ProcUptime>("uptime"));
+    result.entries.push_back(procfs_stateless_directory<ProcMeminfo>("meminfo"));
+    result.entries.push_back(procfs_stateless_directory<ProcMounts>("mounts"));
     pid_t self{0};
     {
         auto *scheduler = get_scheduler();
@@ -201,16 +261,21 @@ entries_result procfs_root::Entries() {
                     }
                 }
             });
-            for (const auto &proc: procs) {
+            for (const auto &proc_cref: procs) {
+                std::weak_ptr<Process> proc = proc_cref;
                 std::string name{};
                 {
                     std::stringstream ss{};
-                    ss << std::dec << proc->getpid();
+                    ss << std::dec << proc_cref->getpid();
                     name = ss.str();
                 }
-                std::shared_ptr<directory_entry> dirent = std::make_shared<directory_entry>(
+                std::shared_ptr<directory_entry> dirent = std::make_shared<procfs_directory_entry>(
                         name,
-                        std::make_shared<procfs_procdir>(proc)
+                        [proc] () {
+                            auto file = std::make_shared<procfs_procdir>(proc);
+                            directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+                            return result;
+                        }
                 );
                 result.entries.push_back(dirent);
             }
@@ -223,9 +288,13 @@ entries_result procfs_root::Entries() {
             ss << self;
             self_link = ss.str();
         }
-        std::shared_ptr<directory_entry> dirent = std::make_shared<directory_entry>(
+        std::shared_ptr<directory_entry> dirent = std::make_shared<procfs_directory_entry>(
                 "self",
-                std::make_shared<procfs_symlink>(self_link)
+                [self_link] () {
+                        auto file = std::make_shared<procfs_symlink>(self_link);
+                        directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+                        return result;
+                }
         );
         result.entries.push_back(dirent);
     }

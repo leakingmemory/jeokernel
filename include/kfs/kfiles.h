@@ -70,17 +70,23 @@ public:
     virtual void stat(struct statx &st) const = 0;
 };
 
+class lazy_kfile {
+public:
+    lazy_kfile() {}
+    virtual std::shared_ptr<kfile> Load() = 0;
+};
+
 class kdirent {
 private:
     std::string name;
-    std::shared_ptr<kfile> file;
+    std::shared_ptr<lazy_kfile> file;
 public:
-    kdirent(const std::string &name, const std::shared_ptr<kfile> &file) : name(name), file(file) {}
+    kdirent(const std::string &name, const std::shared_ptr<lazy_kfile> &file) : name(name), file(file) {}
     std::string Name() {
         return name;
     }
     std::shared_ptr<kfile> File() {
-        return file;
+        return file->Load();
     }
 };
 
