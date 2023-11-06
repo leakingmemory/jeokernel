@@ -359,13 +359,14 @@ namespace std {
                 return *this;
             }
             ptr = mv.ptr;
-            if (container != nullptr) {
-                if (container->release() == 0) {
-                    delete container;
-                }
-            }
+            auto *prevContainer = container;
             container = mv.container;
             mv.container = nullptr;
+            if (prevContainer != nullptr) {
+                if (prevContainer->release() == 0) {
+                    delete prevContainer;
+                }
+            }
             return *this;
         }
 
@@ -382,14 +383,7 @@ namespace std {
             }
             auto *prevContainer = container;
             container = cp.container;
-            if constexpr(is_polymorphic<P>::value) {
-                ptr = dynamic_cast<T *>(cp.ptr);
-            } else {
-                ptr = cp.ptr;
-            }
-            if (ptr == nullptr) {
-                container = nullptr;
-            }
+            ptr = cp.ptr != nullptr ? cp.ptr : nullptr;
             if (container != nullptr) {
                 container->acquire();
             }
@@ -405,14 +399,15 @@ namespace std {
             if (is_self(mv)) {
                 return *this;
             }
-            if (container != nullptr) {
-                if (container->release() == 0) {
-                    delete container;
-                }
-            }
+            auto *prevContainer = container;
             ptr = mv.ptr;
             container = mv.container;
             mv.container = nullptr;
+            if (prevContainer != nullptr) {
+                if (prevContainer->release() == 0) {
+                    delete prevContainer;
+                }
+            }
             return *this;
         }
 
@@ -435,16 +430,17 @@ namespace std {
         }
 
         shared_ptr &operator = (pointer ptr) {
-            if (container != nullptr) {
-                if (container->release() == 0) {
-                    delete container;
-                }
-            }
+            auto *prevContainer = container;
             this->ptr = ptr;
             if (ptr != nullptr) {
                 container = new impl::shared_ptr_container<T, Deleter>(ptr);
             } else {
                 container = nullptr;
+            }
+            if (prevContainer != nullptr) {
+                if (prevContainer->release() == 0) {
+                    delete prevContainer;
+                }
             }
             return *this;
         }
@@ -503,7 +499,7 @@ namespace std {
                 if constexpr (is_polymorphic<P>::value) {
                     ptr = dynamic_cast<T *>(cp.ptr);
                 } else {
-                    ptr = cp.ptr;
+                    ptr = cp.ptr != nullptr ? cp.ptr : nullptr;
                 }
                 auto *container = cp.container;
                 if (container != nullptr && ptr != nullptr) {
