@@ -20,6 +20,10 @@ FileDescriptorHandler::FileDescriptorHandler() : mtx(), subscriptions(), readyRe
 FileDescriptorHandler::FileDescriptorHandler(const FileDescriptorHandler &cp) : mtx(), subscriptions(), readyRead(cp.readyRead) {
 }
 
+void FileDescriptorHandler::CopyFrom(const FileDescriptorHandler &cp) {
+    readyRead = cp.readyRead;
+}
+
 void FileDescriptorHandler::Subscribe(int fd, Select select) {
     std::lock_guard lock{mtx};
     if (readyRead) {

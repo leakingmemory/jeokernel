@@ -19,15 +19,17 @@ public:
 
 class FsFileDescriptorHandler : public FileDescriptorHandler {
 private:
-    hw_spinlock mtx;
     std::shared_ptr<kfile> file;
     size_t offset;
     bool openRead;
     bool openWrite;
     bool nonblock;
 public:
-    FsFileDescriptorHandler(const std::shared_ptr<kfile> &file, bool openRead, bool openWrite, bool nonblock) : FileDescriptorHandler(), mtx(), file(file), offset(0), openRead(openRead), openWrite(openWrite), nonblock(nonblock) {}
+    FsFileDescriptorHandler(const std::shared_ptr<kfile> &file, bool openRead, bool openWrite, bool nonblock) : FileDescriptorHandler(), file(file), offset(0), openRead(openRead), openWrite(openWrite), nonblock(nonblock) {}
     FsFileDescriptorHandler(const FsFileDescriptorHandler &cp);
+    FsFileDescriptorHandler(FsFileDescriptorHandler &&) = delete;
+    FsFileDescriptorHandler &operator = (const FsFileDescriptorHandler &) = delete;
+    FsFileDescriptorHandler &operator = (FsFileDescriptorHandler &&) = delete;
     std::shared_ptr<FileDescriptorHandler> clone() override;
     std::shared_ptr<kfile> get_file() override;
     bool can_seek() override;
@@ -44,13 +46,12 @@ public:
 
 class FsDirectoryDescriptorHandler : public FileDescriptorHandler {
 private:
-    hw_spinlock mtx;
     std::shared_ptr<kdirectory> dir;
     bool readdirInited;
     std::vector<std::shared_ptr<kdirent>> dirents;
     std::vector<std::shared_ptr<kdirent>>::iterator iterator;
 public:
-    FsDirectoryDescriptorHandler(const std::shared_ptr<kdirectory> &dir) : FileDescriptorHandler(), mtx(), dir(dir), readdirInited(false), dirents(), iterator() {}
+    FsDirectoryDescriptorHandler(const std::shared_ptr<kdirectory> &dir) : FileDescriptorHandler(), dir(dir), readdirInited(false), dirents(), iterator() {}
     FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &);
     std::shared_ptr<FileDescriptorHandler> clone() override;
     std::shared_ptr<kfile> get_file() override;

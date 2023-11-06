@@ -65,8 +65,9 @@ void FsStat::Stat(const kfile &file, statx &st) {
     }
 }
 
-FsFileDescriptorHandler::FsFileDescriptorHandler(const FsFileDescriptorHandler &cp) : mtx() {
+FsFileDescriptorHandler::FsFileDescriptorHandler(const FsFileDescriptorHandler &cp) : FileDescriptorHandler() {
     std::lock_guard lock{*((hw_spinlock *) &(cp.mtx))};
+    CopyFrom(cp);
     this->file = cp.file;
     this->offset = cp.offset;
     this->openRead = cp.openRead;
@@ -183,8 +184,9 @@ int FsFileDescriptorHandler::readdir(const std::function<bool (kdirent &dirent)>
     return -ENOTDIR;
 }
 
-FsDirectoryDescriptorHandler::FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &cp) : mtx(), dir(), readdirInited(false), dirents(), iterator() {
+FsDirectoryDescriptorHandler::FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &cp) : FileDescriptorHandler(), dir(), readdirInited(false), dirents(), iterator() {
     std::lock_guard lock{*((hw_spinlock *) &(cp.mtx))};
+    CopyFrom(cp);
     dir = cp.dir;
     readdirInited = cp.readdirInited;
     dirents = cp.dirents;

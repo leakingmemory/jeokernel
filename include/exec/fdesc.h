@@ -32,16 +32,21 @@ struct FdSubscription {
 enum class SeekWhence { SET, CUR, END };
 
 class FileDescriptorHandler {
-private:
+protected:
     hw_spinlock mtx;
+private:
     std::vector<FdSubscription> subscriptions;
     bool readyRead;
 public:
     FileDescriptorHandler();
-    virtual ~FileDescriptorHandler() = default;
 protected:
     FileDescriptorHandler(const FileDescriptorHandler &cp);
+    void CopyFrom(const FileDescriptorHandler &cp);
 public:
+    FileDescriptorHandler(FileDescriptorHandler &&) = delete;
+    FileDescriptorHandler &operator =(const FileDescriptorHandler &) = delete;
+    FileDescriptorHandler &operator =(FileDescriptorHandler &&) = delete;
+    virtual ~FileDescriptorHandler() = default;
     void Subscribe(int fd, Select select);
     void SetReadyRead(bool ready);
     virtual void Notify();
