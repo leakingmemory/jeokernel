@@ -942,8 +942,11 @@ std::shared_ptr<Process> Process::Clone() {
             }
         }
     }
-    for (const auto &fd : fileDescriptors) {
-        clonedProcess->fileDescriptors.push_back(fd);
+    {
+        std::lock_guard lock{mtx};
+        for (const auto &fd: fileDescriptors) {
+            clonedProcess->fileDescriptors.push_back(fd);
+        }
     }
     return clonedProcess;
 }
