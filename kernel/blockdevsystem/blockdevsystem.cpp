@@ -16,6 +16,7 @@
 #include <filesystems/filesystem.h>
 #include <devfs/devfsinit.h>
 #include <procfs/procfs.h>
+#include <files/fsresource.h>
 #include "blockdev_node.h"
 
 static parttable_readers *parttableReaders = nullptr;
@@ -258,9 +259,30 @@ std::shared_ptr<blockdev> blockdevsystem_impl::GetBlockdevice(const std::string 
     return {};
 }
 
+class blockdevsystem_fsresourcelock : public fsresourcelock {
+private:
+    hw_spinlock spinlock{};
+public:
+    void lock() override {
+        spinlock.lock();
+    }
+    void unlock() override {
+        spinlock.unlock();
+    }
+};
+
+class blockdevsystem_fsresourcelockfactory : public fsresourcelockfactory {
+public:
+    std::shared_ptr<fsresourcelock> Create() override;
+};
+
+std::shared_ptr<fsresourcelock> blockdevsystem_fsresourcelockfactory::Create() {
+    return std::make_shared<blockdevsystem_fsresourcelock>();
+}
+
 std::shared_ptr<filesystem>
 blockdevsystem_impl::OpenFilesystem(const std::string &provider_name, std::shared_ptr<blockdev> bdev) {
-    return open_filesystem(provider_name, bdev);
+    return open_filesystem(std::make_shared<blockdevsystem_fsresourcelockfactory>(), provider_name, bdev);
 }
 
 std::shared_ptr<filesystem> blockdevsystem_impl::OpenFilesystem(const std::string &provider_name) {

@@ -17,7 +17,8 @@ private:
     std::size_t lastDirentPos, actualSize;
     bool entriesRead;
 public:
-    ext2fs_directory(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : directory(), ext2fs_file(fs, inode), entries(), lastDirentPos(0), actualSize(0), entriesRead(false) {}
+    ext2fs_directory(std::shared_ptr<ext2fs> fs) : directory(), ext2fs_file(fs), entries(), lastDirentPos(0), actualSize(0), entriesRead(false) {}
+    std::string GetReferrerIdentifier() override;
     entries_result Entries() override;
 
     directory_resolve_result Create(std::string filename, uint16_t mode, uint8_t filetype);
@@ -27,8 +28,7 @@ public:
 
 private:
     ext2fs &Filesystem() {
-        filesystem *fs = &(*(this->fs));
-        return *((ext2fs *) fs);
+        return *(this->fs);
     }
     uint32_t Mode() override;
     std::size_t Size() override;

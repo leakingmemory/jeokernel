@@ -4,8 +4,17 @@
 
 #include "ext2fs_file.h"
 #include "ext2fs_inode.h"
+#include <files/fsresource.h>
 
-ext2fs_file::ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : fs(fs), inode(inode) {
+ext2fs_file::ext2fs_file(std::shared_ptr<ext2fs> fs) : fsreferrer("ext2fs_file"), fs(fs), inode() {
+}
+
+void ext2fs_file::Init(const std::shared_ptr<ext2fs_file> &self_ref, fsresource<ext2fs_inode> &inode) {
+    this->inode = inode.CreateReference(self_ref);
+}
+
+std::string ext2fs_file::GetReferrerIdentifier() {
+    return "";
 }
 
 uint32_t ext2fs_file::Mode() {

@@ -100,7 +100,7 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     std::shared_ptr<filesystem> fs{};
 
     if (!blockdev) {
-        fs = open_filesystem(fstype);
+        fs = system.OpenFilesystem(fstype);
         if (!fs) {
             std::cerr << "Device not found " << deviceName << "\n";
             return;
@@ -108,7 +108,7 @@ void kshell_mount::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     }
 
     if (!fs) {
-        fs = open_filesystem(fstype, blockdev);
+        fs = system.OpenFilesystem(fstype, blockdev);
     }
     if (fs) {
         blockdev_writer::GetInstance().OpenForWrite(fs);

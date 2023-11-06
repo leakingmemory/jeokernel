@@ -10,6 +10,7 @@
 #include <vector>
 #include <filesystems/filesystem.h>
 #include <files/filepage.h>
+#include <files/fsresource.h>
 
 #include "ext2fs_inode_results.h"
 
@@ -23,7 +24,7 @@ class ext2fs_directory;
 
 class ext2inode;
 
-class ext2fs_inode {
+class ext2fs_inode : public fsresource<ext2fs_inode> {
     friend ext2fs;
     friend ext2fs_file;
     friend ext2fs_symlink;
@@ -60,12 +61,15 @@ private:
     uint8_t fragment_size;
     bool dirty{false};
 public:
-    ext2fs_inode(const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk, std::size_t offset, std::size_t blocksize, std::size_t inodesize, uint64_t blocknum) : mtx(), fs(fs), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), inodesize(inodesize), blockRefs(), symlinkPointer(), blockCache(), sys_dev_id(), inode(0), filesize(0), blocknum(blocknum), mode(0) {
+    ext2fs_inode(fsresourcelockfactory &lockfactory, const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk, std::size_t offset, std::size_t blocksize, std::size_t inodesize, uint64_t blocknum) : fsresource<ext2fs_inode>(lockfactory), mtx(), fs(fs), bdev(bdev), blocks(), offset(offset), blocksize(blocksize), inodesize(inodesize), blockRefs(), symlinkPointer(), blockCache(), sys_dev_id(), inode(0), filesize(0), blocknum(blocknum), mode(0) {
         blocks[0] = blk;
     }
-    ext2fs_inode(const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk1, std::shared_ptr<filepage> blk2, std::size_t offset, std::size_t blocksize, std::size_t inodesize, uint64_t blocknum) : ext2fs_inode(fs, bdev, blk1, offset, blocksize, inodesize, blocknum) {
+    ext2fs_inode(fsresourcelockfactory &lockfactory, const std::weak_ptr<ext2fs> &fs, const std::shared_ptr<blockdev> &bdev, const std::shared_ptr<filepage> &blk1, std::shared_ptr<filepage> blk2, std::size_t offset, std::size_t blocksize, std::size_t inodesize, uint64_t blocknum) : ext2fs_inode(lockfactory, fs, bdev, blk1, offset, blocksize, inodesize, blocknum) {
         blocks[1] = blk2;
     }
+protected:
+    ext2fs_inode * GetResource() override;
+public:
     bool Init();
     bool Read(ext2inode &inode);
     bool Write(ext2inode &inode);

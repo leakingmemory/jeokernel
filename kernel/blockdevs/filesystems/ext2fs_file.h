@@ -7,15 +7,18 @@
 
 #include <memory>
 #include <files/fileitem.h>
+#include <files/fsreferrer.h>
+#include <files/fsreference.h>
 #include <filesystems/filesystem.h>
 
-class filesystem;
+class ext2fs;
 class ext2fs_inode;
 
-class ext2fs_file : public fileitem {
+class ext2fs_file : public fileitem, public fsreferrer {
+    friend ext2fs;
 protected:
-    std::shared_ptr<filesystem> fs;
-    std::shared_ptr<ext2fs_inode> inode;
+    std::shared_ptr<ext2fs> fs;
+    fsreference<ext2fs_inode> inode;
 public:
     constexpr static fileitem_status Convert(filesystem_status ino_stat) {
         fileitem_status status{fileitem_status::SUCCESS};
@@ -40,7 +43,11 @@ public:
         }
         return status;
     }
-    ext2fs_file(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode);
+    ext2fs_file(std::shared_ptr<ext2fs> fs);
+protected:
+    virtual void Init(const std::shared_ptr<ext2fs_file> &self_ref, fsresource<ext2fs_inode> &inode);
+public:
+    std::string GetReferrerIdentifier() override;
     uint32_t Mode() override;
     std::size_t Size() override;
     uintptr_t InodeNum() override;
