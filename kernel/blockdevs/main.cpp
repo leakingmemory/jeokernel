@@ -2,6 +2,7 @@
 #include <blockdevs/parttable_readers.h>
 #include <blockdevs/offset_blockdev.h>
 #include <filesystems/filesystem.h>
+#include <files/fsresource.h>
 #include <iostream>
 #include <cstring>
 #include <vector>
@@ -123,8 +124,33 @@ void writetodev(std::shared_ptr<blockdev> bdev, std::vector<std::vector<dirty_bl
     }
 }
 
+class fsbits_fsresourcelock : public fsresourcelock {
+private:
+    std::mutex mtx{};
+public:
+    void lock() override;
+    void unlock() override;
+};
+
+void fsbits_fsresourcelock::lock() {
+    mtx.lock();
+}
+
+void fsbits_fsresourcelock::unlock() {
+    mtx.unlock();
+}
+
+class fsbits_fsresourcelockfactory : public fsresourcelockfactory {
+public:
+    std::shared_ptr<fsresourcelock> Create() override;
+};
+
+std::shared_ptr<fsresourcelock> fsbits_fsresourcelockfactory::Create() {
+    return std::make_shared<fsbits_fsresourcelock>();
+}
+
 int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
-    std::shared_ptr<blockdev_filesystem> bdev_fs = open_filesystem(fsname, bdev);
+    std::shared_ptr<blockdev_filesystem> bdev_fs = open_filesystem(std::make_shared<fsbits_fsresourcelockfactory>(), fsname, bdev);
     std::shared_ptr<filesystem> fs = bdev_fs;
     if (!fs) {
         std::cerr << "Failed to open filesystem " << fsname << "\n";
