@@ -49,12 +49,12 @@ std::shared_ptr<filesystem> open_filesystem(std::string provider_name) {
     return {};
 }
 
-std::shared_ptr<blockdev_filesystem> open_filesystem(std::string provider_name, std::shared_ptr<blockdev> bdev) {
+std::shared_ptr<blockdev_filesystem> open_filesystem(const std::shared_ptr<fsresourcelockfactory> &lockfactory, std::string provider_name, std::shared_ptr<blockdev> bdev) {
     for (auto provider : *providers) {
         if (provider_name == provider->name()) {
             auto *blockdev_fs = dynamic_cast<blockdev_filesystem_provider *>(&(*provider));
             if (blockdev_fs != nullptr) {
-                return blockdev_fs->open(bdev);
+                return blockdev_fs->open(bdev, lockfactory);
             }
         }
     }

@@ -12,13 +12,14 @@
 #include <strings.h>
 #include <iostream>
 #include <files/symlink.h>
+#include <files/fsreference.h>
 #include <algorithm>
 #include "ext2fs/ext2struct.h"
 
 //#define DEBUG_INODE
 //#define DEBUG_DIR
 
-ext2fs::ext2fs(std::shared_ptr<blockdev> bdev) : blockdev_filesystem(bdev), mtx(), superblock(), groups(), inodes(), superblock_offset(0), superblock_start(0), superblock_size(0), BlockSize(0), PhysBlockGroupsBlock(0), PhysBlockGroupsOffset(0), BlockGroupsTotalBlocks(0), filesystemWasValid(false), filesystemOpenForWrite(false) {
+ext2fs::ext2fs(std::shared_ptr<blockdev> bdev, const std::shared_ptr<fsresourcelockfactory> &fsreslockfactory) : blockdev_filesystem(bdev), mtx(), fsreslockfactory(fsreslockfactory), superblock(), groups(), inodes(), superblock_offset(0), superblock_start(0), superblock_size(0), BlockSize(0), PhysBlockGroupsBlock(0), PhysBlockGroupsOffset(0), BlockGroupsTotalBlocks(0), filesystemWasValid(false), filesystemOpenForWrite(false) {
     sys_dev_id = bdev->GetDevId();
     auto blocksize = bdev->GetBlocksize();
     {
@@ -251,9 +252,11 @@ ext2fs_get_inode_result ext2fs::LoadInode(std::size_t inode_num) {
     }
     std::shared_ptr<ext2fs_inode> inode_obj{};
     if (block_num == block_end) {
-        inode_obj = std::make_shared<ext2fs_inode>(self_ref, bdev, group.InodeTableBlocks[block_num], offset, BlockSize, InodeSize(), rdStart);
+        inode_obj = std::make_shared<ext2fs_inode>(*fsreslockfactory, self_ref, bdev, group.InodeTableBlocks[block_num], offset, BlockSize, InodeSize(), rdStart);
+        inode_obj->SetSelfRef(inode_obj);
     } else if ((block_num + 1) == block_end) {
-        inode_obj = std::make_shared<ext2fs_inode>(self_ref, bdev, group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, BlockSize, InodeSize(), rdStart);
+        inode_obj = std::make_shared<ext2fs_inode>(*fsreslockfactory, self_ref, bdev, group.InodeTableBlocks[block_num], group.InodeTableBlocks[block_end], offset, BlockSize, InodeSize(), rdStart);
+        inode_obj->SetSelfRef(inode_obj);
     } else {
         return {};
     }
@@ -416,7 +419,9 @@ private:
     std::string symlink;
     bool loaded;
 public:
-    ext2fs_symlink(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode);
+    ext2fs_symlink(std::shared_ptr<ext2fs> fs);
+    void Init(const std::shared_ptr<ext2fs_file> &self_ref, fsresource<ext2fs_inode> &inode) override;
+    std::string GetReferrerIdentifier() override;
     uint32_t Mode() override;
     std::size_t Size() override;
     uintptr_t InodeNum() override;
@@ -427,11 +432,19 @@ public:
     [[nodiscard]] std::string GetLink();
 };
 
-ext2fs_symlink::ext2fs_symlink(std::shared_ptr<filesystem> fs, std::shared_ptr<ext2fs_inode> inode) : ext2fs_file(fs, inode), symlink(), loaded(false) {
-    if (inode->filesize <= 60) {
-        this->symlink = inode->symlinkPointer;
+ext2fs_symlink::ext2fs_symlink(std::shared_ptr<ext2fs> fs) : ext2fs_file(fs), symlink(), loaded(false) {
+}
+
+void ext2fs_symlink::Init(const std::shared_ptr<ext2fs_file> &self_ref, fsresource<ext2fs_inode> &inode) {
+    ext2fs_file::Init(self_ref, inode);
+    if (this->inode->filesize <= 60) {
+        this->symlink = this->inode->symlinkPointer;
         this->loaded = true;
     }
+}
+
+std::string ext2fs_symlink::GetReferrerIdentifier() {
+    return "ext2fs_symlink";
 }
 
 uint32_t ext2fs_symlink::Mode() {
@@ -488,7 +501,11 @@ filesystem_get_node_result<directory> ext2fs::GetDirectory(std::shared_ptr<files
         std::cerr << "Failed to open inode " << inode_num << "\n";
         return {.node = {}, .status = inode_obj.status};
     }
-    return {.node = std::make_shared<ext2fs_directory>(shared_this, inode_obj.inode), .status = filesystem_status::SUCCESS};
+    std::shared_ptr<ext2fs> e2fs = std::dynamic_pointer_cast<ext2fs>(shared_this);
+    std::shared_ptr<ext2fs_directory> dir = std::make_shared<ext2fs_directory>(e2fs);
+    std::shared_ptr<ext2fs_file> file = dir;
+    dir->Init(file, *(inode_obj.inode));
+    return {.node = dir, .status = filesystem_status::SUCCESS};
 }
 
 filesystem_get_node_result<fileitem> ext2fs::GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
@@ -501,7 +518,10 @@ filesystem_get_node_result<fileitem> ext2fs::GetFile(std::shared_ptr<filesystem>
         std::cerr << "Failed to open inode " << inode_num << "\n";
         return {.node = {}, .status = inode_obj.status};
     }
-    return {.node = std::make_shared<ext2fs_file>(shared_this, inode_obj.inode), .status = filesystem_status::SUCCESS};
+    std::shared_ptr<ext2fs> e2fs = std::dynamic_pointer_cast<ext2fs>(shared_this);
+    std::shared_ptr<ext2fs_file> file = std::make_shared<ext2fs_file>(e2fs);
+    file->Init(file, *(inode_obj.inode));
+    return {.node = file, .status = filesystem_status::SUCCESS};
 }
 
 filesystem_get_node_result<fileitem> ext2fs::GetSymlink(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
@@ -514,7 +534,10 @@ filesystem_get_node_result<fileitem> ext2fs::GetSymlink(std::shared_ptr<filesyst
         std::cerr << "Failed to open inode " << inode_num << "\n";
         return {.node = {}, .status = inode_obj.status};
     }
-    std::shared_ptr<ext2fs_symlink> symlink = std::make_shared<ext2fs_symlink>(shared_this, inode_obj.inode);
+    std::shared_ptr<ext2fs> e2fs = std::dynamic_pointer_cast<ext2fs>(shared_this);
+    std::shared_ptr<ext2fs_symlink> symlink = std::make_shared<ext2fs_symlink>(e2fs);
+    std::shared_ptr<ext2fs_file> file = symlink;
+    symlink->Init(file, *(inode_obj.inode));
     std::shared_ptr<class symlink> as_symlink{symlink};
     return {.node = as_symlink, .status = filesystem_status::SUCCESS};
 }
@@ -651,6 +674,9 @@ std::vector<dirty_block> ext2fs::GetDataWritesForFlush() {
                     dropInodes.push_back(inode.inode_num);
                 }
             }
+        } else {
+            std::cout << "Inode " << inode.inode_num << " size=" << inode.inode->filesize << " still held=" << flushInode << "\n";
+            inode.inode->PrintTraceBack(1);
         }
         if (flushData) {
             auto writes = inode.inode->GetDataWrites();
@@ -856,8 +882,8 @@ std::string ext2fs_provider::name() const {
     return "ext2fs";
 }
 
-std::shared_ptr<blockdev_filesystem> ext2fs_provider::open(std::shared_ptr<blockdev> bdev) const {
-    std::shared_ptr<ext2fs> fs{new ext2fs(bdev)};
+std::shared_ptr<blockdev_filesystem> ext2fs_provider::open(std::shared_ptr<blockdev> bdev, const std::shared_ptr<fsresourcelockfactory> &fsreslockfactory) const {
+    std::shared_ptr<ext2fs> fs{new ext2fs(bdev, fsreslockfactory)};
     {
         std::weak_ptr<ext2fs> weakPtr{fs};
         fs->self_ref = weakPtr;

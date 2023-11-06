@@ -7,16 +7,23 @@
 
 #include "ext2fs_inode_results.h"
 #include <memory>
+#include <files/fsreferrer.h>
+#include <files/fsreference.h>
 
 class ext2fs_inode;
 
-class ext2fs_inode_reader {
+class ext2fs_inode_reader : public fsreferrer {
 private:
-    std::shared_ptr<ext2fs_inode> inode;
+    fsreference<ext2fs_inode> inode;
+    std::weak_ptr<ext2fs_inode_reader> self_ref;
     std::shared_ptr<filepage_pointer> page;
     std::size_t offset, next_blki, cur_blki;
+private:
+    ext2fs_inode_reader();
+    void Init(fsresource<ext2fs_inode> &inode);
 public:
-    ext2fs_inode_reader(std::shared_ptr<ext2fs_inode> inode) : inode(inode), page(), offset(0), next_blki(0), cur_blki(0) {}
+    static std::shared_ptr<ext2fs_inode_reader> Create(fsresource<ext2fs_inode> &inode);
+    std::string GetReferrerIdentifier() override;
     filesystem_status seek_set(std::size_t offset);
     inode_read_bytes_result read(void *ptr, std::size_t bytes);
     inode_read_bytes_result write(const void *ptr, std::size_t bytes);

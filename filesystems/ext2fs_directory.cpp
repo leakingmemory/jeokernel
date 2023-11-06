@@ -10,6 +10,7 @@
 #include <filesystems/filesystem.h>
 #include <cstring>
 #include <strings.h>
+#include <files/fsreference.h>
 
 constexpr uint16_t modeTypeFile =      00100000;
 constexpr uint16_t modeTypeDirectory = 00040000;
@@ -72,12 +73,16 @@ static directory_entry *CreateDirectoryEntry(std::shared_ptr<filesystem> fs, ext
     return new ext2fs_directory_entry(e2fs, name, dirent->inode, dirent->file_type);
 }
 
+std::string ext2fs_directory::GetReferrerIdentifier() {
+    return "ext2fs_directory";
+}
+
 entries_result ext2fs_directory::Entries() {
     if (entriesRead) {
         return {.entries = entries, .status = fileitem_status::SUCCESS};
     }
     std::vector<std::shared_ptr<directory_entry>> entries{};
-    ext2fs_inode_reader reader{inode};
+    std::shared_ptr<ext2fs_inode_reader> reader = ext2fs_inode_reader::Create(inode.GetFsResourceRef());
     {
         ext2dirent baseDirent{};
         auto sizeRemaining = inode->GetFileSize();
@@ -85,7 +90,7 @@ entries_result ext2fs_directory::Entries() {
             inode_read_bytes_result readResult{};
             if (sizeRemaining >= sizeof(baseDirent)) {
                 lastDirentPos = inode->GetFileSize() - sizeRemaining;
-                readResult = reader.read(&baseDirent, sizeof(baseDirent));
+                readResult = reader->read(&baseDirent, sizeof(baseDirent));
             } else {
                 readResult = {.size = 0, .status = filesystem_status::SUCCESS};
             }
@@ -98,7 +103,7 @@ entries_result ext2fs_directory::Entries() {
                 memcpy(dirent, &baseDirent, sizeof(*dirent));
                 static_assert(sizeof(*dirent) == sizeof(baseDirent));
                 if (sizeRemaining >= addLength) {
-                    readResult = reader.read(((uint8_t *) dirent) + sizeof(baseDirent), addLength);
+                    readResult = reader->read(((uint8_t *) dirent) + sizeof(baseDirent), addLength);
                     sizeRemaining -= readResult.size;
                 } else {
                     readResult = {.size = 0, .status = filesystem_status::SUCCESS};
@@ -222,8 +227,8 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     allocInode.inode->dirty = true;
 
     auto seekTo = lastDirentPos;
-    ext2fs_inode_reader reader{inode};
-    reader.seek_set(seekTo);
+    std::shared_ptr<ext2fs_inode_reader> reader = ext2fs_inode_reader::Create(inode.GetFsResourceRef());
+    reader->seek_set(seekTo);
 
     ext2dirent *lastDirent, *dirent;
     auto sizeofLast = actualSize - lastDirentPos;
@@ -231,7 +236,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     {
         lastDirent = sizeofLast >= sizeof(*dirent) ? new(malloc(sizeofLast)) ext2dirent() : nullptr;
         if (lastDirent != nullptr) {
-            auto result = reader.read(lastDirent, sizeofLast);
+            auto result = reader->read(lastDirent, sizeofLast);
             if (result.status != filesystem_status::SUCCESS) {
                 Filesystem().ReleaseInode(allocInode.inode->inode);
                 lastDirent->~ext2dirent();
@@ -265,9 +270,9 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
             if (minimumPaddedLength < lastDirent->rec_len) {
                 lastDirent->rec_len = minimumPaddedLength;
                 bzero(lastDirent->PaddingPtr(), padding);
-                auto status = reader.seek_set(seekTo);
+                auto status = reader->seek_set(seekTo);
                 if (status == filesystem_status::SUCCESS) {
-                    auto result = reader.write(lastDirent, lastDirent->rec_len);
+                    auto result = reader->write(lastDirent, lastDirent->rec_len);
                     if (result.status == filesystem_status::SUCCESS) {
                         if (result.size != lastDirent->rec_len) {
                             status = filesystem_status::IO_ERROR;
@@ -329,7 +334,7 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     auto rec_len = dirent->rec_len;
     dirent->rec_len = actualSize - seekTo;
 
-    auto result = reader.write(dirent, rec_len);
+    auto result = reader->write(dirent, rec_len);
 
     std::shared_ptr<fileitem> file{};
     if (result.status == filesystem_status::SUCCESS) {

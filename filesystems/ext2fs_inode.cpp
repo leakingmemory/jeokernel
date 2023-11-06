@@ -43,6 +43,10 @@ std::size_t ext2file_block::Size() const {
     return size;
 }
 
+ext2fs_inode *ext2fs_inode::GetResource() {
+    return this;
+}
+
 bool ext2fs_inode::Init() {
     ext2inode inode{};
     if (!Read(inode)) {
@@ -403,9 +407,14 @@ bool ext2fs_inode::FlushData() {
         auto &block = *iterator;
         if (block) {
             bool flushed{false};
-            if (block.use_count() == 1 && !block->IsDirty()) {
+            auto use_count = block.use_count();
+            auto dirty = block->IsDirty();
+            if (use_count == 1 && !dirty) {
                 block = {};
                 flushed = true;
+            } else {
+                std::cout << "Inode " << inode << " size=" << filesize << " block"
+                << (use_count != 1 ? " held" : "") << (dirty ? " dirty\n" : "\n");
             }
             if (!flushed) {
                 allFlushed = false;

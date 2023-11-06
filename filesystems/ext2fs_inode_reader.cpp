@@ -5,6 +5,26 @@
 #include "ext2fs_inode_reader.h"
 #include "ext2fs_inode.h"
 #include <cstring>
+#include <files/fsreference.h>
+
+ext2fs_inode_reader::ext2fs_inode_reader() : fsreferrer("ext2fs_inode_reader"), inode(), page(), offset(0), next_blki(0), cur_blki(0) {
+}
+
+void ext2fs_inode_reader::Init(fsresource<ext2fs_inode> &inode) {
+    this->inode = inode.CreateReference(self_ref.lock());
+}
+
+std::shared_ptr<ext2fs_inode_reader> ext2fs_inode_reader::Create(fsresource<ext2fs_inode> &inode) {
+    std::shared_ptr<ext2fs_inode_reader> reader{new ext2fs_inode_reader()};
+    std::weak_ptr<ext2fs_inode_reader> weak{reader};
+    reader->self_ref = weak;
+    reader->Init(inode);
+    return reader;
+}
+
+std::string ext2fs_inode_reader::GetReferrerIdentifier() {
+    return "";
+}
 
 filesystem_status ext2fs_inode_reader::seek_set(std::size_t offset) {
     next_blki = offset / FILEPAGE_PAGE_SIZE;

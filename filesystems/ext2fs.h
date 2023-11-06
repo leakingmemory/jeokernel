@@ -81,6 +81,7 @@ struct ext2fs_allocate_blocks_result {
     filesystem_status status;
 };
 
+class fsresourcelockfactory;
 class ext2bitmap;
 class ext2blockgroups;
 
@@ -89,6 +90,7 @@ class ext2fs : public blockdev_filesystem {
 private:
     std::mutex mtx;
     std::weak_ptr<ext2fs> self_ref;
+    std::shared_ptr<fsresourcelockfactory> fsreslockfactory;
     std::shared_ptr<blockdev_block> superblock_blocks;
     std::unique_ptr<ext2super> superblock;
     std::shared_ptr<blockdev_block> groups_blocks;
@@ -104,7 +106,7 @@ private:
     uint32_t PhysBlockGroupsBlock, PhysBlockGroupsOffset, BlockGroupsTotalBlocks;
     bool filesystemWasValid, filesystemOpenForWrite;
 public:
-    ext2fs(std::shared_ptr<blockdev> bdev);
+    ext2fs(std::shared_ptr<blockdev> bdev, const std::shared_ptr<fsresourcelockfactory> &fsreslockfactory);
     bool HasSuperblock() const;
     int VersionMajor() const ;
     int VersionMinor() const ;
@@ -150,7 +152,7 @@ class ext2fs_provider : public blockdev_filesystem_provider {
 public:
     ext2fs_provider();
     std::string name() const override;
-    std::shared_ptr<blockdev_filesystem> open(std::shared_ptr<blockdev> bdev) const override;
+    std::shared_ptr<blockdev_filesystem> open(std::shared_ptr<blockdev> bdev, const std::shared_ptr<fsresourcelockfactory> &fsreslockfactory) const override;
 };
 
 #endif //FSBITS_EXT2FS_H
