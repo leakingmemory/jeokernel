@@ -3,8 +3,16 @@
 //
 
 #include "ProcProcessStat.h"
+#include "procfs_fsresourcelockfactory.h"
 #include <exec/procthread.h>
 #include <sstream>
+
+std::shared_ptr<ProcProcessStat> ProcProcessStat::Create(const std::shared_ptr<Process> &process) {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<ProcProcessStat> procProcessStat{new ProcProcessStat(lockfactory, process)};
+    procProcessStat->SetSelfRef(procProcessStat);
+    return procProcessStat;
+}
 
 std::string ProcProcessStat::GetContent(Process &proc) {
     auto pid = proc.getpid();

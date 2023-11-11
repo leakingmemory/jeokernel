@@ -6,6 +6,7 @@
 #include <filesystems/filesystem.h>
 #include <exec/procthread.h>
 #include <files/symlink.h>
+#include <files/fsresource.h>
 #include <sstream>
 #include <core/uname_info.h>
 #include "ProcAuxv.h"
@@ -14,12 +15,15 @@
 #include "ProcUptime.h"
 #include "ProcMeminfo.h"
 #include "ProcMounts.h"
+#include "procfs_fsresourcelockfactory.h"
 
-class procfs_symlink : public symlink {
+class procfs_symlink : public symlink, public fsresource<procfs_symlink> {
 private:
     std::string link{};
+    procfs_symlink(fsresourcelockfactory &lockfactory, const std::string &link) : fsresource<procfs_symlink>(lockfactory), link(link) {}
 public:
-    procfs_symlink(const std::string &link) : link(link) {}
+    static std::shared_ptr<procfs_symlink> Create(const std::string &link);
+    procfs_symlink * GetResource() override;
     uint32_t Mode() override;
     std::size_t Size() override;
     uintptr_t InodeNum() override;
@@ -29,6 +33,17 @@ public:
     file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
     std::string GetLink() override;
 };
+
+std::shared_ptr<procfs_symlink> procfs_symlink::Create(const std::string &link) {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<procfs_symlink> symlink{new procfs_symlink(lockfactory, link)};
+    symlink->SetSelfRef(symlink);
+    return symlink;
+}
+
+procfs_symlink *procfs_symlink::GetResource() {
+    return this;
+}
 
 uint32_t procfs_symlink::Mode() {
     return 00120777;
@@ -62,8 +77,12 @@ std::string procfs_symlink::GetLink() {
     return link;
 }
 
-class procfs_directory : public directory {
+class procfs_directory : public directory, public fsresource<procfs_directory> {
+protected:
+    explicit procfs_directory(fsresourcelockfactory &lockfactory) : fsresource<procfs_directory>(lockfactory) {}
 public:
+    procfs_directory() = delete;
+    procfs_directory * GetResource() override;
     uint32_t Mode() override;
     std::size_t Size() override;
     uintptr_t InodeNum() override;
@@ -73,6 +92,10 @@ public:
     file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
     entries_result Entries() override = 0;
 };
+
+procfs_directory *procfs_directory::GetResource() {
+    return this;
+}
 
 uint32_t procfs_directory::Mode() {
     return 0040555;
@@ -103,20 +126,30 @@ file_read_result procfs_directory::Read(uint64_t offset, void *ptr, std::size_t 
 }
 
 class procfs_kerneldir : public procfs_directory {
+private:
+    procfs_kerneldir(fsresourcelockfactory &lockfactory) : procfs_directory(lockfactory) {}
 public:
+    static std::shared_ptr<procfs_kerneldir> Create();
     entries_result Entries() override;
 };
 
+std::shared_ptr<procfs_kerneldir> procfs_kerneldir::Create() {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<procfs_kerneldir> kerneldir{new procfs_kerneldir(lockfactory)};
+    kerneldir->SetSelfRef(kerneldir);
+    return kerneldir;
+}
+
 class procfs_directory_entry : public directory_entry {
 private:
-    std::function<directory_entry_result ()> load;
+    std::function<directory_entry_result (const std::shared_ptr<fsreferrer> &referrer)> load;
 public:
-    procfs_directory_entry(const std::string &name, const std::function<directory_entry_result ()> &load) : directory_entry(name), load(load) {}
-    directory_entry_result LoadItem() override;
+    procfs_directory_entry(const std::string &name, const std::function<directory_entry_result (const std::shared_ptr<fsreferrer> &referrer)> &load) : directory_entry(name), load(load) {}
+    directory_entry_result LoadItem(const std::shared_ptr<fsreferrer> &referrer) override;
 };
 
-directory_entry_result procfs_directory_entry::LoadItem() {
-    return load();
+directory_entry_result procfs_directory_entry::LoadItem(const std::shared_ptr<fsreferrer> &referrer) {
+    return load(referrer);
 }
 
 entries_result procfs_kerneldir::Entries() {
@@ -129,10 +162,10 @@ entries_result procfs_kerneldir::Entries() {
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
     {
         result.entries.push_back(
-                std::make_shared<procfs_directory_entry>("osrelease", [osrelease] () {
-                    auto file = std::make_shared<ProcStrfile>(osrelease);
+                std::make_shared<procfs_directory_entry>("osrelease", [osrelease] (const std::shared_ptr<fsreferrer> &referrer) {
+                    auto file = ProcStrfile::Create(osrelease);
                     file->SetMode(00444);
-                    directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+                    directory_entry_result result{.file = file->CreateReference(referrer), .status = fileitem_status::SUCCESS};
                     return result;
                 }));
     }
@@ -143,10 +176,12 @@ entries_result procfs_kerneldir::Entries() {
             strs << std::dec << Process::GetMaxPid();
             maxPidStr = strs.str();
         }
-        result.entries.push_back(std::make_shared<procfs_directory_entry>("pid_max", [maxPidStr] () {
-            auto file = std::make_shared<ProcStrfile>(maxPidStr);
+        result.entries.push_back(std::make_shared<procfs_directory_entry>("pid_max", [maxPidStr] (const std::shared_ptr<fsreferrer> &referrer) {
+            auto file = ProcStrfile::Create(maxPidStr);
             file->SetMode(00444);
-            directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+            fsreference<ProcDatafile> refProc = file->CreateReference(referrer);
+            fsreference<fileitem> fileItemRef = fsreference_dynamic_cast<fileitem>(std::move(refProc));
+            directory_entry_result result{.file = std::move(fileItemRef), .status = fileitem_status::SUCCESS};
             return result;
         }));
     }
@@ -154,15 +189,28 @@ entries_result procfs_kerneldir::Entries() {
 }
 
 class procfs_sysdir : public procfs_directory {
+private:
+    procfs_sysdir(fsresourcelockfactory &lockfactory) : procfs_directory(lockfactory) {}
 public:
+    procfs_sysdir() = delete;
+    static std::shared_ptr<procfs_sysdir> Create();
     entries_result Entries() override;
 };
 
+std::shared_ptr<procfs_sysdir> procfs_sysdir::Create() {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<procfs_sysdir> sysdir{new procfs_sysdir(lockfactory)};
+    sysdir->SetSelfRef(sysdir);
+    return sysdir;
+}
+
 entries_result procfs_sysdir::Entries() {
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
-    result.entries.push_back(std::make_shared<procfs_directory_entry>("kernel", [] () {
-        auto file = std::make_shared<procfs_kerneldir>();
-        directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+    result.entries.push_back(std::make_shared<procfs_directory_entry>("kernel", [] (const std::shared_ptr<fsreferrer> &referrer) {
+        auto file = procfs_kerneldir::Create();
+        auto procRef = file->CreateReference(referrer);
+        fsreference<fileitem> fileRef = fsreference_dynamic_cast<fileitem>(std::move(procRef));
+        directory_entry_result result{.file = std::move(fileRef), .status = fileitem_status::SUCCESS};
         return result;
     }));
     return result;
@@ -171,11 +219,19 @@ entries_result procfs_sysdir::Entries() {
 class procfs_procdir : public procfs_directory {
 private:
     std::weak_ptr<Process> w_process;
+    procfs_procdir(fsresourcelockfactory &lockfactory, const std::weak_ptr<Process> &process) : procfs_directory(lockfactory), w_process(process) {}
 public:
-    explicit procfs_procdir(const std::weak_ptr<Process> &process) : w_process(process) {}
+    static std::shared_ptr<procfs_procdir> Create(const std::weak_ptr<Process> &process);
     pid_t getpid();
     entries_result Entries() override;
 };
+
+std::shared_ptr<procfs_procdir> procfs_procdir::Create(const std::weak_ptr<Process> &process) {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<procfs_procdir> procdir{new procfs_procdir(lockfactory, process)};
+    procdir->SetSelfRef(procdir);
+    return procdir;
+}
 
 pid_t procfs_procdir::getpid() {
     auto process = w_process.lock();
@@ -190,24 +246,28 @@ entries_result procfs_procdir::Entries() {
     auto process = w_process.lock();
     entries_result result{.entries = {}, .status = fileitem_status::SUCCESS};
     if (process) {
-        result.entries.emplace_back(std::make_shared<procfs_directory_entry>("auxv", [w_process]() mutable {
+        result.entries.emplace_back(std::make_shared<procfs_directory_entry>("auxv", [w_process](const std::shared_ptr<fsreferrer> &referrer) mutable {
             auto process = w_process.lock();
             if (!process) {
                 directory_entry_result result{.file = {}, .status = fileitem_status::IO_ERROR};
                 return result;
             }
-            auto file = std::make_shared<ProcAuxv>(process->GetAuxv());
-            directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+            auto file = ProcAuxv::Create(process->GetAuxv());
+            auto procRef = file->CreateReference(referrer);
+            fsreference<fileitem> fileRef = fsreference_dynamic_cast<fileitem>(std::move(procRef));
+            directory_entry_result result{.file = std::move(fileRef), .status = fileitem_status::SUCCESS};
             return result;
         }));
-        result.entries.emplace_back(std::make_shared<procfs_directory_entry>("stat", [w_process]() mutable {
+        result.entries.emplace_back(std::make_shared<procfs_directory_entry>("stat", [w_process](const std::shared_ptr<fsreferrer> &referrer) mutable {
             auto process = w_process.lock();
             if (!process) {
                 directory_entry_result result{.file = {}, .status = fileitem_status::IO_ERROR};
                 return result;
             }
-            auto file = std::make_shared<ProcProcessStat>(process);
-            directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+            auto file = ProcProcessStat::Create(process);
+            auto procRef = file->CreateReference(referrer);
+            fsreference<fileitem> fileRef = fsreference_dynamic_cast<fileitem>(std::move(procRef));
+            directory_entry_result result{.file = std::move(fileRef), .status = fileitem_status::SUCCESS};
             return result;
         }));
     }
@@ -215,14 +275,41 @@ entries_result procfs_procdir::Entries() {
 }
 
 class procfs_root : public procfs_directory {
+private:
+    procfs_root(fsresourcelockfactory &lockfactory) : procfs_directory(lockfactory) {}
 public:
+    procfs_root() = delete;
+    static std::shared_ptr<procfs_root> Create();
     entries_result Entries() override;
 };
 
-template <typename T> std::shared_ptr<directory_entry> procfs_stateless_directory(const std::string &name) {
-    return std::make_shared<procfs_directory_entry>(name, [] () {
-        auto file = std::make_shared<T>();
-        directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+std::shared_ptr<procfs_root> procfs_root::Create() {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<procfs_root> root{new procfs_root(lockfactory)};
+    root->SetSelfRef(root);
+    return root;
+}
+
+template <typename T> concept ProcStatelessDirectoryCreate = requires(std::shared_ptr<T> t)
+{
+    { t = T::Create() };
+};
+template <typename T> concept ProcStatelessDirectoryReference = requires(fsreference<T> ref)
+{
+    { ref = std::declval<std::shared_ptr<T>>()->CreateReference(std::declval<std::shared_ptr<fsreferrer>>()) };
+};
+template <typename T> concept ProcStatelessDirectory = ProcStatelessDirectoryCreate<T> && ProcStatelessDirectoryReference<T>;
+
+template <ProcStatelessDirectory T> fsreference<fileitem> CreateProcfsFileitemRef(const std::shared_ptr<fsreferrer> &referrer) {
+    auto file = T::Create();
+    auto genRef = file->CreateReference(referrer);
+    fsreference<fileitem> fileRef = fsreference_dynamic_cast<fileitem>(std::move(genRef));
+    return fileRef;
+}
+template <ProcStatelessDirectory T> std::shared_ptr<directory_entry> procfs_stateless_directory(const std::string &name) {
+    return std::make_shared<procfs_directory_entry>(name, [] (const std::shared_ptr<fsreferrer> &referrer) {
+        fsreference<fileitem> fileRef = CreateProcfsFileitemRef<T>(referrer);
+        directory_entry_result result{.file = std::move(fileRef), .status = fileitem_status::SUCCESS};
         return result;
     });
 }
@@ -271,9 +358,11 @@ entries_result procfs_root::Entries() {
                 }
                 std::shared_ptr<directory_entry> dirent = std::make_shared<procfs_directory_entry>(
                         name,
-                        [proc] () {
-                            auto file = std::make_shared<procfs_procdir>(proc);
-                            directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+                        [proc] (const std::shared_ptr<fsreferrer> &referrer) {
+                            auto file = procfs_procdir::Create(proc);
+                            auto genRef = file->CreateReference(referrer);
+                            fsreference<fileitem> fileRef = fsreference_dynamic_cast<fileitem>(std::move(genRef));
+                            directory_entry_result result{.file = std::move(fileRef), .status = fileitem_status::SUCCESS};
                             return result;
                         }
                 );
@@ -290,9 +379,11 @@ entries_result procfs_root::Entries() {
         }
         std::shared_ptr<directory_entry> dirent = std::make_shared<procfs_directory_entry>(
                 "self",
-                [self_link] () {
-                        auto file = std::make_shared<procfs_symlink>(self_link);
-                        directory_entry_result result{.file = file, .status = fileitem_status::SUCCESS};
+                [self_link] (const std::shared_ptr<fsreferrer> &referrer) {
+                        auto file = procfs_symlink::Create(self_link);
+                        auto genRef = file->CreateReference(referrer);
+                        fsreference<fileitem> fileRef = fsreference_dynamic_cast<fileitem>(std::move(genRef));
+                        directory_entry_result result{.file = std::move(fileRef), .status = fileitem_status::SUCCESS};
                         return result;
                 }
         );
@@ -303,11 +394,14 @@ entries_result procfs_root::Entries() {
 
 class procfs : public filesystem {
 public:
-    filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
+    filesystem_get_node_result<fsreference<directory>> GetRootDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer) override;
 };
 
-filesystem_get_node_result<directory> procfs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {
-    return {.node = std::make_shared<procfs_root>(), .status = filesystem_status::SUCCESS};
+filesystem_get_node_result<fsreference<directory>> procfs::GetRootDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer) {
+    auto root = procfs_root::Create();
+    auto rootDirRef = root->CreateReference(referrer);
+    auto dirRef = fsreference_dynamic_cast<directory>(std::move(rootDirRef));
+    return {.node = std::move(dirRef), .status = filesystem_status::SUCCESS};
 }
 
 class procfs_provider : public special_filesystem_provider {

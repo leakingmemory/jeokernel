@@ -18,8 +18,9 @@ private:
     std::weak_ptr<Process> process;
     std::string str{};
     bool initialized;
+protected:
+    ProcLazyStrfile(fsresourcelockfactory &lockfactory, const std::shared_ptr<Process> &process) : ProcDatafile(lockfactory), mtx(), process(process), str(), initialized(false) {}
 public:
-    ProcLazyStrfile(const std::shared_ptr<Process> &process) : mtx(), process(process), str(), initialized(false) {}
     std::size_t Size() override;
     file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
     virtual std::string GetContent(Process &proc) = 0;

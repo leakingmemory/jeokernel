@@ -5,11 +5,12 @@
 #include "blockdev_node.h"
 #include <core/blockdev_devfs_node.h>
 #include <core/blockdevsystem.h>
+#include <devfs/devfs.h>
 
 
 blockdev_node::blockdev_node(const std::string &name, std::shared_ptr<blockdev_with_partitions> blockdev) :
         name(name), node(), blockdev(blockdev) {
-    node = blockdev_devfs_node::Create(blockdev->GetBlockdev())->AsFileitem();
+    node = blockdev_devfs_node::Create(blockdev->GetBlockdev())->AsDevfsNode();
     GetDevfs()->GetRoot()->Add(name, node);
 }
 

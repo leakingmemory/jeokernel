@@ -5,12 +5,12 @@
 #ifndef JEOKERNEL_BLOCKDEV_DEVFS_NODE_H
 #define JEOKERNEL_BLOCKDEV_DEVFS_NODE_H
 
-#include <devfs/devfs.h>
 #include <kfs/kfiles.h>
 
 class blockdev;
 
 class blockdev_devfs_node_impl;
+class devfs_node;
 
 class blockdev_devfs_node {
 private:
@@ -24,8 +24,9 @@ public:
     std::shared_ptr<blockdev> GetBlockdev() {
         return bdev.lock();
     }
-    static std::shared_ptr<blockdev_devfs_node> FromFileItem(const std::shared_ptr<fileitem> &);
+    static blockdev_devfs_node *FromFileItem(fileitem *);
     std::shared_ptr<fileitem> AsFileitem();
+    std::shared_ptr<devfs_node> AsDevfsNode();
 };
 
 #endif //JEOKERNEL_BLOCKDEV_DEVFS_NODE_H

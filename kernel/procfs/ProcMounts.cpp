@@ -3,8 +3,16 @@
 //
 
 #include "ProcMounts.h"
+#include "procfs_fsresourcelockfactory.h"
 #include <kfs/kfiles.h>
 #include <sstream>
+
+std::shared_ptr<ProcMounts> ProcMounts::Create() {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<ProcMounts> procMounts{new ProcMounts(lockfactory)};
+    procMounts->SetSelfRef(procMounts);
+    return procMounts;
+}
 
 std::string ProcMounts::GetContent() {
     std::stringstream strs{};

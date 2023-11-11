@@ -13,8 +13,10 @@
 class ttyfsdev : public devfs_node_impl, public kstatable {
 private:
     std::shared_ptr<ttydev> ttyd;
+private:
+    ttyfsdev(fsresourcelockfactory &lockfactory, const std::shared_ptr<ttydev> &ttyd) : devfs_node_impl(lockfactory, 00666), ttyd(ttyd) {}
 public:
-    ttyfsdev(std::shared_ptr<ttydev> ttyd) : devfs_node_impl(00666), ttyd(ttyd) {}
+    static std::shared_ptr<ttyfsdev> Create(const std::shared_ptr<ttydev> &ttyd);
     void stat(struct stat64 &st) const override;
     void stat(struct statx &st) const override;
 };

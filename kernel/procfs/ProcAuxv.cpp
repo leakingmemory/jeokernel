@@ -3,7 +3,15 @@
 //
 
 #include "ProcAuxv.h"
+#include "procfs_fsresourcelockfactory.h"
 #include <string.h>
+
+std::shared_ptr<ProcAuxv> ProcAuxv::Create(const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv) {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<ProcAuxv> procAuxv{new ProcAuxv(lockfactory, auxv)};
+    procAuxv->SetSelfRef(procAuxv);
+    return procAuxv;
+}
 
 std::size_t ProcAuxv::Size() {
     return sizeof((*auxv)[0]) * auxv->size();

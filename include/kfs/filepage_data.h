@@ -8,6 +8,7 @@
 #include <cstdint>
 
 class kfile;
+class kfile_impl;
 class filepage;
 class filepage_ref;
 
@@ -15,6 +16,7 @@ class filepage_data {
     friend filepage;
     friend filepage_ref;
     friend kfile;
+    friend kfile_impl;
 private:
     uintptr_t physpage;
     uint32_t ref;

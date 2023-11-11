@@ -14,7 +14,10 @@ private:
     std::mutex mtx{};
     std::string str{};
     bool initialized{false};
+protected:
+    ProcSysLazyStrfile(fsresourcelockfactory &lockfactory) : ProcDatafile(lockfactory) {}
 public:
+    ProcSysLazyStrfile() = delete;
     std::size_t Size() override;
     file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
     virtual std::string GetContent() = 0;

@@ -15,3 +15,16 @@ void rawfsresource::Forget(uint64_t id) {
         ++iterator;
     }
 }
+
+uint64_t rawfsresource::NewRef(const std::shared_ptr<fsreferrer> &referrer) {
+    uint64_t id;
+    std::weak_ptr<fsreferrer> w{referrer};
+    {
+        std::lock_guard lock{*mtx};
+        rawfsreference &ref = refs.emplace_back();
+        ref.referrer = w;
+        ref.id = ++serial;
+        id = ref.id;
+    }
+    return id;
+}

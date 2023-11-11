@@ -50,7 +50,7 @@ Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir
     std::function<std::shared_ptr<filesystem> ()> openfs{};
 
     if (deviceResult.result) {
-        auto node = blockdev_devfs_node::FromFileItem(deviceResult.result->GetImplementation());
+        auto node = blockdev_devfs_node::FromFileItem(deviceResult.result->GetFileitem());
         if (node) {
             auto blockdev = node->GetBlockdev();
             if (!blockdev) {
@@ -81,30 +81,8 @@ Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir
             ctx.ReturnWhenNotRunning(-EINVAL);
             return;
         }
-        auto result = get_blockdevsystem().GetRootDirectory(fs);
-        if (result.status != blockdevsystem_status::SUCCESS) {
-            switch (result.status) {
-                case blockdevsystem_status::IO_ERROR:
-                    ctx.ReturnWhenNotRunning(-EIO);
-                    return;
-                case blockdevsystem_status::INTEGRITY_ERROR:
-                case blockdevsystem_status::INVALID_REQUEST:
-                    ctx.ReturnWhenNotRunning(-EINVAL);
-                    return;
-                case blockdevsystem_status::NOT_SUPPORTED_FS_FEATURE:
-                    ctx.ReturnWhenNotRunning(-EOPNOTSUPP);
-                    return;
-                default:
-                    ctx.ReturnWhenNotRunning(-EIO);
-                    return;
-            }
-        }
-        if (result.node) {
-            mountpoint->Mount(dev, type, "ro", fs, result.node);
-            ctx.ReturnWhenNotRunning(0);
-        } else {
-            ctx.ReturnWhenNotRunning(-EOPNOTSUPP);
-        }
+        mountpoint->Mount(dev, type, "ro", fs);
+        ctx.ReturnWhenNotRunning(0);
     });
     return ctx.Async();
 }

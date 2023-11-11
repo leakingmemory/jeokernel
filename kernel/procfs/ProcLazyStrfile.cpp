@@ -3,6 +3,7 @@
 //
 
 #include "ProcLazyStrfile.h"
+#include "procfs_fsresourcelockfactory.h"
 #include <iostream>
 
 std::size_t ProcLazyStrfile::Size() {

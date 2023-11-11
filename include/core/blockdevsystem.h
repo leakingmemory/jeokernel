@@ -97,7 +97,6 @@ public:
     virtual std::shared_ptr<blockdev> GetBlockdevice(const std::string &name) = 0;
     virtual std::shared_ptr<filesystem> OpenFilesystem(const std::string &provider_name, std::shared_ptr<blockdev> bdev) = 0;
     virtual std::shared_ptr<filesystem> OpenFilesystem(const std::string &provider_name) = 0;
-    virtual blockdevsystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> fs) = 0;
 };
 
 void init_blockdevsystem();

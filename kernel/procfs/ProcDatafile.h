@@ -6,12 +6,15 @@
 #define JEOKERNEL_PROCDATAFILE_H
 
 #include <files/fileitem.h>
+#include <files/fsresource.h>
 
-class ProcDatafile : public fileitem {
+class ProcDatafile : public fileitem, public fsresource<ProcDatafile> {
 private:
     uint32_t mode;
+protected:
+    ProcDatafile(fsresourcelockfactory &lockfactory) : fsresource<ProcDatafile>(lockfactory), mode(00400) {}
 public:
-    ProcDatafile() : mode(00400) {}
+    ProcDatafile * GetResource() override;
     uint32_t Mode() override;
     void SetMode(uint32_t mode);
     uintptr_t InodeNum() override;

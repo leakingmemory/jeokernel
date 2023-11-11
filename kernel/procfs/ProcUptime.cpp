@@ -3,8 +3,16 @@
 //
 
 #include "ProcUptime.h"
+#include "procfs_fsresourcelockfactory.h"
 #include <core/nanotime.h>
 #include <sstream>
+
+std::shared_ptr<ProcUptime> ProcUptime::Create() {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<ProcUptime> procUptime{new ProcUptime(lockfactory)};
+    procUptime->SetSelfRef(procUptime);
+    return procUptime;
+}
 
 std::string ProcUptime::GetContent() {
     auto tm = get_nanotime_ref();

@@ -11,10 +11,24 @@ ext2fs_inode_reader::ext2fs_inode_reader() : fsreferrer("ext2fs_inode_reader"), 
 }
 
 void ext2fs_inode_reader::Init(fsresource<ext2fs_inode> &inode) {
-    this->inode = inode.CreateReference(self_ref.lock());
+    std::shared_ptr<fsreferrer> ref = self_ref.lock();
+    this->inode = inode.CreateReference(ref);
+}
+
+void ext2fs_inode_reader::Init(const fsreference<ext2fs_inode> &inode) {
+    std::shared_ptr<fsreferrer> ref = self_ref.lock();
+    this->inode = inode.CreateReference(ref);
 }
 
 std::shared_ptr<ext2fs_inode_reader> ext2fs_inode_reader::Create(fsresource<ext2fs_inode> &inode) {
+    std::shared_ptr<ext2fs_inode_reader> reader{new ext2fs_inode_reader()};
+    std::weak_ptr<ext2fs_inode_reader> weak{reader};
+    reader->self_ref = weak;
+    reader->Init(inode);
+    return reader;
+}
+
+std::shared_ptr<ext2fs_inode_reader> ext2fs_inode_reader::Create(const fsreference<ext2fs_inode> &inode) {
     std::shared_ptr<ext2fs_inode_reader> reader{new ext2fs_inode_reader()};
     std::weak_ptr<ext2fs_inode_reader> weak{reader};
     reader->self_ref = weak;

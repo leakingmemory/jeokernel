@@ -33,6 +33,8 @@ struct file_read_result {
     fileitem_status status;
 };
 
+template <class T> class fsresource;
+
 class fileitem {
  public:
     virtual ~fileitem() = default;

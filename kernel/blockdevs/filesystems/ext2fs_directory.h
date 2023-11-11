@@ -17,14 +17,14 @@ private:
     std::size_t lastDirentPos, actualSize;
     bool entriesRead;
 public:
-    ext2fs_directory(std::shared_ptr<ext2fs> fs) : directory(), ext2fs_file(fs), entries(), lastDirentPos(0), actualSize(0), entriesRead(false) {}
+    ext2fs_directory(std::shared_ptr<ext2fs> fs, fsresourcelockfactory &lockfactory) : directory(), ext2fs_file(fs, lockfactory), entries(), lastDirentPos(0), actualSize(0), entriesRead(false) {}
     std::string GetReferrerIdentifier() override;
     entries_result Entries() override;
 
-    directory_resolve_result Create(std::string filename, uint16_t mode, uint8_t filetype);
-    directory_resolve_result CreateFile(std::string filename, uint16_t mode) override;
+    directory_resolve_result Create(const std::shared_ptr<fsreferrer> &, std::string filename, uint16_t mode, uint8_t filetype);
+    directory_resolve_result CreateFile(const std::shared_ptr<fsreferrer> &, std::string filename, uint16_t mode) override;
     void InitializeDirectory(uint32_t parentInode, uint32_t blocknum);
-    directory_resolve_result CreateDirectory(std::string filename, uint16_t mode) override;
+    directory_resolve_result CreateDirectory(const std::shared_ptr<fsreferrer> &, std::string filename, uint16_t mode) override;
 
 private:
     ext2fs &Filesystem() {

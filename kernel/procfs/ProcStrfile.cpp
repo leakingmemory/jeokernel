@@ -3,7 +3,15 @@
 //
 
 #include "ProcStrfile.h"
+#include "procfs_fsresourcelockfactory.h"
 #include <string.h>
+
+std::shared_ptr<ProcStrfile> ProcStrfile::Create(const std::string &str) {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<ProcStrfile> procStrfile{new ProcStrfile(lockfactory, str)};
+    procStrfile->SetSelfRef(procStrfile);
+    return procStrfile;
+}
 
 std::size_t ProcStrfile::Size() {
     return str.size();

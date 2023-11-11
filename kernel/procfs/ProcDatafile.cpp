@@ -4,6 +4,10 @@
 
 #include "ProcDatafile.h"
 
+ProcDatafile *ProcDatafile::GetResource() {
+    return this;
+}
+
 uint32_t ProcDatafile::Mode() {
     return mode;
 }

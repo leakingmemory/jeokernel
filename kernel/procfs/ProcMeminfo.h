@@ -8,7 +8,11 @@
 #include "ProcSysLazyStrfile.h"
 
 class ProcMeminfo : public ProcSysLazyStrfile {
+private:
+    ProcMeminfo(fsresourcelockfactory &lockfactory) : ProcSysLazyStrfile(lockfactory) {}
 public:
+    static std::shared_ptr<ProcMeminfo> Create();
+    ProcMeminfo() = delete;
     std::string GetContent() override;
 };
 

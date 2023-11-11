@@ -30,10 +30,13 @@ std::string text(kfile_status status);
 
 class fileitem;
 class directory;
+class kfile_impl;
 class kdirectory;
 class kdirectory_impl;
 class ksymlink_impl;
 class ksymlink;
+template <class T> class fsreference;
+template <class T> class fsresource;
 
 template <typename T> struct kfile_result {
     T result;
@@ -41,27 +44,27 @@ template <typename T> struct kfile_result {
 };
 
 class kfile {
+    friend kfile_impl;
     friend kdirectory;
     friend kdirectory_impl;
     friend ksymlink_impl;
     friend ksymlink;
 private:
-    std::shared_ptr<fileitem> file;
     std::string name;
 public:
-    kfile(const std::shared_ptr<fileitem> &file, const std::string &name) : file(file), name(name) {}
+    kfile(const std::string &name) : name(name) {}
     virtual ~kfile() = default;
     std::string Name() const;
-    uint32_t Mode() const;
-    int Gid() const;
-    int Uid() const;
-    std::size_t Size() const;
-    uintptr_t InodeNum() const;
-    uint32_t BlockSize() const;
-    uintptr_t SysDevId() const;
-    kfile_result<std::size_t> Read(uint64_t offset, void *ptr, std::size_t len);
-    kfile_result<filepage_ref> GetPage(std::size_t pagenum);
-    std::shared_ptr<fileitem> GetImplementation() const;
+    virtual fileitem *GetFileitem() const = 0;
+    virtual uint32_t Mode() const = 0;
+    virtual int Gid() const;
+    virtual int Uid() const;
+    virtual std::size_t Size() const = 0;
+    virtual uintptr_t InodeNum() const = 0;
+    virtual uint32_t BlockSize() const = 0;
+    virtual uintptr_t SysDevId() const = 0;
+    virtual kfile_result<std::size_t> Read(uint64_t offset, void *ptr, std::size_t len) = 0;
+    virtual kfile_result<filepage_ref> GetPage(std::size_t pagenum) = 0;
 };
 
 class kstatable {
@@ -92,44 +95,41 @@ public:
 
 class filesystem;
 
-class kdirectory_impl : public kfile {
-private:
-    std::shared_ptr<kfile> parent;
-public:
-    kdirectory_impl(const std::shared_ptr<kfile> &parent, const std::string &kpath, const std::shared_ptr<fileitem> &fileitem) : kfile(fileitem, kpath), parent(parent) {}
-    kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries(std::shared_ptr<kfile> this_impl);
-    std::shared_ptr<filesystem> Unmount();
-    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs, const std::shared_ptr<directory> &fsroot);
-    std::string Kpath();
-};
-
 class kdirectory : public kfile {
 private:
     std::shared_ptr<kfile> impl;
 public:
-    kdirectory(const std::shared_ptr<kfile> &impl, const std::string &name) : kfile(impl->file, name), impl(impl) {}
+    kdirectory(const std::shared_ptr<kfile> &impl, const std::string &name) : kfile(name), impl(impl) {}
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries();
     kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root, std::string filename, int resolveSymlinks = 20);
     std::shared_ptr<filesystem> Unmount();
-    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs, const std::shared_ptr<directory> &fsroot);
+    void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs);
     std::string Kpath();
-};
-
-class ksymlink_impl : public kfile {
-    friend ksymlink;
-private:
-    std::shared_ptr<kfile> parent;
-public:
-    ksymlink_impl(std::shared_ptr<kfile> parent, const std::shared_ptr<fileitem> &fileitem, const std::string &name) : kfile(fileitem, name), parent(parent) {}
+    fileitem *GetFileitem() const override;
+    uint32_t Mode() const override;
+    std::size_t Size() const override;
+    uintptr_t InodeNum() const override;
+    uint32_t BlockSize() const override;
+    uintptr_t SysDevId() const override;
+    kfile_result<std::size_t> Read(uint64_t offset, void *ptr, std::size_t len) override;
+    kfile_result<filepage_ref> GetPage(std::size_t pagenum) override;
 };
 
 class ksymlink : public kfile {
 private:
     std::shared_ptr<ksymlink_impl> impl;
 public:
-    ksymlink(std::shared_ptr<ksymlink_impl> impl) : kfile(impl->file, impl->Name()), impl(impl) {}
+    ksymlink(const std::shared_ptr<ksymlink_impl> &impl);
     [[nodiscard]] kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root);
     [[nodiscard]] std::string GetLink();
+    fileitem *GetFileitem() const override;
+    uint32_t Mode() const override;
+    std::size_t Size() const override;
+    uintptr_t InodeNum() const override;
+    uint32_t BlockSize() const override;
+    uintptr_t SysDevId() const override;
+    kfile_result<std::size_t> Read(uint64_t offset, void *ptr, std::size_t len) override;
+    kfile_result<filepage_ref> GetPage(std::size_t pagenum) override;
 };
 
 std::shared_ptr<kdirectory> get_kernel_rootdir();

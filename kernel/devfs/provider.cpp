@@ -8,7 +8,7 @@
 
 class devfs_filesystem : public filesystem {
 public:
-    filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
+    filesystem_get_node_result<fsreference<directory>> GetRootDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer) override;
 };
 
 class devfs_provider : public special_filesystem_provider {
@@ -17,8 +17,11 @@ public:
     std::shared_ptr<filesystem> open() const override;
 };
 
-filesystem_get_node_result<directory> devfs_filesystem::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {
-    return {.node = std::dynamic_pointer_cast<directory>(GetDevfs()->GetRoot()), .status = filesystem_status::SUCCESS};
+filesystem_get_node_result<fsreference<directory>> devfs_filesystem::GetRootDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer) {
+    std::shared_ptr<fsresource<devfs_directory>> devfsRoot = GetDevfs()->GetRoot();
+    auto genRef = devfsRoot->CreateReference(referrer);
+    auto dirRef = fsreference_dynamic_cast<directory>(std::move(genRef));
+    return {.node = std::move(dirRef), .status = filesystem_status::SUCCESS};
 }
 
 std::string devfs_provider::name() const {

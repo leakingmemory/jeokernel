@@ -10,11 +10,12 @@
 
 class fileitem;
 class blockdev_with_partitions;
+class devfs_node;
 
 class blockdev_node {
 private:
     std::string name;
-    std::shared_ptr<fileitem> node;
+    std::shared_ptr<devfs_node> node;
     std::shared_ptr<blockdev_with_partitions> blockdev;
 public:
     blockdev_node(const std::string &name, std::shared_ptr<blockdev_with_partitions> blockdev);

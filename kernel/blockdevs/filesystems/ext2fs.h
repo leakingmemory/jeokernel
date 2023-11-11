@@ -11,6 +11,7 @@
 #include <filesystems/filesystem.h>
 #include <files/directory.h>
 #include <files/filepage.h>
+#include <files/fsreference.h>
 #include "ext2fs_inode_results.h"
 
 class blockdev;
@@ -84,6 +85,8 @@ struct ext2fs_allocate_blocks_result {
 class fsresourcelockfactory;
 class ext2bitmap;
 class ext2blockgroups;
+class symlink;
+class fsreferrer;
 
 class ext2fs : public blockdev_filesystem {
     friend ext2fs_provider;
@@ -124,9 +127,9 @@ private:
     ext2fs_get_inode_result LoadInode(std::size_t inode_num);
 public:
     ext2fs_get_inode_result GetInode(std::size_t inode_num);
-    filesystem_get_node_result<directory> GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
-    filesystem_get_node_result<fileitem> GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
-    filesystem_get_node_result<fileitem> GetSymlink(std::shared_ptr<filesystem> shared_this, std::size_t inode_num);
+    filesystem_get_node_result<fsreference<directory>> GetDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num);
+    filesystem_get_node_result<fsreference<fileitem>> GetFile(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num);
+    filesystem_get_node_result<fsreference<symlink>> GetSymlink(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num);
     ext2fs_get_inode_result AllocateInode();
     filesystem_status ReleaseInode(uint32_t inodeNum);
     ext2fs_allocate_blocks_result AllocateBlocks(std::size_t requestedCount);
@@ -141,7 +144,7 @@ public:
     std::vector<dirty_block> OpenForWrite() override;
     FlushOrCloseResult FlushOrClose() override;
 public:
-    filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override;
+    filesystem_get_node_result<fsreference<directory>> GetRootDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer) override;
 };
 
 class ext2fs_file;

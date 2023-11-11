@@ -3,8 +3,16 @@
 //
 
 #include "ProcMeminfo.h"
+#include "procfs_fsresourcelockfactory.h"
 #include <sstream>
 #include <sys/sysinfo.h>
+
+std::shared_ptr<ProcMeminfo> ProcMeminfo::Create() {
+    procfs_fsresourcelockfactory lockfactory{};
+    std::shared_ptr<ProcMeminfo> procMeminfo{new ProcMeminfo(lockfactory)};
+    procMeminfo->SetSelfRef(procMeminfo);
+    return procMeminfo;
+}
 
 static void Line(std::stringstream &strs, const char *name, uint64_t value)
 {

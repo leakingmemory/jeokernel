@@ -7,19 +7,24 @@
 
 #include <memory>
 #include <string>
+#include <files/fsresource.h>
 
 class fileitem;
 
-class devfs_node {
+class devfs_node : public fsresource<devfs_node> {
 public:
+    devfs_node(fsresourcelockfactory &lockfactory) : fsresource<devfs_node>(lockfactory) {}
     virtual ~devfs_node() = default;
+    devfs_node *GetResource() override;
 };
 
-class devfs_directory {
+class devfs_directory : public fsresource<devfs_directory> {
 public:
+    devfs_directory(fsresourcelockfactory &lockfactory) : fsresource<devfs_directory>(lockfactory) {}
     virtual ~devfs_directory() = default;
-    virtual void Add(const std::string &name, std::shared_ptr<fileitem> node) = 0;
-    virtual void Remove(std::shared_ptr<fileitem> node) = 0;
+    devfs_directory *GetResource() override;
+    virtual void Add(const std::string &name, std::shared_ptr<devfs_node> node) = 0;
+    virtual void Remove(std::shared_ptr<devfs_node> node) = 0;
 };
 
 class devfs_directory_impl;

@@ -8,7 +8,10 @@
 #include "ProcSysLazyStrfile.h"
 
 class ProcUptime : public ProcSysLazyStrfile {
+    ProcUptime(fsresourcelockfactory &lockfactory) : ProcSysLazyStrfile(lockfactory) {}
 public:
+    ProcUptime() = delete;
+    static std::shared_ptr<ProcUptime> Create();
     std::string GetContent() override;
 };
 

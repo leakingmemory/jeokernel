@@ -12,8 +12,9 @@
 class ProcAuxv : public ProcDatafile {
 private:
     std::shared_ptr<const std::vector<ELF64_auxv>> auxv;
+    ProcAuxv(fsresourcelockfactory &lockfactory, const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv) : ProcDatafile(lockfactory), auxv(auxv) {}
 public:
-    ProcAuxv(const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv) : auxv(auxv) {}
+    static std::shared_ptr<ProcAuxv> Create(const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv);
     std::size_t Size() override;
     file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
 };

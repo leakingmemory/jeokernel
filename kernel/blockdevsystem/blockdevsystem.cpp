@@ -78,7 +78,6 @@ public:
     std::shared_ptr<blockdev> GetBlockdevice(const std::string &name) override;
     std::shared_ptr<filesystem> OpenFilesystem(const std::string &provider_name, std::shared_ptr<blockdev> bdev) override;
     std::shared_ptr<filesystem> OpenFilesystem(const std::string &provider_name) override;
-    blockdevsystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> fs) override;
 };
 
 blockdev_with_partitions::blockdev_with_partitions(std::shared_ptr<blockdev> bdev)
@@ -287,31 +286,6 @@ blockdevsystem_impl::OpenFilesystem(const std::string &provider_name, std::share
 
 std::shared_ptr<filesystem> blockdevsystem_impl::OpenFilesystem(const std::string &provider_name) {
     return open_filesystem(provider_name);
-}
-
-blockdevsystem_get_node_result<directory> blockdevsystem_impl::GetRootDirectory(std::shared_ptr<filesystem> fs) {
-    auto result = fs->GetRootDirectory(fs);
-    blockdevsystem_status status;
-    switch (result.status) {
-        case filesystem_status::SUCCESS:
-            status = blockdevsystem_status::SUCCESS;
-            break;
-        case filesystem_status::IO_ERROR:
-            status = blockdevsystem_status::IO_ERROR;
-            break;
-        case filesystem_status::NOT_SUPPORTED_FS_FEATURE:
-            status = blockdevsystem_status::NOT_SUPPORTED_FS_FEATURE;
-            break;
-        case filesystem_status::INVALID_REQUEST:
-            status = blockdevsystem_status::INVALID_REQUEST;
-            break;
-        case filesystem_status::INTEGRITY_ERROR:
-            status = blockdevsystem_status::INTEGRITY_ERROR;
-            break;
-        default:
-            status = blockdevsystem_status::IO_ERROR;
-    }
-    return {.node = result.node, .status = status};
 }
 
 void init_blockdevsystem() {
