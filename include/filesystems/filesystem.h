@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <files/directory.h>
+#include <files/fsreference.h>
 
 class blockdev;
 
@@ -24,13 +25,15 @@ enum class filesystem_status {
 std::string text(filesystem_status status);
 
 template <typename T> struct filesystem_get_node_result {
-    std::shared_ptr<T> node;
+    T node;
     filesystem_status status;
 };
 
+class fsreferrer;
+
 class filesystem {
 public:
-    virtual filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) = 0;
+    virtual filesystem_get_node_result<fsreference<directory>> GetRootDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer) = 0;
 };
 
 struct FlushOrCloseResult {
@@ -47,7 +50,7 @@ public:
     [[nodiscard]] std::shared_ptr<blockdev> GetBlockdev() const {
         return bdev;
     }
-    filesystem_get_node_result<directory> GetRootDirectory(std::shared_ptr<filesystem> shared_this) override = 0;
+    filesystem_get_node_result<fsreference<directory>> GetRootDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer) override = 0;
     virtual std::vector<std::vector<dirty_block>> GetWrites() = 0;
     virtual std::vector<dirty_block> OpenForWrite() = 0;
     virtual FlushOrCloseResult FlushOrClose() = 0;

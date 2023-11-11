@@ -30,6 +30,7 @@ struct rawfsresource {
     std::vector<rawfsreference> refs{};
     uint64_t serial{0};
     void Forget(uint64_t id);
+    uint64_t NewRef(const std::shared_ptr<fsreferrer> &);
 };
 
 class fsresourcelockfactory {
@@ -44,6 +45,7 @@ public:
 
 template <class T> class fsresource : private rawfsresource, public fsresourceunwinder {
     friend fsreference<T>;
+    friend fsreference_reference<T>;
 private:
     std::weak_ptr<fsresource<T>> self_ref{};
 protected:
@@ -72,9 +74,8 @@ public:
             id = ref.id;
         }
         fsreference<T> ref{};
-        ref.id = id;
-        ref.ref = self_ref.lock();
-        ref.ptr = ref.ref->GetResource();
+        ref.ref = std::make_shared<fsreference_reference<T>>(self_ref.lock(), id);
+        ref.ptr = (T *) ref.ref->GetResource();
         return ref;
     }
     void PrintTraceBack(int indent) override {

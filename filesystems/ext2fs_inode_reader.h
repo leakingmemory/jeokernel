@@ -21,8 +21,10 @@ private:
 private:
     ext2fs_inode_reader();
     void Init(fsresource<ext2fs_inode> &inode);
+    void Init(const fsreference<ext2fs_inode> &inode);
 public:
     static std::shared_ptr<ext2fs_inode_reader> Create(fsresource<ext2fs_inode> &inode);
+    static std::shared_ptr<ext2fs_inode_reader> Create(const fsreference<ext2fs_inode> &inode);
     std::string GetReferrerIdentifier() override;
     filesystem_status seek_set(std::size_t offset);
     inode_read_bytes_result read(void *ptr, std::size_t bytes);

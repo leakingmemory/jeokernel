@@ -419,7 +419,7 @@ private:
     std::string symlink;
     bool loaded;
 public:
-    ext2fs_symlink(std::shared_ptr<ext2fs> fs);
+    ext2fs_symlink(std::shared_ptr<ext2fs> fs, fsresourcelockfactory &);
     void Init(const std::shared_ptr<ext2fs_file> &self_ref, fsresource<ext2fs_inode> &inode) override;
     std::string GetReferrerIdentifier() override;
     uint32_t Mode() override;
@@ -432,7 +432,7 @@ public:
     [[nodiscard]] std::string GetLink();
 };
 
-ext2fs_symlink::ext2fs_symlink(std::shared_ptr<ext2fs> fs) : ext2fs_file(fs), symlink(), loaded(false) {
+ext2fs_symlink::ext2fs_symlink(std::shared_ptr<ext2fs> fs, fsresourcelockfactory &lockfactory) : ext2fs_file(fs, lockfactory), symlink(), loaded(false) {
 }
 
 void ext2fs_symlink::Init(const std::shared_ptr<ext2fs_file> &self_ref, fsresource<ext2fs_inode> &inode) {
@@ -491,7 +491,7 @@ std::string ext2fs_symlink::GetLink() {
     return symlink;
 }
 
-filesystem_get_node_result<directory> ext2fs::GetDirectory(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
+filesystem_get_node_result<fsreference<directory>> ext2fs::GetDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num) {
     if (!shared_this || this != ((ext2fs *) &(*shared_this))) {
         std::cerr << "Wrong shared reference for filesystem when opening directory\n";
         return {.node = {}, .status = filesystem_status::INVALID_REQUEST};
@@ -502,13 +502,15 @@ filesystem_get_node_result<directory> ext2fs::GetDirectory(std::shared_ptr<files
         return {.node = {}, .status = inode_obj.status};
     }
     std::shared_ptr<ext2fs> e2fs = std::dynamic_pointer_cast<ext2fs>(shared_this);
-    std::shared_ptr<ext2fs_directory> dir = std::make_shared<ext2fs_directory>(e2fs);
+    std::shared_ptr<ext2fs_directory> dir = std::make_shared<ext2fs_directory>(e2fs, *fsreslockfactory);
     std::shared_ptr<ext2fs_file> file = dir;
     dir->Init(file, *(inode_obj.inode));
-    return {.node = dir, .status = filesystem_status::SUCCESS};
+    fsreference<ext2fs_file> fileReference = dir->CreateReference(referrer);
+    fsreference<directory> dirReference = fsreference_dynamic_cast<directory>(std::move(fileReference));
+    return {.node = std::move(dirReference), .status = filesystem_status::SUCCESS};
 }
 
-filesystem_get_node_result<fileitem> ext2fs::GetFile(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
+filesystem_get_node_result<fsreference<fileitem>> ext2fs::GetFile(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num) {
     if (!shared_this || this != ((ext2fs *) &(*shared_this))) {
         std::cerr << "Wrong shared reference for filesystem when opening directory\n";
         return {.node = {}, .status = filesystem_status::INVALID_REQUEST};
@@ -519,12 +521,15 @@ filesystem_get_node_result<fileitem> ext2fs::GetFile(std::shared_ptr<filesystem>
         return {.node = {}, .status = inode_obj.status};
     }
     std::shared_ptr<ext2fs> e2fs = std::dynamic_pointer_cast<ext2fs>(shared_this);
-    std::shared_ptr<ext2fs_file> file = std::make_shared<ext2fs_file>(e2fs);
+    std::shared_ptr<ext2fs_file> file = std::make_shared<ext2fs_file>(e2fs, *fsreslockfactory);
+
     file->Init(file, *(inode_obj.inode));
-    return {.node = file, .status = filesystem_status::SUCCESS};
+    fsreference<ext2fs_file> fileReference = file->CreateReference(referrer);
+    fsreference<fileitem> fileitemReference = fsreference_dynamic_cast<fileitem>(std::move(fileReference));
+    return {.node = std::move(fileitemReference), .status = filesystem_status::SUCCESS};
 }
 
-filesystem_get_node_result<fileitem> ext2fs::GetSymlink(std::shared_ptr<filesystem> shared_this, std::size_t inode_num) {
+filesystem_get_node_result<fsreference<symlink>> ext2fs::GetSymlink(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num) {
     if (!shared_this || this != ((ext2fs *) &(*shared_this))) {
         std::cerr << "Wrong shared reference for filesystem when opening directory\n";
         return {.node = {}, .status = filesystem_status::INVALID_REQUEST};
@@ -535,11 +540,12 @@ filesystem_get_node_result<fileitem> ext2fs::GetSymlink(std::shared_ptr<filesyst
         return {.node = {}, .status = inode_obj.status};
     }
     std::shared_ptr<ext2fs> e2fs = std::dynamic_pointer_cast<ext2fs>(shared_this);
-    std::shared_ptr<ext2fs_symlink> symlink = std::make_shared<ext2fs_symlink>(e2fs);
+    std::shared_ptr<ext2fs_symlink> symlink = std::make_shared<ext2fs_symlink>(e2fs, *fsreslockfactory);
     std::shared_ptr<ext2fs_file> file = symlink;
     symlink->Init(file, *(inode_obj.inode));
-    std::shared_ptr<class symlink> as_symlink{symlink};
-    return {.node = as_symlink, .status = filesystem_status::SUCCESS};
+    fsreference<ext2fs_file> fileReference = symlink->CreateReference(referrer);
+    fsreference<class symlink> symlinkReference = fsreference_dynamic_cast<class symlink>(std::move(fileReference));
+    return {.node = std::move(symlinkReference), .status = filesystem_status::SUCCESS};
 }
 
 ext2fs_get_inode_result ext2fs::AllocateInode() {
@@ -871,8 +877,8 @@ FlushOrCloseResult ext2fs::FlushOrClose() {
     return {result, true};
 }
 
-filesystem_get_node_result<directory> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this) {
-    return GetDirectory(shared_this, 2);
+filesystem_get_node_result<fsreference<directory>> ext2fs::GetRootDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer) {
+    return GetDirectory(shared_this, referrer, 2);
 }
 
 ext2fs_provider::ext2fs_provider() {

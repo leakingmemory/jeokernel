@@ -9,11 +9,14 @@
 #include <vector>
 #include <memory>
 #include <files/fileitem.h>
+#include <files/fsreference.h>
 
 struct directory_entry_result {
-    std::shared_ptr<fileitem> file;
+    fsreference<fileitem> file;
     fileitem_status status;
 };
+
+class fsreferrer;
 
 class directory_entry {
 private:
@@ -23,7 +26,7 @@ public:
     std::string Name() {
         return name;
     }
-    virtual directory_entry_result LoadItem() = 0;
+    virtual directory_entry_result LoadItem(const std::shared_ptr<fsreferrer> &referrer) = 0;
 };
 
 struct entries_result {
@@ -32,20 +35,23 @@ struct entries_result {
 };
 
 struct directory_resolve_result {
-    std::shared_ptr<fileitem> file;
+    fsreference<fileitem> file;
     fileitem_status status;
 };
 
 constexpr int maxLinkRecurse = 50;
 
+class directory_path_resolver;
+
 class directory : public fileitem {
+    friend directory_path_resolver;
 public:
     virtual ~directory() = default;
     uint32_t Mode() override = 0;
     virtual entries_result Entries() = 0;
-    directory_resolve_result Resolve(std::string filename, directory *rootdir = nullptr, int followSymlink = maxLinkRecurse);
-    virtual directory_resolve_result CreateFile(std::string filename, uint16_t mode);
-    virtual directory_resolve_result CreateDirectory(std::string filename, uint16_t mode);
+    directory_resolve_result Resolve(const std::shared_ptr<fsreferrer> &referrer, std::string filename, directory *rootdir = nullptr, int followSymlink = maxLinkRecurse);
+    virtual directory_resolve_result CreateFile(const std::shared_ptr<fsreferrer> &, std::string filename, uint16_t mode);
+    virtual directory_resolve_result CreateDirectory(const std::shared_ptr<fsreferrer> &, std::string filename, uint16_t mode);
 };
 
 #endif //FSBITS_DIRECTORY_H

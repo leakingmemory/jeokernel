@@ -6,10 +6,15 @@
 #include "ext2fs_inode.h"
 #include <files/fsresource.h>
 
-ext2fs_file::ext2fs_file(std::shared_ptr<ext2fs> fs) : fsreferrer("ext2fs_file"), fs(fs), inode() {
+ext2fs_file *ext2fs_file::GetResource() {
+    return this;
+}
+
+ext2fs_file::ext2fs_file(std::shared_ptr<ext2fs> fs, fsresourcelockfactory &lockfactory) : fsresource<ext2fs_file>(lockfactory), fsreferrer("ext2fs_file"), fs(fs), inode() {
 }
 
 void ext2fs_file::Init(const std::shared_ptr<ext2fs_file> &self_ref, fsresource<ext2fs_inode> &inode) {
+    SetSelfRef(self_ref);
     this->inode = inode.CreateReference(self_ref);
 }
 

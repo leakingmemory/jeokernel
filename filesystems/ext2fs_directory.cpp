@@ -11,6 +11,7 @@
 #include <cstring>
 #include <strings.h>
 #include <files/fsreference.h>
+#include <files/symlink.h>
 
 constexpr uint16_t modeTypeFile =      00100000;
 constexpr uint16_t modeTypeDirectory = 00040000;
@@ -22,19 +23,19 @@ private:
     uint8_t fileType;
 public:
     ext2fs_directory_entry(const std::shared_ptr<ext2fs> &e2fs, std::string name, uint32_t inode, uint8_t fileType) : directory_entry(name), e2fs(e2fs), inode(inode), fileType(fileType) {}
-    directory_entry_result LoadItem() override;
+    directory_entry_result LoadItem(const std::shared_ptr<fsreferrer> &referrer) override;
 };
 
-directory_entry_result ext2fs_directory_entry::LoadItem() {
+directory_entry_result ext2fs_directory_entry::LoadItem(const std::shared_ptr<fsreferrer> &referrer) {
     std::shared_ptr<ext2fs> e2fs = this->e2fs.lock();
     if (!e2fs) {
         return {{}, fileitem_status::IO_ERROR};
     }
     if (fileType == Ext2FileType_Directory) {
-        auto result = e2fs->GetDirectory(e2fs, inode);
+        auto result = e2fs->GetDirectory(e2fs, referrer, inode);
         if (result.status == filesystem_status::SUCCESS) {
             if (result.node) {
-                return {result.node, fileitem_status::SUCCESS};
+                return {std::move(result.node), fileitem_status::SUCCESS};
             } else {
                 return {{}, fileitem_status::IO_ERROR};
             }
@@ -42,10 +43,10 @@ directory_entry_result ext2fs_directory_entry::LoadItem() {
             return {{}, ext2fs_file::Convert(result.status)};
         }
     } else if (fileType == Ext2FileType_Regular) {
-        auto result = e2fs->GetFile(e2fs, inode);
+        auto result = e2fs->GetFile(e2fs, referrer, inode);
         if (result.status == filesystem_status::SUCCESS) {
             if (result.node) {
-                return {result.node, fileitem_status::SUCCESS};
+                return {std::move(result.node), fileitem_status::SUCCESS};
             } else {
                 return {{}, fileitem_status::IO_ERROR};
             }
@@ -53,10 +54,10 @@ directory_entry_result ext2fs_directory_entry::LoadItem() {
             return {{}, ext2fs_file::Convert(result.status)};
         }
     } else if (fileType == Ext2FileType_Symlink) {
-        auto result = e2fs->GetSymlink(e2fs, inode);
+        auto result = e2fs->GetSymlink(e2fs, referrer, inode);
         if (result.status == filesystem_status::SUCCESS) {
             if (result.node) {
-                return {result.node, fileitem_status::SUCCESS};
+                return {std::move(result.node), fileitem_status::SUCCESS};
             } else {
                 return {{}, fileitem_status::IO_ERROR};
             }
@@ -82,7 +83,8 @@ entries_result ext2fs_directory::Entries() {
         return {.entries = entries, .status = fileitem_status::SUCCESS};
     }
     std::vector<std::shared_ptr<directory_entry>> entries{};
-    std::shared_ptr<ext2fs_inode_reader> reader = ext2fs_inode_reader::Create(inode.GetFsResourceRef());
+    auto fsResource = inode.GetFsResource();
+    std::shared_ptr<ext2fs_inode_reader> reader = ext2fs_inode_reader::Create(*fsResource);
     {
         ext2dirent baseDirent{};
         auto sizeRemaining = inode->GetFileSize();
@@ -170,7 +172,7 @@ file_read_result ext2fs_directory::Read(uint64_t offset, void *ptr, std::size_t 
     return {.size = 0, .status = fileitem_status::INVALID_REQUEST};
 }
 
-directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t mode, uint8_t filetype) {
+directory_resolve_result ext2fs_directory::Create(const std::shared_ptr<fsreferrer> &referrer, std::string filename, uint16_t mode, uint8_t filetype) {
     auto allocInode = Filesystem().AllocateInode();
     if (allocInode.status != filesystem_status::SUCCESS) {
         fileitem_status status;
@@ -227,7 +229,8 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
     allocInode.inode->dirty = true;
 
     auto seekTo = lastDirentPos;
-    std::shared_ptr<ext2fs_inode_reader> reader = ext2fs_inode_reader::Create(inode.GetFsResourceRef());
+    auto fsResource = inode.GetFsResource();
+    std::shared_ptr<ext2fs_inode_reader> reader = ext2fs_inode_reader::Create(*fsResource);
     reader->seek_set(seekTo);
 
     ext2dirent *lastDirent, *dirent;
@@ -336,19 +339,19 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
 
     auto result = reader->write(dirent, rec_len);
 
-    std::shared_ptr<fileitem> file{};
+    fsreference<fileitem> file{};
     if (result.status == filesystem_status::SUCCESS) {
         filesystem_status error{};
         auto *direntObj = CreateDirectoryEntry(fs, dirent, error);
         if (direntObj != nullptr) {
             auto &item = entries.emplace_back(direntObj);
-            auto fileResult = item->LoadItem();
+            auto fileResult = item->LoadItem(referrer);
             if (fileResult.status != fileitem_status::SUCCESS) {
                 error = filesystem_status::INTEGRITY_ERROR;
             } else if (!fileResult.file) {
                 error = filesystem_status::INTEGRITY_ERROR;
             } else {
-                file = fileResult.file;
+                file = std::move(fileResult.file);
             }
         }  else {
             if (error == filesystem_status::SUCCESS) {
@@ -380,11 +383,11 @@ directory_resolve_result ext2fs_directory::Create(std::string filename, uint16_t
         }
     }
 
-    return {.file = file, .status = fileitem_status::SUCCESS};
+    return {.file = std::move(file), .status = fileitem_status::SUCCESS};
 }
 
-directory_resolve_result ext2fs_directory::CreateFile(std::string filename, uint16_t mode) {
-    return Create(filename, mode | modeTypeFile, Ext2FileType_Regular);
+directory_resolve_result ext2fs_directory::CreateFile(const std::shared_ptr<fsreferrer> &referrer, std::string filename, uint16_t mode) {
+    return Create(referrer, filename, mode | modeTypeFile, Ext2FileType_Regular);
 }
 
 void ext2fs_directory::InitializeDirectory(uint32_t parentInode, uint32_t blocknum) {
@@ -418,12 +421,12 @@ void ext2fs_directory::InitializeDirectory(uint32_t parentInode, uint32_t blockn
     inode->dirty = true;
 }
 
-directory_resolve_result ext2fs_directory::CreateDirectory(std::string filename, uint16_t mode) {
+directory_resolve_result ext2fs_directory::CreateDirectory(const std::shared_ptr<fsreferrer> &referrer, std::string filename, uint16_t mode) {
     auto emptyDirectoryBlock = Filesystem().AllocateBlocks(1);
     if (emptyDirectoryBlock.status != filesystem_status::SUCCESS) {
         return {.file = {}, .status = Convert(emptyDirectoryBlock.status)};
     }
-    auto inodeCreateResult = Create(filename, mode | modeTypeDirectory, Ext2FileType_Directory);
+    auto inodeCreateResult = Create(referrer, filename, mode | modeTypeDirectory, Ext2FileType_Directory);
     auto *dir = dynamic_cast<ext2fs_directory *>(&(*(inodeCreateResult.file)));
     if (inodeCreateResult.status == fileitem_status::SUCCESS && dir == nullptr) {
         inodeCreateResult.status = fileitem_status::INTEGRITY_ERROR;

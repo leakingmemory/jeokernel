@@ -9,16 +9,18 @@
 #include <files/fileitem.h>
 #include <files/fsreferrer.h>
 #include <files/fsreference.h>
+#include <files/fsresource.h>
 #include <filesystems/filesystem.h>
 
 class ext2fs;
 class ext2fs_inode;
 
-class ext2fs_file : public fileitem, public fsreferrer {
+class ext2fs_file : public fileitem, public fsreferrer, public fsresource<ext2fs_file> {
     friend ext2fs;
 protected:
     std::shared_ptr<ext2fs> fs;
     fsreference<ext2fs_inode> inode;
+    ext2fs_file * GetResource() override;
 public:
     constexpr static fileitem_status Convert(filesystem_status ino_stat) {
         fileitem_status status{fileitem_status::SUCCESS};
@@ -43,7 +45,7 @@ public:
         }
         return status;
     }
-    ext2fs_file(std::shared_ptr<ext2fs> fs);
+    ext2fs_file(std::shared_ptr<ext2fs> fs, fsresourcelockfactory &lockfactory);
 protected:
     virtual void Init(const std::shared_ptr<ext2fs_file> &self_ref, fsresource<ext2fs_inode> &inode);
 public:
