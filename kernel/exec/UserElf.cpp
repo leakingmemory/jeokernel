@@ -6,7 +6,22 @@
 #include <kfs/kfiles.h>
 #include "UserElf.h"
 
-UserElf::UserElf(const std::shared_ptr<kfile> &file) : file(file), elf64Header(), valid(false) {
+UserElf::UserElf() : referrer("UserElf") {
+}
+
+std::string UserElf::GetReferrerIdentifier() {
+    return "";
+}
+
+void UserElf::Init(const std::shared_ptr<UserElf> &selfRef, const reference<kfile> &file) {
+    std::weak_ptr<UserElf> weakPtr{selfRef};
+    this->weakPtr = weakPtr;
+    std::shared_ptr<class referrer> referrer = selfRef;
+    this->file = file.CreateReference(referrer);
+    PostInit();
+}
+
+void UserElf::PostInit() {
     if (file->Size() < sizeof(elf64Header)) {
         return;
     }
@@ -41,6 +56,12 @@ UserElf::UserElf(const std::shared_ptr<kfile> &file) : file(file), elf64Header()
         return;
     }
     valid = true;
+}
+
+std::shared_ptr<UserElf> UserElf::Create(const reference<kfile> &file) {
+    std::shared_ptr<UserElf> userElf{new UserElf()};
+    userElf->Init(userElf, file);
+    return userElf;
 }
 
 std::shared_ptr<ELF64_program_entry> UserElf::get_program_entry(uint16_t index) {

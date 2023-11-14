@@ -35,6 +35,23 @@ struct ELF_loads {
     uintptr_t program_brk{0};
 };
 
+std::shared_ptr<Exec>
+Exec::Create(const std::shared_ptr<class tty> &tty, const reference<kfile> &cwd_ref, kdirectory &cwd, const reference<kfile> &binary,
+             const std::string &name, const std::vector<std::string> &argv, const std::vector<std::string> &env,
+             pid_t parent_pid) {
+    std::shared_ptr<Exec> exec{new Exec(tty, cwd, name, argv, env, parent_pid)};
+    std::weak_ptr<Exec> weakPtr{exec};
+    exec->selfRef = weakPtr;
+    std::shared_ptr<class referrer> referrer = exec;
+    exec->cwd_ref = cwd_ref.CreateReference(referrer);
+    exec->binary = binary.CreateReference(referrer);
+    return exec;
+}
+
+std::string Exec::GetReferrerIdentifier() {
+    return "";
+}
+
 bool Exec::LoadLoads(kfile &binary, ELF_loads &loads, UserElf &userElf) {
     loads.start = (uintptr_t) ((intptr_t) -1);
     for (int i = 0; i < userElf.get_num_program_entries(); i++) {
@@ -189,7 +206,7 @@ uintptr_t Exec::ProgramBreakAlign(uintptr_t pbrk) {
     return (pbrk + programBreakAlignmentMask) & ~programBreakAlignmentMask;
 }
 
-void Exec::MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset) {
+void Exec::MapPages(const reference<kfile> &binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset) {
     if ((relocationOffset & (PAGESIZE-1)) != 0) {
         wild_panic("Invalid relocation offset <-> not page aligned");
     }
@@ -257,9 +274,22 @@ void Exec::MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vec
     }
 }
 
-std::shared_ptr<kfile> ExecState::ResolveFile(const std::string &filename) {
-    std::shared_ptr<kfile> litem{};
+std::shared_ptr<ExecState> ExecState::Create(const reference<kfile> &cwd_ref, kdirectory &cwd) {
+    std::shared_ptr<ExecState> e{new ExecState(cwd)};
+    std::weak_ptr<ExecState> w{e};
+    e->selfRef = w;
+    e->cwd_ref = cwd_ref.CreateReference(e);
+    return e;
+}
+
+std::string ExecState::GetReferrerIdentifier() {
+    return "";
+}
+
+reference<kfile> ExecState::ResolveFile(const std::shared_ptr<class referrer> &referrer, const std::string &filename) {
+    reference<kfile> litem{};
     auto rootdir = get_kernel_rootdir();
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
     if (filename.starts_with("/")) {
         std::string resname{};
         resname.append(filename.c_str()+1);
@@ -269,26 +299,26 @@ std::shared_ptr<kfile> ExecState::ResolveFile(const std::string &filename) {
             resname = trim;
         }
         if (!resname.empty()) {
-            auto resolveResult = rootdir->Resolve(&(*rootdir), resname);
+            auto resolveResult = rootdir->Resolve(&(*rootdir), selfRef, resname);
             if (resolveResult.status != kfile_status::SUCCESS) {
                 std::cerr << "elfloader: error: " << text(resolveResult.status) << "\n";
                 return {};
             }
-            litem = resolveResult.result;
+            litem = std::move(resolveResult.result);
         } else {
-            litem = rootdir;
+            litem = rootdir->CreateReference(selfRef);
         }
     } else {
         if (filename.empty()) {
             std::cerr << "elfloader: not found: <empty>\n";
             return {};
         }
-        auto resolveResult = cwd.Resolve(&(*rootdir), filename);
+        auto resolveResult = cwd.Resolve(&(*rootdir), selfRef, filename);
         if (resolveResult.status != kfile_status::SUCCESS) {
             std::cerr << "elfloader: error: " << text(resolveResult.status) << "\n";
             return {};
         }
-        litem = resolveResult.result;
+        litem = std::move(resolveResult.result);
     }
     if (litem) {
         kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
@@ -296,7 +326,7 @@ std::shared_ptr<kfile> ExecState::ResolveFile(const std::string &filename) {
             std::cerr << "elfloader: is a directory: " << filename << "\n";
             return {};
         } else {
-            return litem;
+            return litem.CreateReference(referrer);
         }
     } else {
         std::cerr << "elfloader: not found: " << filename << "\n";
@@ -328,8 +358,8 @@ public:
 
 ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success, const ExecStartVector &)> &c_func) {
     std::string cmd_name = name;
-    UserElf userElf{binary};
-    if (!userElf.is_valid()) {
+    std::shared_ptr<UserElf> userElf = UserElf::Create(binary);
+    if (!userElf->is_valid()) {
         std::cerr << "Not valid ELF64\n";
         return ExecResult::SOFTERROR;
     }
@@ -338,7 +368,7 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
     ELF_loads loads{};
     uintptr_t fsBase{0};
     {
-        if (!LoadLoads(*binary, loads, userElf)) {
+        if (!LoadLoads(*binary, loads, *userElf)) {
             return ExecResult::SOFTERROR;
         }
         fsBase = loads.tlsStart + loads.tlsMemSize;
@@ -361,7 +391,7 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
         }
         std::vector<exec_pageinfo> pages{};
 
-        Pages(pages, loads, userElf);
+        Pages(pages, loads, *userElf);
 
         // PONR
 
@@ -380,7 +410,7 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
 #endif
 
         process->AddRelocation("main", relocationOffset);
-        uint64_t entrypoint = userElf.get_entrypoint_addr();
+        uint64_t entrypoint = userElf->get_entrypoint_addr();
 
         entrypoint += relocationOffset;
 
@@ -412,16 +442,18 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
 
         std::string interpreter{loads.interpreter};
 
-        std::shared_ptr<ExecState> execState{new ExecState(cwd_ref, cwd)};
+        std::shared_ptr<ExecState> execState = ExecState::Create(cwd_ref, cwd);
 
-        auto programHeaderAddr = userElf.get_program_header_addr();
+        auto programHeaderAddr = userElf->get_program_header_addr();
         programHeaderAddr += relocationOffset;
-        auto sizePhEnt = userElf.get_size_of_program_entry();
-        auto numPhEnt = userElf.get_num_program_entries();
+        auto sizePhEnt = userElf->get_size_of_program_entry();
+        auto numPhEnt = userElf->get_num_program_entries();
 
         std::function<void (bool, const ExecStartVector &)> func{c_func};
 
-        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [execState, loads, interpreter, process, random, environ, argv, argc, programHeaderAddr, sizePhEnt, numPhEnt, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t randomAddr) mutable {
+        std::shared_ptr<Exec> execSelf{selfRef.lock()};
+
+        process->push_data(stackAddr, &(random->data[0]), sizeof(random->data), [execSelf, execState, loads, interpreter, process, random, environ, argv, argc, programHeaderAddr, sizePhEnt, numPhEnt, entrypoint, cmd_name, fsBase, func] (bool success, uintptr_t randomAddr) mutable {
             if (!success) {
                 std::cerr << "Error: Failed to push random data to stack for new process\n";
                 func(false, {});
@@ -436,27 +468,27 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
             auxv->push_back({.type = AT_PHNUM, .uintptr = numPhEnt});
 
             if (!interpreter.empty()) {
-                auto interpreterFile = execState->ResolveFile(interpreter);
+                auto interpreterFile = execState->ResolveFile(execSelf, interpreter);
                 if (!interpreterFile) {
                     std::cerr << "Error: Interpreter not found: " << interpreter << "\n";
                     func(false, {});
                     return;
                 }
-                UserElf interpreterElf{interpreterFile};
-                if (!interpreterElf.is_valid()) {
+                std::shared_ptr<UserElf> interpreterElf = UserElf::Create(interpreterFile);
+                if (!interpreterElf->is_valid()) {
                     std::cerr << "interpreter: " << interpreter << ": Not valid ELF64\n";
                     func(false, {});
                     return;
                 }
                 ELF_loads interpreterLoads{};
-                if (!LoadLoads(*interpreterFile, interpreterLoads, interpreterElf)) {
+                if (!LoadLoads(*interpreterFile, interpreterLoads, *interpreterElf)) {
                     func(false, {});
                     return;
                 }
 
                 std::vector<exec_pageinfo> interpreterPages{};
 
-                Pages(interpreterPages, interpreterLoads, interpreterElf);
+                Pages(interpreterPages, interpreterLoads, *interpreterElf);
 
                 uintptr_t interpreterRelocate{0};
                 if (!process->IsFree(interpreterLoads.startpage, interpreterLoads.endpage - interpreterLoads.startpage)) {
@@ -494,7 +526,7 @@ ExecResult Exec::Run(ProcThread *process, const std::function<void (bool success
 
                 MapPages(interpreterFile, process, interpreterPages, interpreterLoads, interpreterRelocate << 12);
 
-                entrypoint = interpreterElf.get_entrypoint_addr();
+                entrypoint = interpreterElf->get_entrypoint_addr();
                 entrypoint += interpreterRelocate << 12;
 
                 uintptr_t interpreterBase = interpreterRelocate - interpreterLoads.startpage;

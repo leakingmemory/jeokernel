@@ -11,25 +11,28 @@
 
 //#define MMAP_DEBUG
 
-int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, SyscallAdditionalParams &params) {
-    int64_t fd = params.Param5();
-    int64_t off = params.Param6();
-#ifdef MMAP_DEBUG
-    std::cout << "mmap(" << std::hex << addr << ", " << len << ", " << prot << ", " << flags << ", " << fd << ", " << off << std::dec << ")\n";
-#endif
-    {
-        constexpr uint64_t nonSupportedProt = ~((uint64_t) PROT_SUPPORTED);
-        constexpr uint64_t nonSupportedFlags = ~((uint64_t) MAP_SUPPORTED);
+class Mmap_Call : public referrer {
+private:
+    std::weak_ptr<Mmap_Call> selfRef{};
+    Mmap_Call() : referrer("Mmap_Call") {}
+public:
+    static std::shared_ptr<Mmap_Call> Create();
+    std::string GetReferrerIdentifier() override;
+    intptr_t Call(uintptr_t addr, uintptr_t len, unsigned int prot, unsigned int flags, int fd, intptr_t off);
+};
 
-        auto protUnsupp = (uint64_t) prot & nonSupportedProt;
-        auto flagsUnsupp = (uint64_t) flags & nonSupportedFlags;
+std::shared_ptr<Mmap_Call> Mmap_Call::Create() {
+    std::shared_ptr<Mmap_Call> mmapCall{new Mmap_Call()};
+    std::weak_ptr<Mmap_Call> weakPtr{mmapCall};
+    mmapCall->selfRef = weakPtr;
+    return mmapCall;
+}
 
-        if (protUnsupp != 0 || flagsUnsupp != 0) {
-            std::cerr << "mmap: error: unsupported prot/flags " << std::hex << prot << "/" << flags << std::dec << "\n";
-            return -EOPNOTSUPP;
-        }
-    }
+std::string Mmap_Call::GetReferrerIdentifier() {
+    return "";
+}
 
+intptr_t Mmap_Call::Call(uintptr_t addr, uintptr_t len, unsigned int prot, unsigned int flags, int fd, intptr_t off) {
     auto mapType = flags & MAP_TYPE_MASK;
 
     switch (mapType) {
@@ -81,7 +84,8 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
         if (!desc.Valid()) {
             return -EBADF;
         }
-        auto file = desc.get_file();
+        std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+        auto file = desc.get_file(selfRef);
         if (!desc.can_read()) {
             return -EPERM;
         }
@@ -107,4 +111,26 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
         }
     }
     return vpageaddr << 12;
+}
+
+int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, SyscallAdditionalParams &params) {
+    int64_t fd = params.Param5();
+    int64_t off = params.Param6();
+#ifdef MMAP_DEBUG
+    std::cout << "mmap(" << std::hex << addr << ", " << len << ", " << prot << ", " << flags << ", " << fd << ", " << off << std::dec << ")\n";
+#endif
+    {
+        constexpr uint64_t nonSupportedProt = ~((uint64_t) PROT_SUPPORTED);
+        constexpr uint64_t nonSupportedFlags = ~((uint64_t) MAP_SUPPORTED);
+
+        auto protUnsupp = (uint64_t) prot & nonSupportedProt;
+        auto flagsUnsupp = (uint64_t) flags & nonSupportedFlags;
+
+        if (protUnsupp != 0 || flagsUnsupp != 0) {
+            std::cerr << "mmap: error: unsupported prot/flags " << std::hex << prot << "/" << flags << std::dec << "\n";
+            return -EOPNOTSUPP;
+        }
+    }
+
+    return Mmap_Call::Create()->Call(addr, len, prot, flags, fd, off);
 }

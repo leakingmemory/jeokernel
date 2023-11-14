@@ -17,21 +17,26 @@ public:
     static void Stat(const kfile &file, statx &st);
 };
 
-class FsFileDescriptorHandler : public FileDescriptorHandler {
+class FsFileDescriptorHandler : public FileDescriptorHandler, public referrer {
 private:
-    std::shared_ptr<kfile> file;
+    std::weak_ptr<FsFileDescriptorHandler> selfRef{};
+    reference<kfile> file{};
     size_t offset;
     bool openRead;
     bool openWrite;
     bool nonblock;
-public:
-    FsFileDescriptorHandler(const std::shared_ptr<kfile> &file, bool openRead, bool openWrite, bool nonblock) : FileDescriptorHandler(), file(file), offset(0), openRead(openRead), openWrite(openWrite), nonblock(nonblock) {}
+    FsFileDescriptorHandler(bool openRead, bool openWrite, bool nonblock) : FileDescriptorHandler(),
+        referrer("FsFileDescriptorHandler"), offset(0), openRead(openRead), openWrite(openWrite), nonblock(nonblock) {}
     FsFileDescriptorHandler(const FsFileDescriptorHandler &cp);
+public:
+    static std::shared_ptr<FsFileDescriptorHandler> Create(const reference<kfile> &file, bool openRead, bool openWrite, bool nonblock);
+    static std::shared_ptr<FsFileDescriptorHandler> Create(const FsFileDescriptorHandler &cp);
+    std::string GetReferrerIdentifier() override;
     FsFileDescriptorHandler(FsFileDescriptorHandler &&) = delete;
     FsFileDescriptorHandler &operator = (const FsFileDescriptorHandler &) = delete;
     FsFileDescriptorHandler &operator = (FsFileDescriptorHandler &&) = delete;
     std::shared_ptr<FileDescriptorHandler> clone() override;
-    std::shared_ptr<kfile> get_file() override;
+    reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     bool can_seek() override;
     bool can_read() override;
     intptr_t seek(intptr_t offset, SeekWhence whence) override;
@@ -44,17 +49,20 @@ public:
     int readdir(const std::function<bool (kdirent &dirent)> &) override;
 };
 
-class FsDirectoryDescriptorHandler : public FileDescriptorHandler {
+class FsDirectoryDescriptorHandler : public FileDescriptorHandler, public referrer {
 private:
-    std::shared_ptr<kdirectory> dir;
+    std::weak_ptr<FsDirectoryDescriptorHandler> selfRef{};
+    reference<kdirectory> dir{};
     bool readdirInited;
     std::vector<std::shared_ptr<kdirent>> dirents;
     std::vector<std::shared_ptr<kdirent>>::iterator iterator;
-public:
-    FsDirectoryDescriptorHandler(const std::shared_ptr<kdirectory> &dir) : FileDescriptorHandler(), dir(dir), readdirInited(false), dirents(), iterator() {}
+    FsDirectoryDescriptorHandler() : FileDescriptorHandler(), referrer("FsDirectoryDescriptorHandler"), readdirInited(false), dirents(), iterator() {}
     FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &);
+public:
+    static std::shared_ptr<FsDirectoryDescriptorHandler> Create(const reference<kdirectory> &reference);
+    std::string GetReferrerIdentifier() override;
     std::shared_ptr<FileDescriptorHandler> clone() override;
-    std::shared_ptr<kfile> get_file() override;
+    reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     bool can_seek() override;
     bool can_read() override;
     intptr_t seek(intptr_t offset, SeekWhence whence) override;

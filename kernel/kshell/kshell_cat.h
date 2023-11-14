@@ -10,7 +10,6 @@
 class kshell_cat : public kshell_command {
 private:
     std::string command;
-    uint8_t buf[256];
 public:
     kshell_cat() : command("cat") {}
     const std::string &Command() const override {

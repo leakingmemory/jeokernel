@@ -80,7 +80,7 @@ public:
         return command;
     }
     void Exec(kshell &shell, const std::vector<std::string> &cmd) override {
-        auto cwd = shell.Cwd();
+        auto &cwd = shell.Cwd();
         std::cout << cwd.Kpath() << "\n";
     }
 };

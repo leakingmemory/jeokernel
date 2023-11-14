@@ -7,14 +7,42 @@
 #include <concurrency/raw_semaphore.h>
 #include <exec/process.h>
 #include "kshell_exec.h"
+#include <resource/referrer.h>
+#include <resource/reference.h>
 
-void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
+class kshell_exec_exec : public referrer {
+private:
+    std::weak_ptr<kshell_exec_exec> selfRef{};
+    kshell_exec_exec() : referrer("kshell_exec_exec") {}
+public:
+    kshell_exec_exec(const kshell_exec_exec &) = delete;
+    kshell_exec_exec(kshell_exec_exec &&) = delete;
+    kshell_exec_exec &operator =(const kshell_exec_exec &) = delete;
+    kshell_exec_exec &operator =(kshell_exec_exec &&) = delete;
+    static std::shared_ptr<kshell_exec_exec> Create();
+    std::string GetReferrerIdentifier() override;
+    void Exec(kshell &shell, const std::vector<std::string> &cmd);
+};
+
+std::shared_ptr<kshell_exec_exec> kshell_exec_exec::Create() {
+    std::shared_ptr<kshell_exec_exec> e{new kshell_exec_exec()};
+    std::weak_ptr<kshell_exec_exec> w{e};
+    e->selfRef = w;
+    return e;
+}
+
+std::string kshell_exec_exec::GetReferrerIdentifier() {
+    return "";
+}
+
+void kshell_exec_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     std::shared_ptr<keycode_consumer> keycodeConsumer{shell.Tty()};
     if (!keycodeConsumer) {
         std::cerr << "Tty can not be subscribed for input (keyboard)\n";
         return;
     }
-    std::shared_ptr<kfile> dir_ref{shell.CwdRef()};
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    reference<kfile> dir_ref = shell.CwdRef(selfRef);
     kdirectory *dir = &(shell.Cwd());
     auto iterator = cmd.begin();
     if (iterator != cmd.end()) {
@@ -42,25 +70,25 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             trim.append(resname.c_str()+1);
             resname = trim;
         }
-        std::shared_ptr<kfile> litem;
+        reference<kfile> litem;
         if (!resname.empty()) {
-            auto resolveResult = rootdir->Resolve(&(*rootdir), resname);
+            auto resolveResult = rootdir->Resolve(&(*rootdir), selfRef, resname);
             if (resolveResult.status != kfile_status::SUCCESS) {
                 std::cerr << "Error: " << text(resolveResult.status) << "\n";
                 return;
             }
-            litem = resolveResult.result;
+            litem = std::move(resolveResult.result);
         } else {
-            litem = rootdir;
+            litem = rootdir->CreateReference(selfRef);
         }
         if (litem) {
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {
                 std::cerr << "exec: is a directory: " << filename << "\n";
             } else {
-                class Exec exec{shell.Tty(), dir_ref, *dir, litem, filename, args, env, 0};
+                std::shared_ptr<class Exec> exec = Exec::Create(shell.Tty(), dir_ref, *dir, litem, filename, args, env, 0);
                 Keyboard().consume(keycodeConsumer);
-                auto process = exec.Run([] (const std::shared_ptr<Process> &process) {
+                auto process = exec->Run([] (const std::shared_ptr<Process> &process) {
                     auto pgrp = process->getpgrp();
                     auto tty = process->GetTty();
                     tty->SetPgrp(pgrp);
@@ -80,20 +108,20 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             std::cerr << "exec: not found: " << filename << "\n";
         }
     } else {
-        auto resolveResult = dir->Resolve(&(*rootdir), filename);
+        auto resolveResult = dir->Resolve(&(*rootdir), selfRef, filename);
         if (resolveResult.status != kfile_status::SUCCESS) {
             std::cerr << "Error: " << text(resolveResult.status) << "\n";
             return;
         }
-        auto litem = resolveResult.result;
+        reference<kfile> litem = std::move(resolveResult.result);
         if (litem) {
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {
                 std::cerr << "exec: is a directory: " << filename << "\n";
             } else {
-                class Exec exec{shell.Tty(), dir_ref, *dir, litem, filename, args, env, 0};
+                std::shared_ptr<class Exec> exec = Exec::Create(shell.Tty(), dir_ref, *dir, litem, filename, args, env, 0);
                 Keyboard().consume(keycodeConsumer);
-                auto process = exec.Run();
+                auto process = exec->Run();
                 if (process) {
                     raw_semaphore latch{-1};
                     process->RegisterExitNotification([&latch] (intptr_t exitCode) {
@@ -109,4 +137,8 @@ void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             std::cerr << "exec: not found: " << filename << "\n";
         }
     }
+}
+
+void kshell_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
+    kshell_exec_exec::Create()->Exec(shell, cmd);
 }

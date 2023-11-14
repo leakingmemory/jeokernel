@@ -13,7 +13,6 @@ class Process;
 class Chdir : public Syscall, SyscallAsyncThread {
 public:
     Chdir(SyscallHandler &handler) : Syscall(handler, 80), SyscallAsyncThread("[chdir]") {}
-    int DoChdir(std::shared_ptr<Process> proc, const std::string &filename);
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;
 };
 

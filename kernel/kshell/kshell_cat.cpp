@@ -4,14 +4,43 @@
 
 #include <iostream>
 #include "kshell_cat.h"
+#include <resource/referrer.h>
+#include <resource/reference.h>
 
-void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
+class kshell_cat_exec : public referrer {
+private:
+    std::weak_ptr<kshell_cat_exec> selfRef{};
+    uint8_t buf[256];
+    kshell_cat_exec() : referrer("kshell_cat_exec") {}
+public:
+    kshell_cat_exec(const kshell_cat_exec &) = delete;
+    kshell_cat_exec(kshell_cat_exec &&) = delete;
+    kshell_cat_exec &operator =(const kshell_cat_exec &) = delete;
+    kshell_cat_exec &operator =(kshell_cat_exec &&) = delete;
+    static std::shared_ptr<kshell_cat_exec> Create();
+    std::string GetReferrerIdentifier() override;
+    void Exec(kshell &shell, const std::vector<std::string> &cmd);
+};
+
+std::shared_ptr<kshell_cat_exec> kshell_cat_exec::Create() {
+    std::shared_ptr<kshell_cat_exec> e{new kshell_cat_exec()};
+    std::weak_ptr<kshell_cat_exec> w{e};
+    e->selfRef = w;
+    return e;
+}
+
+std::string kshell_cat_exec::GetReferrerIdentifier() {
+    return "";
+}
+
+void kshell_cat_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     std::shared_ptr<kdirectory> dir_ref{};
     kdirectory *dir = &(shell.Cwd());
     auto iterator = cmd.begin();
     if (iterator != cmd.end()) {
         ++iterator;
     }
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
     auto rootdir = get_kernel_rootdir();
     std::string output{};
     while (iterator != cmd.end()) {
@@ -24,16 +53,16 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                 trim.append(resname.c_str()+1);
                 resname = trim;
             }
-            std::shared_ptr<kfile> litem;
+            reference<kfile> litem;
             if (!resname.empty()) {
-                auto resolveResult = rootdir->Resolve(&(*rootdir), resname);
+                auto resolveResult = rootdir->Resolve(&(*rootdir), selfRef, resname);
                 if (resolveResult.status != kfile_status::SUCCESS) {
                     std::cerr << "Error: " << text(resolveResult.status) << "\n";
                     return;
                 }
-                litem = resolveResult.result;
+                litem = std::move(resolveResult.result);
             } else {
-                litem = rootdir;
+                litem = rootdir->CreateReference(selfRef);
             }
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {
@@ -57,12 +86,12 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                 }
             }
         } else {
-            auto resolveResult = dir->Resolve(&(*rootdir), filename);
+            auto resolveResult = dir->Resolve(&(*rootdir), selfRef, filename);
             if (resolveResult.status != kfile_status::SUCCESS) {
                 std::cerr << "Error: " << text(resolveResult.status) << "\n";
                 return;
             }
-            auto litem = resolveResult.result;
+            reference<kfile> litem = std::move(resolveResult.result);
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {
                 std::cerr << "cat: is a directory: " << filename << "\n";
@@ -87,4 +116,8 @@ void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         }
         ++iterator;
     }
+}
+
+void kshell_cat::Exec(kshell &shell, const std::vector<std::string> &cmd) {
+    kshell_cat_exec::Create()->Exec(shell, cmd);
 }

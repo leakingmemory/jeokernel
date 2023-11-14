@@ -13,9 +13,6 @@ class ProcThread;
 class Getcwd : public Syscall {
 public:
     Getcwd(SyscallHandler &handler) : Syscall(handler, 79) {}
-private:
-    int DoGetcwd(ProcThread &, char *, intptr_t);
-public:
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;
 };
 

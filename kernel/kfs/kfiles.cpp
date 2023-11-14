@@ -6,6 +6,7 @@
 #include <kfs/kfiles.h>
 #include <files/directory.h>
 #include <files/symlink.h>
+#include <resource/reference.h>
 #include <concurrency/hw_spinlock.h>
 #include <mutex>
 #include "kdirectory_impl.h"
@@ -36,48 +37,113 @@ int kfile::Uid() const {
     return 0;
 }
 
-class kdirectory_lazy_file : public lazy_kfile {
+class kdirectory_lazy_file : public lazy_kfile, public referrer {
 private:
+    std::weak_ptr<kdirectory_lazy_file> selfRef{};
     std::shared_ptr<kdirent> dirent;
     std::string name;
+private:
+    kdirectory_lazy_file(const std::shared_ptr<kdirent> &dirent, const std::string &name) : referrer("kdirectory_lazy_file"), dirent(dirent), name(name) {}
 public:
-    kdirectory_lazy_file(const std::shared_ptr<kdirent> &dirent, const std::string &name) : dirent(dirent), name(name) {}
-    std::shared_ptr<kfile> Load() override;
+    static std::shared_ptr<kdirectory_lazy_file> Create(const std::shared_ptr<kdirent> &dirent, const std::string &name);
+    std::string GetReferrerIdentifier() override;
+    reference<kfile> Load(std::shared_ptr<class referrer> &referrer) override;
 };
 
-std::shared_ptr<kfile> kdirectory_lazy_file::Load() {
-    auto file = dirent->File();
-    if (dynamic_cast<kdirectory_impl *>(&(*file)) == nullptr) {
-        std::shared_ptr<ksymlink_impl> symli = std::dynamic_pointer_cast<ksymlink_impl>(file);
-        if (!symli) {
-            return file;
+std::shared_ptr<kdirectory_lazy_file>
+kdirectory_lazy_file::Create(const std::shared_ptr<kdirent> &dirent, const std::string &name) {
+    std::shared_ptr<kdirectory_lazy_file> lz{new kdirectory_lazy_file(dirent, name)};
+    std::weak_ptr<kdirectory_lazy_file> w{lz};
+    lz->selfRef = w;
+    return lz;
+}
+
+std::string kdirectory_lazy_file::GetReferrerIdentifier() {
+    return name;
+}
+
+reference<kfile> kdirectory_lazy_file::Load(std::shared_ptr<class referrer> &referrer) {
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    reference<kfile> file = dirent->File(selfRef);
+    if (!reference_is_a<kdirectory_impl>(file)) {
+
+        if (!reference_is_a<ksymlink_impl>(file)) {
+            return file.CreateReference(referrer);
         } else {
-            std::shared_ptr<ksymlink> syml = std::make_shared<ksymlink>(symli);
-            return syml;
+            reference<ksymlink_impl> symli = reference_dynamic_cast<ksymlink_impl>(std::move(file));
+            std::shared_ptr<ksymlink> syml = ksymlink::Create(symli);
+            auto symlRef = syml->CreateReference(referrer);
+            return reference_dynamic_cast<kfile>(std::move(symlRef));
         }
     } else {
-        std::shared_ptr<kdirectory> dir{new kdirectory(file, name)};
-        return dir;
+        std::shared_ptr<kdirectory> dir = kdirectory::Create(file, name);
+        auto genRef = dir->CreateReference(referrer);
+        return genRef;
     }
-    return {};
+}
+
+void kdirectory::Init(const std::shared_ptr<kdirectory> &selfRef) {
+    std::weak_ptr<kdirectory> weakRef{selfRef};
+    this->selfRef = weakRef;
+    SetSelfRef(selfRef);
+}
+
+void kdirectory::Init(const std::shared_ptr<kdirectory> &selfRef, const reference<kfile> &impl) {
+    Init(selfRef);
+    std::shared_ptr<class referrer> referrer = selfRef;
+    this->impl = impl.CreateReference(referrer);
+}
+
+void kdirectory::Init(const std::shared_ptr<kdirectory> &selfRef, const std::shared_ptr<kdirectory_impl> &impl) {
+    Init(selfRef);
+    std::shared_ptr<class referrer> referrer = selfRef;
+    this->impl = impl->CreateReference(referrer);
+}
+
+std::shared_ptr<kdirectory> kdirectory::Create(const reference<kfile> &impl, const std::string &name) {
+    std::shared_ptr<kdirectory> kdir{new kdirectory(name)};
+    kdir->Init(kdir, impl);
+    return kdir;
+}
+
+std::shared_ptr<kdirectory> kdirectory::Create(const reference<kdirectory_impl> &impl, const std::string &name) {
+    std::shared_ptr<kdirectory> kdir{new kdirectory(name)};
+    kdir->Init(kdir);
+    auto refCopy = impl.CreateReference(kdir);
+    kdir->impl = reference_dynamic_cast<kfile>(std::move(refCopy));
+    return kdir;
+}
+
+std::shared_ptr<kdirectory> kdirectory::Create(const std::shared_ptr<kdirectory_impl> &impl, const std::string &name) {
+    std::shared_ptr<kdirectory> kdir{new kdirectory(name)};
+    kdir->Init(kdir, impl);
+    return kdir;
+}
+
+std::string kdirectory::GetReferrerIdentifier() {
+    return name;
+}
+
+kdirectory *kdirectory::GetResource() {
+    return this;
 }
 
 kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory::Entries() {
     kfile *cwd_file = &(*impl);
     kdirectory_impl *dir = dynamic_cast<kdirectory_impl *>(cwd_file);
-    auto impl_entries = dir->Entries(impl);
+    auto impl_entries = dir->Entries();
     if (impl_entries.status != kfile_status::SUCCESS) {
         return {.result = {}, .status = impl_entries.status};
     }
     std::vector<std::shared_ptr<kdirent>> entries{};
     for (auto impl_entry : impl_entries.result) {
-        std::shared_ptr<lazy_kfile> lz = std::make_shared<kdirectory_lazy_file>(impl_entry, name);
+        std::shared_ptr<lazy_kfile> lz = kdirectory_lazy_file::Create(impl_entry, name);
         entries.push_back(std::make_shared<kdirent>(impl_entry->Name(), lz));
     }
     return {.result = entries, .status = kfile_status::SUCCESS};
 }
 
-kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(kdirectory *root, std::string filename, int resolveSymlinks) {
+kfile_result<reference<kfile>> kdirectory::Resolve(kdirectory *root, std::shared_ptr<class referrer> &referrer, std::string filename, int resolveSymlinks) {
     if (filename.empty() || filename.starts_with("/")) {
         return {.result = {}, .status = kfile_status::SUCCESS};
     }
@@ -111,29 +177,34 @@ kfile_result<std::shared_ptr<kfile>> kdirectory::Resolve(kdirectory *root, std::
     if (entriesResult.status != kfile_status::SUCCESS) {
         return {.result = {}, .status = kfile_status::IO_ERROR};
     }
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
     for (const auto &entry : entriesResult.result) {
         if (component == entry->Name()) {
-            auto file = entry->File();
-            if (!filename.empty()) {
+            auto file = entry->File(selfRef);
+            if (file && !filename.empty()) {
                 ksymlink *syml;
                 while ((syml = dynamic_cast<ksymlink *>(&(*file))) != nullptr && resolveSymlinks > 0) {
                     --resolveSymlinks;
-                    auto result = syml->Resolve(root);
+                    auto result = syml->Resolve(root, selfRef);
                     if (result.status != kfile_status::SUCCESS || !result.result) {
                         return result;
                     }
                     // syml = nullptr; // Pointer becomes unsafe:
-                    file = result.result;
+                    file = std::move(result.result);
                 }
             }
+            if (!file) {
+                return {.result = {}, .status = kfile_status::SUCCESS};
+            }
             if (filename.empty()) {
-                return {.result = file, .status = kfile_status::SUCCESS};
+                auto finalRef = file.CreateReference(referrer);
+                return {.result = std::move(finalRef), .status = kfile_status::SUCCESS};
             } else {
                 kdirectory *dir = dynamic_cast<kdirectory *>(&(*file));
                 if (dir == nullptr) {
                     return {.result = {}, .status = kfile_status::NOT_DIRECTORY};
                 }
-                return dir->Resolve(root, filename, resolveSymlinks);
+                return dir->Resolve(root, referrer, filename, resolveSymlinks);
             }
         }
     }
@@ -181,9 +252,32 @@ kfile_result<filepage_ref> kdirectory::GetPage(std::size_t pagenum) {
     return impl->GetPage(pagenum);
 }
 
-ksymlink::ksymlink(const std::shared_ptr<ksymlink_impl> &impl)  : kfile(impl->Name()), impl(impl) {}
+ksymlink::ksymlink(const std::string &name)  : kfile(name), referrer("ksymlink"), resource<ksymlink>(), impl() {
+}
 
-kfile_result<std::shared_ptr<kfile>> ksymlink::Resolve(kdirectory *root) {
+std::shared_ptr<ksymlink> ksymlink::Create(const reference<ksymlink_impl> &impl) {
+    std::shared_ptr<ksymlink> syml{new ksymlink(impl->Name())};
+    syml->Init(syml, impl);
+    return syml;
+}
+
+void ksymlink::Init(const std::shared_ptr<ksymlink> &selfRef, const reference<ksymlink_impl> &impl) {
+    std::weak_ptr<ksymlink> weakPtr{selfRef};
+    this->selfRef = weakPtr;
+    SetSelfRef(selfRef);
+    auto ref = impl->CreateReference(selfRef);
+    this->impl = reference_dynamic_cast<ksymlink_impl>(std::move(ref));
+}
+
+std::string ksymlink::GetReferrerIdentifier() {
+    return name;
+}
+
+ksymlink *ksymlink::GetResource() {
+    return this;
+}
+
+kfile_result<reference<kfile>> ksymlink::Resolve(kdirectory *root, std::shared_ptr<class referrer> &referrer) {
     std::string syml = GetLink();
     std::shared_ptr<kdirectory> kdir{};
     if (syml.starts_with("/")) {
@@ -197,7 +291,7 @@ kfile_result<std::shared_ptr<kfile>> ksymlink::Resolve(kdirectory *root) {
         auto parentimpl = dynamic_cast<kdirectory_impl *>(&(*(impl->parent)));
         kdirectory *parent;
         if (parentimpl != nullptr) {
-            kdir = std::make_shared<kdirectory>(impl->parent, syml);
+            kdir = kdirectory::Create(impl->parent, syml);
             parent = &(*kdir);
         } else {
             parent = dynamic_cast<kdirectory *>(&(*(impl->parent)));
@@ -205,12 +299,12 @@ kfile_result<std::shared_ptr<kfile>> ksymlink::Resolve(kdirectory *root) {
         if (parent == nullptr) {
             return {.result = {}, .status = kfile_status::SUCCESS};
         }
-        return parent->Resolve(root, syml);
+        return parent->Resolve(root, referrer, syml);
     }
     if (root == nullptr) {
         return {.result = {}, .status = kfile_status::SUCCESS};
     }
-    return root->Resolve(root, syml);
+    return root->Resolve(root, referrer, syml);
 }
 
 std::string ksymlink::GetLink() {

@@ -80,8 +80,8 @@ void FileDescriptorHandler::SetReadyRead(bool ready) {
 void FileDescriptorHandler::Notify() {
 }
 
-std::shared_ptr<kfile> FileDescriptor::get_file() const {
-    return handler->get_file();
+reference<kfile> FileDescriptor::get_file(std::shared_ptr<class referrer> &referrer) const {
+    return handler->get_file(referrer);
 }
 
 bool FileDescriptor::can_seek() {

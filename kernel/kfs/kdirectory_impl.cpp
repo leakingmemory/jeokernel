@@ -19,7 +19,7 @@ struct kmount {
 
 static hw_spinlock mounts_lock{};
 static std::vector<kmount> mounts{};
-static std::shared_ptr<kdirectory_impl> rootdir = kdirectory_impl::Create({}, {}, "/");
+static std::shared_ptr<kdirectory_impl> rootdir = kdirectory_impl::CreateRoot();
 
 std::vector<kmount_info> GetKmounts() {
     std::vector<kmount_info> kmounts{};
@@ -33,7 +33,7 @@ std::vector<kmount_info> GetKmounts() {
 }
 
 std::shared_ptr<kdirectory> get_kernel_rootdir() {
-    return std::make_shared<kdirectory>(rootdir, "/");
+    return kdirectory::Create(rootdir, "/");
 }
 
 void kdirectory_impl::Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs) {
@@ -45,19 +45,48 @@ std::string kdirectory_impl::Kpath() {
     return Name();
 }
 
-void kdirectory_impl::Init(std::shared_ptr<kdirectory_impl> &selfRef) {
+kdirectory_impl::kdirectory_impl(const std::string &kpath) : kfile_impl(kpath), parent() {}
+
+void kdirectory_impl::Init(std::shared_ptr<kdirectory_impl> &selfRef, const std::shared_ptr<kdirectory_impl> &parent) {
     std::weak_ptr<kdirectory_impl> weak{selfRef};
     this->selfRef = weak;
+    SetSelfRef(selfRef);
+    if (parent) {
+        this->parent = parent->CreateReference(selfRef);
+    }
+}
+
+void kdirectory_impl::Init(std::shared_ptr<kdirectory_impl> &selfRef, const reference<kdirectory_impl> &parent) {
+    std::weak_ptr<kdirectory_impl> weak{selfRef};
+    this->selfRef = weak;
+    SetSelfRef(selfRef);
+    if (parent) {
+        this->parent = parent->CreateReference(selfRef);
+    }
 }
 
 std::shared_ptr<kdirectory_impl>
-kdirectory_impl::Create(const fsreference<fileitem> &file, const std::shared_ptr<kfile> &parent, const std::string &kpath) {
-    auto dir = kfile_impl::Create<kdirectory_impl>(file, parent, kpath);
-    dir->Init(dir);
+kdirectory_impl::Create(const fsreference<fileitem> &file, const std::shared_ptr<kdirectory_impl> &parent, const std::string &kpath) {
+    auto dir = kfile_impl::Create<kdirectory_impl>(file, kpath);
+    dir->Init(dir, parent);
     return dir;
 }
 
-kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std::shared_ptr<kfile> this_ref) {
+std::shared_ptr<kdirectory_impl>
+kdirectory_impl::Create(const fsreference<fileitem> &file, const reference<kdirectory_impl> &parent, const std::string &kpath) {
+    auto dir = kfile_impl::Create<kdirectory_impl>(file, kpath);
+    dir->Init(dir, parent);
+    return dir;
+}
+
+std::shared_ptr<kdirectory_impl> kdirectory_impl::CreateRoot() {
+    auto dir = kfile_impl::Create<kdirectory_impl>({}, "/");
+    std::shared_ptr<kdirectory_impl> parent{};
+    dir->Init(dir, parent);
+    return dir;
+}
+
+kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries() {
     directory *listing;
     if (file) {
         listing = dynamic_cast<directory *> (&(*file));
@@ -112,11 +141,14 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
         }
     }
     std::vector<std::shared_ptr<kdirent>> items{};
-    items.push_back(std::make_shared<kdirent>(".", std::make_shared<kdirectory_impl_ref>(this_ref)));
+    std::shared_ptr<kdirectory_impl> this_ref_typed = selfRef.lock();
+    items.push_back(std::make_shared<kdirent>(".", kdirectory_impl_ref::Create(this_ref_typed)));
     if (parent) {
-        items.push_back(std::make_shared<kdirent>("..", std::make_shared<kdirectory_impl_ref>(parent)));
+        auto refCopy = parent.CreateReference(selfRef.lock());
+        auto dirRef = reference_dynamic_cast<kdirectory_impl>(std::move(refCopy));
+        items.push_back(std::make_shared<kdirent>("..", kdirectory_impl_ref::Create(dirRef)));
     } else {
-        items.push_back(std::make_shared<kdirent>("..", std::make_shared<kdirectory_impl_ref>(this_ref)));
+        items.push_back(std::make_shared<kdirent>("..", kdirectory_impl_ref::Create(this_ref_typed)));
     }
     if (listing != nullptr) {
         auto entriesResult = listing->Entries();
@@ -126,7 +158,7 @@ kfile_result<std::vector<std::shared_ptr<kdirent>>> kdirectory_impl::Entries(std
         for (auto fsent : entriesResult.entries) {
             auto name = fsent->Name();
             if (name != ".." && name != ".") {
-                std::shared_ptr<lazy_kfile> fsfile = kdirectory_impl_lazy::Create(this_ref, fsent, Name());
+                std::shared_ptr<lazy_kfile> fsfile = kdirectory_impl_lazy::Create(this_ref_typed, fsent, Name());
                 items.push_back(std::make_shared<kdirent>(name, fsfile));
             }
         }

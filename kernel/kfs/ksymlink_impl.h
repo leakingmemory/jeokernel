@@ -7,13 +7,15 @@
 
 #include "kfile_impl.h"
 
+template <class T> class reference;
+
 class ksymlink_impl : public kfile_impl {
     friend ksymlink;
 private:
-    std::shared_ptr<kfile> parent;
+    reference<kdirectory_impl> parent;
 public:
-    ksymlink_impl(std::shared_ptr<kfile> parent, const std::string &name) : kfile_impl(name), parent(parent) {}
-    static std::shared_ptr<ksymlink_impl> Create(const fsreference<fileitem> &file, std::shared_ptr<kfile> parent, const std::string &name);
+    ksymlink_impl(const std::string &name) : kfile_impl(name), parent() {}
+    static std::shared_ptr<ksymlink_impl> Create(const fsreference<fileitem> &file, const reference<kdirectory_impl> &parent, const std::string &name);
 };
 
 

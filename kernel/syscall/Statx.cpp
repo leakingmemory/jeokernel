@@ -11,11 +11,62 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <resource/reference.h>
+#include <resource/referrer.h>
 #include <iostream>
 #include "Statx.h"
 #include "SyscallCtx.h"
 
 //#define DEBUG_STATX
+
+class Statx_Call : public referrer {
+private:
+    std::weak_ptr<Statx_Call> selfRef{};
+    Statx_Call() : referrer("Statx_Call") {}
+public:
+    static std::shared_ptr<Statx_Call> Create();
+    std::string GetReferrerIdentifier() override;
+    void ResolveFromRoot(SyscallCtx &ctx, void *statbuf, struct statx &st, const std::string &filename);
+};
+
+std::shared_ptr<Statx_Call> Statx_Call::Create() {
+    std::shared_ptr<Statx_Call> statx{new Statx_Call()};
+    std::weak_ptr<Statx_Call> weakPtr{statx};
+    statx->selfRef = weakPtr;
+    return statx;
+}
+
+std::string Statx_Call::GetReferrerIdentifier() {
+    return "";
+}
+
+void Statx_Call::ResolveFromRoot(SyscallCtx &ctx, void *statbuf, struct statx &st, const std::string &filename) {
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    auto fileResolve = ctx.GetProcess().ResolveFile(selfRef, filename);
+    if (fileResolve.status != kfile_status::SUCCESS) {
+        int err{-EIO};
+        switch (fileResolve.status) {
+            case kfile_status::IO_ERROR:
+                err = -EIO;
+                break;
+            case kfile_status::NOT_DIRECTORY:
+                err = -ENOTDIR;
+                break;
+            default:
+                err = -EIO;
+        }
+        ctx.ReturnWhenNotRunning(err);
+        return;
+    }
+    auto file = std::move(fileResolve.result);
+    if (!file) {
+        ctx.ReturnWhenNotRunning(-ENOENT);
+        return;
+    }
+    FsStat::Stat(*file, st);
+    memcpy(statbuf, &st, sizeof(st));
+    ctx.ReturnWhenNotRunning(0);
+}
 
 int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t mask, SyscallAdditionalParams &params) {
     auto dfd = (int32_t) i_dfd;
@@ -47,28 +98,8 @@ int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t 
                           << "statbuf, " << flag << std::dec << ")\n";
 #endif
                 if ((!filename.empty() && filename.starts_with("/")) || dfd == AT_FDCWD) {
-                    auto fileResolve = ctx.GetProcess().ResolveFile(filename);
-                    if (fileResolve.status != kfile_status::SUCCESS) {
-                        int err{-EIO};
-                        switch (fileResolve.status) {
-                            case kfile_status::IO_ERROR:
-                                err = -EIO;
-                                break;
-                            case kfile_status::NOT_DIRECTORY:
-                                err = -ENOTDIR;
-                                break;
-                            default:
-                                err = -EIO;
-                        }
-                        ctx.ReturnWhenNotRunning(err);
-                        return;
-                    }
-                    auto file = fileResolve.result;
-                    if (!file) {
-                        ctx.ReturnWhenNotRunning(-ENOENT);
-                        return;
-                    }
-                    FsStat::Stat(*file, st);
+                    Statx_Call::Create()->ResolveFromRoot(ctx, statbuf, st, filename);
+                    return;
                 } else {
                     FileDescriptor fd{ctx.GetProcess().get_file_descriptor(dfd)};
                     if (!fd.Valid()) {

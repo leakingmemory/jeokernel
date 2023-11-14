@@ -9,7 +9,7 @@
 
 //#define DEBUG_SIGNAL_RETURN
 
-ProcThread::ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) :
+ProcThread::ProcThread(const reference<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) :
 process(Process::Create(cwd, tty, parent_pid, cmdline)), blockthr(), rseq(), fsBase(0), tidAddress(0), robustListHead(0), tid(process->getpid())
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
 , threadFaulted(false)
@@ -93,7 +93,7 @@ void ProcThread::CallAbortAll() {
     process->CallAbortAll();
 }
 
-bool ProcThread::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
+bool ProcThread::Map(const reference<kfile> &image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
     return process->Map(image, pagenum, pages, image_skip_pages, load, write, execute, copyOnWrite, binaryMap);
 }
 bool ProcThread::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
@@ -245,8 +245,8 @@ void ProcThread::push_strings(uintptr_t ptr, const std::vector<std::string>::ite
     process->push_strings(*this, ptr, begin, end, pointers, func);
 }
 
-kfile_result<std::shared_ptr<kfile>> ProcThread::ResolveFile(const std::string &filename) {
-    return process->ResolveFile(filename);
+kfile_result<reference<kfile>> ProcThread::ResolveFile(const std::shared_ptr<class referrer> &referrer, const std::string &filename) {
+    return process->ResolveFile(referrer, filename);
 }
 
 FileDescriptor ProcThread::get_file_descriptor(int fd) {
@@ -347,8 +347,8 @@ int ProcThread::getrlimit(int resource, rlimit &lim) {
     return process->getrlimit(resource, lim);
 }
 
-std::shared_ptr<kfile> ProcThread::GetCwd() const {
-    return process->GetCwd();
+reference<kfile> ProcThread::GetCwd(std::shared_ptr<class referrer> &referrer) const {
+    return process->GetCwd(referrer);
 }
 
 void ProcThread::SetExitCode(intptr_t code) {

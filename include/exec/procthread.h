@@ -40,7 +40,7 @@ private:
     bool threadFaulted;
 #endif
 public:
-    ProcThread(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
+    ProcThread(const reference<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
     explicit ProcThread(std::shared_ptr<Process> process);
     ~ProcThread();
     std::shared_ptr<Process> GetProcess() const {
@@ -57,7 +57,7 @@ public:
     void ClearAborterFunc();
     void CallAbort();
     void CallAbortAll();
-    bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
+    bool Map(const reference<kfile> &image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
     bool IsFree(uint32_t pagenum, uint32_t pages);
@@ -78,7 +78,7 @@ public:
     uintptr_t push_data(uintptr_t ptr, const void *, uintptr_t length, const std::function<void (bool,uintptr_t)> &);
     uintptr_t push_64(uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
     void push_strings(uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
-    kfile_result<std::shared_ptr<kfile>> ResolveFile(const std::string &filename);
+    kfile_result<reference<kfile>> ResolveFile(const std::shared_ptr<class referrer> &referrer, const std::string &filename);
     FileDescriptor get_file_descriptor(int);
     FileDescriptor create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler);
     FileDescriptor create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd);;
@@ -103,7 +103,7 @@ public:
     bool IsKilled() const;
     int setrlimit(int resource, const rlimit &lim);
     int getrlimit(int resource, rlimit &);
-    std::shared_ptr<kfile> GetCwd() const;
+    reference<kfile> GetCwd(std::shared_ptr<class referrer> &referrer) const;
     ThreadRSeq &RSeq() {
         return this->rseq;
     }

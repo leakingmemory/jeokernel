@@ -7,7 +7,12 @@
 #include <files/fsresource.h>
 #include <files/fileitem.h>
 
+kfile_impl *kfile_impl::GetResource() {
+    return this;
+}
+
 void kfile_impl::Init(const std::shared_ptr<kfile_impl> &selfRef, const fsreference<fileitem> &resource) {
+    SetSelfRef(selfRef);
     if (resource) {
         file = resource.CreateReference(selfRef);
     }
@@ -17,6 +22,10 @@ std::string kfile_impl::GetReferrerIdentifier() {
     std::string id{"kfile_impl:"};
     id.append(name);
     return id;
+}
+
+void kfile_impl::PrintTraceBack(int indent) {
+    resource::PrintTraceBack(indent);
 }
 
 fileitem *kfile_impl::GetFileitem() const {

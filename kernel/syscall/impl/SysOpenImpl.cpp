@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <exec/procthread.h>
 #include <exec/files.h>
+#include <resource/reference.h>
+#include <resource/referrer.h>
 #include <iostream>
 
 //#define DEBUG_OPENAT_CALL
@@ -15,28 +17,30 @@
 constexpr int supportedOpenFlags = (3 | O_CLOEXEC | O_DIRECTORY | O_NONBLOCK | O_NOFOLLOW | O_LARGEFILE);
 constexpr int notSupportedOpenFlags = ~supportedOpenFlags;
 
-int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int flags, int mode) {
-#ifdef DEBUG_OPENAT_CALL
-    std::cout << "openat(" << std::dec << dfd << ", " << filename << ", 0x" << std::hex << flags << std::oct << ", 0" << mode << std::dec << ")\n";
-#endif
-    if (dfd != AT_FDCWD) {
-        std::cerr << "not implemented: open at fd\n";
-        return -EIO;
-    }
+class Open_Call : public referrer {
+private:
+    std::weak_ptr<Open_Call> selfRef{};
+    Open_Call() : referrer("Open_Call") {}
+public:
+    static std::shared_ptr<Open_Call> Create();
+    std::string GetReferrerIdentifier() override;
+    int Call(ProcThread &proc, const std::string &filename, int flags);
+};
 
-    if ((flags & 3) == 3) {
-        return -EINVAL;
-    }
+std::shared_ptr<Open_Call> Open_Call::Create() {
+    std::shared_ptr<Open_Call> openCall{new Open_Call()};
+    std::weak_ptr<Open_Call> weakPtr{openCall};
+    openCall->selfRef = weakPtr;
+    return openCall;
+}
 
-    {
-        int notSupportedFlags = flags & notSupportedOpenFlags;
-        if (notSupportedFlags != 0) {
-            std::cerr << "not implemented: open flags << " << std::hex << notSupportedFlags << std::dec << "\n";
-            return -EIO;
-        }
-    }
+std::string Open_Call::GetReferrerIdentifier() {
+    return "";
+}
 
-    auto fileResolve = proc.ResolveFile(filename);
+int Open_Call::Call(ProcThread &proc, const std::string &filename, int flags) {
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    auto fileResolve = proc.ResolveFile(selfRef, filename);
     if (fileResolve.status != kfile_status::SUCCESS) {
         switch (fileResolve.status) {
             case kfile_status::IO_ERROR:
@@ -47,7 +51,7 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
                 return -EIO;
         }
     }
-    auto file = fileResolve.result;
+    auto file = std::move(fileResolve.result);
     if (!file) {
 #ifdef DEBUG_OPENAT_CALL
         std::cout << "openat: not found: " << filename << "\n";
@@ -57,10 +61,10 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
 
     int followLim = 20;
     while (true) {
-        std::shared_ptr<ksymlink> perhapsSymlink = std::dynamic_pointer_cast<ksymlink>(file);
-        if (!perhapsSymlink) {
+        if (!reference_is_a<ksymlink>(file)) {
             break;
         }
+        reference<ksymlink> perhapsSymlink = reference_dynamic_cast<ksymlink>(std::move(file));
         if (followLim <= 0 || (flags & O_NOFOLLOW) != 0) {
 #ifdef DEBUG_OPENAT_CALL
             std::cout << "openat: symlink nofollow or loop: " << filename << "\n";
@@ -70,7 +74,7 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
         --followLim;
 
         auto rootdir = get_kernel_rootdir();
-        auto result = perhapsSymlink->Resolve(&(*rootdir));
+        auto result = perhapsSymlink->Resolve(&(*rootdir), selfRef);
         if (result.status != kfile_status::SUCCESS) {
 #ifdef DEBUG_OPENAT_CALL
             std::cout << "openat: error following symlink: " << filename << "\n";
@@ -84,7 +88,7 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
                     return -EIO;
             }
         }
-        file = result.result;
+        file = std::move(result.result);
         if (!file) {
 #ifdef DEBUG_OPENAT_CALL
             std::cout << "openat: not found while following symlink for: " << filename << "\n";
@@ -139,12 +143,12 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
         }
     }
 
-    std::shared_ptr<kdirectory> perhapsDir = std::dynamic_pointer_cast<kdirectory>(file);
-    if (perhapsDir) {
+    if (reference_is_a<kdirectory>(file)) {
         if (openWrite) {
             return -EISDIR;
         }
-        std::shared_ptr<FileDescriptorHandler> handler{new FsDirectoryDescriptorHandler(perhapsDir)};
+        reference<kdirectory> perhapsDir = reference_dynamic_cast<kdirectory>(std::move(file));
+        std::shared_ptr<FileDescriptorHandler> handler = FsDirectoryDescriptorHandler::Create(perhapsDir);
         FileDescriptor desc = proc.create_file_descriptor(flags, handler);
 #ifdef DEBUG_OPENAT_CALL
         std::cout << "openat -> " << std::dec << desc.FD() << "\n";
@@ -156,10 +160,34 @@ int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename
         return -ENOTDIR;
     }
 
-    std::shared_ptr<FileDescriptorHandler> handler{new FsFileDescriptorHandler(file, openRead, openWrite, (flags & O_NONBLOCK) != 0)};
+    std::shared_ptr<FileDescriptorHandler> handler = FsFileDescriptorHandler::Create(file, openRead, openWrite, (flags & O_NONBLOCK) != 0);
     FileDescriptor desc = proc.create_file_descriptor(flags, handler);
 #ifdef DEBUG_OPENAT_CALL
     std::cout << "openat -> " << std::dec << desc.FD() << "\n";
 #endif
     return desc.FD();
+}
+
+int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int flags, int mode) {
+#ifdef DEBUG_OPENAT_CALL
+    std::cout << "openat(" << std::dec << dfd << ", " << filename << ", 0x" << std::hex << flags << std::oct << ", 0" << mode << std::dec << ")\n";
+#endif
+    if (dfd != AT_FDCWD) {
+        std::cerr << "not implemented: open at fd\n";
+        return -EIO;
+    }
+
+    if ((flags & 3) == 3) {
+        return -EINVAL;
+    }
+
+    {
+        int notSupportedFlags = flags & notSupportedOpenFlags;
+        if (notSupportedFlags != 0) {
+            std::cerr << "not implemented: open flags << " << std::hex << notSupportedFlags << std::dec << "\n";
+            return -EIO;
+        }
+    }
+
+    return Open_Call::Create()->Call(proc, filename, flags);
 }

@@ -980,8 +980,10 @@ done_with_mem_extension:
 
         AcpiBoot acpi_boot{multiboot2};
 
+        std::shared_ptr<kshell> shell{};
+
         {
-            std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state, reserved_mem]() {
+            std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state, reserved_mem, &shell]() {
                 std::this_thread::set_name("[pciscan]");
                 acpi_boot.join();
 
@@ -1003,7 +1005,8 @@ done_with_mem_extension:
                 }
 
                 std::shared_ptr<tty> term = tty::Create();
-                kshell_commands shell{*(new kshell(term))};
+                shell = kshell::Create(term);
+                kshell_commands shellcmd{*shell};
             }};
             pci_scan_thread.detach();
         }

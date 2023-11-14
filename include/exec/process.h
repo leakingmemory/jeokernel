@@ -19,6 +19,8 @@
 #include <kfs/kfiles.h>
 #include <tty/tty.h>
 #include <exec/resolve_return.h>
+#include <resource/referrer.h>
+#include <resource/reference.h>
 #include "elf.h"
 
 class Process;
@@ -68,10 +70,11 @@ struct PhysMapping {
     uint32_t page;
 };
 
-class MemMapping {
+class MemMapping : public referrer {
     friend Process;
 private:
-    std::shared_ptr<kfile> image;
+    std::weak_ptr<MemMapping> selfRef{};
+    reference<kfile> image{};
     uint32_t pagenum;
     uint32_t pages;
     uint32_t image_skip_pages;
@@ -80,13 +83,18 @@ private:
     bool cow;
     bool binary_mapping;
     std::vector<PhysMapping> mappings;
-public:
     MemMapping();
+    MemMapping(uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping);
+public:
     static void CopyAttributes(MemMapping &, const MemMapping &);
-    MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping);
-    MemMapping(MemMapping &&mv);
+    std::string GetReferrerIdentifier() override;
+    void Init(const std::shared_ptr<MemMapping> &selfRef);
+    void Init(const std::shared_ptr<MemMapping> &selfRef, const reference<kfile> &image);
+    static std::shared_ptr<MemMapping> Create(const reference<kfile> &image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping);
+    static std::shared_ptr<MemMapping> Create();
+    MemMapping(MemMapping &&mv) = delete;
     MemMapping(const MemMapping &) = delete;
-    MemMapping &operator =(MemMapping &&mv);
+    MemMapping &operator =(MemMapping &&mv) = delete;
     MemMapping &operator =(const MemMapping &) = delete;
     ~MemMapping();
 };
@@ -230,7 +238,7 @@ struct process_pfault_callback {
     std::function<void (bool)> func;
 };
 
-class Process {
+class Process : public referrer {
     friend MemoryMapSnapshotBarrier;
 private:
     hw_spinlock mtx;
@@ -244,12 +252,12 @@ private:
     pid_t parent_pid;
     std::vector<PagetableRoot> pagetableLow;
     std::vector<PagetableRoot> pagetableRoots;
-    std::vector<MemMapping> mappings;
+    std::vector<std::shared_ptr<MemMapping>> mappings;
     std::vector<MemoryMapSnapshot> memoryMapSnapshots{};
     std::vector<FileDescriptor> fileDescriptors;
     std::vector<BinaryRelocation> relocations;
     std::vector<ProcessAborterFunc> aborterFunc{};
-    std::shared_ptr<kfile> cwd;
+    reference<kfile> cwd{};
     std::string cmdline;
     std::shared_ptr<class tty> tty;
     std::vector<sigaction_record> sigactions;
@@ -264,10 +272,12 @@ private:
     int32_t euid, egid, uid, gid;
     bool killed{false};
 private:
-    Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
-    Process(std::shared_ptr<Process> cp);
+    Process(const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
+    Process(const Process &cp);
 public:
-    static std::shared_ptr<Process> Create(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
+    std::string GetReferrerIdentifier() override;
+    static std::shared_ptr<Process> Create(const reference<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline);
+    static std::shared_ptr<Process> Create(const std::shared_ptr<Process> &cp);
     Process(Process &&) = delete;
     Process &operator =(const Process &) = delete;
     Process &operator =(Process &&) = delete;
@@ -304,7 +314,7 @@ public:
         return resolve_read(nullptr, addr, len, async, asyncReturn, func);
     }
     bool resolve_write(uintptr_t addr, uintptr_t len);
-    bool Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
+    bool Map(const reference<kfile> &image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap);
     bool Map(uint32_t pagenum, uint32_t pages, bool binaryMap);
     int Protect(uint32_t pagenum, uint32_t pages, int prot);
     bool IsFree(uint32_t pagenum, uint32_t pages);
@@ -318,7 +328,7 @@ public:
     uint32_t FindFree(uint32_t pages);
     void TearDownMemory();
 private:
-    std::vector<MemMapping> WriteProtectCow();
+    std::vector<std::shared_ptr<MemMapping>> WriteProtectCow();
 public:
     std::shared_ptr<Process> Clone();
     void SetProgramBreak(uintptr_t pbrk) {
@@ -356,7 +366,7 @@ private:
 public:
     void push_strings(ProcThread &, uintptr_t ptr, const std::vector<std::string>::iterator &, const std::vector<std::string>::iterator &, const std::vector<uintptr_t> &, const std::function<void (bool,const std::vector<uintptr_t> &,uintptr_t)> &);
     uintptr_t push_64(ProcThread &, uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
-    kfile_result<std::shared_ptr<kfile>> ResolveFile(const std::string &filename);
+    kfile_result<reference<kfile>> ResolveFile(const std::shared_ptr<class referrer> &referrer, const std::string &filename);
 private:
     FileDescriptor get_file_descriptor_impl(int);
 public:
@@ -395,12 +405,8 @@ public:
     pid_t getppid() const {
         return parent_pid;
     }
-    std::shared_ptr<kfile> GetCwd() const {
-        return cwd;
-    }
-    void SetCwd(const std::shared_ptr<kfile> &cwd) {
-        this->cwd = cwd;
-    }
+    reference<kfile> GetCwd(std::shared_ptr<class referrer> &referrer) const;
+    void SetCwd(const reference<kfile> &cwd);
     int sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize);
     int sigaction(int signal, const struct sigaction *act, struct sigaction *oact);
     std::optional<struct sigaction> GetSigaction(int signal);

@@ -6,9 +6,8 @@
 #define JEOKERNEL_FACCESSAT2_H
 
 #include "SyscallHandler.h"
-#include "impl/SysFaccessatImpl.h"
 
-class Faccessat2 : public Syscall, private SysFaccessatImpl {
+class Faccessat2 : public Syscall {
 public:
     Faccessat2(SyscallHandler &handler) : Syscall(handler, 439) {}
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;

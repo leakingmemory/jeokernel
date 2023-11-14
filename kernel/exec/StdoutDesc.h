@@ -14,7 +14,7 @@ public:
     static FileDescriptor StdoutDescriptor();
     static FileDescriptor StderrDescriptor();
     std::shared_ptr<FileDescriptorHandler> clone() override;
-    std::shared_ptr<kfile> get_file() override;
+    reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     bool can_seek() override;
     bool can_read() override;
     intptr_t seek(intptr_t offset, SeekWhence whence) override;

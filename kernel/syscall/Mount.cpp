@@ -10,15 +10,41 @@
 #include <errno.h>
 #include <exec/procthread.h>
 #include <kfs/blockdev_writer.h>
+#include <resource/reference.h>
+#include <resource/referrer.h>
+
+
+class Mount_Call : public referrer {
+private:
+    std::weak_ptr<Mount_Call> selfRef{};
+    Mount_Call() : referrer("Mount_Call") {}
+public:
+    static std::shared_ptr<Mount_Call> Create();
+    std::string GetReferrerIdentifier() override;
+    resolve_return_value Call(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir, const std::string &i_type,
+                              unsigned long flags, const std::string &opts);
+};
+
+std::shared_ptr<Mount_Call> Mount_Call::Create() {
+    std::shared_ptr<Mount_Call> mountCall{new Mount_Call()};
+    std::weak_ptr<Mount_Call> weakPtr{mountCall};
+    mountCall->selfRef = weakPtr;
+    return mountCall;
+}
+
+std::string Mount_Call::GetReferrerIdentifier() {
+    return "";
+}
 
 resolve_return_value
-Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir, const std::string &i_type,
-               unsigned long flags, const std::string &opts) {
+Mount_Call::Call(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir, const std::string &i_type,
+                 unsigned long flags, const std::string &opts) {
     std::string dev{i_dev};
     std::string type{i_type};
     std::cout << "mount(" << dev << ", " << dir << ", " << type << ", " << std::hex << flags << std::dec << ", "
               << opts << ")\n";
-    auto mountpointResult = ctx.GetProcess().ResolveFile(dir);
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    auto mountpointResult = ctx.GetProcess().ResolveFile(selfRef, dir);
     if (mountpointResult.status != kfile_status::SUCCESS) {
         switch (mountpointResult.status) {
             case kfile_status::NOT_DIRECTORY:
@@ -31,12 +57,13 @@ Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir
     if (!mountpointResult.result) {
         return ctx.Return(-ENOENT);
     }
-    std::shared_ptr<kdirectory> mountpoint = std::dynamic_pointer_cast<kdirectory>(mountpointResult.result);
-    if (!mountpoint) {
+    std::shared_ptr<reference<kdirectory>> mountpoint = std::make_shared<reference<kdirectory>>();
+    *mountpoint = reference_dynamic_cast<kdirectory>(std::move(mountpointResult.result));
+    if (!(*mountpoint)) {
         return ctx.Return(-ENOTDIR);
     }
 
-    auto deviceResult = ctx.GetProcess().ResolveFile(dev);
+    auto deviceResult = ctx.GetProcess().ResolveFile(selfRef, dev);
     if (deviceResult.status != kfile_status::SUCCESS) {
         switch (deviceResult.status) {
             case kfile_status::NOT_DIRECTORY:
@@ -75,13 +102,13 @@ Mount::DoMount(SyscallCtx &ctx, const std::string &i_dev, const std::string &dir
 
     auto task_id = get_scheduler()->get_current_task_id();
 
-    Queue(task_id, [ctx, openfs, mountpoint, dev, type] () mutable {
+    ctx.GetProcess().QueueBlocking(task_id, [ctx, openfs, mountpoint, dev, type] () mutable {
         auto fs = openfs();
         if (!fs) {
             ctx.ReturnWhenNotRunning(-EINVAL);
             return;
         }
-        mountpoint->Mount(dev, type, "ro", fs);
+        (*mountpoint)->Mount(dev, type, "ro", fs);
         ctx.ReturnWhenNotRunning(0);
     });
     return ctx.Async();
@@ -98,10 +125,10 @@ int64_t Mount::Call(int64_t uptr_dev, int64_t uptr_dir, int64_t uptr_type, int64
                 if (uptr_data != 0) {
                     std::string type{i_type};
                     return ctx.NestedReadString(uptr_data, [this, ctx, dev, dir, type, u_flags] (const std::string &data) mutable {
-                        return DoMount(ctx, dev, dir, type, (unsigned long) u_flags, data);
+                        return Mount_Call::Create()->Call(ctx, dev, dir, type, (unsigned long) u_flags, data);
                     });
                 }
-                return DoMount(ctx, dev, dir, i_type, (unsigned long) u_flags, "");
+                return Mount_Call::Create()->Call(ctx, dev, dir, i_type, (unsigned long) u_flags, "");
             });
         });
     });

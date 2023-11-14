@@ -29,6 +29,9 @@ struct FdSubscription {
     int fd;
 };
 
+template <class T> class reference;
+class referrer;
+
 enum class SeekWhence { SET, CUR, END };
 
 class FileDescriptorHandler {
@@ -51,7 +54,7 @@ public:
     void SetReadyRead(bool ready);
     virtual void Notify();
     virtual std::shared_ptr<FileDescriptorHandler> clone() = 0;
-    virtual std::shared_ptr<kfile> get_file() = 0;
+    virtual reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) = 0;
     virtual bool can_seek() = 0;
     virtual bool can_read() = 0;
     virtual intptr_t seek(intptr_t offset, SeekWhence whence) = 0;
@@ -88,7 +91,7 @@ public:
     std::shared_ptr<FileDescriptorHandler> GetHandler() {
         return handler;
     }
-    std::shared_ptr<kfile> get_file() const;
+    reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) const;
     bool can_seek();
     bool can_read();
     intptr_t seek(intptr_t offset, SeekWhence whence);

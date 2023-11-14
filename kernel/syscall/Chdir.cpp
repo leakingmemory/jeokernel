@@ -6,9 +6,33 @@
 #include "SyscallCtx.h"
 #include <exec/procthread.h>
 #include <errno.h>
+#include <resource/referrer.h>
+#include <resource/reference.h>
 
-int Chdir::DoChdir(std::shared_ptr<Process> proc, const std::string &filename) {
-    auto file = proc->ResolveFile(filename);
+class Chdir_Call : public referrer {
+private:
+    std::weak_ptr<Chdir_Call> selfRef{};
+    Chdir_Call() : referrer("Chdir_Call") {}
+public:
+    static std::shared_ptr<Chdir_Call> Create();
+    std::string GetReferrerIdentifier() override;
+    int Call(const std::shared_ptr<Process> &proc, const std::string &filename);
+};
+
+std::shared_ptr<Chdir_Call> Chdir_Call::Create() {
+    std::shared_ptr<Chdir_Call> chdirCall{new Chdir_Call()};
+    std::weak_ptr<Chdir_Call> weakPtr{chdirCall};
+    chdirCall->selfRef = weakPtr;
+    return chdirCall;
+}
+
+std::string Chdir_Call::GetReferrerIdentifier() {
+    return "";
+}
+
+int Chdir_Call::Call(const std::shared_ptr<Process> &proc, const std::string &filename) {
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    auto file = proc->ResolveFile(selfRef, filename);
     switch (file.status) {
         case kfile_status::SUCCESS:
             break;
@@ -20,7 +44,7 @@ int Chdir::DoChdir(std::shared_ptr<Process> proc, const std::string &filename) {
     if (!file.result) {
         return -ENOENT;
     }
-    std::shared_ptr<kdirectory> dir = std::dynamic_pointer_cast<kdirectory>(file.result);
+    reference<kdirectory> dir = reference_dynamic_cast<kdirectory>(std::move(file.result));
     if (!dir) {
         return -ENOTDIR;
     }
@@ -34,7 +58,7 @@ int64_t Chdir::Call(int64_t uptr_filename, int64_t, int64_t, int64_t, SyscallAdd
     return ctx.ReadString(uptr_filename, [this, ctx, task_id] (const std::string &r_filename) {
         std::string filename{r_filename};
         Queue(task_id, [this, ctx, filename] () {
-            auto res = DoChdir(ctx.GetProcess().GetProcess(), filename);
+            auto res = Chdir_Call::Create()->Call(ctx.GetProcess().GetProcess(), filename);
             ctx.ReturnWhenNotRunning(res);
         });
         return ctx.Async();

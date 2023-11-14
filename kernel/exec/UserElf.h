@@ -10,15 +10,20 @@
 
 class kfile;
 
-class UserElf {
+class UserElf : public referrer {
 private:
-    std::shared_ptr<kfile> file;
+    std::weak_ptr<UserElf> weakPtr{};
+    reference<kfile> file{};
     ELF64_header elf64Header{};
     bool m64;
     bool le;
-    bool valid;
+    bool valid{false};
+    UserElf();
+    std::string GetReferrerIdentifier() override;
+    void Init(const std::shared_ptr<UserElf> &selfRef, const reference<kfile> &file);
+    void PostInit();
 public:
-    UserElf(const std::shared_ptr<kfile> &file);
+    static std::shared_ptr<UserElf> Create(const reference<kfile> &file);
     bool is_valid() const {
         return valid;
     }

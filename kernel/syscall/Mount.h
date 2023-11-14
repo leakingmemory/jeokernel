@@ -6,18 +6,14 @@
 #define JEOKERNEL_MOUNT_H
 
 #include "SyscallHandler.h"
-#include "SyscallAsyncThread.h"
 #include <string>
 
 class SyscallCtx;
 class resolve_return_value;
 
-class Mount : public Syscall, private SyscallAsyncThread {
+class Mount : public Syscall {
 public:
-    Mount(SyscallHandler &handler) : Syscall(handler, 165), SyscallAsyncThread("[mount]") {}
-private:
-    resolve_return_value DoMount(SyscallCtx &ctx, const std::string &dev, const std::string &dir, const std::string &type, unsigned long flags, const std::string &opts);
-public:
+    Mount(SyscallHandler &handler) : Syscall(handler, 165) {}
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;
 };
 

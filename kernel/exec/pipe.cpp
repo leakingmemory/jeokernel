@@ -6,6 +6,7 @@
 #include <mutex>
 #include <errno.h>
 #include <exec/callctx.h>
+#include <resource/reference.h>
 
 PipeEnd::~PipeEnd() {
     auto other = otherEnd.lock();
@@ -84,7 +85,7 @@ std::shared_ptr<FileDescriptorHandler> PipeDescriptorHandler::clone() {
     return CreateHandler(end);
 }
 
-std::shared_ptr<kfile> PipeDescriptorHandler::get_file() {
+reference<kfile> PipeDescriptorHandler::get_file(std::shared_ptr<class referrer> &referrer) {
     return {};
 }
 

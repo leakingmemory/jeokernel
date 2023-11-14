@@ -11,12 +11,45 @@
 
 //#define GETDENTS64_DEBUG
 
+class Getdents64_File : public referrer {
+private:
+    std::weak_ptr<Getdents64_File> selfRef{};
+    Getdents64_File() : referrer("Getdents64_File") {}
+public:
+    static std::shared_ptr<Getdents64_File> Create();
+    std::string GetReferrerIdentifier() override;
+    void Iteration(dirent64 &de, kdirent &dirent);
+};
+
+std::shared_ptr<Getdents64_File> Getdents64_File::Create() {
+    std::shared_ptr<Getdents64_File> obj{new Getdents64_File()};
+    std::weak_ptr<Getdents64_File> weakPtr{obj};
+    obj->selfRef = weakPtr;
+    return obj;
+}
+
+std::string Getdents64_File::GetReferrerIdentifier() {
+    return "";
+}
+
+void Getdents64_File::Iteration(dirent64 &de, kdirent &dirent) {
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    auto file = dirent.File(selfRef);
+    de.d_ino = file->InodeNum();
+    if (dynamic_cast<kdirectory *>(&(*file)) != nullptr) {
+        de.d_type = DT_DIR;
+    } else {
+        de.d_type = DT_REG;
+    }
+}
+
 int Getdents64::GetDents64(const FileDescriptor &desc, void *dirents, size_t count) {
     size_t remaining{count};
     void *ptr = dirents;
     dirent64 *prev{nullptr};
     bool found{false};
-    desc.readdir([&ptr, &prev, &remaining, &found] (kdirent &dirent) {
+    auto fileReader = Getdents64_File::Create();
+    desc.readdir([&ptr, &prev, &remaining, &found, fileReader] (kdirent &dirent) {
         found = true;
         const std::string name{dirent.Name()};
         auto reclen = dirent64::Reclen(name);
@@ -30,16 +63,10 @@ int Getdents64::GetDents64(const FileDescriptor &desc, void *dirents, size_t cou
         std::cout << "getdents64: " << name << " reclen " << reclen << "\n";
 #endif
         dirent64 &de = *((dirent64 *) ptr);
-        auto file = dirent.File();
-        de.d_ino = file->InodeNum();
         de.d_off = reclen;
         de.d_reclen = reclen;
-        if (dynamic_cast<kdirectory *>(&(*file)) != nullptr) {
-            de.d_type = DT_DIR;
-        } else {
-            de.d_type = DT_REG;
-        }
         strcpy(de.d_name, name.c_str());
+        fileReader->Iteration(de, dirent);
         ptr = ((uint8_t *) ptr) + reclen;
         remaining -= reclen;
         prev = &de;

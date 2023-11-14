@@ -89,6 +89,26 @@ namespace std {
             start_context = new threadimpl::thread_start_context_impl<Function>(f);
             id = start();
         }
+        thread(const thread &) = delete;
+        thread(thread &&mv) : start_context(mv.start_context), id(mv.id) {
+            mv.start_context = nullptr;
+            mv.id = 0;
+        }
+        thread &operator =(const thread &) = delete;
+        thread &operator =(thread &&mv) {
+            if (this == &mv) {
+                return *this;
+            }
+            if (start_context != nullptr) {
+                delete start_context;
+                start_context = nullptr;
+            }
+            start_context = mv.start_context;
+            id = mv.id;
+            mv.start_context = nullptr;
+            mv.id = 0;
+            return *this;
+        }
         ~thread() {
             if (start_context != nullptr) {
                 delete start_context;

@@ -9,6 +9,9 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <resource/referrer.h>
+#include <resource/reference.h>
+#include <resource/resource.h>
 #include "filepage_data.h"
 
 struct kmount_info {
@@ -76,7 +79,7 @@ public:
 class lazy_kfile {
 public:
     lazy_kfile() {}
-    virtual std::shared_ptr<kfile> Load() = 0;
+    virtual reference<kfile> Load(std::shared_ptr<referrer> &referrer) = 0;
 };
 
 class kdirent {
@@ -88,20 +91,30 @@ public:
     std::string Name() {
         return name;
     }
-    std::shared_ptr<kfile> File() {
-        return file->Load();
+    reference<kfile> File(std::shared_ptr<referrer> &referrer) {
+        return file->Load(referrer);
     }
 };
 
 class filesystem;
 
-class kdirectory : public kfile {
+class kdirectory : public kfile, public referrer, public resource<kdirectory> {
 private:
-    std::shared_ptr<kfile> impl;
+    std::weak_ptr<kdirectory> selfRef{};
+    reference<kfile> impl;
+private:
+    kdirectory(const std::string &name) : kfile(name), referrer("kdirectory"), resource<kdirectory>(), impl() {}
 public:
-    kdirectory(const std::shared_ptr<kfile> &impl, const std::string &name) : kfile(name), impl(impl) {}
+    void Init(const std::shared_ptr<kdirectory> &selfRef);
+    void Init(const std::shared_ptr<kdirectory> &selfRef, const reference<kfile> &impl);
+    void Init(const std::shared_ptr<kdirectory> &selfRef, const std::shared_ptr<kdirectory_impl> &impl);
+    static std::shared_ptr<kdirectory> Create(const reference<kfile> &impl, const std::string &name);
+    static std::shared_ptr<kdirectory> Create(const reference<kdirectory_impl> &impl, const std::string &name);
+    static std::shared_ptr<kdirectory> Create(const std::shared_ptr<kdirectory_impl> &impl, const std::string &name);
+    std::string GetReferrerIdentifier() override;
+    kdirectory * GetResource() override;
     kfile_result<std::vector<std::shared_ptr<kdirent>>> Entries();
-    kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root, std::string filename, int resolveSymlinks = 20);
+    kfile_result<reference<kfile>> Resolve(kdirectory *root, std::shared_ptr<class referrer> &referrer, std::string filename, int resolveSymlinks = 20);
     std::shared_ptr<filesystem> Unmount();
     void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs);
     std::string Kpath();
@@ -115,12 +128,19 @@ public:
     kfile_result<filepage_ref> GetPage(std::size_t pagenum) override;
 };
 
-class ksymlink : public kfile {
+class ksymlink : public kfile, public referrer, public resource<ksymlink> {
 private:
-    std::shared_ptr<ksymlink_impl> impl;
+    std::weak_ptr<ksymlink> selfRef;
+    reference<ksymlink_impl> impl;
+private:
+    ksymlink(const std::string &name);
 public:
-    ksymlink(const std::shared_ptr<ksymlink_impl> &impl);
-    [[nodiscard]] kfile_result<std::shared_ptr<kfile>> Resolve(kdirectory *root);
+    ksymlink() = delete;
+    static std::shared_ptr<ksymlink> Create(const reference<ksymlink_impl> &impl);
+    void Init(const std::shared_ptr<ksymlink> &selfRef, const reference<ksymlink_impl> &impl);
+    std::string GetReferrerIdentifier() override;
+    ksymlink * GetResource() override;
+    [[nodiscard]] kfile_result<reference<kfile>> Resolve(kdirectory *root, std::shared_ptr<class referrer> &referer);
     [[nodiscard]] std::string GetLink();
     fileitem *GetFileitem() const override;
     uint32_t Mode() const override;

@@ -5,6 +5,8 @@
 #include "ksymlink_impl.h"
 
 std::shared_ptr<ksymlink_impl>
-ksymlink_impl::Create(const fsreference<fileitem> &file, std::shared_ptr<kfile> parent, const std::string &name) {
-    return kfile_impl::Create<ksymlink_impl>(file, parent, name);
+ksymlink_impl::Create(const fsreference<fileitem> &file, const reference<kdirectory_impl> &parent, const std::string &name) {
+    auto impl = kfile_impl::Create<ksymlink_impl>(file, name);
+    impl->parent = parent.CreateReference(impl);
+    return impl;
 }

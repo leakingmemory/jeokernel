@@ -7,28 +7,41 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <resource/reference.h>
 
 constexpr int supportedFlags = (AT_EACCESS | AT_SYMLINK_NOFOLLOW);
 constexpr int notSupportedFlags = ~supportedFlags;
+
+std::shared_ptr<SysFaccessatImpl> SysFaccessatImpl::Create() {
+    std::shared_ptr<SysFaccessatImpl> sysFaccessat{new SysFaccessatImpl()};
+    std::weak_ptr<SysFaccessatImpl> weakPtr{sysFaccessat};
+    sysFaccessat->selfRef = weakPtr;
+    return sysFaccessat;
+}
+
+std::string SysFaccessatImpl::GetReferrerIdentifier() {
+    return "";
+}
 
 int SysFaccessatImpl::DoFaccessat(ProcThread &proc, int dfd, std::string filename, int mode, int flags) {
     constexpr int allAccess = F_OK | X_OK | W_OK | R_OK;
     if ((mode & allAccess) != mode || (flags & notSupportedFlags) != 0 || filename.empty()) {
         return -EINVAL;
     }
-    kfile_result<std::shared_ptr<kfile>> fileResolve{};
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    kfile_result<reference<kfile>> fileResolve{};
     if (dfd == AT_FDCWD || filename.starts_with("/")) {
-        fileResolve = proc.ResolveFile(filename);
+        fileResolve = proc.ResolveFile(selfRef, filename);
     } else {
         auto fdesc = proc.get_file_descriptor(dfd);
         auto handler = fdesc.GetHandler();
-        auto file = handler->get_file();
-        std::shared_ptr<kdirectory> dir = std::dynamic_pointer_cast<kdirectory>(file);
+        auto file = handler->get_file(selfRef);
+        reference<kdirectory> dir = reference_dynamic_cast<kdirectory>(std::move(file));
         if (!dir) {
             return -ENOTDIR;
         }
         auto rootdir = get_kernel_rootdir();
-        fileResolve = dir->Resolve(&(*rootdir), filename);
+        fileResolve = dir->Resolve(&(*rootdir), selfRef, filename);
     }
     if (fileResolve.status != kfile_status::SUCCESS) {
         switch (fileResolve.status) {
@@ -43,16 +56,16 @@ int SysFaccessatImpl::DoFaccessat(ProcThread &proc, int dfd, std::string filenam
     if ((flags & AT_SYMLINK_NOFOLLOW) == 0) {
         int linkLimit = 20;
         while (true) {
-            std::shared_ptr<ksymlink> symlink = std::dynamic_pointer_cast<ksymlink>(fileResolve.result);
-            if (!symlink) {
+            if (!reference_is_a<ksymlink>(fileResolve.result)) {
                 break;
             }
+            reference<ksymlink> symlink = reference_dynamic_cast<ksymlink>(std::move(fileResolve.result));
             if (linkLimit <= 0) {
                 return -ELOOP;
             }
             --linkLimit;
             auto rootdir = get_kernel_rootdir();
-            fileResolve = symlink->Resolve(&(*rootdir));
+            fileResolve = symlink->Resolve(&(*rootdir), selfRef);
             if (fileResolve.status != kfile_status::SUCCESS) {
                 switch (fileResolve.status) {
                     case kfile_status::IO_ERROR:
@@ -65,7 +78,7 @@ int SysFaccessatImpl::DoFaccessat(ProcThread &proc, int dfd, std::string filenam
             }
         }
     }
-    auto file = fileResolve.result;
+    auto file = std::move(fileResolve.result);
     if (!file) {
         return -ENOENT;
     }

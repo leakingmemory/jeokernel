@@ -6,12 +6,18 @@
 #define JEOKERNEL_SYSFACCESSATIMPL_H
 
 #include <string>
+#include <resource/referrer.h>
 
 class ProcThread;
 
-class SysFaccessatImpl {
+class SysFaccessatImpl : public referrer {
+private:
+    std::weak_ptr<SysFaccessatImpl> selfRef{};
+    SysFaccessatImpl() : referrer("SysFaccesatImpl") {}
 public:
-    static int DoFaccessat(ProcThread &proc, int dfd, std::string filename, int mode, int flags);
+    static std::shared_ptr<SysFaccessatImpl> Create();
+    std::string GetReferrerIdentifier() override;
+    int DoFaccessat(ProcThread &proc, int dfd, std::string filename, int mode, int flags);
 };
 
 

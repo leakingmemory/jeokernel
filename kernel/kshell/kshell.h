@@ -8,6 +8,8 @@
 #include <thread>
 #include <string>
 #include <kfs/kfiles.h>
+#include <resource/reference.h>
+#include <resource/referrer.h>
 
 class kshell;
 
@@ -18,28 +20,29 @@ public:
     virtual void Exec(kshell &shell, const std::vector<std::string> &cmd) = 0;
 };
 
-class kshell {
+class kshell : public referrer {
 private:
-    std::mutex mtx;
-    bool exit;
-    std::vector<std::shared_ptr<kshell_command>> commands;
-    std::shared_ptr<kfile> cwd_ref;
-    kdirectory *cwd;
+    std::mutex mtx{};
+    std::weak_ptr<kshell> selfRef{};
+    std::vector<std::shared_ptr<kshell_command>> commands{};
+    reference<kfile> cwd_ref{};
+    kdirectory *cwd{nullptr};
     std::shared_ptr<class tty> tty;
-    std::thread shell;
+    std::thread shell{};
+    bool exit{false};
+private:
+    kshell(const std::shared_ptr<class tty> &tty);
 public:
-    kshell(const std::shared_ptr<class tty> tty);
+    void Init(const std::shared_ptr<kshell> &selfRef);
+    static std::shared_ptr<kshell> Create(const std::shared_ptr<class tty> &tty);
+    std::string GetReferrerIdentifier() override;
     ~kshell();
-    void Cwd(const std::shared_ptr<kfile> &cwd) {
-        this->cwd_ref = cwd;
-        this->cwd = dynamic_cast<kdirectory *> (&(*(this->cwd_ref)));
-    }
+    void CwdRoot();
+    void Cwd(const reference<kfile> &cwd);
     kdirectory &Cwd() {
         return *cwd;
     }
-    std::shared_ptr<kfile> CwdRef() {
-        return cwd_ref;
-    }
+    reference<kfile> CwdRef(std::shared_ptr<class referrer> &referrer);
     std::shared_ptr<class tty> Tty() {
         return tty;
     }

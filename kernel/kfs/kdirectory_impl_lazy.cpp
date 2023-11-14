@@ -8,11 +8,12 @@
 #include "ksymlink_impl.h"
 
 std::shared_ptr<kdirectory_impl_lazy>
-kdirectory_impl_lazy::Create(const std::shared_ptr<kfile> &ref, const std::shared_ptr<directory_entry> &dirent,
+kdirectory_impl_lazy::Create(const std::shared_ptr<kdirectory_impl> &ref, const std::shared_ptr<directory_entry> &dirent,
                              const std::string &dirname) {
-    std::shared_ptr<kdirectory_impl_lazy> kdir{new kdirectory_impl_lazy(ref, dirent, dirname)};
+    std::shared_ptr<kdirectory_impl_lazy> kdir{new kdirectory_impl_lazy(dirent, dirname)};
     std::weak_ptr<kdirectory_impl_lazy> w{kdir};
     kdir->selfRef = w;
+    kdir->ref = ref->CreateReference(kdir);
     return kdir;
 }
 
@@ -20,7 +21,7 @@ std::string kdirectory_impl_lazy::GetReferrerIdentifier() {
     return "";
 }
 
-std::shared_ptr<kfile> kdirectory_impl_lazy::Load() {
+reference<kfile> kdirectory_impl_lazy::Load(std::shared_ptr<class referrer> &referrer) {
     fsreference<fileitem> fsfile{};
     {
         auto ld = dirent->LoadItem(selfRef.lock());
@@ -36,16 +37,24 @@ std::shared_ptr<kfile> kdirectory_impl_lazy::Load() {
             subpath.append("/", 1);
         }
         subpath.append(dirent->Name());
-        std::shared_ptr<kdirectory_impl> dir = kdirectory_impl::Create(fsfile, ref, subpath);
-        return dir;
+        auto refCopy = ref->CreateReference(selfRef.lock());
+        auto parentDirRef = reference_dynamic_cast<kdirectory_impl>(std::move(refCopy));
+        std::shared_ptr<kdirectory_impl> dir = kdirectory_impl::Create(fsfile, parentDirRef, subpath);
+        auto dirRef = dir->CreateReference(referrer);
+        reference<kfile> fileRef = reference_dynamic_cast<kfile>(std::move(dirRef));
+        return fileRef;
     } else {
         class symlink *syml = dynamic_cast<class symlink *>(&(*fsfile));
         if (syml != nullptr) {
-            std::shared_ptr<ksymlink_impl> symli = ksymlink_impl::Create(fsfile, ref, dirent->Name());
-            return symli;
+            auto refCopy = ref->CreateReference(selfRef.lock());
+            auto parentDirRef = reference_dynamic_cast<kdirectory_impl>(std::move(refCopy));
+            std::shared_ptr<ksymlink_impl> symli = ksymlink_impl::Create(fsfile, parentDirRef, dirent->Name());
+            auto symliRef = symli->CreateReference(referrer);
+            reference<kfile> fileRef = reference_dynamic_cast<kfile>(std::move(symliRef));
+            return fileRef;
         } else {
             std::shared_ptr<kfile_impl> file = kfile_impl::Create<kfile_impl>(fsfile, dirent->Name());
-            return file;
+            return file->CreateReference(referrer);
         }
     }
 }

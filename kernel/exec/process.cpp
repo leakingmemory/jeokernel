@@ -75,10 +75,14 @@ PagetableRoot::PagetableRoot(PagetableRoot &&mv) : physpage(mv.physpage), vm(std
     }
 }
 
-MemMapping::MemMapping() : image(), pagenum(0), pages(0), image_skip_pages(0), load(0), read(false), cow(false), binary_mapping(false), mappings() {}
+MemMapping::MemMapping() : referrer("MemMapping"), image(), pagenum(0), pages(0), image_skip_pages(0), load(0), read(false), cow(false), binary_mapping(false), mappings() {}
 
 void MemMapping::CopyAttributes(MemMapping &dst, const MemMapping &src) {
-    dst.image = src.image;
+    if (src.image) {
+        dst.image = src.image.CreateReference(dst.selfRef.lock());
+    } else {
+        dst.image = {};
+    }
     dst.pagenum = src.pagenum;
     dst.pages = src.pages;
     dst.image_skip_pages = src.image_skip_pages;
@@ -88,28 +92,38 @@ void MemMapping::CopyAttributes(MemMapping &dst, const MemMapping &src) {
     dst.binary_mapping = src.binary_mapping;
 }
 
-MemMapping::MemMapping(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping)
-: image(image), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), load(load), read(true), cow(cow), binary_mapping(binaryMapping), mappings() {}
+MemMapping::MemMapping(uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool cow, bool binaryMapping)
+: referrer("MemMapping"), pagenum(pagenum), pages(pages), image_skip_pages(image_skip_pages), load(load), read(true), cow(cow), binary_mapping(binaryMapping), mappings() {}
 
-MemMapping::MemMapping(MemMapping &&mv) : image(mv.image), pagenum(mv.pagenum), pages(mv.pages), image_skip_pages(mv.image_skip_pages), load(mv.load), read(mv.read), cow(mv.cow), binary_mapping(mv.binary_mapping), mappings(mv.mappings) {
-    mv.mappings.clear();
+std::string MemMapping::GetReferrerIdentifier() {
+    return "";
 }
 
-MemMapping &MemMapping::operator =(MemMapping &&mv) {
-    if (this == &mv) {
-        return *this;
+void MemMapping::Init(const std::shared_ptr<MemMapping> &selfRef) {
+    std::weak_ptr<MemMapping> weakPtr{selfRef};
+    this->selfRef = weakPtr;
+}
+
+void MemMapping::Init(const std::shared_ptr<MemMapping> &selfRef, const reference<kfile> &image) {
+    Init(selfRef);
+    if (image) {
+        std::shared_ptr<class referrer> referrer = selfRef;
+        this->image = image.CreateReference(referrer);
     }
-    image = mv.image;
-    pagenum = mv.pagenum;
-    pages = mv.pages;
-    image_skip_pages = mv.image_skip_pages;
-    load = mv.load;
-    read = mv.read;
-    cow = mv.cow;
-    binary_mapping = mv.binary_mapping;
-    mappings = mv.mappings;
-    mv.mappings.clear();
-    return *this;
+}
+
+std::shared_ptr<MemMapping>
+MemMapping::Create(const reference<kfile> &image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages,
+                   uint16_t load, bool cow, bool binaryMapping) {
+    std::shared_ptr<MemMapping> memMapping{new MemMapping(pagenum, pages, image_skip_pages, load, cow, binaryMapping)};
+    memMapping->Init(memMapping, image);
+    return memMapping;
+}
+
+std::shared_ptr<MemMapping> MemMapping::Create() {
+    std::shared_ptr<MemMapping> memMapping{new MemMapping()};
+    memMapping->Init(memMapping);
+    return memMapping;
 }
 
 MemMapping::~MemMapping() {
@@ -197,7 +211,7 @@ static pid_t AllocPid() {
     return pid;
 }
 
-Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) : mtx(), self_ref(), sigmask(), sigpending(), rlimits(), pid(0), pgrp(0), parent(), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cwd), cmdline(cmdline), tty(tty), sigactions(), exitNotifications(), childExitNotifications(), auxv(), exitCode(-1), program_brk(0), euid(0), egid(0), uid(0), gid(0) {
+Process::Process(const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) : referrer("Process"), mtx(), self_ref(), sigmask(), sigpending(), rlimits(), pid(0), pgrp(0), parent(), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cmdline(cmdline), tty(tty), sigactions(), exitNotifications(), childExitNotifications(), auxv(), exitCode(-1), program_brk(0), euid(0), egid(0), uid(0), gid(0) {
     fileDescriptors.push_back(StdinDesc::Descriptor(tty));
     fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
     fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
@@ -205,17 +219,33 @@ Process::Process(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class 
     pgrp = pid;
 }
 
-Process::Process(std::shared_ptr<Process> cp) : mtx(), self_ref(), sigmask(cp->sigmask), sigpending(cp->sigpending), rlimits(cp->rlimits), pid(0), pgrp(cp->pgrp), parent(cp), parent_pid(cp->pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cwd(cp->cwd), cmdline(cp->cmdline), tty(cp->tty), sigactions(cp->sigactions), exitNotifications(), childExitNotifications(), auxv(cp->auxv), exitCode(-1), program_brk(cp->program_brk), euid(cp->euid), egid(cp->egid), uid(cp->uid), gid(cp->gid) {
+Process::Process(const Process &cp) : referrer("Process"), mtx(), self_ref(), sigmask(cp.sigmask), sigpending(cp.sigpending), rlimits(cp.rlimits), pid(0), pgrp(cp.pgrp), parent(), parent_pid(cp.pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cmdline(cp.cmdline), tty(cp.tty), sigactions(cp.sigactions), exitNotifications(), childExitNotifications(), auxv(cp.auxv), exitCode(-1), program_brk(cp.program_brk), euid(cp.euid), egid(cp.egid), uid(cp.uid), gid(cp.gid) {
     pid = AllocPid();
 }
 
+std::string Process::GetReferrerIdentifier() {
+    return "";
+}
+
 std::shared_ptr<Process>
-Process::Create(const std::shared_ptr<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid,
+Process::Create(const reference<kfile> &cwd, const std::shared_ptr<class tty> &tty, pid_t parent_pid,
                 const std::string &cmdline) {
-    std::shared_ptr<Process> process{new Process(cwd, tty, parent_pid, cmdline)};
+    std::shared_ptr<Process> process{new Process(tty, parent_pid, cmdline)};
     std::weak_ptr<Process> weak{process};
     process->self_ref = weak;
+    process->cwd = cwd.CreateReference(process);
     return process;
+}
+
+std::shared_ptr<Process> Process::Create(const std::shared_ptr<Process> &cp) {
+    std::shared_ptr<Process> process{new Process(*cp)};
+    std::weak_ptr<Process> weak{process};
+    process->self_ref = weak;
+    if (cp->cwd) {
+        process->cwd = cp->cwd.CreateReference(process);
+    }
+    std::weak_ptr<Process> parent{cp};
+    process->parent = parent;
 }
 
 Process::~Process() {
@@ -517,8 +547,8 @@ bool Process::Pageentry(uint32_t pagenum, std::function<void (pageentr &)> func)
 bool Process::CheckMapOverlap(uint32_t pagenum, uint32_t pages) {
     for (const auto &mapping : mappings) {
         {
-            auto overlap_page = mapping.pagenum > pagenum ? mapping.pagenum : pagenum;
-            auto overlap_end = mapping.pagenum + mapping.pages;
+            auto overlap_page = mapping->pagenum > pagenum ? mapping->pagenum : pagenum;
+            auto overlap_end = mapping->pagenum + mapping->pages;
             {
                 auto other_end = pagenum + pages;
                 if (other_end < overlap_end) {
@@ -558,7 +588,7 @@ struct MemoryArea {
 bool Process::IsFree(uint32_t pagenum, uint32_t pages) {
     MemoryArea area{.start = pagenum, .end = (pagenum + pages)};
     for (const auto &mapping : mappings) {
-        MemoryArea mappingArea{.start = mapping.pagenum, .end = (mapping.pagenum + mapping.pages)};
+        MemoryArea mappingArea{.start = mapping->pagenum, .end = (mapping->pagenum + mapping->pages)};
         if (area.Overlaps(mappingArea)) {
             return false;
         }
@@ -596,12 +626,12 @@ std::shared_ptr<std::vector<DeferredReleasePage>> Process::ClearRange(uint32_t p
     release->reserve(2);
     std::lock_guard lock{mtx};
     auto iterator = mappings.begin();
-    std::vector<MemMapping> newMappings{};
+    std::vector<std::shared_ptr<MemMapping>> newMappings{};
     while (iterator != mappings.end()) {
         auto &mapping = *iterator;
         {
-            auto overlap_page = mapping.pagenum > pagenum ? mapping.pagenum : pagenum;
-            auto overlap_end = mapping.pagenum + mapping.pages;
+            auto overlap_page = mapping->pagenum > pagenum ? mapping->pagenum : pagenum;
+            auto overlap_end = mapping->pagenum + mapping->pages;
             {
                 auto other_end = pagenum + pages;
                 if (other_end < overlap_end) {
@@ -609,29 +639,30 @@ std::shared_ptr<std::vector<DeferredReleasePage>> Process::ClearRange(uint32_t p
                 }
             }
             if (overlap_page < overlap_end) {
-                auto mapping_end = mapping.pagenum + mapping.pages;
-                if (mapping.pagenum < overlap_page) {
+                auto mapping_end = mapping->pagenum + mapping->pages;
+                if (mapping->pagenum < overlap_page) {
                     if (mapping_end > overlap_end) {
-                        auto &newMapping = newMappings.emplace_back();
-                        MemMapping::CopyAttributes(newMapping, mapping);
+                        auto newMapping = MemMapping::Create();
+                        newMappings.emplace_back(newMapping);
+                        MemMapping::CopyAttributes(*newMapping, *mapping);
 #ifdef DEBUG_MMAP_OVERLAP
-                        std::cout << "Map split " << std::hex << mapping.pagenum << "/" << mapping.pages;
+                        std::cout << "Map split " << std::hex << mapping->pagenum << "/" << mapping->pages;
 #endif
-                        mapping.pages = overlap_page - mapping.pagenum;
+                        mapping->pages = overlap_page - mapping->pagenum;
 #ifdef DEBUG_MMAP_OVERLAP
-                        std::cout << " -> " << std::hex << mapping.pagenum << "/" << mapping.pages << ", ";
+                        std::cout << " -> " << std::hex << mapping->pagenum << "/" << mapping->pages << ", ";
 #endif
-                        newMapping.pages -= overlap_end - mapping.pagenum;
-                        newMapping.pagenum = overlap_end;
+                        newMapping->pages -= overlap_end - mapping->pagenum;
+                        newMapping->pagenum = overlap_end;
 #ifdef DEBUG_MMAP_OVERLAP
-                        std::cout << newMapping.pagenum << "/" << newMapping.pages << "\n";
+                        std::cout << newMapping->pagenum << "/" << newMapping->pages << "\n";
 #endif
                         {
 #ifdef DEBUG_MAP_CLEAR_FREE
                             std::cout << "Free pages: ";
 #endif
-                            auto dropIterator = mapping.mappings.begin();
-                            while (dropIterator != mapping.mappings.end()) {
+                            auto dropIterator = mapping->mappings.begin();
+                            while (dropIterator != mapping->mappings.end()) {
                                 const auto &check = *dropIterator;
                                 if (check.page >= overlap_page) {
                                     if (check.page < overlap_end) {
@@ -642,9 +673,9 @@ std::shared_ptr<std::vector<DeferredReleasePage>> Process::ClearRange(uint32_t p
                                             std::cout << " *" << std::hex << check.page << std::dec;
                                         }
 #endif
-                                        newMapping.mappings.push_back(check);
+                                        newMapping->mappings.push_back(check);
                                     }
-                                    mapping.mappings.erase(dropIterator);
+                                    mapping->mappings.erase(dropIterator);
                                 } else {
                                     ++dropIterator;
                                 }
@@ -655,19 +686,19 @@ std::shared_ptr<std::vector<DeferredReleasePage>> Process::ClearRange(uint32_t p
                         }
                     } else {
 #ifdef DEBUG_MMAP_OVERLAP
-                        std::cout << "Map slit/2 type-reduce keep:" << std::hex << mapping.pagenum << "-" << overlap_page << " drop:-" << overlap_end << std::dec << "\n";
+                        std::cout << "Map slit/2 type-reduce keep:" << std::hex << mapping->pagenum << "-" << overlap_page << " drop:-" << overlap_end << std::dec << "\n";
 #endif
-                        mapping.pages = overlap_page - mapping.pagenum;
+                        mapping->pages = overlap_page - mapping->pagenum;
                         {
-                            auto dropIterator = mapping.mappings.begin();
+                            auto dropIterator = mapping->mappings.begin();
 #ifdef DEBUG_MAP_CLEAR_FREE
                             std::cout << "Free pages: ";
 #endif
-                            while (dropIterator != mapping.mappings.end()) {
+                            while (dropIterator != mapping->mappings.end()) {
                                 auto &check = *dropIterator;
                                 if (check.page >= overlap_page) {
                                     release->emplace_back(check.phys_page, check.data, check.cow);
-                                    mapping.mappings.erase(dropIterator);
+                                    mapping->mappings.erase(dropIterator);
                                 } else {
                                     ++dropIterator;
                                 }
@@ -679,20 +710,20 @@ std::shared_ptr<std::vector<DeferredReleasePage>> Process::ClearRange(uint32_t p
                     }
                 } else if (mapping_end > overlap_end) {
 #ifdef DEBUG_MMAP_OVERLAP
-                    std::cout << "Map slit/3 type-reduce drop:" << std::hex << mapping.pagenum << "- keep:" << overlap_end << "-" << mapping_end << std::dec << "\n";
+                    std::cout << "Map slit/3 type-reduce drop:" << std::hex << mapping->pagenum << "- keep:" << overlap_end << "-" << mapping_end << std::dec << "\n";
 #endif
-                    mapping.pages = mapping_end - overlap_end;
-                    mapping.pagenum = overlap_end;
+                    mapping->pages = mapping_end - overlap_end;
+                    mapping->pagenum = overlap_end;
                     {
 #ifdef DEBUG_MAP_CLEAR_FREE
                         std::cout << "Free pages: ";
 #endif
-                        auto dropIterator = mapping.mappings.begin();
-                        while (dropIterator != mapping.mappings.end()) {
+                        auto dropIterator = mapping->mappings.begin();
+                        while (dropIterator != mapping->mappings.end()) {
                             auto &check = *dropIterator;
                             if (check.page < overlap_end) {
                                 release->emplace_back(check.phys_page, check.data, check.cow);
-                                mapping.mappings.erase(dropIterator);
+                                mapping->mappings.erase(dropIterator);
                             } else {
                                 ++dropIterator;
                             }
@@ -703,7 +734,7 @@ std::shared_ptr<std::vector<DeferredReleasePage>> Process::ClearRange(uint32_t p
                     }
                 } else {
 #ifdef DEBUG_MMAP_OVERLAP
-                    std::cout << "Map slit/4 type-drop drop:" << std::hex << mapping.pagenum << " num:" << mapping.pages << std::dec << "\n";
+                    std::cout << "Map slit/4 type-drop drop:" << std::hex << mapping->pagenum << " num:" << mapping->pages << std::dec << "\n";
 #endif
                     mappings.erase(iterator);
                     continue;
@@ -713,13 +744,14 @@ std::shared_ptr<std::vector<DeferredReleasePage>> Process::ClearRange(uint32_t p
         ++iterator;
     }
     for (auto &mapping : newMappings) {
-        auto &map = mappings.emplace_back();
-        MemMapping::CopyAttributes(map, mapping);
-        map.mappings.reserve(mapping.mappings.size());
-        for (const auto &m : mapping.mappings) {
-            map.mappings.push_back(m);
+        auto map = MemMapping::Create();
+        mappings.emplace_back(map);
+        MemMapping::CopyAttributes(*map, *mapping);
+        map->mappings.reserve(mapping->mappings.size());
+        for (const auto &m : mapping->mappings) {
+            map->mappings.push_back(m);
         }
-        mapping.mappings.clear();
+        mapping->mappings.clear();
     }
     {
         auto iterator = memoryMapSnapshots.end();
@@ -783,7 +815,7 @@ std::vector<MemoryArea> Process::FindFreeMemoryAreas() {
             mappings.reserve(this->mappings.size());
             for (int i = 0; i < this->mappings.size(); i++) {
                 auto &mapping = this->mappings[i];
-                MemoryArea area{.start = mapping.pagenum, .end = (mapping.pagenum + mapping.pages)};
+                MemoryArea area{.start = mapping->pagenum, .end = (mapping->pagenum + mapping->pages)};
                 auto iterator = mappings.begin();
                 while (iterator != mappings.end()) {
                     if (iterator->Overlaps(area)) {
@@ -874,7 +906,7 @@ uint32_t Process::FindFree(uint32_t pages) {
 void Process::TearDownMemory() {
     std::lock_guard lock{mtx};
     for (auto &mapping : mappings) {
-        for (auto &phmap : mapping.mappings) {
+        for (auto &phmap : mapping->mappings) {
             Pageentry(phmap.page, [] (pageentr &pe) {
                 pe.present = 0;
                 pe.writeable = 0;
@@ -886,13 +918,14 @@ void Process::TearDownMemory() {
     mappings.clear();
 }
 
-std::vector<MemMapping> Process::WriteProtectCow() {
-    std::vector<MemMapping> memMappings{};
+std::vector<std::shared_ptr<MemMapping>> Process::WriteProtectCow() {
+    std::vector<std::shared_ptr<MemMapping>> memMappings{};
     std::lock_guard lock{mtx};
     for (auto &mapping : mappings) {
-        auto &newMapping = memMappings.emplace_back(mapping.image, mapping.pagenum, mapping.pages, mapping.image_skip_pages, mapping.load, mapping.cow, mapping.binary_mapping);
-        newMapping.read = mapping.read;
-        for (auto &phmap : mapping.mappings) {
+        auto newMapping = MemMapping::Create(mapping->image, mapping->pagenum, mapping->pages, mapping->image_skip_pages, mapping->load, mapping->cow, mapping->binary_mapping);
+        memMappings.emplace_back(newMapping);
+        newMapping->read = mapping->read;
+        for (auto &phmap : mapping->mappings) {
             bool wasWriteable{false};
             Pageentry(phmap.page, [&wasWriteable] (pageentr &pe) {
                 if (pe.writeable != 0) {
@@ -905,7 +938,7 @@ std::vector<MemMapping> Process::WriteProtectCow() {
                     phmap.cow = std::make_shared<CowPageRef>(phmap.phys_page);
                     phmap.phys_page = 0;
                 }
-                auto &newPhysMapping = newMapping.mappings.emplace_back();
+                auto &newPhysMapping = newMapping->mappings.emplace_back();
                 newPhysMapping.phys_page = phmap.phys_page;
                 newPhysMapping.page = phmap.page;
                 newPhysMapping.data = phmap.data;
@@ -922,7 +955,7 @@ std::shared_ptr<Process> Process::Clone() {
     original = this->self_ref.lock();
     {
         std::lock_guard lock{mtx};
-        clonedProcess = new Process(original);
+        clonedProcess = Process::Create(original);
     }
     {
         std::weak_ptr<Process> weak{clonedProcess};
@@ -931,9 +964,9 @@ std::shared_ptr<Process> Process::Clone() {
     clonedProcess->mappings = WriteProtectCow();
     for (auto &mapping : clonedProcess->mappings)
     {
-        uintptr_t pageend = mapping.pagenum;
-        pageend += mapping.pages;
-        for (uintptr_t pageaddr = mapping.pagenum; pageaddr < pageend; pageaddr++) {
+        uintptr_t pageend = mapping->pagenum;
+        pageend += mapping->pages;
+        for (uintptr_t pageaddr = mapping->pagenum; pageaddr < pageend; pageaddr++) {
             auto srcPe = Pageentry(pageaddr);
             if (srcPe) {
                 clonedProcess->Pageentry(pageaddr, [&srcPe] (pageentr &pe) {
@@ -951,7 +984,7 @@ std::shared_ptr<Process> Process::Clone() {
     return clonedProcess;
 }
 
-bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
+bool Process::Map(const reference<kfile> &image, uint32_t pagenum, uint32_t pages, uint32_t image_skip_pages, uint16_t load, bool write, bool execute, bool copyOnWrite, bool binaryMap) {
 #ifdef DEBUG_MMAP
     std::cout << "Map " << std::hex << pagenum << "-" << (pagenum+pages) << " -> " << image_skip_pages << (write ? " write" : "") << (execute ? " exec" : "") << std::dec << "\n";
 #endif
@@ -963,7 +996,7 @@ bool Process::Map(std::shared_ptr<kfile> image, uint32_t pagenum, uint32_t pages
         std::cerr << "Map error: overlapping existing mapping\n";
         return false;
     }
-    mappings.emplace_back(image, pagenum, pages, image_skip_pages, load, write && copyOnWrite, binaryMap);
+    mappings.emplace_back(MemMapping::Create(image, pagenum, pages, image_skip_pages, load, write && copyOnWrite, binaryMap));
     for (uint32_t p = 0; p < pages; p++) {
         bool success = Pageentry(pagenum + p, [execute, write] (pageentr &pe) {
             pe.present = 0;
@@ -998,7 +1031,7 @@ bool Process::Map(uint32_t pagenum, uint32_t pages, bool binaryMap) {
     if (!CheckMapOverlap(pagenum, pages)) {
         return false;
     }
-    mappings.emplace_back(std::shared_ptr<kfile>(), pagenum, pages, 0, 0, false, binaryMap);
+    mappings.emplace_back(MemMapping::Create(reference<kfile>(), pagenum, pages, 0, 0, false, binaryMap));
     for (uint32_t p = 0; p < pages; p++) {
         bool success = Pageentry(pagenum + p, [] (pageentr &pe) {
             pe.present = 0;
@@ -1036,18 +1069,18 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
     std::lock_guard lock{mtx};
     prot_mappings.reserve(4);
     for (auto &mapping : mappings) {
-        auto ol_start = mapping.pagenum;
+        auto ol_start = mapping->pagenum;
         if (ol_start < pagenum) {
             ol_start = pagenum;
         }
-        auto ol_end = mapping.pagenum + mapping.pages;
+        auto ol_end = mapping->pagenum + mapping->pages;
         if (ol_end > (pagenum + pages)) {
             ol_end = pagenum + pages;
         }
         if (ol_start >= ol_end) {
             continue;
         }
-        ProtectMapping p{.start = ol_start, .end = ol_end, .mapping = &mapping};
+        ProtectMapping p{.start = ol_start, .end = ol_end, .mapping = &(*mapping)};
         prot_mappings.push_back(p);
         covered += ol_end - ol_start;
     }
@@ -1055,25 +1088,27 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
         std::cerr << "mprotect: not all pages are mapped\n";
         return -EINVAL;
     }
-    std::vector<MemMapping> new_mappings{};
+    std::vector<std::shared_ptr<MemMapping>> new_mappings{};
     new_mappings.reserve(prot_mappings.size() * 2);
     std::function<void ()> apply_new_mappings = [this, &new_mappings] () {
         mappings.reserve(mappings.size() + new_mappings.size());
         for (auto &mapping : new_mappings) {
-            auto &map = mappings.emplace_back();
-            MemMapping::CopyAttributes(map, mapping);
-            for (const auto &m : mapping.mappings) {
-                map.mappings.push_back(m);
+            auto map = MemMapping::Create();
+            mappings.emplace_back(map);
+            MemMapping::CopyAttributes(*map, *mapping);
+            for (const auto &m : mapping->mappings) {
+                map->mappings.push_back(m);
             }
-            mapping.mappings.clear();
+            mapping->mappings.clear();
         }
     };
     for (auto &pmapping : prot_mappings) {
         if (pmapping.start > pmapping.mapping->pagenum) {
             auto size_pages = pmapping.start - pmapping.mapping->pagenum;
-            auto &map = new_mappings.emplace_back();
-            MemMapping::CopyAttributes(map, *(pmapping.mapping));
-            map.pages = size_pages;
+            auto map = MemMapping::Create();
+            new_mappings.emplace_back(map);
+            MemMapping::CopyAttributes(*map, *(pmapping.mapping));
+            map->pages = size_pages;
             pmapping.mapping->pagenum = pmapping.start;
             pmapping.mapping->pages -= size_pages;
             if (pmapping.mapping->image) {
@@ -1082,8 +1117,8 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
             auto iterator = pmapping.mapping->mappings.begin();
             while (iterator != pmapping.mapping->mappings.end()) {
                 auto &mapping = *iterator;
-                if (mapping.page >= map.pagenum && mapping.page < (map.pagenum + map.pages)) {
-                    map.mappings.push_back((const PhysMapping &) mapping);
+                if (mapping.page >= map->pagenum && mapping.page < (map->pagenum + map->pages)) {
+                    map->mappings.push_back((const PhysMapping &) mapping);
                     pmapping.mapping->mappings.erase(iterator);
                     continue;
                 }
@@ -1093,13 +1128,14 @@ int Process::Protect(uint32_t pagenum, uint32_t pages, int prot) {
         if (pmapping.end < (pmapping.mapping->pagenum + pmapping.mapping->pages)) {
             auto size_pages1 = pmapping.end - pmapping.mapping->pagenum;
             auto size_pages2 = pmapping.mapping->pages - size_pages1;
-            auto &map = new_mappings.emplace_back(pmapping.mapping->image, pmapping.mapping->pagenum + size_pages1, size_pages2, pmapping.mapping->image_skip_pages + size_pages1, 0, pmapping.mapping->cow, pmapping.mapping->binary_mapping);
+            auto map = MemMapping::Create(pmapping.mapping->image, pmapping.mapping->pagenum + size_pages1, size_pages2, pmapping.mapping->image_skip_pages + size_pages1, 0, pmapping.mapping->cow, pmapping.mapping->binary_mapping);
+            new_mappings.emplace_back(map);
             pmapping.mapping->pages = size_pages1;
             auto iterator = pmapping.mapping->mappings.begin();
             while (iterator != pmapping.mapping->mappings.end()) {
                 auto &mapping = *iterator;
-                if (mapping.page >= map.pagenum && mapping.page < (map.pagenum + map.pages)) {
-                    map.mappings.push_back((const PhysMapping &) mapping);
+                if (mapping.page >= map->pagenum && mapping.page < (map->pagenum + map->pages)) {
+                    map->mappings.push_back((const PhysMapping &) mapping);
                     pmapping.mapping->mappings.erase(iterator);
                     continue;
                 }
@@ -1334,22 +1370,22 @@ bool Process::page_fault(ProcThread &thread, task &current_task, Interrupt &intr
 }
 
 bool Process::exception(task &current_task, const std::string &name, Interrupt &intr) {
-    std::shared_ptr<kfile> image{};
+    reference<kfile> image{};
     uintptr_t ivaddr;
     uintptr_t offset;
     auto rip = intr.rip();
     for (const auto &mapping : mappings) {
-        auto file = mapping.image;
+        auto &file = mapping->image;
         if (file) {
-            uintptr_t vaddr = mapping.pagenum;
+            uintptr_t vaddr = mapping->pagenum;
             vaddr = vaddr << 12;
             if (rip > vaddr && (!image || vaddr > ivaddr)) {
-                image = file;
+                image = file.CreateReference(self_ref.lock());
                 ivaddr = vaddr;
-                offset = mapping.image_skip_pages;
+                offset = mapping->image_skip_pages;
                 offset = offset << 12;
             }
-            std::cerr << " - " << file->Name() << " " << std::hex << mapping.image_skip_pages << "000 " << vaddr << " - " << (mapping.pagenum + mapping.pages - 1) << "FFF\n";
+            std::cerr << " - " << file->Name() << " " << std::hex << mapping->image_skip_pages << "000 " << vaddr << " - " << (mapping->pagenum + mapping->pages - 1) << "FFF\n";
         }
     }
     std::cerr << "Exception <"<< name <<"> in user process at " << std::hex << rip << std::dec;
@@ -1510,14 +1546,14 @@ bool Process::readable(uintptr_t addr) {
         uintptr_t xaddr{addr};
         xaddr = xaddr >> 12;
         page = xaddr;
-        MemMapping *mapping{nullptr};
+        std::shared_ptr<MemMapping> mapping{};
         for (auto &m: mappings) {
-            if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-                mapping = &m;
+            if (m->pagenum <= page && page < (m->pagenum + m->pages)) {
+                mapping = m;
                 break;
             }
         }
-        if (mapping == nullptr) {
+        if (!mapping) {
             std::cerr << "User process page resolve: No mapping for page " << std::hex << page << std::dec << "\n";
             return false;
         }
@@ -1602,14 +1638,14 @@ bool Process::sync_resolve_page(uintptr_t fault_addr) {
         addr = addr >> 12;
         page = addr;
     }
-    MemMapping *mapping{nullptr};
+    std::shared_ptr<MemMapping> mapping{};
     for (auto &m : mappings) {
-        if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-            mapping = &m;
+        if (m->pagenum <= page && page < (m->pagenum + m->pages)) {
+            mapping = m;
             break;
         }
     }
-    if (mapping == nullptr) {
+    if (!mapping) {
         std::cerr << "User process page resolve: No mapping for page " << std::hex << page << std::dec << "\n";
         return false;
     }
@@ -1679,7 +1715,10 @@ bool Process::sync_resolve_page(uintptr_t fault_addr) {
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
         std::cout << "Loading page " << std::hex << page << " for addr " << fault_addr << " from " << physpage << std::dec << "\n";
 #endif
-        auto image = mapping->image;
+        reference<kfile> image{};
+        if (mapping->image) {
+            image = mapping->image.CreateReference(self_ref.lock());
+        }
         bool pre_existing{true};
         phys_t phys_page{0};
         filepage_ref loaded_page{};
@@ -1693,6 +1732,9 @@ bool Process::sync_resolve_page(uintptr_t fault_addr) {
         if (phys_page == 0) {
             pre_existing = false;
             if (image) {
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
+                std::cout << "Load from image requires async load\n";
+#endif
                 return false;
             } else {
                 phys_page = ppagealloc(PAGESIZE);
@@ -1710,9 +1752,9 @@ bool Process::sync_resolve_page(uintptr_t fault_addr) {
         }
         bool ok{false};
         for (auto &m : mappings) {
-            if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-                if (m.image) {
-                    if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
+            if (m->pagenum <= page && page < (m->pagenum + m->pages)) {
+                if (m->image) {
+                    if (mapping != m || physpage != (m->image_skip_pages + (page - m->pagenum)) || &(*image) != &(*(m->image))) {
                         std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page
                                   << std::dec << "\n";
                         if (!loaded_page && !pre_existing) {
@@ -1721,7 +1763,7 @@ bool Process::sync_resolve_page(uintptr_t fault_addr) {
                         return false;
                     }
                 } else {
-                    if (mapping != &m || loaded_page) {
+                    if (mapping != m || loaded_page) {
                         std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page
                                   << std::dec << "\n";
                         if (!loaded_page && !pre_existing) {
@@ -1921,14 +1963,14 @@ bool Process::resolve_page(uintptr_t fault_addr) {
         addr = addr >> 12;
         page = addr;
     }
-    MemMapping *mapping{nullptr};
+    std::shared_ptr<MemMapping> mapping{};
     for (auto &m : mappings) {
-        if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-            mapping = &m;
+        if (m->pagenum <= page && page < (m->pagenum + m->pages)) {
+            mapping = m;
             break;
         }
     }
-    if (mapping == nullptr) {
+    if (!mapping) {
         std::cerr << "User process page resolve: No mapping for page " << std::hex << page << std::dec << "\n";
         return false;
     }
@@ -1998,7 +2040,10 @@ bool Process::resolve_page(uintptr_t fault_addr) {
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
         std::cout << "Loading page " << std::hex << page << " for addr " << fault_addr << " from " << physpage << std::dec << "\n";
 #endif
-        auto image = mapping->image;
+        reference<kfile> image{};
+        if (mapping->image) {
+            image = mapping->image.CreateReference(self_ref.lock());
+        }
         bool pre_existing{true};
         phys_t phys_page{0};
         filepage_ref loaded_page{};
@@ -2049,9 +2094,9 @@ bool Process::resolve_page(uintptr_t fault_addr) {
         }
         bool ok{false};
         for (auto &m : mappings) {
-            if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-                if (m.image) {
-                    if (mapping != &m || physpage != (m.image_skip_pages + (page - m.pagenum)) || image != m.image) {
+            if (m->pagenum <= page && page < (m->pagenum + m->pages)) {
+                if (m->image) {
+                    if (mapping != m || physpage != (m->image_skip_pages + (page - m->pagenum)) || &(*image) != &(*(m->image))) {
                         std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page
                                   << std::dec << "\n";
                         if (!loaded_page && !pre_existing) {
@@ -2060,7 +2105,7 @@ bool Process::resolve_page(uintptr_t fault_addr) {
                         return false;
                     }
                 } else {
-                    if (mapping != &m || loaded_page) {
+                    if (mapping != m || loaded_page) {
                         std::cerr << "User process page resolve: Mapping was removed for page " << std::hex << page
                                   << std::dec << "\n";
                         if (!loaded_page && !pre_existing) {
@@ -2205,14 +2250,14 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
         addr = addr >> 12;
         page = addr;
     }
-    MemMapping *mapping{nullptr};
+    std::shared_ptr<MemMapping> mapping{};
     for (auto &m : mappings) {
-        if (m.pagenum <= page && page < (m.pagenum + m.pages)) {
-            mapping = &m;
+        if (m->pagenum <= page && page < (m->pagenum + m->pages)) {
+            mapping = m;
             break;
         }
     }
-    if (mapping == nullptr) {
+    if (!mapping) {
         std::cerr << "User process page resolve (w): No mapping for page " << std::hex << page << std::dec << "\n";
         return ResolveWrite::ERROR;
     }
@@ -2633,16 +2678,17 @@ bool Process::resolve_write(uintptr_t addr, uintptr_t len) {
     }
 }
 
-kfile_result<std::shared_ptr<kfile>> Process::ResolveFile(const std::string &filename) {
-    std::shared_ptr<kfile> cwd_ref{};
+kfile_result<reference<kfile>> Process::ResolveFile(const std::shared_ptr<class referrer> &referrer, const std::string &filename) {
+    std::shared_ptr<class referrer> selfRef = this->self_ref.lock();
+    reference<kfile> cwd_ref{};
     {
         std::lock_guard lock{mtx};
-        cwd_ref = this->cwd;
+        cwd_ref = this->cwd.CreateReference(selfRef);
     }
     kdirectory *cwd = cwd_ref ? dynamic_cast<kdirectory *>(&(*cwd_ref)) : nullptr;
 
     auto rootdir = get_kernel_rootdir();
-    std::shared_ptr<kfile> litem{};
+    reference<kfile> litem{};
     if (filename.starts_with("/")) {
         std::string resname{};
         resname.append(filename.c_str()+1);
@@ -2652,25 +2698,30 @@ kfile_result<std::shared_ptr<kfile>> Process::ResolveFile(const std::string &fil
             resname = trim;
         }
         if (!resname.empty()) {
-            auto result = rootdir->Resolve(&(*rootdir), resname);
+            auto result = rootdir->Resolve(&(*rootdir), selfRef, resname);
             if (result.status != kfile_status::SUCCESS) {
                 return {.result = {}, .status = result.status};
             }
-            litem = result.result;
+            litem = std::move(result.result);
         } else {
-            litem = rootdir;
+            litem = rootdir->CreateReference(selfRef);
         }
     } else {
         if (filename.empty() || cwd == nullptr) {
             return {};
         }
-        auto result = cwd->Resolve(&(*rootdir), filename);
+        auto result = cwd->Resolve(&(*rootdir), selfRef, filename);
         if (result.status != kfile_status::SUCCESS) {
             return {.result = {}, .status = result.status};
         }
-        litem = result.result;
+        litem = std::move(result.result);
     }
-    return {.result = litem, .status = kfile_status::SUCCESS};
+    if (litem) {
+        auto refCopy = litem.CreateReference(referrer);
+        return {.result = std::move(refCopy), .status = kfile_status::SUCCESS};
+    } else {
+        return {.result = {}, .status = kfile_status::SUCCESS};
+    }
 }
 
 FileDescriptor Process::get_file_descriptor_impl(int fd) {
@@ -2722,22 +2773,22 @@ bool Process::close_file_descriptor(int fd) {
 bool Process::brk(intptr_t brk_addr, uintptr_t &result) {
     constexpr uint64_t highEnd = ((uint64_t) PMLT4_USERSPACE_HIGH_END) << (9 + 9 + 9 + 12);
     std::lock_guard lock{mtx};
-    MemMapping *mapping{nullptr};
+    std::shared_ptr<MemMapping> mapping{};
     for (auto &m : mappings) {
-        if (!m.binary_mapping) {
+        if (!m->binary_mapping) {
             continue;
         }
-        if (mapping == nullptr) {
-            mapping = &m;
+        if (!mapping) {
+            mapping = m;
             continue;
         }
-        auto mappingEnd = m.pagenum + m.pages;
+        auto mappingEnd = m->pagenum + m->pages;
         auto compMappingEnd = mapping->pagenum + mapping->pages;
         if (mappingEnd > compMappingEnd) {
-            mapping = &m;
+            mapping = m;
         }
     }
-    if (mapping == nullptr) {
+    if (!mapping) {
         return false;
     }
     if (mapping->image) {
@@ -2868,6 +2919,14 @@ int Process::getpgid(pid_t pid) {
     }
     std::cerr << "getpgid: "<<std::dec<<pid<< "\n";
     return -EPERM;
+}
+
+reference<kfile> Process::GetCwd(std::shared_ptr<class referrer> &referrer) const {
+    return cwd.CreateReference(referrer);
+}
+
+void Process::SetCwd(const reference<kfile> &cwd) {
+    this->cwd = cwd.CreateReference(self_ref.lock());
 }
 
 int Process::sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize) {

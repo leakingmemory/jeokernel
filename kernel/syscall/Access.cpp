@@ -6,6 +6,7 @@
 #include <exec/procthread.h>
 #include <fcntl.h>
 #include "SyscallCtx.h"
+#include "impl/SysFaccessatImpl.h"
 
 //#define DEBUG_ACCESS_CALL
 
@@ -18,7 +19,7 @@ int64_t Access::Call(int64_t uptr_filename, int64_t mode, int64_t, int64_t, Sysc
         std::string filename{u_filename};
 
         ctx.GetProcess().QueueBlocking(task_id, [this, ctx, filename, mode] () mutable {
-            auto res = DoFaccessat(ctx.GetProcess(), AT_FDCWD, filename, mode, 0);
+            auto res = SysFaccessatImpl::Create()->DoFaccessat(ctx.GetProcess(), AT_FDCWD, filename, mode, 0);
 #ifdef DEBUG_ACCESS_CALL
             std::cout << "access(" << filename << ", " << std::hex << mode << std::dec << ") => " << res << "\n";
 #endif

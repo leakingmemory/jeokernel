@@ -8,6 +8,8 @@
 #include <kfs/kfiles.h>
 #include <files/fsreference.h>
 #include <files/fsreferrer.h>
+#include <files/fsresource.h>
+#include <resource/resource.h>
 
 class kfile_impl;
 
@@ -15,12 +17,13 @@ template <class T> concept kfile_impl_sub = requires(T *a, kfile_impl *b) {
     {b = a};
 };
 
-class kfile_impl : public kfile, public fsreferrer {
+class kfile_impl : public kfile, public referrer, public fsreferrer, public resource<kfile_impl>, public fsresourceunwinder {
     friend kdirectory_impl;
 private:
     fsreference<fileitem> file{};
 protected:
-    kfile_impl(const std::string &name) : kfile(name), fsreferrer("kfile_impl") {}
+    kfile_impl(const std::string &name) : kfile(name), referrer("kfile_impl"), fsreferrer("kfile_impl"), resource<kfile_impl>() {}
+    kfile_impl *GetResource() override;
 public:
     kfile_impl() = delete;
     kfile_impl(const kfile_impl &) = delete;
@@ -35,6 +38,7 @@ public:
         return shobj;
     }
     std::string GetReferrerIdentifier() override;
+    void PrintTraceBack(int indent) override;
     fileitem *GetFileitem() const override;
     uint32_t Mode() const override;
     std::size_t Size() const override;

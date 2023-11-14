@@ -13,7 +13,6 @@ class ProcThread;
 class Readlink : public Syscall, private SyscallAsyncThread {
 public:
     Readlink(SyscallHandler &handler) : Syscall(handler, 89), SyscallAsyncThread("[readlink]") {}
-    std::string DoReadlink(ProcThread &, const std::string &path, int &errno);
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;
 };
 

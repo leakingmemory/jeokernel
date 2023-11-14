@@ -7,6 +7,8 @@
 #include <exec/files.h>
 #include <kfs/kfiles.h>
 #include <mutex>
+#include <resource/reference.h>
+#include <resource/referrer.h>
 
 void FsStat::Stat(const kfile &file, struct stat64 &st) {
     st.st_mode = file.Mode();
@@ -65,22 +67,42 @@ void FsStat::Stat(const kfile &file, statx &st) {
     }
 }
 
-FsFileDescriptorHandler::FsFileDescriptorHandler(const FsFileDescriptorHandler &cp) : FileDescriptorHandler() {
+FsFileDescriptorHandler::FsFileDescriptorHandler(const FsFileDescriptorHandler &cp) : FileDescriptorHandler(), referrer("FsFileDescriptorHandler") {
     std::lock_guard lock{*((hw_spinlock *) &(cp.mtx))};
     CopyFrom(cp);
-    this->file = cp.file;
     this->offset = cp.offset;
     this->openRead = cp.openRead;
     this->openWrite = cp.openWrite;
     this->nonblock = cp.nonblock;
 }
 
-std::shared_ptr<FileDescriptorHandler> FsFileDescriptorHandler::clone() {
-    return std::make_shared<FsFileDescriptorHandler>((const FsFileDescriptorHandler &) *this);
+std::shared_ptr<FsFileDescriptorHandler>
+FsFileDescriptorHandler::Create(const reference<kfile> &file, bool openRead, bool openWrite, bool nonblock) {
+    std::shared_ptr<FsFileDescriptorHandler> handler{new FsFileDescriptorHandler(openRead, openWrite, nonblock)};
+    std::weak_ptr<FsFileDescriptorHandler> weakPtr{handler};
+    handler->selfRef = weakPtr;
+    handler->file = file.CreateReference(handler);
+    return handler;
 }
 
-std::shared_ptr<kfile> FsFileDescriptorHandler::get_file() {
-    return file;
+std::shared_ptr<FsFileDescriptorHandler> FsFileDescriptorHandler::Create(const FsFileDescriptorHandler &cp) {
+    std::shared_ptr<FsFileDescriptorHandler> handler{new FsFileDescriptorHandler(cp)};
+    std::weak_ptr<FsFileDescriptorHandler> weakPtr{handler};
+    handler->selfRef = weakPtr;
+    handler->file = cp.file.CreateReference(handler);
+    return handler;
+}
+
+std::string FsFileDescriptorHandler::GetReferrerIdentifier() {
+    return "";
+}
+
+std::shared_ptr<FileDescriptorHandler> FsFileDescriptorHandler::clone() {
+    return FsFileDescriptorHandler::Create((const FsFileDescriptorHandler &) *this);
+}
+
+reference<kfile> FsFileDescriptorHandler::get_file(std::shared_ptr<class referrer> &referrer) {
+    return file.CreateReference(referrer);
 }
 
 bool FsFileDescriptorHandler::can_seek() {
@@ -184,10 +206,10 @@ int FsFileDescriptorHandler::readdir(const std::function<bool (kdirent &dirent)>
     return -ENOTDIR;
 }
 
-FsDirectoryDescriptorHandler::FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &cp) : FileDescriptorHandler(), dir(), readdirInited(false), dirents(), iterator() {
+FsDirectoryDescriptorHandler::FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &cp) : FileDescriptorHandler(),
+                                                                                                     referrer("FsDirectoryDescriptorHandler"), dir(), readdirInited(false), dirents(), iterator() {
     std::lock_guard lock{*((hw_spinlock *) &(cp.mtx))};
     CopyFrom(cp);
-    dir = cp.dir;
     readdirInited = cp.readdirInited;
     dirents = cp.dirents;
     iterator = dirents.begin();
@@ -203,13 +225,29 @@ FsDirectoryDescriptorHandler::FsDirectoryDescriptorHandler(const FsDirectoryDesc
     }
 }
 
-std::shared_ptr<FileDescriptorHandler> FsDirectoryDescriptorHandler::clone() {
-    return std::make_shared<FsDirectoryDescriptorHandler>((const FsDirectoryDescriptorHandler &) *this);
+std::shared_ptr<FsDirectoryDescriptorHandler> FsDirectoryDescriptorHandler::Create(const reference<kdirectory> &reference) {
+    std::shared_ptr<FsDirectoryDescriptorHandler> handler{new FsDirectoryDescriptorHandler()};
+    std::weak_ptr<FsDirectoryDescriptorHandler> weakPtr{handler};
+    handler->selfRef = weakPtr;
+    handler->dir = reference.CreateReference(handler);
+    return handler;
 }
 
-std::shared_ptr<kfile> FsDirectoryDescriptorHandler::get_file() {
-    std::shared_ptr<kfile> f{dir};
-    return f;
+std::string FsDirectoryDescriptorHandler::GetReferrerIdentifier() {
+    return "";
+}
+
+std::shared_ptr<FileDescriptorHandler> FsDirectoryDescriptorHandler::clone() {
+    std::shared_ptr<FsDirectoryDescriptorHandler> handler{new FsDirectoryDescriptorHandler((const FsDirectoryDescriptorHandler &) *this)};
+    std::weak_ptr<FsDirectoryDescriptorHandler> weakPtr{handler};
+    handler->selfRef = weakPtr;
+    handler->dir = dir.CreateReference(handler);
+    return handler;
+}
+
+reference<kfile> FsDirectoryDescriptorHandler::get_file(std::shared_ptr<class referrer> &referrer) {
+    auto dirRef = dir->CreateReference(referrer);
+    return reference_dynamic_cast<kfile>(std::move(dirRef));
 }
 
 bool FsDirectoryDescriptorHandler::can_seek() {

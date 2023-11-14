@@ -9,8 +9,80 @@
 #include <iostream>
 #include <exec/exec.h>
 #include <exec/procthread.h>
+#include <resource/referrer.h>
+#include <resource/reference.h>
 
 //#define DEBUG_EXECVE
+
+class Execve_Call : public referrer {
+private:
+    std::weak_ptr<Execve_Call> selfRef{};
+    Execve_Call() : referrer("Execve_Call") {}
+public:
+    static std::shared_ptr<Execve_Call> Create();
+    std::string GetReferrerIdentifier() override;
+    void Call(SyscallCtx &ctx, const std::string &filename, const std::vector<std::string> &argv, const std::vector<std::string> &env);
+};
+
+std::shared_ptr<Execve_Call> Execve_Call::Create() {
+    std::shared_ptr<Execve_Call> e{new Execve_Call()};
+    std::weak_ptr<Execve_Call> w{e};
+    e->selfRef = w;
+    return e;
+}
+
+std::string Execve_Call::GetReferrerIdentifier() {
+    return "";
+}
+
+void Execve_Call::Call(SyscallCtx &ctx, const std::string &filename, const std::vector<std::string> &argv, const std::vector<std::string> &env) {
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    auto binary = ctx.GetProcess().ResolveFile(selfRef, filename);
+    if (binary.status != kfile_status::SUCCESS) {
+        ctx.ReturnWhenNotRunning(-EIO);
+        return;
+    }
+    int linkLimit = 20;
+    while (binary.result) {
+        if (!reference_is_a<ksymlink>(binary.result)) {
+            break;
+        }
+        reference<ksymlink> symlink = reference_dynamic_cast<ksymlink>(std::move(binary.result));
+        if (linkLimit == 0) {
+            ctx.ReturnWhenNotRunning(-ELOOP);
+            return;
+        }
+        --linkLimit;
+        auto rootdir = get_kernel_rootdir();
+        binary = symlink->Resolve(&(*rootdir), selfRef);
+        if (binary.status != kfile_status::SUCCESS) {
+            ctx.ReturnWhenNotRunning(-EIO);
+            return;
+        }
+    }
+    if (!binary.result) {
+        ctx.ReturnWhenNotRunning(-ENOENT);
+        return;
+    }
+    ctx.GetProcess().GetProcess()->TearDownMemory();
+    auto cwd = ctx.GetProcess().GetCwd(selfRef);
+    reference<kdirectory> cwd_dir = reference_dynamic_cast<kdirectory>(std::move(cwd));
+    std::shared_ptr<tty> tty{};
+    std::shared_ptr<Exec> exec = Exec::Create(tty, cwd, *cwd_dir, binary.result, filename, argv, env, 0);
+    auto result = exec->RunFromExistingProcess(&(ctx.GetProcess()), [ctx] (bool success, const ExecStartVector &startVector) {
+        if (!success) {
+            ctx.KillAsync();
+            return;
+        }
+        ctx.EntrypointAsync(startVector.entrypoint, startVector.fsBase, startVector.stackAddr);
+    });
+    if (result != ExecResult::DETACHED) {
+        if (result == ExecResult::SOFTERROR) {
+            ctx.ReturnWhenNotRunning(-EINVAL);
+        }
+        ctx.KillAsync();
+    }
+}
 
 int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp, int64_t flags, SyscallAdditionalParams &params) {
     if (uptr_filename == 0 || uptr_argv == 0 || uptr_envp == 0) {
@@ -46,51 +118,7 @@ int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp
                         }
 #endif
                         Queue(task_id, [ctx, filename, argv, env] () mutable {
-                            auto binary = ctx.GetProcess().ResolveFile(filename);
-                            if (binary.status != kfile_status::SUCCESS) {
-                                ctx.ReturnWhenNotRunning(-EIO);
-                                return;
-                            }
-                            int linkLimit = 20;
-                            while (binary.result) {
-                                std::shared_ptr<ksymlink> symlink = std::dynamic_pointer_cast<ksymlink>(binary.result);
-                                if (!symlink) {
-                                    break;
-                                }
-                                if (linkLimit == 0) {
-                                    ctx.ReturnWhenNotRunning(-ELOOP);
-                                    return;
-                                }
-                                --linkLimit;
-                                auto rootdir = get_kernel_rootdir();
-                                binary = symlink->Resolve(&(*rootdir));
-                                if (binary.status != kfile_status::SUCCESS) {
-                                    ctx.ReturnWhenNotRunning(-EIO);
-                                    return;
-                                }
-                            }
-                            if (!binary.result) {
-                                ctx.ReturnWhenNotRunning(-ENOENT);
-                                return;
-                            }
-                            ctx.GetProcess().GetProcess()->TearDownMemory();
-                            auto cwd = ctx.GetProcess().GetCwd();
-                            std::shared_ptr<kdirectory> cwd_dir = std::dynamic_pointer_cast<kdirectory>(cwd);
-                            std::shared_ptr<tty> tty{};
-                            Exec exec{tty, cwd, *cwd_dir, binary.result, filename, argv, env, 0};
-                            auto result = exec.RunFromExistingProcess(&(ctx.GetProcess()), [ctx] (bool success, const ExecStartVector &startVector) {
-                                if (!success) {
-                                    ctx.KillAsync();
-                                    return;
-                                }
-                                ctx.EntrypointAsync(startVector.entrypoint, startVector.fsBase, startVector.stackAddr);
-                            });
-                            if (result != ExecResult::DETACHED) {
-                                if (result == ExecResult::SOFTERROR) {
-                                    ctx.ReturnWhenNotRunning(-EINVAL);
-                                }
-                                ctx.KillAsync();
-                            }
+                            Execve_Call::Create()->Call(ctx, filename, argv, env);
                         });
                         return resolve_return_value::AsyncReturn();
                     });

@@ -31,7 +31,7 @@ std::shared_ptr<FileDescriptorHandler> StdinDesc::clone() {
     return std::make_shared<StdinDesc>((const StdinDesc &) *this);
 }
 
-std::shared_ptr<kfile> StdinDesc::get_file() {
+reference<kfile> StdinDesc::get_file(std::shared_ptr<class referrer> &referrer) {
     return {};
 }
 

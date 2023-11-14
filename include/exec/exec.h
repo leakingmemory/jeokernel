@@ -10,6 +10,8 @@
 #include <string>
 #include <sys/types.h>
 #include <functional>
+#include <resource/reference.h>
+#include <resource/referrer.h>
 
 class tty;
 class kfile;
@@ -20,13 +22,16 @@ class UserElf;
 class exec_pageinfo;
 class ProcThread;
 
-class ExecState {
+class ExecState : public referrer {
 private:
-    std::shared_ptr<kfile> cwd_ref;
+    std::weak_ptr<ExecState> selfRef{};
+    reference<kfile> cwd_ref{};
     kdirectory &cwd;
+    ExecState(kdirectory &cwd) : referrer("ExecState"), cwd(cwd) {}
 public:
-    ExecState(const std::shared_ptr<kfile> &cwd_ref, kdirectory &cwd) : cwd_ref(cwd_ref), cwd(cwd) {}
-    std::shared_ptr<kfile> ResolveFile(const std::string &filename);
+    static std::shared_ptr<ExecState> Create(const reference<kfile> &cwd_ref, kdirectory &cwd);
+    std::string GetReferrerIdentifier() override;
+    reference<kfile> ResolveFile(const std::shared_ptr<class referrer> &referrer, const std::string &filename);
 };
 
 class Process;
@@ -43,22 +48,29 @@ struct ExecStartVector {
     uintptr_t stackAddr;
 };
 
-class Exec {
+class Exec : public referrer {
 private:
+    std::weak_ptr<Exec> selfRef{};
     std::shared_ptr<class tty> tty;
-    std::shared_ptr<kfile> cwd_ref;
+    reference<kfile> cwd_ref{};
     kdirectory &cwd;
-    std::shared_ptr<kfile> binary;
+    reference<kfile> binary{};
     std::string name;
     std::vector<std::string> argv;
     std::vector<std::string> env;
     pid_t parent_pid;
+    Exec(const std::shared_ptr<class tty> &tty, kdirectory &cwd, const std::string &name, const std::vector<std::string> &argv, const std::vector<std::string> &env, pid_t parent_pid) : referrer("Exec"), tty(tty), cwd(cwd), name(name), argv(argv), env(env), parent_pid(parent_pid) {}
 public:
-    Exec(const std::shared_ptr<class tty> &tty, const std::shared_ptr<kfile> &cwd_ref, kdirectory &cwd, std::shared_ptr<kfile> binary, const std::string &name, const std::vector<std::string> &argv, const std::vector<std::string> &env, pid_t parent_pid) : tty(tty), cwd_ref(cwd_ref), cwd(cwd), binary(binary), name(name), argv(argv), env(env), parent_pid(parent_pid) {}
+    Exec(const Exec &) = delete;
+    Exec(Exec &&) = delete;
+    Exec &operator =(const Exec &) = delete;
+    Exec &operator =(Exec &&) = delete;
+    static std::shared_ptr<Exec> Create(const std::shared_ptr<class tty> &tty, const reference<kfile> &cwd_ref, kdirectory &cwd, const reference<kfile> &binary, const std::string &name, const std::vector<std::string> &argv, const std::vector<std::string> &env, pid_t parent_pid);
+    std::string GetReferrerIdentifier() override;
 private:
     static bool LoadLoads(kfile &binary, ELF_loads &loads, UserElf &userElf);
     static void Pages(std::vector<exec_pageinfo> &pages, ELF_loads &loads, UserElf &userElf);
-    static void MapPages(std::shared_ptr<kfile> binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset);
+    static void MapPages(const reference<kfile> &binary, ProcThread *process, std::vector<exec_pageinfo> &pages, ELF_loads &loads, uintptr_t relocationOffset);
     static uintptr_t ProgramBreakAlign(uintptr_t pbrk);
     ExecResult Run(ProcThread *process, const std::function<void (bool success, const ExecStartVector &)> &);
 public:
