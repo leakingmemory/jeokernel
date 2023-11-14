@@ -129,7 +129,7 @@ public:
     ext2fs_get_inode_result GetInode(std::size_t inode_num);
     filesystem_get_node_result<fsreference<directory>> GetDirectory(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num);
     filesystem_get_node_result<fsreference<fileitem>> GetFile(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num);
-    filesystem_get_node_result<fsreference<symlink>> GetSymlink(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num);
+    filesystem_get_node_result<fsreference<class symlink>> GetSymlink(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num);
     ext2fs_get_inode_result AllocateInode();
     filesystem_status ReleaseInode(uint32_t inodeNum);
     ext2fs_allocate_blocks_result AllocateBlocks(std::size_t requestedCount);

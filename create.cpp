@@ -4,10 +4,12 @@
 
 #include "create.h"
 #include "mkdir.h"
+#include "mockreferrer.h"
 #include <iostream>
 
-int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
-    std::shared_ptr<fileitem> file{};
+int create(const fsreference<directory> &rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
+    auto referrer = std::make_shared<mockreferrer>();
+    fsreference<fileitem> file{};
     std::string createFileName{};
     bool pathCreate{false};
     bool nextDir{false};
@@ -46,8 +48,8 @@ int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
             if ((slashpos = path.find_last_of('/')) < path.size()) {
                 createFileName = path.substr(slashpos + 1);
                 path.resize(slashpos);
-                auto result = rootdir->Resolve(path);
-                file = result.file;
+                auto result = rootdir->Resolve(referrer, path);
+                file = std::move(result.file);
                 if (!file) {
                     if (result.status == fileitem_status::SUCCESS) {
                         if (pathCreate) {
@@ -65,7 +67,7 @@ int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
                     }
                 }
             } else {
-                file = rootdir;
+                file = rootdir.CreateReference(referrer);
             }
         }
         if (createFileName.empty()) {
@@ -73,7 +75,7 @@ int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
             return 3;
         }
 
-        std::shared_ptr<directory> dir = std::dynamic_pointer_cast<directory>(file);
+        fsreference<directory> dir = fsreference_dynamic_cast<directory>(std::move(file));
         if (!dir) {
             std::cerr << "Not a directory\n";
             continue;
@@ -81,7 +83,7 @@ int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
 
         std::cout << "Will create " << createFileName << "\n";
 
-        auto createResult = dir->CreateFile(createFileName, 00644);
+        auto createResult = dir->CreateFile(referrer, createFileName, 00644);
         if (!createResult.file || createResult.status != fileitem_status::SUCCESS) {
             switch (createResult.status) {
                 case fileitem_status::IO_ERROR:

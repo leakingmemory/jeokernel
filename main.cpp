@@ -11,6 +11,7 @@
 #include "cat.h"
 #include "create.h"
 #include "mkdir.h"
+#include "mockreferrer.h"
 
 bool is_fswrite(std::vector<std::string>::iterator args, const std::vector<std::string>::iterator &args_end) {
     if (args != args_end) {
@@ -26,7 +27,7 @@ bool is_fswrite(std::vector<std::string>::iterator args, const std::vector<std::
     return false;
 }
 
-int fsmain(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
+int fsmain(const fsreference<directory> &rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
     if (args != args_end) {
         auto cmd = *args;
         ++args;
@@ -43,12 +44,13 @@ int fsmain(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterato
             return 1;
         }
     }
+    auto referrer = std::make_shared<mockreferrer>();
     auto entriesResult = rootdir->Entries();
     if (entriesResult.status == fileitem_status::SUCCESS) {
         for (auto entry: entriesResult.entries) {
-            auto itemResult = entry->LoadItem();
+            auto itemResult = entry->LoadItem(referrer);
             if (itemResult.status == fileitem_status::SUCCESS) {
-                auto item = itemResult.file;
+                auto item = std::move(itemResult.file);
                 std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << entry->Name()
                           << "\n";
             } else {
@@ -156,10 +158,11 @@ int blockdevmain(std::shared_ptr<blockdev> bdev, std::string fsname, std::vector
         std::cerr << "Failed to open filesystem " << fsname << "\n";
         return 1;
     }
-    std::shared_ptr<directory> rootdir{};
+    auto referrer = std::make_shared<mockreferrer>();
+    fsreference<directory> rootdir{};
     {
-        auto rootdirResult = fs->GetRootDirectory(fs);
-        rootdir = rootdirResult.node;
+        auto rootdirResult = fs->GetRootDirectory(fs, referrer);
+        rootdir = std::move(rootdirResult.node);
         if (!rootdir) {
             if (rootdirResult.status == filesystem_status::SUCCESS) {
                 std::cerr << "Failed to open filesystem root directory " << fsname << "\n";
