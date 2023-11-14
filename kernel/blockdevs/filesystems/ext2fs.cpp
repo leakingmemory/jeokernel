@@ -529,7 +529,7 @@ filesystem_get_node_result<fsreference<fileitem>> ext2fs::GetFile(std::shared_pt
     return {.node = std::move(fileitemReference), .status = filesystem_status::SUCCESS};
 }
 
-filesystem_get_node_result<fsreference<symlink>> ext2fs::GetSymlink(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num) {
+filesystem_get_node_result<fsreference<class symlink>> ext2fs::GetSymlink(std::shared_ptr<filesystem> shared_this, const std::shared_ptr<fsreferrer> &referrer, std::size_t inode_num) {
     if (!shared_this || this != ((ext2fs *) &(*shared_this))) {
         std::cerr << "Wrong shared reference for filesystem when opening directory\n";
         return {.node = {}, .status = filesystem_status::INVALID_REQUEST};

@@ -10,6 +10,8 @@
 #include <vector>
 #include <files/directory.h>
 
-int ls(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end);
+template <class T> class fsreference;
+
+int ls(const fsreference<directory> &rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end);
 
 #endif //FSBITS_LS_H

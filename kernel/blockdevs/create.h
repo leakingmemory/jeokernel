@@ -10,6 +10,8 @@
 #include <vector>
 #include <files/directory.h>
 
-int create(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end);
+template <class T> class fsreference;
+
+int create(const fsreference<directory> &rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end);
 
 #endif //FSBITS_CREATE_H

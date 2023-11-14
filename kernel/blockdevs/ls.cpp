@@ -5,16 +5,18 @@
 #include <iostream>
 #include <files/symlink.h>
 #include "ls.h"
+#include "mockreferrer.h"
 
-int ls(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
-    std::shared_ptr<fileitem> file = rootdir;
+int ls(const fsreference<directory> &rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
+    auto referrer = std::make_shared<mockreferrer>();
+    fsreference<fileitem> file = rootdir.CreateReference(referrer);
     std::string final_filename{};
     if (args != args_end) {
         std::string path = *args;
         ++args;
         std::cout << "Looking for path: " << path << "\n";
-        auto fileResolve = rootdir->Resolve(path);
-        file = fileResolve.file;
+        auto fileResolve = rootdir->Resolve(referrer, path);
+        file = std::move(fileResolve.file);
         if (!file) {
             if (fileResolve.status == fileitem_status::SUCCESS) {
                 std::cerr << "Path not found: " << path << "\n";
@@ -30,9 +32,9 @@ int ls(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &a
             auto entriesResult = dir->Entries();
             if (entriesResult.status == fileitem_status::SUCCESS) {
                 for (auto entry : entriesResult.entries) {
-                    auto itemResult = entry->LoadItem();
+                    auto itemResult = entry->LoadItem(referrer);
                     if (itemResult.status == fileitem_status::SUCCESS) {
-                        auto item = itemResult.file;
+                        auto item = std::move(itemResult.file);
                         std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " "
                                   << item->SysDevId()
                                   << ":" << item->InodeNum() << " " << entry->Name();
@@ -50,7 +52,7 @@ int ls(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &a
                 std::cerr << "Directory error: " << text(entriesResult.status) << "\n";
             }
         } else {
-            auto item = file;
+            auto item = std::move(file);
             std::cout << std::oct << item->Mode() << std::dec << " " << item->Size() << " " << item->SysDevId() << ":" << item->InodeNum() << " " << final_filename << "\n";
         }
     }

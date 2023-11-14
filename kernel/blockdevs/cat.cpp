@@ -4,16 +4,18 @@
 
 #include <iostream>
 #include "cat.h"
+#include "mockreferrer.h"
 
-int cat(std::shared_ptr<directory> rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
-    std::shared_ptr<fileitem> file = rootdir;
+int cat(const fsreference<directory> &rootdir, std::vector<std::string>::iterator &args, const std::vector<std::string>::iterator &args_end) {
+    auto referrer = std::make_shared<mockreferrer>();
+    fsreference<fileitem> file = rootdir.CreateReference(referrer);
     std::string final_filename{};
     while (args != args_end) {
         {
             std::string path = *args;
             ++args;
-            auto result = rootdir->Resolve(path);
-            file = result.file;
+            auto result = rootdir->Resolve(referrer, path);
+            file = std::move(result.file);
             if (!file) {
                 if (result.status == fileitem_status::SUCCESS) {
                     std::cerr << "Path not found: " << path << "\n";
