@@ -254,7 +254,7 @@ private:
     std::vector<PagetableRoot> pagetableRoots;
     std::vector<std::shared_ptr<MemMapping>> mappings;
     std::vector<MemoryMapSnapshot> memoryMapSnapshots{};
-    std::vector<FileDescriptor> fileDescriptors;
+    std::vector<std::shared_ptr<FileDescriptor>> fileDescriptors;
     std::vector<BinaryRelocation> relocations;
     std::vector<ProcessAborterFunc> aborterFunc{};
     reference<kfile> cwd{};
@@ -368,11 +368,11 @@ public:
     uintptr_t push_64(ProcThread &, uintptr_t ptr, uint64_t val, const std::function<void (bool,uintptr_t)> &);
     kfile_result<reference<kfile>> ResolveFile(const std::shared_ptr<class referrer> &referrer, const std::string &filename);
 private:
-    FileDescriptor get_file_descriptor_impl(int);
+    std::shared_ptr<FileDescriptor> get_file_descriptor_impl(int);
 public:
-    FileDescriptor get_file_descriptor(int);
-    FileDescriptor create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler);
-    FileDescriptor create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd);
+    std::shared_ptr<FileDescriptor> get_file_descriptor(int);
+    std::shared_ptr<FileDescriptor> create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler);
+    std::shared_ptr<FileDescriptor> create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd);
     bool close_file_descriptor(int fd);
     std::shared_ptr<class tty> GetTty() const {
         return tty;

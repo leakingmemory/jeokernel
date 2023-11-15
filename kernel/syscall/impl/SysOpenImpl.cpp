@@ -149,11 +149,11 @@ int Open_Call::Call(ProcThread &proc, const std::string &filename, int flags) {
         }
         reference<kdirectory> perhapsDir = reference_dynamic_cast<kdirectory>(std::move(file));
         std::shared_ptr<FileDescriptorHandler> handler = FsDirectoryDescriptorHandler::Create(perhapsDir);
-        FileDescriptor desc = proc.create_file_descriptor(flags, handler);
+        auto desc = proc.create_file_descriptor(flags, handler);
 #ifdef DEBUG_OPENAT_CALL
-        std::cout << "openat -> " << std::dec << desc.FD() << "\n";
+        std::cout << "openat -> " << std::dec << desc->FD() << "\n";
 #endif
-        return desc.FD();
+        return desc->FD();
     }
 
     if ((flags & O_DIRECTORY) != 0) {
@@ -161,11 +161,11 @@ int Open_Call::Call(ProcThread &proc, const std::string &filename, int flags) {
     }
 
     std::shared_ptr<FileDescriptorHandler> handler = FsFileDescriptorHandler::Create(file, openRead, openWrite, (flags & O_NONBLOCK) != 0);
-    FileDescriptor desc = proc.create_file_descriptor(flags, handler);
+    auto desc = proc.create_file_descriptor(flags, handler);
 #ifdef DEBUG_OPENAT_CALL
-    std::cout << "openat -> " << std::dec << desc.FD() << "\n";
+    std::cout << "openat -> " << std::dec << desc->FD() << "\n";
 #endif
-    return desc.FD();
+    return desc->FD();
 }
 
 int SysOpenImpl::DoOpenAt(ProcThread &proc, int dfd, const std::string &filename, int flags, int mode) {

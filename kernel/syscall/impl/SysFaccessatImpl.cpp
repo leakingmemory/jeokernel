@@ -34,7 +34,10 @@ int SysFaccessatImpl::DoFaccessat(ProcThread &proc, int dfd, std::string filenam
         fileResolve = proc.ResolveFile(selfRef, filename);
     } else {
         auto fdesc = proc.get_file_descriptor(dfd);
-        auto handler = fdesc.GetHandler();
+        if (!fdesc) {
+            return -EBADF;
+        }
+        auto handler = fdesc->GetHandler();
         auto file = handler->get_file(selfRef);
         reference<kdirectory> dir = reference_dynamic_cast<kdirectory>(std::move(file));
         if (!dir) {

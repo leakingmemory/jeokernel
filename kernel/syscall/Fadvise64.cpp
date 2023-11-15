@@ -11,7 +11,7 @@ int64_t Fadvise64::Call(int64_t i_fd, int64_t offset, int64_t len, int64_t advic
     SyscallCtx ctx{params};
     int32_t fd = (int32_t) (i_fd & 0x0ffffffff);
     auto fdesc = ctx.GetProcess().get_file_descriptor(fd);
-    if (!fdesc.Valid()) {
+    if (!fdesc) {
         return EBADF;
     }
     return 0;

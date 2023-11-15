@@ -69,8 +69,8 @@ void Newfstatat_Call::Call(SyscallCtx &ctx, void *statbuf, const std::string &fi
         }
         FsStat::Stat(*file, st);
     } else {
-        FileDescriptor fd{ctx.GetProcess().get_file_descriptor(dfd)};
-        if (!fd.Valid()) {
+        std::shared_ptr<FileDescriptor> fd = ctx.GetProcess().get_file_descriptor(dfd);
+        if (!fd) {
             ctx.ReturnWhenNotRunning(-EBADF);
             return;
         }
@@ -79,7 +79,7 @@ void Newfstatat_Call::Call(SyscallCtx &ctx, void *statbuf, const std::string &fi
                 ctx.ReturnWhenNotRunning(-EINVAL);
                 return;
             }
-            if (!fd.stat(st)) {
+            if (!fd->stat(st)) {
                 ctx.ReturnWhenNotRunning(-EBADF);
                 return;
             }

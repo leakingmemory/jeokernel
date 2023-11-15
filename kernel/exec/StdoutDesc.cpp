@@ -10,15 +10,15 @@
 #include <exec/procthread.h>
 #include <fcntl.h>
 
-FileDescriptor StdoutDesc::StdoutDescriptor() {
+std::shared_ptr<FileDescriptor> StdoutDesc::StdoutDescriptor() {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
-    FileDescriptor fd{desc, 1, O_WRONLY};
+    std::shared_ptr<FileDescriptor> fd = FileDescriptor::Create(desc, 1, O_WRONLY);
     return fd;
 }
 
-FileDescriptor StdoutDesc::StderrDescriptor() {
+std::shared_ptr<FileDescriptor> StdoutDesc::StderrDescriptor() {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
-    FileDescriptor fd{desc, 2, O_WRONLY};
+    std::shared_ptr<FileDescriptor> fd = FileDescriptor::Create(desc, 2, O_WRONLY);
     return fd;
 }
 

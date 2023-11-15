@@ -80,6 +80,19 @@ void FileDescriptorHandler::SetReadyRead(bool ready) {
 void FileDescriptorHandler::Notify() {
 }
 
+std::shared_ptr<FileDescriptor>
+FileDescriptor::Create(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags) {
+    std::shared_ptr<FileDescriptor> fdesc{new FileDescriptor(fd, openFlags)};
+    std::weak_ptr<FileDescriptor> weakPtr{fdesc};
+    fdesc->selfRef = weakPtr;
+    fdesc->handler = handler;
+    return fdesc;
+}
+
+std::string FileDescriptor::GetReferrerIdentifier() {
+    return "";
+}
+
 reference<kfile> FileDescriptor::get_file(std::shared_ptr<class referrer> &referrer) const {
     return handler->get_file(referrer);
 }

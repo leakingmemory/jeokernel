@@ -33,7 +33,7 @@ int64_t Lseek::Call(int64_t i_fd, int64_t offset, int64_t i_whence, int64_t, Sys
     int fd = (int) i_fd;
     SyscallCtx ctx{params};
     auto fdesc = ctx.GetProcess().get_file_descriptor(fd);
-    if (!fdesc.Valid()) {
+    if (!fdesc) {
         return -EBADF;
     }
 #ifdef LSEEK_DEBUG
@@ -51,7 +51,7 @@ int64_t Lseek::Call(int64_t i_fd, int64_t offset, int64_t i_whence, int64_t, Sys
     }
     std::cout << ") -> ";
 #endif
-    auto result = fdesc.seek(offset, whence);
+    auto result = fdesc->seek(offset, whence);
 #ifdef LSEEK_DEBUG
     std::cout << std::dec << result << "\n";
 #endif

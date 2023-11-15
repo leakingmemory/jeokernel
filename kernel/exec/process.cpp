@@ -2724,35 +2724,44 @@ kfile_result<reference<kfile>> Process::ResolveFile(const std::shared_ptr<class 
     }
 }
 
-FileDescriptor Process::get_file_descriptor_impl(int fd) {
+std::shared_ptr<FileDescriptor> Process::get_file_descriptor_impl(int fd) {
     for (auto desc : fileDescriptors) {
-        if (desc.FD() == fd) {
+        if (desc->FD() == fd) {
             return desc;
         }
     }
     return {};
 }
 
-FileDescriptor Process::get_file_descriptor(int fd) {
+std::shared_ptr<FileDescriptor> Process::get_file_descriptor(int fd) {
     std::lock_guard lock{mtx};
     return get_file_descriptor_impl(fd);
 }
 
-FileDescriptor Process::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler) {
+std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler) {
     std::lock_guard lock{mtx};
     int fd = 0;
-    while (get_file_descriptor_impl(fd).Valid()) { ++fd; }
-    FileDescriptor desc{handler, fd, openFlags};
+    while (true) {
+        auto fdesc = get_file_descriptor_impl(fd);
+        if (!fdesc) {
+            break;
+        }
+        ++fd;
+    }
+    std::shared_ptr<FileDescriptor> desc = FileDescriptor::Create(handler, fd, openFlags);
     fileDescriptors.push_back(desc);
     return desc;
 }
 
-FileDescriptor Process::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
+std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
     std::lock_guard lock{mtx};
-    if (get_file_descriptor_impl(fd).Valid()) {
-        return {};
+    {
+        auto checkDesc = get_file_descriptor_impl(fd);
+        if (checkDesc) {
+            return {};
+        }
     }
-    FileDescriptor desc{handler, fd, openFlags};
+    std::shared_ptr<FileDescriptor> desc = FileDescriptor::Create(handler, fd, openFlags);
     fileDescriptors.push_back(desc);
     return desc;
 }
@@ -2761,7 +2770,7 @@ bool Process::close_file_descriptor(int fd) {
     std::lock_guard lock{mtx};
     auto iterator = fileDescriptors.begin();
     while (iterator != fileDescriptors.end()) {
-        if (iterator->FD() == fd) {
+        if ((*iterator)->FD() == fd) {
             fileDescriptors.erase(iterator);
             return true;
         }

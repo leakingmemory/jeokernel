@@ -194,12 +194,12 @@ void SelectImpl::Select(std::shared_ptr<SelectImpl> ref, int n, fdset *inp, fdse
         lock.release();
         subscribeTo->ForEach(n, [ref] (int fd) {
             auto fdesc = ref->ctx.GetProcess().get_file_descriptor(fd);
-            if (fdesc.Valid()) {
+            if (fdesc) {
 #ifdef SELECT_DEBUG
                 std::cout << "Subscribe " << std::dec << fd << "\n";
 #endif
                 class Select sel{ref};
-                fdesc.GetHandler()->Subscribe(fd, sel);
+                fdesc->GetHandler()->Subscribe(fd, sel);
             }
         });
     }

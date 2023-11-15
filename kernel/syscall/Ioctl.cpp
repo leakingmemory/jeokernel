@@ -12,9 +12,9 @@ int64_t Ioctl::Call(int64_t fd, int64_t cmd, int64_t arg, int64_t, SyscallAdditi
     task *current_task = &(scheduler->get_current_task());
     auto *process = scheduler->get_resource<ProcThread>(*current_task);
     auto desc = process->get_file_descriptor(fd);
-    if (!desc.Valid()) {
+    if (!desc) {
         return -EBADF;
     }
     SyscallCtx ctx{params};
-    return desc.ioctl(ctx, cmd, arg);
+    return desc->ioctl(ctx, cmd, arg);
 }

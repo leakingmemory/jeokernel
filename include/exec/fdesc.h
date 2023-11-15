@@ -13,6 +13,8 @@
 #include <concurrency/hw_spinlock.h>
 #include <vector>
 #include <exec/resolve_return.h>
+#include <resource/referrer.h>
+#include <resource/reference.h>
 
 class callctx;
 class ProcThread;
@@ -67,26 +69,21 @@ public:
     virtual int readdir(const std::function<bool (kdirent &dirent)> &) = 0;
 };
 
-class FileDescriptor {
+class FileDescriptor : public referrer {
 private:
-    std::shared_ptr<FileDescriptorHandler> handler;
+    std::weak_ptr<FileDescriptor> selfRef{};
+    std::shared_ptr<FileDescriptorHandler> handler{};
     int fd;
     int openFlags;
+private:
+    FileDescriptor(int fd, int openFlags) : referrer("FileDescriptor"), fd(fd), openFlags(openFlags) {
+    }
 public:
-    FileDescriptor() : handler(), fd(0), openFlags(0) {
-    }
-    FileDescriptor(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags) : handler(handler), fd(fd), openFlags(openFlags) {
-    }
+    static std::shared_ptr<FileDescriptor> Create(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags);
+    std::string GetReferrerIdentifier() override;
     virtual ~FileDescriptor() = default;
     int FD() {
         return fd;
-    }
-    bool Valid() {
-        if (handler) {
-            return true;
-        } else {
-            return false;
-        }
     }
     std::shared_ptr<FileDescriptorHandler> GetHandler() {
         return handler;

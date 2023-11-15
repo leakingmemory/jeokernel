@@ -98,12 +98,12 @@ int64_t Getdents64::Call(int64_t fd, int64_t uptr_dirent, int64_t count, int64_t
 #endif
     auto task_id = get_scheduler()->get_current_task_id();
     auto desc = ctx.GetProcess().get_file_descriptor(fd);
-    if (!desc.Valid()) {
+    if (!desc) {
         return -EBADF;
     }
     return ctx.Write(uptr_dirent, count, [this, ctx, task_id, desc, count] (void *dirent) {
         Queue(task_id, [this, ctx, desc, dirent, count] () {
-            auto retv = GetDents64(desc, dirent, count);
+            auto retv = GetDents64(*desc, dirent, count);
             ctx.ReturnWhenNotRunning(retv);
         });
         return resolve_return_value::AsyncReturn();

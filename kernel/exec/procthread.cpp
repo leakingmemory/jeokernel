@@ -249,13 +249,13 @@ kfile_result<reference<kfile>> ProcThread::ResolveFile(const std::shared_ptr<cla
     return process->ResolveFile(referrer, filename);
 }
 
-FileDescriptor ProcThread::get_file_descriptor(int fd) {
+std::shared_ptr<FileDescriptor> ProcThread::get_file_descriptor(int fd) {
     return process->get_file_descriptor(fd);
 }
-FileDescriptor ProcThread::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler) {
+std::shared_ptr<FileDescriptor> ProcThread::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler) {
     return process->create_file_descriptor(openFlags, handler);
 }
-FileDescriptor ProcThread::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
+std::shared_ptr<FileDescriptor> ProcThread::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
     return process->create_file_descriptor(openFlags, handler, fd);
 }
 bool ProcThread::close_file_descriptor(int fd) {

@@ -18,8 +18,8 @@ int64_t Pipe::Call(int64_t uptr_fds, int64_t, int64_t, int64_t, SyscallAdditiona
         PipeDescriptorHandler::CreateHandlerPair(pipe1, pipe2);
         auto fdesc1 = ctx.GetProcess().create_file_descriptor(O_RDWR, pipe1);
         auto fdesc2 = ctx.GetProcess().create_file_descriptor(O_RDWR, pipe2);
-        fd1 = fdesc1.FD();
-        fd2 = fdesc2.FD();
+        fd1 = fdesc1->FD();
+        fd2 = fdesc2->FD();
         return resolve_return_value::Return(0);
     });
 }

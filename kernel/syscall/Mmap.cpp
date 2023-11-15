@@ -81,12 +81,12 @@ intptr_t Mmap_Call::Call(uintptr_t addr, uintptr_t len, unsigned int prot, unsig
         }
     } else {
         auto desc = process->get_file_descriptor(fd);
-        if (!desc.Valid()) {
+        if (!desc) {
             return -EBADF;
         }
         std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
-        auto file = desc.get_file(selfRef);
-        if (!desc.can_read()) {
+        auto file = desc->get_file(selfRef);
+        if (!desc->can_read()) {
             return -EPERM;
         }
         if (!file || (flags & MAP_PRIVATE) == 0) {

@@ -101,8 +101,8 @@ int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t 
                     Statx_Call::Create()->ResolveFromRoot(ctx, statbuf, st, filename);
                     return;
                 } else {
-                    FileDescriptor fd{ctx.GetProcess().get_file_descriptor(dfd)};
-                    if (!fd.Valid()) {
+                    std::shared_ptr<FileDescriptor> fd = ctx.GetProcess().get_file_descriptor(dfd);
+                    if (!fd) {
                         ctx.ReturnWhenNotRunning(-EBADF);
                         return;
                     }
@@ -111,7 +111,7 @@ int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t 
                             ctx.ReturnWhenNotRunning(-EINVAL);
                             return;
                         }
-                        if (!fd.stat(st)) {
+                        if (!fd->stat(st)) {
                             ctx.ReturnWhenNotRunning(-EBADF);
                             return;
                         }
