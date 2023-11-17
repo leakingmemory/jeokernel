@@ -15,6 +15,7 @@
 #include <exec/resolve_return.h>
 #include <resource/referrer.h>
 #include <resource/reference.h>
+#include <resource/resource.h>
 
 class callctx;
 class ProcThread;
@@ -36,9 +37,9 @@ class referrer;
 
 enum class SeekWhence { SET, CUR, END };
 
-class FileDescriptorHandler {
+class FileDescriptorHandler : public resource<FileDescriptorHandler> {
 protected:
-    hw_spinlock mtx;
+    hw_spinlock fdmtx;
 private:
     std::vector<FdSubscription> subscriptions;
     bool readyRead;
@@ -48,6 +49,7 @@ protected:
     FileDescriptorHandler(const FileDescriptorHandler &cp);
     void CopyFrom(const FileDescriptorHandler &cp);
 public:
+    FileDescriptorHandler * GetResource() override;
     FileDescriptorHandler(FileDescriptorHandler &&) = delete;
     FileDescriptorHandler &operator =(const FileDescriptorHandler &) = delete;
     FileDescriptorHandler &operator =(FileDescriptorHandler &&) = delete;
@@ -55,7 +57,7 @@ public:
     void Subscribe(int fd, Select select);
     void SetReadyRead(bool ready);
     virtual void Notify();
-    virtual std::shared_ptr<FileDescriptorHandler> clone() = 0;
+    virtual reference<FileDescriptorHandler> clone(const std::shared_ptr<class referrer> &referrer) = 0;
     virtual reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) = 0;
     virtual bool can_seek() = 0;
     virtual bool can_read() = 0;
@@ -72,22 +74,24 @@ public:
 class FileDescriptor : public referrer {
 private:
     std::weak_ptr<FileDescriptor> selfRef{};
-    std::shared_ptr<FileDescriptorHandler> handler{};
+    reference<FileDescriptorHandler> handler{};
     int fd;
     int openFlags;
 private:
     FileDescriptor(int fd, int openFlags) : referrer("FileDescriptor"), fd(fd), openFlags(openFlags) {
     }
 public:
-    static std::shared_ptr<FileDescriptor> Create(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags);
+    static std::shared_ptr<FileDescriptor> CreateFromPointer(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags);
+    static std::shared_ptr<FileDescriptor> Create(const reference<FileDescriptorHandler> &handler, int fd, int openFlags);
     std::string GetReferrerIdentifier() override;
     virtual ~FileDescriptor() = default;
     int FD() {
         return fd;
     }
-    std::shared_ptr<FileDescriptorHandler> GetHandler() {
-        return handler;
+    reference<FileDescriptorHandler> GetHandler(const std::shared_ptr<class referrer> &referrer) {
+        return handler.CreateReference(referrer);
     }
+    void Subscribe(int fd, Select select);
     reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) const;
     bool can_seek();
     bool can_read();

@@ -371,8 +371,8 @@ private:
     std::shared_ptr<FileDescriptor> get_file_descriptor_impl(int);
 public:
     std::shared_ptr<FileDescriptor> get_file_descriptor(int);
-    std::shared_ptr<FileDescriptor> create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler);
-    std::shared_ptr<FileDescriptor> create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd);
+    std::shared_ptr<FileDescriptor> create_file_descriptor(int openFlags, const reference<FileDescriptorHandler> &handler);
+    std::shared_ptr<FileDescriptor> create_file_descriptor(int openFlags, const reference<FileDescriptorHandler> &handler, int fd);
     bool close_file_descriptor(int fd);
     std::shared_ptr<class tty> GetTty() const {
         return tty;

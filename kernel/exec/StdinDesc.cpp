@@ -19,16 +19,17 @@ StdinDesc::~StdinDesc() noexcept {
 
 std::shared_ptr<FileDescriptor> StdinDesc::Descriptor(std::shared_ptr<class tty> tty) {
     std::shared_ptr<StdinDesc> handler{new StdinDesc(tty)};
-    {
-        std::shared_ptr<FileDescriptorHandler> fdhandler{handler};
-        tty->Subscribe(fdhandler);
-    }
-    std::shared_ptr<FileDescriptor> fd = FileDescriptor::Create(handler, 0, O_RDONLY);
+    handler->SetSelfRef(handler);
+    std::shared_ptr<FileDescriptorHandler> fdhandler{handler};
+    tty->Subscribe(fdhandler);
+    std::shared_ptr<FileDescriptor> fd = FileDescriptor::CreateFromPointer(fdhandler, 0, O_RDONLY);
     return fd;
 }
 
-std::shared_ptr<FileDescriptorHandler> StdinDesc::clone() {
-    return std::make_shared<StdinDesc>((const StdinDesc &) *this);
+reference<FileDescriptorHandler> StdinDesc::clone(const std::shared_ptr<class referrer> &referrer) {
+    auto newHandler = std::make_shared<StdinDesc>((const StdinDesc &) *this);
+    newHandler->SetSelfRef(newHandler);
+    return newHandler->CreateReference(referrer);
 }
 
 reference<kfile> StdinDesc::get_file(std::shared_ptr<class referrer> &referrer) {

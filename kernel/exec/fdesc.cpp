@@ -14,10 +14,14 @@
 //#define WRITEV_IGNORE
 //#define SUBSCRIPTION_DEBUG
 
-FileDescriptorHandler::FileDescriptorHandler() : mtx(), subscriptions(), readyRead(false) {
+FileDescriptorHandler::FileDescriptorHandler() : fdmtx(), subscriptions(), readyRead(false) {
 }
 
-FileDescriptorHandler::FileDescriptorHandler(const FileDescriptorHandler &cp) : mtx(), subscriptions(), readyRead(cp.readyRead) {
+FileDescriptorHandler::FileDescriptorHandler(const FileDescriptorHandler &cp) : fdmtx(), subscriptions(), readyRead(cp.readyRead) {
+}
+
+FileDescriptorHandler *FileDescriptorHandler::GetResource() {
+    return this;
 }
 
 void FileDescriptorHandler::CopyFrom(const FileDescriptorHandler &cp) {
@@ -25,7 +29,7 @@ void FileDescriptorHandler::CopyFrom(const FileDescriptorHandler &cp) {
 }
 
 void FileDescriptorHandler::Subscribe(int fd, Select select) {
-    std::lock_guard lock{mtx};
+    std::lock_guard lock{fdmtx};
     if (readyRead) {
         select.NotifyRead(fd);
     }
@@ -37,7 +41,7 @@ void FileDescriptorHandler::Subscribe(int fd, Select select) {
 void FileDescriptorHandler::SetReadyRead(bool ready) {
     std::vector<FdSubscription> notify{};
     {
-        std::lock_guard lock{mtx};
+        std::lock_guard lock{fdmtx};
         if (this->readyRead != ready) {
             this->readyRead = ready;
             if (this->readyRead) {
@@ -56,7 +60,7 @@ void FileDescriptorHandler::SetReadyRead(bool ready) {
             remove.push_back(subscription);
         }
     }
-    std::lock_guard lock{mtx};
+    std::lock_guard lock{fdmtx};
     auto iterator = this->subscriptions.begin();
     while (iterator != this->subscriptions.end()) {
         bool found{false};
@@ -81,16 +85,29 @@ void FileDescriptorHandler::Notify() {
 }
 
 std::shared_ptr<FileDescriptor>
-FileDescriptor::Create(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags) {
+FileDescriptor::CreateFromPointer(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags) {
     std::shared_ptr<FileDescriptor> fdesc{new FileDescriptor(fd, openFlags)};
     std::weak_ptr<FileDescriptor> weakPtr{fdesc};
     fdesc->selfRef = weakPtr;
-    fdesc->handler = handler;
+    fdesc->handler = handler->CreateReference(fdesc);
+    return fdesc;
+}
+
+std::shared_ptr<FileDescriptor>
+FileDescriptor::Create(const reference<FileDescriptorHandler> &handler, int fd, int openFlags) {
+    std::shared_ptr<FileDescriptor> fdesc{new FileDescriptor(fd, openFlags)};
+    std::weak_ptr<FileDescriptor> weakPtr{fdesc};
+    fdesc->selfRef = weakPtr;
+    fdesc->handler = handler.CreateReference(fdesc);
     return fdesc;
 }
 
 std::string FileDescriptor::GetReferrerIdentifier() {
     return "";
+}
+
+void FileDescriptor::Subscribe(int fd, Select select) {
+    handler->Subscribe(fd, select);
 }
 
 reference<kfile> FileDescriptor::get_file(std::shared_ptr<class referrer> &referrer) const {
@@ -138,11 +155,11 @@ struct writev_state {
 
 intptr_t
 FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, int iovcnt) {
-    auto handler = this->handler;
+    auto selfRef = this->selfRef.lock();
     std::shared_ptr<writev_state> state{new writev_state};
     state->remaining = iovcnt;
     auto task_id = get_scheduler()->get_current_task_id();
-    return ctx->Read(usersp_iov_ptr, sizeof(iovec) * iovcnt, [ctx, state, handler, iovcnt, task_id] (void *ptr) mutable {
+    return ctx->Read(usersp_iov_ptr, sizeof(iovec) * iovcnt, [ctx, state, selfRef, iovcnt, task_id] (void *ptr) mutable {
         iovec *iov = (iovec *) ptr;
         for (int i = 0; i < iovcnt; i++) {
             state->iovecs.emplace_back(new kiovec(&(iov[i])));
@@ -157,7 +174,7 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
             if (iov[i].iov_len == 0) {
                 continue;
             }
-            auto nestedResult = ctx->NestedWrite((uintptr_t) iov[i].iov_base, iov[i].iov_len, [ctx, handler, iov, iovcnt, i, state, task_id] (void *bufptr) mutable {
+            auto nestedResult = ctx->NestedWrite((uintptr_t) iov[i].iov_base, iov[i].iov_len, [ctx, selfRef, iov, iovcnt, i, state, task_id] (void *bufptr) mutable {
                 std::unique_lock lock{state->lock};
                 if (state->failed) {
                     return resolve_return_value::NoReturn();
@@ -176,7 +193,7 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
                     }
                     auto processNext = std::make_shared<std::function<void ()>>();
                     auto totlen = std::make_shared<uintptr_t>(0);
-                    *processNext = [state, ctx, handler, queue, processNext, totlen, task_id] () mutable {
+                    *processNext = [state, ctx, selfRef, queue, processNext, totlen, task_id] () mutable {
                         std::shared_ptr<kiovec> iovec{};
                         {
                             auto iterator = queue->begin();
@@ -210,8 +227,8 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
                                 }
                                 lock.release();
                                 return resolve_return_value::NoReturn();
-                            }, [handler, iovec] (auto ctx) {
-                                return handler->read(ctx, iovec->iov_base, iovec->iov_len);
+                            }, [selfRef, iovec] (auto ctx) {
+                                return selfRef->handler->read(ctx, iovec->iov_base, iovec->iov_len);
                             });
                         }
                         if (queue->empty()) {
@@ -252,14 +269,14 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
 }
 
 file_descriptor_result FileDescriptor::write(ProcThread *process, uintptr_t usersp_ptr, intptr_t len, std::function<void (intptr_t)> func) {
-    auto handler = this->handler;
-    auto result = process->resolve_read(usersp_ptr, len, false, func, [process, handler, usersp_ptr, len, func] (bool success, bool, std::function<void (intptr_t)>) mutable {
+    auto selfRef = this->selfRef.lock();
+    auto result = process->resolve_read(usersp_ptr, len, false, func, [process, selfRef, usersp_ptr, len, func] (bool success, bool, std::function<void (intptr_t)>) mutable {
         if (success) {
             UserMemory umem{*process, usersp_ptr, (uintptr_t) len};
             if (!umem) {
                 return resolve_return_value::Return(-EFAULT);
             }
-            return resolve_return_value::Return(handler->write((const void *) umem.Pointer(), len));
+            return resolve_return_value::Return(selfRef->handler->write((const void *) umem.Pointer(), len));
         } else {
             return resolve_return_value::Return(-EFAULT);
         }
@@ -275,13 +292,13 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
 #endif
     return {.result = 0, .async = false};
 #else
-    auto handler = this->handler;
+    auto selfRef = this->selfRef.lock();
     std::shared_ptr<writev_state> state{new writev_state};
     state->remaining = iovcnt;
 #ifdef WRITEV_DEBUG
     std::cout << "writev: remaining=" << state->remaining << "\n";
 #endif
-    auto result = process->resolve_read(usersp_iov_ptr, sizeof(iovec) * iovcnt, false, [func] (uintptr_t returnv) mutable {func(returnv);}, [process, handler, usersp_iov_ptr, iovcnt, state, func] (bool success, bool async, std::function<void (intptr_t)> asyncFunc) mutable {
+    auto result = process->resolve_read(usersp_iov_ptr, sizeof(iovec) * iovcnt, false, [func] (uintptr_t returnv) mutable {func(returnv);}, [process, selfRef, usersp_iov_ptr, iovcnt, state, func] (bool success, bool async, std::function<void (intptr_t)> asyncFunc) mutable {
         if (success) {
             auto iov_len = sizeof(iovec) * iovcnt;
             UserMemory umem{*process, usersp_iov_ptr, iov_len};
@@ -310,7 +327,7 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
                 if (iov[i].iov_len == 0) {
                     continue;
                 }
-                auto nestedResult = process->resolve_read((uintptr_t) iov[i].iov_base, iov[i].iov_len, async, asyncFunc, [handler, process, umem, iov, iovcnt, i, state, func] (bool success, bool, const std::function<void (uintptr_t)> &) mutable {
+                auto nestedResult = process->resolve_read((uintptr_t) iov[i].iov_base, iov[i].iov_len, async, asyncFunc, [selfRef, process, umem, iov, iovcnt, i, state, func] (bool success, bool, const std::function<void (uintptr_t)> &) mutable {
                     std::unique_lock lock{state->lock};
                     if (state->failed) {
                         return resolve_return_value::NoReturn();
@@ -356,7 +373,7 @@ FileDescriptor::writev(ProcThread *process, uintptr_t usersp_iov_ptr, int iovcnt
                         vm.reload();
                         intptr_t totlen{0};
                         for (int i = 0; i < iovcnt; i++) {
-                            handler->write(state->iovecs[i]->iov_base, (intptr_t) state->iovecs[i]->iov_len);
+                            selfRef->handler->write(state->iovecs[i]->iov_base, (intptr_t) state->iovecs[i]->iov_len);
                             totlen += state->iovecs[i]->iov_len;
                         }
                         return resolve_return_value::Return(totlen);

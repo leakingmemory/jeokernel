@@ -148,7 +148,7 @@ int Open_Call::Call(ProcThread &proc, const std::string &filename, int flags) {
             return -EISDIR;
         }
         reference<kdirectory> perhapsDir = reference_dynamic_cast<kdirectory>(std::move(file));
-        std::shared_ptr<FileDescriptorHandler> handler = FsDirectoryDescriptorHandler::Create(perhapsDir);
+        reference<FileDescriptorHandler> handler = FsDirectoryDescriptorHandler::Create(perhapsDir, selfRef);
         auto desc = proc.create_file_descriptor(flags, handler);
 #ifdef DEBUG_OPENAT_CALL
         std::cout << "openat -> " << std::dec << desc->FD() << "\n";
@@ -160,7 +160,7 @@ int Open_Call::Call(ProcThread &proc, const std::string &filename, int flags) {
         return -ENOTDIR;
     }
 
-    std::shared_ptr<FileDescriptorHandler> handler = FsFileDescriptorHandler::Create(file, openRead, openWrite, (flags & O_NONBLOCK) != 0);
+    reference<FileDescriptorHandler> handler = FsFileDescriptorHandler::Create(selfRef, file, openRead, openWrite, (flags & O_NONBLOCK) != 0);
     auto desc = proc.create_file_descriptor(flags, handler);
 #ifdef DEBUG_OPENAT_CALL
     std::cout << "openat -> " << std::dec << desc->FD() << "\n";

@@ -12,18 +12,22 @@
 
 std::shared_ptr<FileDescriptor> StdoutDesc::StdoutDescriptor() {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
-    std::shared_ptr<FileDescriptor> fd = FileDescriptor::Create(desc, 1, O_WRONLY);
+    desc->SetSelfRef(desc);
+    std::shared_ptr<FileDescriptor> fd = FileDescriptor::CreateFromPointer(desc, 1, O_WRONLY);
     return fd;
 }
 
 std::shared_ptr<FileDescriptor> StdoutDesc::StderrDescriptor() {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
-    std::shared_ptr<FileDescriptor> fd = FileDescriptor::Create(desc, 2, O_WRONLY);
+    desc->SetSelfRef(desc);
+    std::shared_ptr<FileDescriptor> fd = FileDescriptor::CreateFromPointer(desc, 2, O_WRONLY);
     return fd;
 }
 
-std::shared_ptr <FileDescriptorHandler> StdoutDesc::clone() {
-    return std::make_shared<StdoutDesc>((const StdoutDesc &) *this);
+reference<FileDescriptorHandler> StdoutDesc::clone(const std::shared_ptr<class referrer> &referrer) {
+    auto newDesc = std::make_shared<StdoutDesc>((const StdoutDesc &) *this);
+    newDesc->SetSelfRef(newDesc);
+    return newDesc->CreateReference(referrer);
 }
 
 reference<kfile> StdoutDesc::get_file(std::shared_ptr<class referrer> &referrer) {

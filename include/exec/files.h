@@ -29,13 +29,14 @@ private:
         referrer("FsFileDescriptorHandler"), offset(0), openRead(openRead), openWrite(openWrite), nonblock(nonblock) {}
     FsFileDescriptorHandler(const FsFileDescriptorHandler &cp);
 public:
-    static std::shared_ptr<FsFileDescriptorHandler> Create(const reference<kfile> &file, bool openRead, bool openWrite, bool nonblock);
-    static std::shared_ptr<FsFileDescriptorHandler> Create(const FsFileDescriptorHandler &cp);
+    static reference<FileDescriptorHandler> Create(const std::shared_ptr<class referrer> &referrer, const reference<kfile> &file, bool openRead, bool openWrite, bool nonblock);
+    static reference<FileDescriptorHandler> Create(const std::shared_ptr<class referrer> &referrer, const FsFileDescriptorHandler &cp);
     std::string GetReferrerIdentifier() override;
+    FsFileDescriptorHandler *GetResource() override;
     FsFileDescriptorHandler(FsFileDescriptorHandler &&) = delete;
     FsFileDescriptorHandler &operator = (const FsFileDescriptorHandler &) = delete;
     FsFileDescriptorHandler &operator = (FsFileDescriptorHandler &&) = delete;
-    std::shared_ptr<FileDescriptorHandler> clone() override;
+    reference<FileDescriptorHandler> clone(const std::shared_ptr<class referrer> &referrer) override;
     reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     bool can_seek() override;
     bool can_read() override;
@@ -59,9 +60,9 @@ private:
     FsDirectoryDescriptorHandler() : FileDescriptorHandler(), referrer("FsDirectoryDescriptorHandler"), readdirInited(false), dirents(), iterator() {}
     FsDirectoryDescriptorHandler(const FsDirectoryDescriptorHandler &);
 public:
-    static std::shared_ptr<FsDirectoryDescriptorHandler> Create(const reference<kdirectory> &reference);
+    static reference<FileDescriptorHandler> Create(const reference<kdirectory> &reference, const std::shared_ptr<class referrer> &referrer);
     std::string GetReferrerIdentifier() override;
-    std::shared_ptr<FileDescriptorHandler> clone() override;
+    reference<FileDescriptorHandler> clone(const std::shared_ptr<class referrer> &referrer) override;
     reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     bool can_seek() override;
     bool can_read() override;

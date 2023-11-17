@@ -2738,7 +2738,7 @@ std::shared_ptr<FileDescriptor> Process::get_file_descriptor(int fd) {
     return get_file_descriptor_impl(fd);
 }
 
-std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler) {
+std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, const reference<FileDescriptorHandler> &handler) {
     std::lock_guard lock{mtx};
     int fd = 0;
     while (true) {
@@ -2753,7 +2753,7 @@ std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, c
     return desc;
 }
 
-std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, const std::shared_ptr<FileDescriptorHandler> &handler, int fd) {
+std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, const reference<FileDescriptorHandler> &handler, int fd) {
     std::lock_guard lock{mtx};
     {
         auto checkDesc = get_file_descriptor_impl(fd);

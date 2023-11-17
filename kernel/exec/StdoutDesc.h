@@ -13,7 +13,7 @@ private:
 public:
     static std::shared_ptr<FileDescriptor> StdoutDescriptor();
     static std::shared_ptr<FileDescriptor> StderrDescriptor();
-    std::shared_ptr<FileDescriptorHandler> clone() override;
+    reference<FileDescriptorHandler> clone(const std::shared_ptr<referrer> &referrer) override;
     reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     bool can_seek() override;
     bool can_read() override;

@@ -65,24 +65,25 @@ void PipeEnd::Notify() {
     }
 }
 
-void PipeDescriptorHandler::CreateHandlerPair(std::shared_ptr<PipeDescriptorHandler> &a,
-                                              std::shared_ptr<PipeDescriptorHandler> &b) {
+void PipeDescriptorHandler::CreateHandlerPair(const std::shared_ptr<class referrer> &referrer,
+                                              reference<FileDescriptorHandler> &a,
+                                              reference<FileDescriptorHandler> &b) {
     std::shared_ptr<PipeEnd> end1 = std::make_shared<PipeEnd>();
     std::shared_ptr<PipeEnd> end2 = std::make_shared<PipeEnd>(end1);
     {
         std::weak_ptr<PipeEnd> weakPtrEnd1{end1};
         end2->otherEnd = weakPtrEnd1;
     }
-    a = CreateHandler(end1);
-    b = CreateHandler(end2);
+    a = CreateHandler(referrer, end1);
+    b = CreateHandler(referrer, end2);
 }
 
 void PipeDescriptorHandler::Notify() {
     end->Notify();
 }
 
-std::shared_ptr<FileDescriptorHandler> PipeDescriptorHandler::clone() {
-    return CreateHandler(end);
+reference<FileDescriptorHandler> PipeDescriptorHandler::clone(const std::shared_ptr<class referrer> &referrer) {
+    return CreateHandler(referrer, end);
 }
 
 reference<kfile> PipeDescriptorHandler::get_file(std::shared_ptr<class referrer> &referrer) {

@@ -37,8 +37,7 @@ int SysFaccessatImpl::DoFaccessat(ProcThread &proc, int dfd, std::string filenam
         if (!fdesc) {
             return -EBADF;
         }
-        auto handler = fdesc->GetHandler();
-        auto file = handler->get_file(selfRef);
+        auto file = fdesc->get_file(selfRef);
         reference<kdirectory> dir = reference_dynamic_cast<kdirectory>(std::move(file));
         if (!dir) {
             return -ENOTDIR;

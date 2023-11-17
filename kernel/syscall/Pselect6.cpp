@@ -199,7 +199,7 @@ void SelectImpl::Select(std::shared_ptr<SelectImpl> ref, int n, fdset *inp, fdse
                 std::cout << "Subscribe " << std::dec << fd << "\n";
 #endif
                 class Select sel{ref};
-                fdesc->GetHandler()->Subscribe(fd, sel);
+                fdesc->Subscribe(fd, sel);
             }
         });
     }

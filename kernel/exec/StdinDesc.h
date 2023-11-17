@@ -7,6 +7,7 @@
 
 #include <exec/fdesc.h>
 #include <tty/tty.h>
+#include <resource/resource.h>
 
 class StdinDesc : public FileDescriptorHandler {
 private:
@@ -15,7 +16,7 @@ private:
 public:
     ~StdinDesc();
     static std::shared_ptr<FileDescriptor> Descriptor(std::shared_ptr<class tty> tty);
-    std::shared_ptr<FileDescriptorHandler> clone() override;
+    reference<FileDescriptorHandler> clone(const std::shared_ptr<class referrer> &) override;
     reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     void Notify() override;
     bool can_seek() override;

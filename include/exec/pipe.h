@@ -41,16 +41,17 @@ private:
 private:
     PipeDescriptorHandler(const std::shared_ptr<PipeEnd> &end) : end(end) {}
 public:
-    static std::shared_ptr<PipeDescriptorHandler> CreateHandler(const std::shared_ptr<PipeEnd> &end) {
+    static reference<FileDescriptorHandler> CreateHandler(const std::shared_ptr<class referrer> &referrer, const std::shared_ptr<PipeEnd> &end) {
         std::shared_ptr<PipeDescriptorHandler> handler{new PipeDescriptorHandler(end)};
+        handler->SetSelfRef(handler);
         end->AddFd(handler);
         std::weak_ptr<PipeDescriptorHandler> weakPtr{handler};
         handler->self_ref = weakPtr;
-        return handler;
+        return handler->CreateReference(referrer);
     }
-    static void CreateHandlerPair(std::shared_ptr<PipeDescriptorHandler> &a, std::shared_ptr<PipeDescriptorHandler> &b);
+    static void CreateHandlerPair(const std::shared_ptr<class referrer> &referrer, reference<FileDescriptorHandler> &a, reference<FileDescriptorHandler> &b);
     void Notify() override;
-    std::shared_ptr<FileDescriptorHandler> clone() override;
+    reference<FileDescriptorHandler> clone(const std::shared_ptr<class referrer> &referrer) override;
     reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     bool can_seek() override;
     bool can_read() override;
