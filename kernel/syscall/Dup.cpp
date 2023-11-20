@@ -30,12 +30,12 @@ std::string Dup_Call::GetReferrerIdentifier() {
 }
 
 int Dup_Call::Call(ProcThread *process, int oldfd) {
-    auto old = process->get_file_descriptor(oldfd);
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    auto old = process->get_file_descriptor(selfRef, oldfd);
     if (!old) {
         return -EBADF;
     }
-    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
-    auto newf = process->create_file_descriptor(old->get_open_flags(), old->GetHandler(selfRef)->clone(selfRef));
+    auto newf = process->create_file_descriptor(selfRef, old->get_open_flags(), old->GetHandler(selfRef)->clone(selfRef));
     if (!newf) {
         return -EMFILE;
     }

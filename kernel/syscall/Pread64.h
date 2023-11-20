@@ -8,9 +8,9 @@
 #include "SyscallHandler.h"
 #include "SyscallAsyncThread.h"
 
-class Pread64 : public Syscall, private SyscallAsyncThread {
+class Pread64 : public Syscall {
 public:
-    Pread64(SyscallHandler &handler) : Syscall(handler, 17), SyscallAsyncThread("[pread64]") {}
+    Pread64(SyscallHandler &handler) : Syscall(handler, 17) {}
     int64_t Call(int64_t, int64_t, int64_t, int64_t, SyscallAdditionalParams &) override;
 };
 

@@ -11,8 +11,8 @@ class StdoutDesc : public FileDescriptorHandler {
 private:
     StdoutDesc() = default;
 public:
-    static std::shared_ptr<FileDescriptor> StdoutDescriptor();
-    static std::shared_ptr<FileDescriptor> StderrDescriptor();
+    static reference<FileDescriptor> StdoutDescriptor(const std::shared_ptr<class referrer> &referrer);
+    static reference<FileDescriptor> StderrDescriptor(const std::shared_ptr<class referrer> &referrer);
     reference<FileDescriptorHandler> clone(const std::shared_ptr<referrer> &referrer) override;
     reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     bool can_seek() override;

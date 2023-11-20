@@ -17,13 +17,12 @@ StdinDesc::~StdinDesc() noexcept {
     tty->Unsubscribe(this);
 }
 
-std::shared_ptr<FileDescriptor> StdinDesc::Descriptor(std::shared_ptr<class tty> tty) {
+reference<FileDescriptor> StdinDesc::Descriptor(const std::shared_ptr<class referrer> &referrer, std::shared_ptr<class tty> tty) {
     std::shared_ptr<StdinDesc> handler{new StdinDesc(tty)};
     handler->SetSelfRef(handler);
     std::shared_ptr<FileDescriptorHandler> fdhandler{handler};
     tty->Subscribe(fdhandler);
-    std::shared_ptr<FileDescriptor> fd = FileDescriptor::CreateFromPointer(fdhandler, 0, O_RDONLY);
-    return fd;
+    return FileDescriptor::CreateFromPointer(referrer, fdhandler, 0, O_RDONLY);
 }
 
 reference<FileDescriptorHandler> StdinDesc::clone(const std::shared_ptr<class referrer> &referrer) {

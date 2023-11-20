@@ -10,18 +10,16 @@
 #include <exec/procthread.h>
 #include <fcntl.h>
 
-std::shared_ptr<FileDescriptor> StdoutDesc::StdoutDescriptor() {
+reference<FileDescriptor> StdoutDesc::StdoutDescriptor(const std::shared_ptr<class referrer> &referrer) {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
     desc->SetSelfRef(desc);
-    std::shared_ptr<FileDescriptor> fd = FileDescriptor::CreateFromPointer(desc, 1, O_WRONLY);
-    return fd;
+    return FileDescriptor::CreateFromPointer(referrer, desc, 1, O_WRONLY);
 }
 
-std::shared_ptr<FileDescriptor> StdoutDesc::StderrDescriptor() {
+reference<FileDescriptor> StdoutDesc::StderrDescriptor(const std::shared_ptr<class referrer> &referrer) {
     std::shared_ptr<StdoutDesc> desc{new StdoutDesc};
     desc->SetSelfRef(desc);
-    std::shared_ptr<FileDescriptor> fd = FileDescriptor::CreateFromPointer(desc, 2, O_WRONLY);
-    return fd;
+    return FileDescriptor::CreateFromPointer(referrer, desc, 2, O_WRONLY);
 }
 
 reference<FileDescriptorHandler> StdoutDesc::clone(const std::shared_ptr<class referrer> &referrer) {

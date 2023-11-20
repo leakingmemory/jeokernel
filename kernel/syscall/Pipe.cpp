@@ -38,8 +38,8 @@ resolve_return_value Pipe_Call::Call(const SyscallCtx &ctx, int *fdsptr) {
     reference<FileDescriptorHandler> pipe1{};
     reference<FileDescriptorHandler> pipe2{};
     PipeDescriptorHandler::CreateHandlerPair(selfRef, pipe1, pipe2);
-    auto fdesc1 = ctx.GetProcess().create_file_descriptor(O_RDWR, pipe1);
-    auto fdesc2 = ctx.GetProcess().create_file_descriptor(O_RDWR, pipe2);
+    auto fdesc1 = ctx.GetProcess().create_file_descriptor(selfRef, O_RDWR, pipe1);
+    auto fdesc2 = ctx.GetProcess().create_file_descriptor(selfRef, O_RDWR, pipe2);
     fd1 = fdesc1->FD();
     fd2 = fdesc2->FD();
     return resolve_return_value::Return(0);

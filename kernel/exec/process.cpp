@@ -212,9 +212,6 @@ static pid_t AllocPid() {
 }
 
 Process::Process(const std::shared_ptr<class tty> &tty, pid_t parent_pid, const std::string &cmdline) : referrer("Process"), mtx(), self_ref(), sigmask(), sigpending(), rlimits(), pid(0), pgrp(0), parent(), parent_pid(parent_pid), pagetableLow(), pagetableRoots(), mappings(), fileDescriptors(), relocations(), cmdline(cmdline), tty(tty), sigactions(), exitNotifications(), childExitNotifications(), auxv(), exitCode(-1), program_brk(0), euid(0), egid(0), uid(0), gid(0) {
-    fileDescriptors.push_back(StdinDesc::Descriptor(tty));
-    fileDescriptors.push_back(StdoutDesc::StdoutDescriptor());
-    fileDescriptors.push_back(StdoutDesc::StderrDescriptor());
     pid = AllocPid();
     pgrp = pid;
 }
@@ -232,6 +229,13 @@ Process::Create(const reference<kfile> &cwd, const std::shared_ptr<class tty> &t
                 const std::string &cmdline) {
     std::shared_ptr<Process> process{new Process(tty, parent_pid, cmdline)};
     std::weak_ptr<Process> weak{process};
+    process->fileDescriptors.reserve(3);
+    auto &stdin = process->fileDescriptors.emplace_back();
+    auto &stdout = process->fileDescriptors.emplace_back();
+    auto &stderr = process->fileDescriptors.emplace_back();
+    stdin = StdinDesc::Descriptor(process, tty);
+    stdout = StdoutDesc::StdoutDescriptor(process);
+    stderr = StdoutDesc::StderrDescriptor(process);
     process->self_ref = weak;
     process->cwd = cwd.CreateReference(process);
     return process;
@@ -978,7 +982,8 @@ std::shared_ptr<Process> Process::Clone() {
     {
         std::lock_guard lock{mtx};
         for (const auto &fd: fileDescriptors) {
-            clonedProcess->fileDescriptors.push_back(fd);
+            auto &ref = clonedProcess->fileDescriptors.emplace_back();
+            ref = fd.CreateReference(clonedProcess);
         }
     }
     return clonedProcess;
@@ -2724,46 +2729,62 @@ kfile_result<reference<kfile>> Process::ResolveFile(const std::shared_ptr<class 
     }
 }
 
-std::shared_ptr<FileDescriptor> Process::get_file_descriptor_impl(int fd) {
-    for (auto desc : fileDescriptors) {
+reference<FileDescriptor> Process::get_file_descriptor_impl(const std::shared_ptr<class referrer> &referrer, int fd) {
+    for (auto &desc : fileDescriptors) {
         if (desc->FD() == fd) {
-            return desc;
+            return desc.CreateReference(referrer);
         }
     }
     return {};
 }
 
-std::shared_ptr<FileDescriptor> Process::get_file_descriptor(int fd) {
-    std::lock_guard lock{mtx};
-    return get_file_descriptor_impl(fd);
+bool Process::has_file_descriptor_impl(int fd) {
+    for (auto &desc : fileDescriptors) {
+        if (desc->FD() == fd) {
+            return true;
+        }
+    }
+    return false;
 }
 
-std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, const reference<FileDescriptorHandler> &handler) {
+reference<FileDescriptor> Process::get_file_descriptor(const std::shared_ptr<class referrer> &referrer, int fd) {
+    std::lock_guard lock{mtx};
+    return get_file_descriptor_impl(referrer, fd);
+}
+
+bool Process::has_file_descriptor(int fd) {
+    std::lock_guard lock{mtx};
+    return has_file_descriptor_impl(fd);
+}
+
+reference<FileDescriptor> Process::create_file_descriptor(const std::shared_ptr<class referrer> &referrer, int openFlags, const reference<FileDescriptorHandler> &handler) {
     std::lock_guard lock{mtx};
     int fd = 0;
     while (true) {
-        auto fdesc = get_file_descriptor_impl(fd);
+        auto fdesc = has_file_descriptor_impl(fd);
         if (!fdesc) {
             break;
         }
         ++fd;
     }
-    std::shared_ptr<FileDescriptor> desc = FileDescriptor::Create(handler, fd, openFlags);
-    fileDescriptors.push_back(desc);
-    return desc;
+    std::shared_ptr<class referrer> selfRef = this->self_ref.lock();
+    auto &ref = fileDescriptors.emplace_back();
+    ref = FileDescriptor::Create(selfRef, handler, fd, openFlags);
+    return ref.CreateReference(referrer);
 }
 
-std::shared_ptr<FileDescriptor> Process::create_file_descriptor(int openFlags, const reference<FileDescriptorHandler> &handler, int fd) {
+reference<FileDescriptor> Process::create_file_descriptor(const std::shared_ptr<class referrer> &referrer, int openFlags, const reference<FileDescriptorHandler> &handler, int fd) {
     std::lock_guard lock{mtx};
     {
-        auto checkDesc = get_file_descriptor_impl(fd);
+        auto checkDesc = has_file_descriptor_impl(fd);
         if (checkDesc) {
             return {};
         }
     }
-    std::shared_ptr<FileDescriptor> desc = FileDescriptor::Create(handler, fd, openFlags);
-    fileDescriptors.push_back(desc);
-    return desc;
+    std::shared_ptr<class referrer> selfRef = this->self_ref.lock();
+    auto &ref = fileDescriptors.emplace_back();
+    ref = FileDescriptor::Create(selfRef, handler, fd, openFlags);
+    return ref.CreateReference(referrer);
 }
 
 bool Process::close_file_descriptor(int fd) {

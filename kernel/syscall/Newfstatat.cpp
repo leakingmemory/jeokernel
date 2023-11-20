@@ -45,8 +45,9 @@ void Newfstatat_Call::Call(SyscallCtx &ctx, void *statbuf, const std::string &fi
     std::cout << "newfstatat(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
                               << "statbuf, " << flag << std::dec << ")\n";
 #endif
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
     if ((!filename.empty() && filename.starts_with("/")) || dfd == AT_FDCWD) {
-        auto fileResolve = ctx.GetProcess().ResolveFile(selfRef.lock(), filename);
+        auto fileResolve = ctx.GetProcess().ResolveFile(selfRef, filename);
         if (fileResolve.status != kfile_status::SUCCESS) {
             int err{-EIO};
             switch (fileResolve.status) {
@@ -69,7 +70,7 @@ void Newfstatat_Call::Call(SyscallCtx &ctx, void *statbuf, const std::string &fi
         }
         FsStat::Stat(*file, st);
     } else {
-        std::shared_ptr<FileDescriptor> fd = ctx.GetProcess().get_file_descriptor(dfd);
+        reference<FileDescriptor> fd = ctx.GetProcess().get_file_descriptor(selfRef, dfd);
         if (!fd) {
             ctx.ReturnWhenNotRunning(-EBADF);
             return;

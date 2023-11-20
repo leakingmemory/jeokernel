@@ -84,26 +84,32 @@ void FileDescriptorHandler::SetReadyRead(bool ready) {
 void FileDescriptorHandler::Notify() {
 }
 
-std::shared_ptr<FileDescriptor>
-FileDescriptor::CreateFromPointer(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags) {
+reference<FileDescriptor>
+FileDescriptor::CreateFromPointer(const std::shared_ptr<class referrer> &referrer, const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags) {
     std::shared_ptr<FileDescriptor> fdesc{new FileDescriptor(fd, openFlags)};
+    fdesc->SetSelfRef(fdesc);
     std::weak_ptr<FileDescriptor> weakPtr{fdesc};
     fdesc->selfRef = weakPtr;
     fdesc->handler = handler->CreateReference(fdesc);
-    return fdesc;
+    return fdesc->CreateReference(referrer);
 }
 
-std::shared_ptr<FileDescriptor>
-FileDescriptor::Create(const reference<FileDescriptorHandler> &handler, int fd, int openFlags) {
+reference<FileDescriptor>
+FileDescriptor::Create(const std::shared_ptr<class referrer> &referrer, const reference<FileDescriptorHandler> &handler, int fd, int openFlags) {
     std::shared_ptr<FileDescriptor> fdesc{new FileDescriptor(fd, openFlags)};
+    fdesc->SetSelfRef(fdesc);
     std::weak_ptr<FileDescriptor> weakPtr{fdesc};
     fdesc->selfRef = weakPtr;
     fdesc->handler = handler.CreateReference(fdesc);
-    return fdesc;
+    return fdesc->CreateReference(referrer);
 }
 
 std::string FileDescriptor::GetReferrerIdentifier() {
     return "";
+}
+
+FileDescriptor *FileDescriptor::GetResource() {
+    return this;
 }
 
 void FileDescriptor::Subscribe(int fd, Select select) {

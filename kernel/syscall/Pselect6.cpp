@@ -83,7 +83,7 @@ bool fdset::AnySet(int n) {
     return false;
 }
 
-class SelectImpl {
+class SelectImpl : public referrer {
 private:
     SyscallCtx ctx;
     hw_spinlock mtx;
@@ -103,6 +103,7 @@ public:
 private:
     void Clear();
 public:
+    std::string GetReferrerIdentifier() override;
     static void Select(std::shared_ptr<SelectImpl> ref, int n, fdset *inp, fdset *outp, fdset *exc);
     static bool KeepSubscription(std::shared_ptr<SelectImpl> ref, int fd);
     static void CopyBack(std::shared_ptr<SelectImpl> ref);
@@ -110,7 +111,7 @@ public:
     static void NotifyIntr(std::shared_ptr<SelectImpl> ref);
 };
 
-SelectImpl::SelectImpl(const SyscallCtx &ctx, const std::function<void (const std::function<void ()> &)> &submitAsync) : ctx(ctx), mtx(), n(0), sig_n(0), u_inp(nullptr), u_outp(nullptr), u_exc(nullptr), inp_sel(nullptr), inp_sig(nullptr), submitAsync(submitAsync), wake(true) {}
+SelectImpl::SelectImpl(const SyscallCtx &ctx, const std::function<void (const std::function<void ()> &)> &submitAsync) : referrer("SelectImpl"), ctx(ctx), mtx(), n(0), sig_n(0), u_inp(nullptr), u_outp(nullptr), u_exc(nullptr), inp_sel(nullptr), inp_sig(nullptr), submitAsync(submitAsync), wake(true) {}
 
 SelectImpl::~SelectImpl() {
     Clear();
@@ -125,6 +126,10 @@ void SelectImpl::Clear() {
         free(inp_sig);
         inp_sig = nullptr;
     }
+}
+
+std::string SelectImpl::GetReferrerIdentifier() {
+    return "";
 }
 
 constexpr intptr_t SizeOfFdSet(intptr_t n) {
@@ -193,7 +198,8 @@ void SelectImpl::Select(std::shared_ptr<SelectImpl> ref, int n, fdset *inp, fdse
         }
         lock.release();
         subscribeTo->ForEach(n, [ref] (int fd) {
-            auto fdesc = ref->ctx.GetProcess().get_file_descriptor(fd);
+            std::shared_ptr<class referrer> referrer = ref;
+            auto fdesc = ref->ctx.GetProcess().get_file_descriptor(referrer, fd);
             if (fdesc) {
 #ifdef SELECT_DEBUG
                 std::cout << "Subscribe " << std::dec << fd << "\n";

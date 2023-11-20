@@ -249,14 +249,18 @@ kfile_result<reference<kfile>> ProcThread::ResolveFile(const std::shared_ptr<cla
     return process->ResolveFile(referrer, filename);
 }
 
-std::shared_ptr<FileDescriptor> ProcThread::get_file_descriptor(int fd) {
-    return process->get_file_descriptor(fd);
+reference<FileDescriptor> ProcThread::get_file_descriptor(std::shared_ptr<class referrer> &referrer, int fd) {
+    return process->get_file_descriptor(referrer, fd);
 }
-std::shared_ptr<FileDescriptor> ProcThread::create_file_descriptor(int openFlags, const reference<FileDescriptorHandler> &handler) {
-    return process->create_file_descriptor(openFlags, handler);
+
+bool ProcThread::has_file_descriptor(int fd) {
+    return process->has_file_descriptor(fd);
 }
-std::shared_ptr<FileDescriptor> ProcThread::create_file_descriptor(int openFlags, const reference<FileDescriptorHandler> &handler, int fd) {
-    return process->create_file_descriptor(openFlags, handler, fd);
+reference<FileDescriptor> ProcThread::create_file_descriptor(std::shared_ptr<class referrer> &referrer, int openFlags, const reference<FileDescriptorHandler> &handler) {
+    return process->create_file_descriptor(referrer, openFlags, handler);
+}
+reference<FileDescriptor> ProcThread::create_file_descriptor(std::shared_ptr<class referrer> &referrer, int openFlags, const reference<FileDescriptorHandler> &handler, int fd) {
+    return process->create_file_descriptor(referrer, openFlags, handler, fd);
 }
 bool ProcThread::close_file_descriptor(int fd) {
     return process->close_file_descriptor(fd);

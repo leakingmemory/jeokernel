@@ -80,11 +80,11 @@ intptr_t Mmap_Call::Call(uintptr_t addr, uintptr_t len, unsigned int prot, unsig
             return -ENOMEM;
         }
     } else {
-        auto desc = process->get_file_descriptor(fd);
+        std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+        auto desc = process->get_file_descriptor(selfRef, fd);
         if (!desc) {
             return -EBADF;
         }
-        std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
         auto file = desc->get_file(selfRef);
         if (!desc->can_read()) {
             return -EPERM;

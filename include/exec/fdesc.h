@@ -71,7 +71,7 @@ public:
     virtual int readdir(const std::function<bool (kdirent &dirent)> &) = 0;
 };
 
-class FileDescriptor : public referrer {
+class FileDescriptor : public resource<FileDescriptor>, public referrer {
 private:
     std::weak_ptr<FileDescriptor> selfRef{};
     reference<FileDescriptorHandler> handler{};
@@ -81,9 +81,10 @@ private:
     FileDescriptor(int fd, int openFlags) : referrer("FileDescriptor"), fd(fd), openFlags(openFlags) {
     }
 public:
-    static std::shared_ptr<FileDescriptor> CreateFromPointer(const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags);
-    static std::shared_ptr<FileDescriptor> Create(const reference<FileDescriptorHandler> &handler, int fd, int openFlags);
+    static reference<FileDescriptor> CreateFromPointer(const std::shared_ptr<class referrer> &referrer, const std::shared_ptr<FileDescriptorHandler> &handler, int fd, int openFlags);
+    static reference<FileDescriptor> Create(const std::shared_ptr<class referrer> &referrer, const reference<FileDescriptorHandler> &handler, int fd, int openFlags);
     std::string GetReferrerIdentifier() override;
+    FileDescriptor * GetResource() override;
     virtual ~FileDescriptor() = default;
     int FD() {
         return fd;

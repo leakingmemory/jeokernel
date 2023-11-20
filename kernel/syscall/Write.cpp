@@ -7,20 +7,46 @@
 #include <errno.h>
 #include "Write.h"
 
-int64_t Write::Call(int64_t fd, int64_t ptr, int64_t len, int64_t, SyscallAdditionalParams &additionalParams) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
+class Write_Call : public referrer {
+private:
+    std::weak_ptr<Write_Call> selfRef{};
+    Write_Call() : referrer("Write_Call") {}
+public:
+    static std::shared_ptr<Write_Call> Create();
+    std::string GetReferrerIdentifier() override;
+    file_descriptor_result Call(tasklist *scheduler, task *current_task, int fd, uintptr_t ptr, intptr_t len);
+};
+
+std::shared_ptr<Write_Call> Write_Call::Create() {
+    std::shared_ptr<Write_Call> writeCall{new Write_Call()};
+    std::weak_ptr<Write_Call> weakPtr{writeCall};
+    writeCall->selfRef = weakPtr;
+    return writeCall;
+}
+
+std::string Write_Call::GetReferrerIdentifier() {
+    return "";
+}
+
+file_descriptor_result Write_Call::Call(tasklist *scheduler, task *current_task, int fd, uintptr_t ptr, intptr_t len) {
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
     auto *process = scheduler->get_resource<ProcThread>(*current_task);
-    auto desc = process->get_file_descriptor(fd);
+    auto desc = process->get_file_descriptor(selfRef, fd);
     if (!desc) {
-        return -EBADF;
+        return {.result = -EBADF, .async = false};
     }
-    auto result = desc->write(process, ptr, len, [scheduler, current_task] (intptr_t result) {
+    return desc->write(process, ptr, len, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;
             current_task->set_blocked(false);
         });
     });
+}
+
+int64_t Write::Call(int64_t fd, int64_t ptr, int64_t len, int64_t, SyscallAdditionalParams &additionalParams) {
+    auto *scheduler = get_scheduler();
+    task *current_task = &(scheduler->get_current_task());
+    auto result = Write_Call::Create()->Call(scheduler, current_task, (int) fd, ptr, len);
     if (result.async) {
         current_task->set_blocked(true);
         additionalParams.DoContextSwitch(true);

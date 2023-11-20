@@ -15,7 +15,7 @@ private:
     explicit StdinDesc(std::shared_ptr<class tty> tty);
 public:
     ~StdinDesc();
-    static std::shared_ptr<FileDescriptor> Descriptor(std::shared_ptr<class tty> tty);
+    static reference<FileDescriptor> Descriptor(const std::shared_ptr<class referrer> &referrer, std::shared_ptr<class tty> tty);
     reference<FileDescriptorHandler> clone(const std::shared_ptr<class referrer> &) override;
     reference<kfile> get_file(std::shared_ptr<class referrer> &referrer) override;
     void Notify() override;

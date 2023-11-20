@@ -27,6 +27,7 @@ public:
     static std::shared_ptr<Statx_Call> Create();
     std::string GetReferrerIdentifier() override;
     void ResolveFromRoot(SyscallCtx &ctx, void *statbuf, struct statx &st, const std::string &filename);
+    void ResolveFromFd(SyscallCtx &ctx, int fd, void *statbuf, struct statx &st, const std::string &filename, uintptr_t flag);
 };
 
 std::shared_ptr<Statx_Call> Statx_Call::Create() {
@@ -68,6 +69,32 @@ void Statx_Call::ResolveFromRoot(SyscallCtx &ctx, void *statbuf, struct statx &s
     ctx.ReturnWhenNotRunning(0);
 }
 
+void Statx_Call::ResolveFromFd(SyscallCtx &ctx, int dfd, void *statbuf, struct statx &st, const std::string &filename, uintptr_t flag) {
+    std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
+    reference<FileDescriptor> fd = ctx.GetProcess().get_file_descriptor(selfRef, dfd);
+    if (!fd) {
+        ctx.ReturnWhenNotRunning(-EBADF);
+        return;
+    }
+    if (filename.empty()) {
+        if ((flag & AT_EMPTY_PATH) != AT_EMPTY_PATH) {
+            ctx.ReturnWhenNotRunning(-EINVAL);
+            return;
+        }
+        if (!fd->stat(st)) {
+            ctx.ReturnWhenNotRunning(-EBADF);
+            return;
+        }
+        memcpy(statbuf, &st, sizeof(st));
+        ctx.ReturnWhenNotRunning(0);
+        return;
+    }
+    // TODO
+    std::cout << "statx(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
+              << "statbuf, " << flag << std::dec << ")\n";
+    asm("ud2");
+}
+
 int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t mask, SyscallAdditionalParams &params) {
     auto dfd = (int32_t) i_dfd;
     int64_t uptr_statbuf = params.Param5();
@@ -101,28 +128,8 @@ int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t 
                     Statx_Call::Create()->ResolveFromRoot(ctx, statbuf, st, filename);
                     return;
                 } else {
-                    std::shared_ptr<FileDescriptor> fd = ctx.GetProcess().get_file_descriptor(dfd);
-                    if (!fd) {
-                        ctx.ReturnWhenNotRunning(-EBADF);
-                        return;
-                    }
-                    if (filename.empty()) {
-                        if ((flag & AT_EMPTY_PATH) != AT_EMPTY_PATH) {
-                            ctx.ReturnWhenNotRunning(-EINVAL);
-                            return;
-                        }
-                        if (!fd->stat(st)) {
-                            ctx.ReturnWhenNotRunning(-EBADF);
-                            return;
-                        }
-                        memcpy(statbuf, &st, sizeof(st));
-                        ctx.ReturnWhenNotRunning(0);
-                        return;
-                    }
-                    // TODO
-                    std::cout << "statx(" << std::dec << dfd << ", \"" << filename << "\", " << std::hex
-                              << "statbuf, " << flag << std::dec << ")\n";
-                    asm("ud2");
+                    Statx_Call::Create()->ResolveFromFd(ctx, (int) dfd, statbuf, st, filename, flag);
+                    return;
                 }
                 memcpy(statbuf, &st, sizeof(st));
                 ctx.ReturnWhenNotRunning(0);

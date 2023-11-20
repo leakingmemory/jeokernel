@@ -33,7 +33,7 @@ int SysFaccessatImpl::DoFaccessat(ProcThread &proc, int dfd, std::string filenam
     if (dfd == AT_FDCWD || filename.starts_with("/")) {
         fileResolve = proc.ResolveFile(selfRef, filename);
     } else {
-        auto fdesc = proc.get_file_descriptor(dfd);
+        auto fdesc = proc.get_file_descriptor(selfRef, dfd);
         if (!fdesc) {
             return -EBADF;
         }

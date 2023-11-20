@@ -31,11 +31,11 @@ std::string Dup2_Call::GetReferrerIdentifier() {
 
 int Dup2_Call::Call(ProcThread *process, int oldfd, int newfd) {
     std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
-    auto old = process->get_file_descriptor(oldfd);
+    auto old = process->get_file_descriptor(selfRef, oldfd);
     if (!old) {
         return -EBADF;
     }
-    auto newf = process->create_file_descriptor(old->get_open_flags(), old->GetHandler(selfRef)->clone(selfRef), newfd);
+    auto newf = process->create_file_descriptor(selfRef, old->get_open_flags(), old->GetHandler(selfRef)->clone(selfRef), newfd);
     return newf->FD();
 }
 
