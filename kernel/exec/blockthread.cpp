@@ -7,7 +7,7 @@
 
 blockthread::blockthread() : thr([this] () {
     while (true) {
-        bool run;
+        bool run{false};
         std::function<void ()> func{};
         {
             std::lock_guard lock{spinlock};
