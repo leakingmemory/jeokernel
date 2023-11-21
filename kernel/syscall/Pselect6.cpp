@@ -250,17 +250,21 @@ void SelectImpl::NotifyRead(std::shared_ptr<SelectImpl> ref, int fd) {
         }
     }
     if (wake) {
-        ref->submitAsync([ref] () {
-            int retv;
-            {
-                std::lock_guard lock{ref->mtx};
-                SelectImpl::CopyBack(ref);
-                retv = ref->sig_n;
-            }
+        std::weak_ptr<SelectImpl> weakRef{ref};
+        ref->submitAsync([weakRef] () mutable {
+            auto ref = weakRef.lock();
+            if (ref) {
+                int retv;
+                {
+                    std::lock_guard lock{ref->mtx};
+                    SelectImpl::CopyBack(ref);
+                    retv = ref->sig_n;
+                }
 #ifdef SELECT_DEBUG
-            std::cout << "Pselect6 return " << retv << "\n";
+                std::cout << "Pselect6 return " << retv << "\n";
 #endif
-            ref->ctx.ReturnWhenNotRunning(retv);
+                ref->ctx.ReturnWhenNotRunning(retv);
+            }
         });
     }
 }
@@ -276,8 +280,12 @@ void SelectImpl::NotifyIntr(std::shared_ptr<SelectImpl> ref) {
         ref->wake = false;
     }
     if (wake) {
-        ref->submitAsync([ref] () {
-            ref->ctx.ReturnWhenNotRunning(-EINTR);
+        std::weak_ptr<SelectImpl> weakRef{ref};
+        ref->submitAsync([weakRef] () mutable {
+            auto ref = weakRef.lock();
+            if (ref) {
+                ref->ctx.ReturnWhenNotRunning(-EINTR);
+            }
         });
     }
 }
