@@ -4,6 +4,7 @@
 
 #include "tests.h"
 #include <cstdint>
+#include <cstdlib>
 #include <type_traits>
 #include <new>
 #include <utility>
@@ -75,7 +76,7 @@ int main() {
         std::shared_ptr<otherparent> other{shared};
         assert(other);
         assert(other->Sig() == 1234);
-        std::shared_ptr<grandch> gr{shared};
+        std::shared_ptr<grandch> gr = std::dynamic_pointer_cast<grandch>(shared);
         assert(!gr);
     }
     {
@@ -86,7 +87,7 @@ int main() {
         other = shared;
         assert(other);
         assert(other->Sig() == 1234);
-        std::shared_ptr<grandch> gr{shared};
+        std::shared_ptr<grandch> gr = std::dynamic_pointer_cast<grandch>(shared);
         assert(!gr);
     }
     {

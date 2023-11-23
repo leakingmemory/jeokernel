@@ -3,6 +3,7 @@
 //
 
 #include "tests.h"
+#include <cstdint>
 #include "../kernel/strings.cpp"
 
 int main() {
