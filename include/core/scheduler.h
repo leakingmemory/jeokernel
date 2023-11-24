@@ -401,6 +401,8 @@ public:
     void switch_tasks(Interrupt &interrupt, uint8_t cpu);
     void thread_reaper();
 
+    void emergency_drop_lock();
+
     bool page_fault(Interrupt &interrupt);
     bool exception(const std::string &name, Interrupt &interrupt);
 

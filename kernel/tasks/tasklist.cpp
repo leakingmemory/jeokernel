@@ -268,6 +268,10 @@ void tasklist::thread_reaper() {
     }
 }
 
+void tasklist::emergency_drop_lock() {
+    _lock.unlock();
+}
+
 bool tasklist::page_fault(Interrupt &interrupt) {
     critical_section cli{};
     uint8_t cpu = 0;
