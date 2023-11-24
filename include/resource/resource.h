@@ -14,7 +14,7 @@
 #include <resource/referrer.h>
 
 struct rawreference {
-    std::weak_ptr<referrer> referrer;
+    std::weak_ptr<class referrer> referrer;
     uint64_t id;
 };
 

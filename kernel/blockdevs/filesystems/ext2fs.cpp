@@ -429,7 +429,7 @@ public:
     uintptr_t SysDevId() override;
     file_getpage_result GetPage(std::size_t pagenum) override;
     file_read_result Read(uint64_t offset, void *ptr, std::size_t length) override;
-    [[nodiscard]] std::string GetLink();
+    [[nodiscard]] std::string GetLink() override;
 };
 
 ext2fs_symlink::ext2fs_symlink(std::shared_ptr<ext2fs> fs, fsresourcelockfactory &lockfactory) : ext2fs_file(fs, lockfactory), symlink(), loaded(false) {

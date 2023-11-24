@@ -250,6 +250,7 @@ std::shared_ptr<Process> Process::Create(const std::shared_ptr<Process> &cp) {
     }
     std::weak_ptr<Process> parent{cp};
     process->parent = parent;
+    return process;
 }
 
 Process::~Process() {
@@ -602,7 +603,7 @@ bool Process::IsFree(uint32_t pagenum, uint32_t pages) {
 
 constexpr uint32_t lowLim = ((uintptr_t) PMLT4_USERSPACE_HIGH_START) << (9 + 9 + 9);
 constexpr uintptr_t highLimBase = ((uintptr_t) PMLT4_USERSPACE_HIGH_END) << (9 + 9 + 9);
-constexpr uint32_t highLim = highLimBase < 0x100000000 ? highLimBase : 0xFFFFFFFF;
+constexpr uint32_t highLim = highLimBase < 0x100000000 ? ((uint32_t) highLimBase) : 0xFFFFFFFF;
 
 bool Process::IsInRange(uint32_t pagenum, uint32_t pages) {
     uintptr_t start{pagenum};

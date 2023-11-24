@@ -13,7 +13,7 @@
 StdinDesc::StdinDesc(std::shared_ptr<class tty> tty) : tty(tty) {
 }
 
-StdinDesc::~StdinDesc() noexcept {
+StdinDesc::~StdinDesc() {
     tty->Unsubscribe(this);
 }
 

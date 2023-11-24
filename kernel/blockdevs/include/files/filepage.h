@@ -15,6 +15,7 @@ class filepage_raw;
 
 class filepage_pointer {
 public:
+    virtual ~filepage_pointer() = default;
     virtual void *Pointer() const = 0;
     virtual void SetDirty(size_t length) = 0;
 };
