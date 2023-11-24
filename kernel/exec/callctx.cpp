@@ -513,6 +513,10 @@ void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intpt
             }
             return;
         }
+        if (!ref->current_task->is_blocked() || ref->current_task->is_running()) {
+            ref->scheduler->emergency_drop_lock();
+            asm("ud2");
+        }
         ref->current_task->get_cpu_state().rax = value;
         ref->current_task->set_blocked(false);
     });
