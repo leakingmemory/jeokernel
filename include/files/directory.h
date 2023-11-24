@@ -23,6 +23,7 @@ private:
     std::string name;
 public:
     directory_entry(const std::string &name) : name(name) {}
+    virtual ~directory_entry() = default;
     std::string Name() {
         return name;
     }
