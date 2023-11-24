@@ -358,10 +358,15 @@ namespace std {
             if (((void *) this) == ((void *) &mv)) {
                 return *this;
             }
-            ptr = mv.ptr;
+            ptr = mv.ptr != nullptr ? mv.ptr : nullptr;
             auto *prevContainer = container;
-            container = mv.container;
-            mv.container = nullptr;
+            if (ptr != nullptr) {
+                container = mv.container;
+                mv.container = nullptr;
+                mv.ptr = nullptr;
+            } else {
+                container = nullptr;
+            }
             if (prevContainer != nullptr) {
                 if (prevContainer->release() == 0) {
                     delete prevContainer;
@@ -382,8 +387,8 @@ namespace std {
                 return *this;
             }
             auto *prevContainer = container;
-            container = cp.container;
             ptr = cp.ptr != nullptr ? cp.ptr : nullptr;
+            container = ptr != nullptr ? cp.container : nullptr;
             if (container != nullptr) {
                 container->acquire();
             }
