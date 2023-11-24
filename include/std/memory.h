@@ -322,8 +322,9 @@ namespace std {
             }
         }
 
-        template <class P,class PDeleter> shared_ptr(shared_ptr<P,Deleter> &&mv) : container(mv.container), ptr(mv.ptr) {
+        template <class P,class PDeleter> shared_ptr(shared_ptr<P,Deleter> &&mv) : container(mv.container), ptr(nullptr) {
             static_assert(std::is_assignable<T*,P*>::value);
+            ptr = mv.ptr != nullptr ? mv.ptr : nullptr;
             if (ptr != nullptr) {
                 mv.container = nullptr;
                 mv.ptr = nullptr;
@@ -340,7 +341,8 @@ namespace std {
                 container->acquire();
             }
         }
-        template <class P,class PDeleter> shared_ptr(const shared_ptr<P,PDeleter> &cp) : container(cp.Container()), ptr(cp.ptr) {
+        template <class P,class PDeleter> shared_ptr(const shared_ptr<P,PDeleter> &cp) : container(cp.Container()), ptr(nullptr) {
+            ptr = cp.ptr != nullptr ? cp.ptr : nullptr;
             if (container != nullptr && ptr != nullptr) {
                 container->acquire();
             } else {
@@ -407,6 +409,7 @@ namespace std {
             auto *prevContainer = container;
             ptr = mv.ptr;
             container = mv.container;
+            mv.ptr = nullptr;
             mv.container = nullptr;
             if (prevContainer != nullptr) {
                 if (prevContainer->release() == 0) {
@@ -610,7 +613,10 @@ namespace std {
             }
             weak = mv.weak;
             container = mv.container;
-            ptr = mv.container;
+            ptr = mv.ptr;
+            mv.weak = nullptr;
+            mv.container = nullptr;
+            mv.ptr = nullptr;
             return *this;
         }
         shared_ptr<T,Deleter> lock() {
