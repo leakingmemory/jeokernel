@@ -417,7 +417,11 @@ namespace std {
             }
         }
 
-        basic_string(basic_string &&) = default;
+        basic_string(basic_string &&mv) : c(mv.c) {
+            if (!mv.c.shrt.is_short()) {
+                mv.c.shrt.set_empty();
+            }
+        }
 
     private:
         void copy_from(const basic_string &cp) {
