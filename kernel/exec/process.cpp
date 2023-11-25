@@ -11,6 +11,7 @@
 #include <strings.h>
 #include <mutex>
 #include <thread>
+#include <sstream>
 #include <errno.h>
 #include <kfs/kfiles.h>
 #include "concurrency/raw_semaphore.h"
@@ -272,6 +273,11 @@ Process::~Process() {
             parentRef->ChildExitNotification(pid, exitCode);
         }
     }
+#ifdef RESOURCE_REF_TRACE
+    for (auto &fd : fileDescriptors) {
+        fd->AddTrace("Proc destr");
+    }
+#endif
 }
 
 pid_t Process::GetMaxPid() {
@@ -984,6 +990,7 @@ std::shared_ptr<Process> Process::Clone() {
         std::lock_guard lock{mtx};
         for (const auto &fd: fileDescriptors) {
             auto &ref = clonedProcess->fileDescriptors.emplace_back();
+            fd->AddTrace("Cloned proc");
             ref = fd.CreateReference(clonedProcess);
         }
     }
@@ -2749,8 +2756,20 @@ bool Process::has_file_descriptor_impl(int fd) {
 }
 
 reference<FileDescriptor> Process::get_file_descriptor(const std::shared_ptr<class referrer> &referrer, int fd) {
-    std::lock_guard lock{mtx};
-    return get_file_descriptor_impl(referrer, fd);
+    reference<FileDescriptor> ref{};
+    {
+        std::lock_guard lock{mtx};
+        ref = get_file_descriptor_impl(referrer, fd);
+    }
+#ifdef RESOURCE_REF_TRACE
+    if (ref) {
+        std::stringstream ss{};
+        ss << "get_file_descriptor(";
+        ss << referrer->GetType() << ")";
+        ref->AddTrace(ss.str());
+    }
+#endif
+    return ref;
 }
 
 bool Process::has_file_descriptor(int fd) {
@@ -2771,6 +2790,7 @@ reference<FileDescriptor> Process::create_file_descriptor(const std::shared_ptr<
     std::shared_ptr<class referrer> selfRef = this->self_ref.lock();
     auto &ref = fileDescriptors.emplace_back();
     ref = FileDescriptor::Create(selfRef, handler, fd, openFlags);
+    ref->AddTrace("create_file_descriptor(1)");
     return ref.CreateReference(referrer);
 }
 
@@ -2785,6 +2805,7 @@ reference<FileDescriptor> Process::create_file_descriptor(const std::shared_ptr<
     std::shared_ptr<class referrer> selfRef = this->self_ref.lock();
     auto &ref = fileDescriptors.emplace_back();
     ref = FileDescriptor::Create(selfRef, handler, fd, openFlags);
+    ref->AddTrace("create_file_descriptor(2)");
     return ref.CreateReference(referrer);
 }
 
@@ -2793,6 +2814,7 @@ bool Process::close_file_descriptor(int fd) {
     auto iterator = fileDescriptors.begin();
     while (iterator != fileDescriptors.end()) {
         if ((*iterator)->FD() == fd) {
+            (*iterator)->AddTrace("close_file_descriptor");
             fileDescriptors.erase(iterator);
             return true;
         }

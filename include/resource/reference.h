@@ -62,7 +62,10 @@ private:
 public:
     reference() : ref(), ptr(nullptr) {}
     reference(const reference &cp) = delete;
-    reference(reference &&mv) = default;
+    reference(reference &&mv) noexcept : ref(std::move(mv.ref)), ptr(mv.ptr) {
+        mv.ref = {};
+        mv.ptr = nullptr;
+    }
     template <class P> reference(reference<P> &&mv) : ref(std::move(mv.ref)), ptr() {
         ptr = mv.ptr != nullptr ? mv.ptr : nullptr;
         mv.ref = {};
@@ -113,8 +116,13 @@ public:
         }
     }
     reference<T> CreateReference(const std::shared_ptr<class referrer> &referrer) const {
+        if (!referrer) {
+            asm("ud2");
+        }
         reference<T> newRef{};
-        newRef.ref = ref->Clone(referrer);
+        if (ref) {
+            newRef.ref = ref->Clone(referrer);
+        }
         newRef.ptr = ptr;
         return newRef;
     }

@@ -17,6 +17,11 @@ void rawresource::Forget(uint64_t id) {
 }
 
 uint64_t rawresource::NewRef(const std::shared_ptr<referrer> &referrer) {
+#ifdef RESOURCE_CHECK_MAGIC
+    if (magic != resource_magic) {
+        asm("ud2");
+    }
+#endif
     uint64_t id;
     std::weak_ptr<class referrer> w{referrer};
     {

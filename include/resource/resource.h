@@ -13,15 +13,23 @@
 #include <concurrency/hw_spinlock.h>
 #include <resource/referrer.h>
 
+//#define RESOURCE_REF_TRACE
+//#define RESOURCE_CHECK_MAGIC
+
 struct rawreference {
     std::weak_ptr<class referrer> referrer;
     uint64_t id;
 };
 
+constexpr uint32_t resource_magic = 0x4589;
+
 struct rawresource {
     hw_spinlock mtx{};
     std::vector<rawreference> refs{};
     uint64_t serial{0};
+#ifdef RESOURCE_CHECK_MAGIC
+    uint16_t magic{resource_magic};
+#endif
     void Forget(uint64_t id);
     uint64_t NewRef(const std::shared_ptr<referrer> &);
 };
@@ -39,6 +47,9 @@ template <class T> class resource : private rawresource, public resourceunwinder
     friend reference_reference<T>;
 private:
     std::weak_ptr<resource<T>> self_ref{};
+#ifdef RESOURCE_REF_TRACE
+    std::vector<std::string> trace{};
+#endif
 protected:
     void SetSelfRef(const std::shared_ptr<resource<T>> &ref) {
         std::weak_ptr<resource<T>> w{ref};
@@ -53,6 +64,14 @@ public:
     resource &operator =(const resource &) = delete;
     resource &operator =(resource &&) = delete;
     reference<T> CreateReference(const std::shared_ptr<referrer> &referrer) {
+        if (!referrer) {
+            asm("ud2");
+        }
+#ifdef RESOURCE_CHECK_MAGIC
+        if (magic != resource_magic) {
+            asm("ud2");
+        }
+#endif
         std::weak_ptr<class referrer> w{referrer};
         uint64_t id;
         {
@@ -61,11 +80,21 @@ public:
             ref.referrer = w;
             ref.id = ++serial;
             id = ref.id;
+#ifdef RESOURCE_REF_TRACE
+            trace.push_back(referrer->GetType());
+#endif
         }
         reference<T> ref{};
         ref.ref = std::make_shared<reference_reference<T>>(self_ref.lock(), id);
         ref.ptr = (T *) ref.ref->GetResource();
         return ref;
+    }
+
+    void AddTrace(const std::string &msg) {
+#ifdef RESOURCE_REF_TRACE
+        std::lock_guard lock{mtx};
+        trace.push_back(msg);
+#endif
     }
     void PrintTraceBack(int indent) override {
         std::string indentStr{};
@@ -73,12 +102,27 @@ public:
             indentStr.append(" ");
         }
         std::vector<std::weak_ptr<referrer>> refs;
+#ifdef RESOURCE_REF_TRACE
+        std::vector<std::string> trace{};
+#endif
         {
             std::lock_guard lock{mtx};
             for (const rawreference &ref: this->refs) {
                 refs.push_back(ref.referrer);
             }
+#ifdef RESOURCE_REF_TRACE
+            if (refs.empty()) {
+                for (const auto &t : this->trace) {
+                    trace.push_back(t);
+                }
+            }
+#endif
         }
+#ifdef RESOURCE_REF_TRACE
+        for (auto &t : trace) {
+            std::cout << indentStr << t << " (trace)\n";
+        }
+#endif
         for (auto &ref : refs) {
             std::shared_ptr<referrer> referrer = ref.lock();
             if (referrer) {
