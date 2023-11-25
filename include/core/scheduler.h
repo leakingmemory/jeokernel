@@ -268,7 +268,7 @@ public:
             return;
         }
         event_handler_loop.clear();
-        event_handlers.reserve(this->event_handlers.size());
+        event_handler_loop.reserve(this->event_handlers.size());
         for (task_event_handler *eh : this->event_handlers) {
             event_handler_loop.push_back(eh);
         }
