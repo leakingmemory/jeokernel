@@ -238,6 +238,7 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
                             });
                         }
                         if (queue->empty()) {
+                            *processNext = [] () {};
                             std::unique_lock lock{state->lock};
                             if (!state->failed) {
                                 lock.release();
@@ -256,6 +257,8 @@ FileDescriptor::readv(std::shared_ptr<callctx> ctx, uintptr_t usersp_iov_ptr, in
 #endif
                         ctx->GetProcess().QueueBlocking(task_id, *processNext);
                         return resolve_return_value::AsyncReturn();
+                    } else {
+                        *processNext = [] () {};
                     }
                     return resolve_return_value::Return(0);
                 }
