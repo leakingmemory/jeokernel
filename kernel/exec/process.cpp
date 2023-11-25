@@ -3100,7 +3100,7 @@ int Process::GetAndClearSigpending() {
         return SIGKILL;
     }
     sigset_t sigs{sigpending & (~sigmask)};
-    auto sig = sigpending.First();
+    auto sig = sigs.First();
     if (sig != -1) {
         sigpending.Clear(sig);
     }
