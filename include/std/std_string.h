@@ -348,7 +348,7 @@ namespace std {
         }
 
         constexpr const CharT &at(size_type pos) const {
-            CharT *ptr;
+            const CharT *ptr;
             if (pos >= 0 && pos < size()) {
                 ptr = &(data()[pos]);
             } else {
@@ -617,6 +617,31 @@ namespace std {
             return *s == '\0';
         }
 
+        constexpr bool ends_with(const CharT ch) const noexcept {
+            auto iterator = cend();
+            if (iterator == cbegin()) {
+                return false;
+            }
+            --iterator;
+            return *iterator == ch;
+        }
+
+        constexpr size_type find_last_of(CharT ch, size_type pos = npos) const noexcept {
+            size_type p;
+            if (pos < size()) {
+                p = pos + 1;
+            } else {
+                p = size();
+            }
+            while (p > 0) {
+                --p;
+                if (at(p) == ch) {
+                    return p;
+                }
+            }
+            return npos;
+        }
+
         constexpr int compare( const basic_string& str ) const noexcept {
             bool equal_s{false};
             bool larger{false};
@@ -647,6 +672,31 @@ namespace std {
                 return larger ? 1 : -1;
             }
             return diff;
+        }
+
+        constexpr basic_string substr(size_type pos = 0, size_type count = npos) const {
+            basic_string str{};
+            auto sz = size();
+            if (pos >= sz) {
+                return str;
+            }
+            if (count > (sz - pos)) {
+                count = sz - pos;
+            }
+            sz = pos + count;
+            str.reserve(count);
+            typeof(pos) i = 0;
+            for (auto p = pos; p < sz; p++) {
+                str.at(i) = at(p);
+                ++i;
+            }
+            str.at(i) = '\0';
+            if (str.c.shrt.is_short()) {
+                str.c.shrt.set_size(count);
+            } else {
+                str.c.ptr.size = count;
+            }
+            return str;
         }
 
         bool operator==(const CharT *rhs ) {
