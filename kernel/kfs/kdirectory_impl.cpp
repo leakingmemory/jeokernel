@@ -45,6 +45,75 @@ std::string kdirectory_impl::Kpath() {
     return Name();
 }
 
+kfile_result<std::shared_ptr<kdirectory_impl>> kdirectory_impl::CreateDirectory(std::string filename, uint16_t mode) {
+    std::shared_ptr<kdirectory_impl> selfRef = this->selfRef.lock();
+    std::shared_ptr<class fsreferrer> referrer = selfRef;
+
+    std::shared_ptr<filesystem> fs{};
+    {
+        std::lock_guard lock{mounts_lock};
+        for (auto mnt: mounts) {
+            if (mnt.info.name == Name()) {
+                fs = mnt.fs;
+            }
+        }
+    }
+
+    fsreference<directory> dirref{};
+
+    if (fs) {
+        auto result = fs->GetRootDirectory(fs, selfRef);
+        if (result.status != filesystem_status::SUCCESS || !result.node) {
+            switch (result.status) {
+                case filesystem_status::SUCCESS:
+                case filesystem_status::IO_ERROR:
+                case filesystem_status::INTEGRITY_ERROR:
+                case filesystem_status::NOT_SUPPORTED_FS_FEATURE:
+                case filesystem_status::INVALID_REQUEST:
+                    return {.result = {}, .status = kfile_status::IO_ERROR};
+                case filesystem_status::NO_AVAIL_INODES:
+                    return {.result = {}, .status = kfile_status::NO_AVAIL_INODES};
+                case filesystem_status::NO_AVAIL_BLOCKS:
+                    return {.result = {}, .status = kfile_status::NO_AVAIL_BLOCKS};
+                default:
+                    return {.result = {}, .status = kfile_status::IO_ERROR};
+            }
+        }
+        dirref = std::move(result.node);
+    } else {
+        auto fileref = file.CreateReference(referrer);
+        dirref = fsreference_dynamic_cast<directory>(std::move(fileref));
+        if (!dirref) {
+            return {.result = {}, .status = kfile_status::NOT_DIRECTORY};
+        }
+    }
+    auto mkdirResult = dirref->CreateDirectory(referrer, filename, mode);
+    if (mkdirResult.status != fileitem_status::SUCCESS || !mkdirResult.file) {
+        switch (mkdirResult.status) {
+            case fileitem_status::SUCCESS:
+            case fileitem_status::IO_ERROR:
+            case fileitem_status::INTEGRITY_ERROR:
+            case fileitem_status::NOT_SUPPORTED_FS_FEATURE:
+            case fileitem_status::INVALID_REQUEST:
+                return {.result = {}, .status = kfile_status::IO_ERROR};
+            case fileitem_status::TOO_MANY_LINKS:
+                return {.result = {}, .status = kfile_status::TOO_MANY_LINKS};
+            case fileitem_status::NO_AVAIL_INODES:
+                return {.result = {}, .status = kfile_status::NO_AVAIL_INODES};
+            case fileitem_status::NO_AVAIL_BLOCKS:
+                return {.result = {}, .status = kfile_status::NO_AVAIL_BLOCKS};
+            case fileitem_status::EXISTS:
+                return {.result = {}, .status = kfile_status::EXISTS};
+            default:
+                return {.result = {}, .status = kfile_status::IO_ERROR};
+        }
+    }
+    std::string fullpath{selfRef->Name()};
+    fullpath.append("/");
+    fullpath.append(filename);
+    return {.result = kdirectory_impl::Create(mkdirResult.file, selfRef, fullpath), .status = kfile_status::SUCCESS};
+}
+
 kdirectory_impl::kdirectory_impl(const std::string &kpath) : kfile_impl(kpath), parent() {}
 
 void kdirectory_impl::Init(std::shared_ptr<kdirectory_impl> &selfRef, const std::shared_ptr<kdirectory_impl> &parent) {

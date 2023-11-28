@@ -24,10 +24,12 @@ extern int errno;
 #define EACCES      13
 #define EFAULT      14 // Bad address
 #define EBUSY       16
+#define EEXIST      17
 #define ENOTDIR     20
 #define EISDIR      21
 #define EINVAL      22 // Invalid argument
 #define EMFILE      24
+#define ENOSPC      28
 #define ERANGE      34
 #define ENOSYS      38 // Not a syscall
 #define ELOOP       40

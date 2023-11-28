@@ -23,6 +23,7 @@ public:
     std::shared_ptr<filesystem> Unmount();
     void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs);
     std::string Kpath();
+    kfile_result<std::shared_ptr<kdirectory_impl>> CreateDirectory(std::string filename, uint16_t mode);
 };
 
 #endif //JEOKERNEL_KDIRECTORY_IMPL_H

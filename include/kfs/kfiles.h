@@ -26,6 +26,10 @@ std::vector<kmount_info> GetKmounts();
 enum class kfile_status {
     SUCCESS,
     IO_ERROR,
+    TOO_MANY_LINKS,
+    NO_AVAIL_INODES,
+    NO_AVAIL_BLOCKS,
+    EXISTS,
     NOT_DIRECTORY
 };
 
@@ -118,6 +122,7 @@ public:
     std::shared_ptr<filesystem> Unmount();
     void Mount(const std::string &devname, const std::string &fstype, const std::string &mntopts, const std::shared_ptr<filesystem> &fs);
     std::string Kpath();
+    kfile_result<reference<kdirectory>> CreateDirectory(std::shared_ptr<class referrer> &referrer, std::string filename, uint16_t mode);
     fileitem *GetFileitem() const override;
     uint32_t Mode() const override;
     std::size_t Size() const override;

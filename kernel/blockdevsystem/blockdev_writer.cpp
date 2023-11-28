@@ -184,7 +184,7 @@ void blockdev_writer::Submit() {
                 }
                 const auto blocks = chunkLength / blocksize;
                 std::remove_const<typeof(blocks)>::type wrBlocks;
-                if ((chunkLength + offset) < FILEPAGE_PAGE_SIZE) {
+                if ((chunkLength + offset) <= FILEPAGE_PAGE_SIZE) {
                     wrBlocks = bdev->WriteBlock(
                             ((uint8_t *) (wr.page1->Pointer()->Pointer())) + offset,
                             blockaddr, blocks);

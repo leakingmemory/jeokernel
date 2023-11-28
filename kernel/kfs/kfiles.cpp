@@ -226,6 +226,20 @@ std::string kdirectory::Kpath() {
     return impl->Kpath();
 }
 
+kfile_result<reference<kdirectory>>
+kdirectory::CreateDirectory(std::shared_ptr<class referrer> &referrer, std::string filename, uint16_t mode) {
+    auto *impl = dynamic_cast<kdirectory_impl *> (&(*(this->impl)));
+    auto newImpl = impl->CreateDirectory(filename, mode);
+    if (newImpl.status != kfile_status::SUCCESS) {
+        return {.result = {}, .status = newImpl.status};
+    }
+    if (!newImpl.result) {
+        return {.result = {}, .status = kfile_status::IO_ERROR};
+    }
+    std::shared_ptr<kdirectory> kdir = kdirectory::Create(newImpl.result, newImpl.result->Kpath());
+    return {.result = kdir->CreateReference(referrer), .status = kfile_status::SUCCESS};
+}
+
 fileitem *kdirectory::GetFileitem() const {
     return impl->GetFileitem();
 }
