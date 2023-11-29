@@ -613,7 +613,17 @@ ext2fs_allocate_blocks_result ext2fs::AllocateBlocks(std::size_t requestedCount)
         if (block == 0) {
             continue;
         }
-        (*(blockBitmap[i]))[block - 1] = true;
+        typeof(block) blockIndex;
+        if (i != 0) {
+            --block;
+            blockIndex = block;
+        } else {
+            if (block == 0) {
+                continue;
+            }
+            blockIndex = block - 1;
+        }
+        (*(blockBitmap[i]))[blockIndex] = true;
         superblock->unallocated_blocks = superblock->unallocated_blocks - 1;
         group.freeBlocksCount--;
         group.dirty = true;
@@ -623,11 +633,16 @@ ext2fs_allocate_blocks_result ext2fs::AllocateBlocks(std::size_t requestedCount)
             if (superblock->unallocated_blocks <= 0 || group.freeBlocksCount <= 0) {
                 break;
             }
-            if (block >= superblock->blocks_per_group || (*(blockBitmap[i]))[block]) {
+            ++block;
+            if (i != 0) {
+                blockIndex = block;
+            } else {
+                blockIndex = block - 1;
+            }
+            if (block >= superblock->blocks_per_group || (*(blockBitmap[i]))[blockIndex]) {
                 break;
             }
-            (*(blockBitmap[i]))[block] = true;
-            ++block;
+            (*(blockBitmap[i]))[blockIndex] = true;
             superblock->unallocated_blocks = superblock->unallocated_blocks - 1;
             group.freeBlocksCount--;
             --requestedCount;
@@ -647,8 +662,11 @@ filesystem_status ext2fs::ReleaseBlock(uint32_t blknum) {
     if (group >= blockBitmap.size()) {
         return filesystem_status::INTEGRITY_ERROR;
     }
+    if (group == 0) {
+        --blk;
+    }
     std::lock_guard lock{mtx};
-    (*(blockBitmap[group]))[blk - 1] = false;
+    (*(blockBitmap[group]))[blk] = false;
     groups[group].freeBlocksCount++;
     groups[group].dirty = true;
     superblock->unallocated_blocks = superblock->unallocated_blocks + 1;
