@@ -6,12 +6,10 @@
 #include <exec/procthread.h>
 #include "SetTidAddress.h"
 
-int64_t SetTidAddress::Call(int64_t tidptr_i, int64_t, int64_t, int64_t, SyscallAdditionalParams &) {
+int64_t SetTidAddress::Call(int64_t tidptr_i, int64_t, int64_t, int64_t, SyscallAdditionalParams &params) {
     auto tidptr = (uintptr_t) tidptr_i;
 
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+    auto *process = params.CurrentThread();
 
     process->SetTidAddress(tidptr);
     return process->getpid();

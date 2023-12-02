@@ -39,9 +39,7 @@ int Dup2_Call::Call(ProcThread *process, int oldfd, int newfd) {
     return newf->FD();
 }
 
-int64_t Dup2::Call(int64_t oldfd, int64_t newfd, int64_t, int64_t, SyscallAdditionalParams &) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+int64_t Dup2::Call(int64_t oldfd, int64_t newfd, int64_t, int64_t, SyscallAdditionalParams &params) {
+    auto *process = params.CurrentThread();
     return Dup2_Call::Create()->Call(process, (int) oldfd, (int) newfd);
 }

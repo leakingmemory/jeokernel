@@ -10,10 +10,8 @@
 
 //#define DEBUG_BRK
 
-int64_t Brk::Call(int64_t addr, int64_t, int64_t, int64_t, SyscallAdditionalParams &) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+int64_t Brk::Call(int64_t addr, int64_t, int64_t, int64_t, SyscallAdditionalParams &params) {
+    auto *process = params.CurrentThread();
     uintptr_t result{0};
 #ifdef DEBUG_BRK
     std::cout << "Brk(" << std::hex << addr << std::dec << ") -> ";

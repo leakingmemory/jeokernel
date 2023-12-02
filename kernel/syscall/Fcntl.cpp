@@ -15,7 +15,7 @@ private:
 public:
     static std::shared_ptr<Fcntl_Call> Create();
     std::string GetReferrerIdentifier() override;
-    intptr_t Call(int fd, intptr_t cmd, intptr_t arg);
+    intptr_t Call(ProcThread *, int fd, intptr_t cmd, intptr_t arg);
 };
 
 std::shared_ptr<Fcntl_Call> Fcntl_Call::Create() {
@@ -29,11 +29,8 @@ std::string Fcntl_Call::GetReferrerIdentifier() {
     return "";
 }
 
-intptr_t Fcntl_Call::Call(int fd, intptr_t cmd, intptr_t arg) {
+intptr_t Fcntl_Call::Call(ProcThread *process, int fd, intptr_t cmd, intptr_t arg) {
     std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     auto fdesc = process->get_file_descriptor(selfRef, fd);
     if (!fdesc) {
         return -EBADF;
@@ -45,6 +42,6 @@ intptr_t Fcntl_Call::Call(int fd, intptr_t cmd, intptr_t arg) {
     return -EOPNOTSUPP;
 }
 
-int64_t Fcntl::Call(int64_t fd, int64_t cmd, int64_t arg, int64_t, SyscallAdditionalParams &) {
-    return Fcntl_Call::Create()->Call((int) fd, cmd, arg);
+int64_t Fcntl::Call(int64_t fd, int64_t cmd, int64_t arg, int64_t, SyscallAdditionalParams &params) {
+    return Fcntl_Call::Create()->Call(params.CurrentThread(), (int) fd, cmd, arg);
 }

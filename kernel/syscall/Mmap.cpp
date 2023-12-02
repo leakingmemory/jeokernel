@@ -18,7 +18,7 @@ private:
 public:
     static std::shared_ptr<Mmap_Call> Create();
     std::string GetReferrerIdentifier() override;
-    intptr_t Call(uintptr_t addr, uintptr_t len, unsigned int prot, unsigned int flags, int fd, intptr_t off);
+    intptr_t Call(ProcThread *, uintptr_t addr, uintptr_t len, unsigned int prot, unsigned int flags, int fd, intptr_t off);
 };
 
 std::shared_ptr<Mmap_Call> Mmap_Call::Create() {
@@ -32,7 +32,7 @@ std::string Mmap_Call::GetReferrerIdentifier() {
     return "";
 }
 
-intptr_t Mmap_Call::Call(uintptr_t addr, uintptr_t len, unsigned int prot, unsigned int flags, int fd, intptr_t off) {
+intptr_t Mmap_Call::Call(ProcThread *process, uintptr_t addr, uintptr_t len, unsigned int prot, unsigned int flags, int fd, intptr_t off) {
     auto mapType = flags & MAP_TYPE_MASK;
 
     switch (mapType) {
@@ -44,10 +44,6 @@ intptr_t Mmap_Call::Call(uintptr_t addr, uintptr_t len, unsigned int prot, unsig
         default:
             return -EOPNOTSUPP;
     }
-
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
 
     auto pages = len >> 12;
     if ((pages << 12) != len) {
@@ -132,5 +128,5 @@ int64_t Mmap::Call(int64_t addr, int64_t len, int64_t prot, int64_t flags, Sysca
         }
     }
 
-    return Mmap_Call::Create()->Call(addr, len, prot, flags, fd, off);
+    return Mmap_Call::Create()->Call(params.CurrentThread(), addr, len, prot, flags, fd, off);
 }

@@ -10,6 +10,9 @@
 #include <functional>
 
 class Interrupt;
+class tasklist;
+class task;
+class ProcThread;
 
 class SyscallInterruptFrameVisitor {
 public:
@@ -21,10 +24,13 @@ private:
     int64_t param5, param6;
     std::function<void (SyscallInterruptFrameVisitor &)> accessInterruptFrame;
     std::function<void (Interrupt &)> modifyCpuState;
+    tasklist *scheduler;
+    task *currentTask;
+    ProcThread *currentThread;
+    uint32_t taskId;
     bool doContextSwitch;
 public:
-    SyscallAdditionalParams(int64_t param5, int64_t param6, const std::function<void (SyscallInterruptFrameVisitor &)> &accessInterruptFrame) : param5(param5), param6(param6), accessInterruptFrame(accessInterruptFrame), modifyCpuState(), doContextSwitch(false) {
-    }
+    SyscallAdditionalParams(int64_t param5, int64_t param6, const std::function<void (SyscallInterruptFrameVisitor &)> &accessInterruptFrame);
     int64_t Param5() const {
         return param5;
     }
@@ -52,6 +58,18 @@ public:
     }
     void Accept(SyscallInterruptFrameVisitor &visitor) {
         accessInterruptFrame(visitor);
+    }
+    tasklist *Scheduler() const {
+        return scheduler;
+    }
+    task *CurrentTask() const {
+        return currentTask;
+    }
+    ProcThread *CurrentThread() const {
+        return currentThread;
+    }
+    uint32_t TaskId() const {
+        return taskId;
     }
 };
 

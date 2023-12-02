@@ -10,7 +10,7 @@
 
 //#define MPROTECT_CALL_DEBUG
 
-int64_t Mprotect::Call(int64_t addr, int64_t len , int64_t prot, int64_t, SyscallAdditionalParams &) {
+int64_t Mprotect::Call(int64_t addr, int64_t len , int64_t prot, int64_t, SyscallAdditionalParams &params) {
     constexpr uint64_t supportedProt = PROT_NONE | PROT_READ | PROT_WRITE | PROT_EXEC;
     constexpr uint64_t notSupportedProt = ~supportedProt;
 #ifdef MPROTECT_CALL_DEBUG
@@ -26,9 +26,7 @@ int64_t Mprotect::Call(int64_t addr, int64_t len , int64_t prot, int64_t, Syscal
         return -EINVAL;
     }
 
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+    auto *process = params.CurrentThread();
 
     auto end = addr + len;
     {

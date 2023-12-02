@@ -78,20 +78,20 @@ void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, c
 
 int64_t Nanosleep::Call(int64_t uptr_requested, int64_t uptr_remaining, int64_t, int64_t, SyscallAdditionalParams &params) {
     auto ctx = std::make_shared<SyscallCtx>(params);
-    auto &task = get_scheduler()->get_current_task();
+    auto *task = params.CurrentTask();
     if (uptr_requested == 0) {
         return -EINVAL;
     }
-    return ctx->Read(uptr_requested, sizeof(timespec), [ctx, &task, uptr_remaining] (void *ptr_requested) {
+    return ctx->Read(uptr_requested, sizeof(timespec), [ctx, task, uptr_remaining] (void *ptr_requested) {
         auto *requested = (timespec *) ptr_requested;
         if (uptr_remaining != 0) {
-            return ctx->NestedWrite(uptr_remaining, sizeof(timespec), [ctx, &task, requested] (void *ptr_remaining) {
+            return ctx->NestedWrite(uptr_remaining, sizeof(timespec), [ctx, task, requested] (void *ptr_remaining) {
                 auto *remaining = (timespec *) ptr_remaining;
-                DoNanosleep(ctx, task, requested, remaining);
+                DoNanosleep(ctx, *task, requested, remaining);
                 return resolve_return_value::AsyncReturn();
             });
         }
-        DoNanosleep(ctx, task, requested, nullptr);
+        DoNanosleep(ctx, *task, requested, nullptr);
         return resolve_return_value::AsyncReturn();
     });
 }

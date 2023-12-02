@@ -28,9 +28,9 @@ constexpr size_t capLen(const std::string &str) {
 }
 
 int64_t Uname::Call(int64_t utsnameptr, int64_t, int64_t, int64_t, SyscallAdditionalParams &additionalParams) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+    auto *scheduler = additionalParams.Scheduler();
+    task *current_task = additionalParams.CurrentTask();
+    auto *process = additionalParams.CurrentThread();
     auto result = process->resolve_read(utsnameptr, sizeof(utsname), false, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;

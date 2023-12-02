@@ -14,7 +14,7 @@ private:
 public:
     static std::shared_ptr<Writev_Call> Create();
     std::string GetReferrerIdentifier() override;
-    file_descriptor_result Call(tasklist *scheduler, task *current_task, int fd, uintptr_t user_iov_ptr, int iovcnt);
+    file_descriptor_result Call(tasklist *scheduler, task *current_task, ProcThread *, int fd, uintptr_t user_iov_ptr, int iovcnt);
 };
 
 std::shared_ptr<Writev_Call> Writev_Call::Create() {
@@ -28,9 +28,8 @@ std::string Writev_Call::GetReferrerIdentifier() {
     return "";
 }
 
-file_descriptor_result Writev_Call::Call(tasklist *scheduler, task *current_task, int fd, uintptr_t user_iov_ptr, int iovcnt) {
+file_descriptor_result Writev_Call::Call(tasklist *scheduler, task *current_task, ProcThread *process, int fd, uintptr_t user_iov_ptr, int iovcnt) {
     std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     auto desc = process->get_file_descriptor(selfRef, fd);
     if (!desc) {
         return {.result = -EBADF, .async = false};
@@ -44,9 +43,10 @@ file_descriptor_result Writev_Call::Call(tasklist *scheduler, task *current_task
 }
 
 int64_t Writev::Call(int64_t fd, int64_t user_iov_ptr, int64_t iovcnt, int64_t, SyscallAdditionalParams &params) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto result = Writev_Call::Create()->Call(scheduler, current_task, (int) fd, user_iov_ptr, (int) iovcnt);
+    auto *scheduler = params.Scheduler();
+    task *current_task = params.CurrentTask();
+    auto *process = params.CurrentThread();
+    auto result = Writev_Call::Create()->Call(scheduler, current_task, process, (int) fd, user_iov_ptr, (int) iovcnt);
     if (result.async) {
         current_task->set_blocked(true);
         params.DoContextSwitch(true);

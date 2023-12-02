@@ -63,7 +63,7 @@ void Stat_Call::Call(SyscallCtx &ctx, struct stat *stbuf, const std::string &fil
 
 int64_t Stat::Call(int64_t uptr_filename, int64_t uptr_statbuf, int64_t, int64_t, SyscallAdditionalParams &handler) {
     SyscallCtx ctx{handler};
-    auto task_id = get_scheduler()->get_current_task_id();
+    auto task_id = handler.TaskId();
 
     return ctx.ReadString(uptr_filename, [this, ctx, uptr_statbuf, task_id] (const std::string &inFilename) {
         std::string filename{inFilename};

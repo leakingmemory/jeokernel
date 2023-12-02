@@ -12,9 +12,8 @@
 #endif
 
 int64_t Exit::Call(int64_t returnValue, int64_t, int64_t, int64_t, SyscallAdditionalParams &additionalParams) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+    auto *scheduler = additionalParams.Scheduler();
+    auto *process = additionalParams.CurrentThread();
 #ifdef EXIT_DEBUG
     std::cout << "exit(" << returnValue << ") pid " << process->getpid() << " tid " << process->gettid() << "\n";
 #endif

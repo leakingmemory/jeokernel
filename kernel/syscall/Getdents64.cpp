@@ -128,7 +128,7 @@ int64_t Getdents64::Call(int64_t fd, int64_t uptr_dirent, int64_t count, int64_t
 #ifdef GETDENTS64_DEBUG
     std::cout << "getdents64(" << std::dec << fd << ", " << std::hex << uptr_dirent << std::dec << ", " << count << ")\n";
 #endif
-    auto task_id = get_scheduler()->get_current_task_id();
+    auto task_id = params.TaskId();
     auto getdents = Getdents64_Call::Create();
     auto err = getdents->Open(ctx, (int) fd);
     if (err != 0) {

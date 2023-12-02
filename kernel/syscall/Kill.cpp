@@ -6,13 +6,12 @@
 #include <exec/procthread.h>
 #include <errno.h>
 
-int64_t Kill::Call(int64_t ipid, int64_t isig, int64_t, int64_t, SyscallAdditionalParams &) {
-    auto *scheduler = get_scheduler();
+int64_t Kill::Call(int64_t ipid, int64_t isig, int64_t, int64_t, SyscallAdditionalParams &params) {
+    auto *scheduler = params.Scheduler();
     uid_t euid;
     pid_t our_pid;
     {
-        auto &task = scheduler->get_current_task();
-        auto *pt = task.get_resource<ProcThread>();
+        auto *pt = params.CurrentThread();
         euid = pt->geteuid();
         our_pid = pt->getpid();
     }

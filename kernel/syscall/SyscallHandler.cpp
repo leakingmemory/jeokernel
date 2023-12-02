@@ -3,6 +3,7 @@
 //
 
 #include <errno.h>
+#include <core/scheduler.h>
 #include "interrupt_frame.h"
 #include "SyscallHandler.h"
 #include "Exit.h"
@@ -84,6 +85,13 @@
 #ifdef SYSCALL_DEBUG
 #include <iostream>
 #endif
+
+SyscallAdditionalParams::SyscallAdditionalParams(int64_t param5, int64_t param6, const std::function<void(
+        SyscallInterruptFrameVisitor &)> &accessInterruptFrame) : param5(param5), param6(param6), accessInterruptFrame(accessInterruptFrame), modifyCpuState(), scheduler(get_scheduler()), currentTask(nullptr), currentThread(nullptr), taskId(0), doContextSwitch(false) {
+    currentTask = &(scheduler->get_current_task());
+    currentThread = scheduler->get_resource<ProcThread>(*currentTask);
+    taskId = scheduler->get_current_task_id();
+}
 
 Syscall::Syscall(SyscallHandler &handler, uint64_t number) : number(number) {
     handler.handlers.push_back(this);

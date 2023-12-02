@@ -112,7 +112,7 @@ int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t 
 
     SyscallCtx ctx{params};
 
-    auto task_id = get_scheduler()->get_current_task_id();
+    auto task_id = params.TaskId();
 
     return ctx.ReadString(uptr_filename, [this, ctx, task_id, uptr_statbuf, dfd, flag] (const std::string &u_filename) {
         std::string filename{u_filename};

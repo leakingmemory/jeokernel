@@ -63,7 +63,7 @@ std::string Readlink_Call::Call(ProcThread &proc, const std::string &path, int &
 
 int64_t Readlink::Call(int64_t uptr_path, int64_t uptr_buf, int64_t bufsize, int64_t, SyscallAdditionalParams &params) {
     SyscallCtx ctx{params};
-    auto task_id = get_scheduler()->get_current_task_id();
+    auto task_id = params.TaskId();
     return ctx.ReadString(uptr_path, [this, ctx, task_id, uptr_buf, bufsize] (const std::string &u_path) {
         std::string path{u_path};
         return ctx.NestedWrite(uptr_buf, bufsize, [this, ctx, task_id, path, bufsize] (void *ptr) {

@@ -14,7 +14,7 @@ private:
 public:
     static std::shared_ptr<Write_Call> Create();
     std::string GetReferrerIdentifier() override;
-    file_descriptor_result Call(tasklist *scheduler, task *current_task, int fd, uintptr_t ptr, intptr_t len);
+    file_descriptor_result Call(tasklist *scheduler, task *current_task, ProcThread *, int fd, uintptr_t ptr, intptr_t len);
 };
 
 std::shared_ptr<Write_Call> Write_Call::Create() {
@@ -28,9 +28,8 @@ std::string Write_Call::GetReferrerIdentifier() {
     return "";
 }
 
-file_descriptor_result Write_Call::Call(tasklist *scheduler, task *current_task, int fd, uintptr_t ptr, intptr_t len) {
+file_descriptor_result Write_Call::Call(tasklist *scheduler, task *current_task, ProcThread *process, int fd, uintptr_t ptr, intptr_t len) {
     std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
     auto desc = process->get_file_descriptor(selfRef, fd);
     if (!desc) {
         return {.result = -EBADF, .async = false};
@@ -44,9 +43,10 @@ file_descriptor_result Write_Call::Call(tasklist *scheduler, task *current_task,
 }
 
 int64_t Write::Call(int64_t fd, int64_t ptr, int64_t len, int64_t, SyscallAdditionalParams &additionalParams) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto result = Write_Call::Create()->Call(scheduler, current_task, (int) fd, ptr, len);
+    auto *scheduler = additionalParams.Scheduler();
+    task *current_task = additionalParams.CurrentTask();
+    auto *process = additionalParams.CurrentThread();
+    auto result = Write_Call::Create()->Call(scheduler, current_task, process, (int) fd, ptr, len);
     if (result.async) {
         current_task->set_blocked(true);
         additionalParams.DoContextSwitch(true);

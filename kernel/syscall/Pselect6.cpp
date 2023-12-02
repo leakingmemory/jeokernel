@@ -328,7 +328,7 @@ int64_t Pselect6::Call(int64_t n, int64_t uptr_inp, int64_t uptr_outp, int64_t u
               << uptr_excp << ", 0x" << uptr_timespec << ", 0x" << uptr_sig << ")\n";
 #endif
     auto sizeofBitm = SizeOfFdSet(n);
-    auto task_id = get_scheduler()->get_current_task_id();
+    auto task_id = params.TaskId();
     if (uptr_timespec != 0) {
         return ctx.Read(uptr_timespec, sizeof(timespec), [this, ctx, task_id, sizeofBitm, n, uptr_inp, uptr_outp, uptr_excp] (const void *ptr_timespec) {
             auto *timeout = (const timespec *) ptr_timespec;

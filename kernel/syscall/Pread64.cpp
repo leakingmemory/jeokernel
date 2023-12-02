@@ -39,7 +39,7 @@ Pread64_Call::Call(SyscallAdditionalParams &additionalParams, int fd, intptr_t u
     if (!desc) {
         return -EBADF;
     }
-    auto task_id = get_scheduler()->get_current_task_id();
+    auto task_id = additionalParams.TaskId();
     return ctx.Write(uptr_buf, count, [selfRef, &process, ctx, task_id, count, pos] (void *ptr) mutable {
         process.QueueBlocking(task_id, [selfRef, ctx, ptr, count, pos] () mutable {
             std::shared_ptr<SyscallCtx> shctx = std::make_shared<SyscallCtx>(ctx);

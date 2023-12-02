@@ -5,10 +5,7 @@
 #include <exec/procthread.h>
 #include "SetRobustList.h"
 
-int64_t SetRobustList::Call(int64_t addr, int64_t length, int64_t, int64_t, SyscallAdditionalParams &) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
-    process->SetRobustListHead((uintptr_t) addr);
+int64_t SetRobustList::Call(int64_t addr, int64_t length, int64_t, int64_t, SyscallAdditionalParams &params) {
+    params.CurrentThread()->SetRobustListHead((uintptr_t) addr);
     return 0;
 }

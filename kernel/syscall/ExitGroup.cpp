@@ -12,9 +12,8 @@
 #include "thread"
 
 int64_t ExitGroup::Call(int64_t status, int64_t, int64_t, int64_t, SyscallAdditionalParams &params) {
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+    auto *scheduler = params.Scheduler();
+    auto *process = params.CurrentThread();
 #ifdef EXIT_GROUP_DEBUG
     std::cout << "exit_group(" << status << ") pid " << process->getpid() << " tid " << process->gettid() << "\n";
 #endif

@@ -12,9 +12,9 @@ int64_t Rseq::Call(int64_t uptr_rseq, int64_t rseq_len32, int64_t i_flags, int64
     uint32_t rseq_len = (uint32_t) rseq_len32;
     int flags = (int) i_flags;
     uint32_t sig = u32_sig;
-    auto *scheduler = get_scheduler();
-    task *current_task = &(scheduler->get_current_task());
-    auto *process = scheduler->get_resource<ProcThread>(*current_task);
+    auto *scheduler = params.Scheduler();
+    task *current_task = params.CurrentTask();
+    auto *process = params.CurrentThread();
     if (rseq_len != sizeof(struct rseq)) {
         return -EINVAL;
     }

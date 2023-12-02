@@ -54,7 +54,7 @@ int Chdir_Call::Call(const std::shared_ptr<Process> &proc, const std::string &fi
 
 int64_t Chdir::Call(int64_t uptr_filename, int64_t, int64_t, int64_t, SyscallAdditionalParams &params) {
     SyscallCtx ctx{params};
-    auto task_id = get_scheduler()->get_current_task_id();
+    auto task_id = params.TaskId();
     return ctx.ReadString(uptr_filename, [this, ctx, task_id] (const std::string &r_filename) {
         std::string filename{r_filename};
         Queue(task_id, [this, ctx, filename] () {

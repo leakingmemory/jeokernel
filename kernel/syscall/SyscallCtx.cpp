@@ -21,9 +21,9 @@ public:
 
 SyscallCtxAsync::SyscallCtxAsync(SyscallAdditionalParams &params) :
     params(&params),
-    scheduler(get_scheduler()),
-    current_task(&(scheduler->get_current_task())),
-    process(current_task->get_resource<ProcThread>())
+    scheduler(params.Scheduler()),
+    current_task(params.CurrentTask()),
+    process(params.CurrentThread())
 {
 }
 
