@@ -9,10 +9,14 @@
 kshell::kshell(const std::shared_ptr<class tty> &tty) : referrer("kshell"), tty(tty) {
 }
 
-void kshell::Init(const std::shared_ptr<kshell> &selfRef) {
+void kshell::Init(const std::shared_ptr<kshell> &selfRefIn) {
+    std::shared_ptr<kshell> selfRef{selfRefIn};
     std::weak_ptr<kshell> weakPtr{selfRef};
     this->selfRef = weakPtr;
-    std::thread shell{[this] () { std::this_thread::set_name("[kshell]"); run(); }};
+    std::thread shell{[selfRef] () mutable {
+        std::this_thread::set_name("[kshell]");
+        selfRef->run();
+    }};
     this->shell = std::move(shell);
 }
 
@@ -34,6 +38,11 @@ kshell::~kshell() {
     shell.join();
 }
 
+void kshell::OnExit(const std::function<void()> &func) {
+    std::lock_guard lock{mtx};
+    exitFuncs.push_back(func);
+}
+
 void kshell::CwdRoot() {
     std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
     this->cwd_ref = get_kernel_rootdir()->CreateReference(selfRef);
@@ -50,10 +59,10 @@ reference<kfile> kshell::CwdRef(std::shared_ptr<class referrer> &referrer) {
     return cwd_ref.CreateReference(referrer);
 }
 
-[[noreturn]] void kshell::run() {
+void kshell::run() {
     std::string input{};
     CwdRoot();
-    while(true) {
+    while (!exit) {
         std::shared_ptr<keyboard_line_consumer> consumer{new keyboard_line_consumer()};
         get_klogger() << "# ";
         Keyboard().consume(consumer);
@@ -68,6 +77,16 @@ reference<kfile> kshell::CwdRef(std::shared_ptr<class referrer> &referrer) {
         if (!parsed.empty()) {
             Exec(parsed);
         }
+    }
+    std::vector<std::function<void ()>> exitFuncs{};
+    {
+        std::lock_guard lock{mtx};
+        for (const auto &func : this->exitFuncs) {
+            exitFuncs.push_back(func);
+        }
+    }
+    for (auto &func : exitFuncs) {
+        func();
     }
 }
 

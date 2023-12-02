@@ -25,18 +25,20 @@ private:
     std::mutex mtx{};
     std::weak_ptr<kshell> selfRef{};
     std::vector<std::shared_ptr<kshell_command>> commands{};
+    std::vector<std::function<void ()>> exitFuncs{};
     reference<kfile> cwd_ref{};
     kdirectory *cwd{nullptr};
     std::shared_ptr<class tty> tty;
     std::thread shell{};
     bool exit{false};
 private:
-    kshell(const std::shared_ptr<class tty> &tty);
+    explicit kshell(const std::shared_ptr<class tty> &tty);
 public:
     void Init(const std::shared_ptr<kshell> &selfRef);
     static std::shared_ptr<kshell> Create(const std::shared_ptr<class tty> &tty);
     std::string GetReferrerIdentifier() override;
     ~kshell();
+    void OnExit(const std::function<void ()> &);
     void CwdRoot();
     void Cwd(const reference<kfile> &cwd);
     kdirectory &Cwd() {
@@ -54,7 +56,11 @@ public:
 
     void AddCommand(std::shared_ptr<kshell_command> command);
 
-    [[noreturn]] void run();
+    void Exit() {
+        exit = true;
+    }
+
+    void run();
 };
 
 #endif //JEOKERNEL_KSHELL_H

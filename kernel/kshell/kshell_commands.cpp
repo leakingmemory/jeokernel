@@ -85,11 +85,25 @@ public:
     }
 };
 
+class kshell_exit : public kshell_command {
+private:
+    std::string command;
+public:
+    kshell_exit() : command("exit") {}
+    const std::string &Command() const override {
+        return command;
+    }
+    void Exec(kshell &shell, const std::vector<std::string> &cmd) override {
+        shell.Exit();
+    }
+};
+
 kshell_commands::kshell_commands(kshell &shell) {
     shell.AddCommand(std::make_shared<kshell_echo>());
     shell.AddCommand(std::make_shared<kshell_reboot>());
     shell.AddCommand(std::make_shared<kshell_poweroff>());
     shell.AddCommand(std::make_shared<kshell_pwd>());
+    shell.AddCommand(std::make_shared<kshell_exit>());
     shell.AddCommand(std::make_shared<kshell_ps>());
     shell.AddCommand(std::make_shared<kshell_stats>());
     shell.AddCommand(std::make_shared<kshell_blockdevices>());

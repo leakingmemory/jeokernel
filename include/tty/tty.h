@@ -14,6 +14,7 @@
 #include <sys/types.h>
 
 class FileDescriptorHandler;
+class kshell;
 
 class tty : public keycode_consumer {
 private:

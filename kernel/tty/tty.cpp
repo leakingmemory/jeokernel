@@ -12,6 +12,8 @@
 #include <exec/fdesc.h>
 #include <exec/process.h>
 #include <exec/procthread.h>
+#include "../kshell/kshell.h"
+#include "../kshell/kshell_commands.h"
 
 tty::tty() : mtx(), self(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
 }
@@ -206,6 +208,14 @@ bool tty::Consume(uint32_t keycode) {
                 }
             }
             return true;
+        } else if ((ch[0] == 's' || ch[0] == 'S') && (keycode & (KEYBOARD_CODE_BIT_LCONTROL | KEYBOARD_CODE_BIT_RCONTROL)) != 0 && (keycode & KEYBOARD_CODE_BIT_LALT) != 0) {
+            std::shared_ptr<tty> ref = self.lock();
+            std::shared_ptr<kshell> shell = kshell::Create(ref);
+            shell->OnExit([ref] () {
+                Keyboard().consume(ref);
+            });
+            kshell_commands cmds{*shell};
+            return false; // Unconsume keycodes, need reconnect after shell
         }
         std::lock_guard lock{mtx};
         if (lineedit) {
