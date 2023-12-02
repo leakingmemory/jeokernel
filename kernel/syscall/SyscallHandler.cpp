@@ -109,6 +109,7 @@ SyscallResult SyscallHandler::Call(Interrupt &intr) {
             SyscallAdditionalParams additionalParams{(int64_t) intr.r8(), (int64_t) intr.r9(), [&intr] (SyscallInterruptFrameVisitor &visitor) {
                 visitor.VisitInterruptFrame(intr);
             }};
+            additionalParams.CurrentThread()->SetSyscallNumber((int) number);
             intr.get_cpu_state().rax = 0;
             uint64_t result = (uint64_t) handler->Call((int64_t) intr.rdi(), (int64_t) intr.rsi(), (int64_t) intr.rdx(), (int64_t) intr.r10(), additionalParams);
             if (result != 0) {

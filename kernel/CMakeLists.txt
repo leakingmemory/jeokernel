@@ -40,6 +40,7 @@ add_subdirectory(devfs)
 add_subdirectory(tty)
 add_subdirectory(procfs)
 add_subdirectory(resource)
+add_subdirectory(prockshell)
 
 add_library(bootstrap bootstrap.S)
 
@@ -96,3 +97,4 @@ target_link_libraries(kernel.full PRIVATE ttydev)
 target_link_libraries(kernel.full PRIVATE tty)
 target_link_libraries(kernel.full PRIVATE procfs)
 target_link_libraries(kernel.full PRIVATE resource)
+target_link_libraries(kernel.full PRIVATE prockshell)

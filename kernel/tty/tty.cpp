@@ -14,6 +14,7 @@
 #include <exec/procthread.h>
 #include <kshell/kshell.h>
 #include <kshell/kshell_commands.h>
+#include <prockshell/prockshell.h>
 
 tty::tty() : mtx(), self(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
 }
@@ -215,6 +216,7 @@ bool tty::Consume(uint32_t keycode) {
                 Keyboard().consume(ref);
             });
             kshell_commands cmds{*shell};
+            prockshell proc{*shell};
             return false; // Unconsume keycodes, need reconnect after shell
         }
         std::lock_guard lock{mtx};

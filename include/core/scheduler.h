@@ -354,6 +354,10 @@ public:
     void set_name(const std::string &nname) {
         this->name = nname;
     }
+
+    std::string get_name() const {
+        return name;
+    }
 };
 
 struct event_call {

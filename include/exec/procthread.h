@@ -32,6 +32,7 @@ private:
     uintptr_t tidAddress;
     uintptr_t robustListHead;
     pid_t tid;
+    int syscallNumber;
     int aborterFuncHandle;
     bool clearTidAddr;
     bool hasSigaltstack;
@@ -144,6 +145,8 @@ public:
     bool WaitForAnyChild(child_result &immediateResult, const std::function<void (pid_t, intptr_t)> &orAsync);
     void SetAuxv(const std::shared_ptr<const std::vector<ELF64_auxv>> &auxv);
     [[nodiscard]] std::shared_ptr<const std::vector<ELF64_auxv>> GetAuxv() const;
+    void SetSyscallNumber(int sycallNumber);
+    int GetSyscallNumber() const;
 
 #ifdef DEBUG_SYSCALL_PFAULT_ASYNC_BUGS
     void SetThreadFaulted(bool faulted) {

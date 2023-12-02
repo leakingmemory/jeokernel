@@ -5,7 +5,7 @@
 #include "kshell_ps.h"
 #include "sstream"
 
-void tab(std::stringstream &str, uint8_t characters) {
+static void tab(std::stringstream &str, uint8_t characters) {
     auto length = str.str().size();
     auto pad = characters - (length % characters);
     if (pad == 0) {

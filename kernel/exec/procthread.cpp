@@ -370,3 +370,13 @@ void ProcThread::SetAuxv(const std::shared_ptr<const std::vector<ELF64_auxv>> &a
 std::shared_ptr<const std::vector<ELF64_auxv>> ProcThread::GetAuxv() const {
     return process->GetAuxv();
 }
+
+void ProcThread::SetSyscallNumber(int syscallNumber) {
+    this->syscallNumber = syscallNumber;
+    asm("sfence");
+}
+
+int ProcThread::GetSyscallNumber() const {
+    asm("mfence");
+    return syscallNumber;
+}
