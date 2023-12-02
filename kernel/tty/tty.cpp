@@ -12,8 +12,8 @@
 #include <exec/fdesc.h>
 #include <exec/process.h>
 #include <exec/procthread.h>
-#include "../kshell/kshell.h"
-#include "../kshell/kshell_commands.h"
+#include <kshell/kshell.h>
+#include <kshell/kshell_commands.h>
 
 tty::tty() : mtx(), self(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
 }
