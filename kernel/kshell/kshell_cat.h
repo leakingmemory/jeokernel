@@ -5,7 +5,7 @@
 #ifndef JEOKERNEL_KSHELL_CAT_H
 #define JEOKERNEL_KSHELL_CAT_H
 
-#include "kshell.h"
+#include <kshell/kshell.h>
 
 class kshell_cat : public kshell_command {
 private:

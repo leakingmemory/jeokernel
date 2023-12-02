@@ -5,7 +5,7 @@
 #ifndef JEOKERNEL_KSHELL_UMOUNT_H
 #define JEOKERNEL_KSHELL_UMOUNT_H
 
-#include "kshell.h"
+#include <kshell/kshell.h>
 
 class kshell_umount : public kshell_command {
 private:

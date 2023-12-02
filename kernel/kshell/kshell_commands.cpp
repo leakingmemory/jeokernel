@@ -2,7 +2,7 @@
 // Created by sigsegv on 1/30/22.
 //
 
-#include "kshell_commands.h"
+#include <kshell/kshell_commands.h>
 #include <sstream>
 #include <iostream>
 #include "kshell_ps.h"

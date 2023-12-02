@@ -5,7 +5,7 @@
 #ifndef JEOKERNEL_KSHELL_MOUNT_H
 #define JEOKERNEL_KSHELL_MOUNT_H
 
-#include "kshell.h"
+#include <kshell/kshell.h>
 
 class kshell_mount : public kshell_command {
 private:

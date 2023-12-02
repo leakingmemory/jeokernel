@@ -2,7 +2,7 @@
 // Created by sigsegv on 1/27/22.
 //
 
-#include "kshell.h"
+#include <kshell/kshell.h>
 #include "keyboard/keyboard.h"
 #include "sstream"
 

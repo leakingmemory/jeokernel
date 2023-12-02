@@ -5,7 +5,7 @@
 #ifndef JEOKERNEL_KSHELL_EXEC_H
 #define JEOKERNEL_KSHELL_EXEC_H
 
-#include "kshell.h"
+#include <kshell/kshell.h>
 
 class kshell_exec : public kshell_command {
 private:

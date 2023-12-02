@@ -5,7 +5,7 @@
 #ifndef JEOKERNEL_KSHELL_BLOCKDEVICES_H
 #define JEOKERNEL_KSHELL_BLOCKDEVICES_H
 
-#include "kshell.h"
+#include <kshell/kshell.h>
 
 class kshell_blockdevices : public kshell_command {
 private:

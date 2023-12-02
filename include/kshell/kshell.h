@@ -5,11 +5,11 @@
 #ifndef JEOKERNEL_KSHELL_H
 #define JEOKERNEL_KSHELL_H
 
-#include <thread>
-#include <string>
-#include <kfs/kfiles.h>
-#include <resource/reference.h>
-#include <resource/referrer.h>
+#include "thread"
+#include "string"
+#include "kfs/kfiles.h"
+#include "resource/reference.h"
+#include "resource/referrer.h"
 
 class kshell;
 

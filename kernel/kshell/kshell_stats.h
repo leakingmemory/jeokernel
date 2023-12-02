@@ -5,7 +5,7 @@
 #ifndef JEOKERNEL_KSHELL_STATS_H
 #define JEOKERNEL_KSHELL_STATS_H
 
-#include "kshell.h"
+#include <kshell/kshell.h>
 
 class kshell_stats : public kshell_command {
 private:
