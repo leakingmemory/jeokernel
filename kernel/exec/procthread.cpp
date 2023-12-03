@@ -163,7 +163,9 @@ void ProcThread::task_leave() {
 
     process->task_leave();
 
-    threadRunMemMapSnapshot.Release();
+    get_scheduler()->when_out_of_lock([this] () {
+        threadRunMemMapSnapshot.Release();
+    });
 }
 bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
     if (intr.rip() == SIGTRAMP_ADDR) {
