@@ -16,6 +16,43 @@
 #define CONTINUE_RUNNING_BIAS 12
 #define RESOURCE_PRIORITY_BIAS 12
 
+constexpr uint64_t get_64bit_str(const char *str) {
+    uint64_t bits{0};
+    int i = 0;
+    while (*str && i < 8) {
+        bits |= ((uint64_t) *str) << (i * 8);
+        ++str;
+        ++i;
+    }
+    return bits;
+}
+
+std::string get_64bit_str(uint64_t strint) {
+    std::string str{};
+    int i = 0;
+    while (i < 8) {
+        auto ch = (strint >> (i * 8)) & 0xFF;
+        if (ch == 0) {
+            return str;
+        }
+        str.append(1, (char) ch);
+        ++i;
+    }
+    return str;
+}
+
+void task::set_blocked(const char *name, bool blocked) {
+    bits.blocked = blocked ? true : false;
+    bits.blocked_by = get_64bit_str(name);
+    asm("sfence");
+}
+
+std::string task::get_blocked_by() const {
+    asm("mfence");
+    auto blocked_by_int = bits.blocked_by;
+    return get_64bit_str(blocked_by_int);
+}
+
 class task_stack_resource : public task_resource {
 private:
     normal_stack stack;
@@ -45,7 +82,7 @@ uint32_t tasklist::create_current_idle_task(uint8_t cpu) {
     uint32_t pid = get_next_id();
     t->set_id(pid);
     t->set_running(nullptr, cpu);
-    t->set_blocked(false);
+    t->set_blocked("idleunbl", false);
     t->set_cpu(cpu);
     t->set_priority_group(PRIO_GROUP_IDLE);
     t->set_cpu_pinned(true);
@@ -388,7 +425,7 @@ uint32_t tasklist::new_task(const x86_fpu_state &fpusse_state, const InterruptSt
     task *t = new task(cpu_frame, cpu_state, fpusse_state, resources);
     tasks.push_back(t);
     t->set_id(get_next_id());
-    t->set_blocked(false);
+    t->set_blocked("newtask", false);
     return t->get_id();
 }
 
@@ -534,7 +571,7 @@ public:
     void event(uint64_t event_id, uint64_t pid, uint64_t ignored) override {
         if (event_id == TASK_EVENT_EXIT && pid == other_task_id) {
             task &t = get_scheduler()->get_task_with_lock(current_task_id);
-            t.set_blocked(false);
+            t.set_blocked("eventunb", false);
             t.remove_event_handler(this);
             delete this;
         }
@@ -552,7 +589,7 @@ void tasklist::join(uint32_t task_id) {
             return;
         }
         t.add_event_handler(new task_join_handler(t.get_id(), task_id));
-        t.set_blocked(true);
+        t.set_blocked("taskjoin", true);
     }
 
     asm("int $0xFE"); // Request task switch now.
@@ -723,7 +760,7 @@ task_nanos_handler::~task_nanos_handler() {
 void task_nanos_handler::event(uint64_t event_id, uint64_t nanos, uint64_t cpu) {
     if (event_id == TASK_EVENT_NANOTIME && nanos >= wakeup_time) {
         task &t = get_scheduler()->get_task_with_lock(current_task_id);
-        t.set_blocked(false);
+        t.set_blocked("nanounbl", false);
         t.remove_event_handler(this);
         delete this;
     }
@@ -744,7 +781,7 @@ public:
     void event(uint64_t event_id, uint64_t currect_tick, uint64_t ignored) override {
         if (event_id == TASK_EVENT_TIMER100HZ && currect_tick >= wakeup_time) {
             task &t = get_scheduler()->get_task_with_lock(current_task_id);
-            t.set_blocked(false);
+            t.set_blocked("timeunbl", false);
             t.remove_event_handler(this);
             delete this;
         }
@@ -792,7 +829,7 @@ void tasklist::ticks_millisleep(uint64_t ms) {
 
         task &t = get_current_task_with_lock();
         t.add_event_handler(new task_timer100hz_handler(t.get_id(), tick_counter + ticks100hz));
-        t.set_blocked(true);
+        t.set_blocked("msleep", true);
     }
 
     asm("int $0xFE"); // Request task switch now.
@@ -820,7 +857,7 @@ void tasklist::tsc_nanosleep(uint64_t nanos) {
 
         task &t = get_current_task_with_lock();
         t.add_event_handler(new task_nanos_handler(t.get_id(), nanos));
-        t.set_blocked(true);
+        t.set_blocked("nanoslp", true);
     }
 
     asm("int $0xFE"); // Request task switch now.
@@ -873,12 +910,12 @@ void tasklist::add_task_event_handler(task_event_handler *handler) {
     t.add_event_handler(handler);
 }
 
-void tasklist::set_blocked(bool blocked, int8_t res_acq) {
+void tasklist::set_blocked(const char *str, bool blocked, int8_t res_acq) {
     critical_section cli{};
     std::lock_guard lock{_lock};
 
     task &t = get_current_task_with_lock();
-    t.set_blocked(blocked);
+    t.set_blocked(str, blocked);
 
 }
 

@@ -30,6 +30,7 @@
 #define MAX_RESOURCES 7
 
 struct task_bits {
+    uint64_t blocked_by;
     uint8_t priority_group : 2;
     bool running : 1;
     bool blocked : 1;
@@ -177,9 +178,8 @@ public:
     void when_not_running(std::function<void ()> func) {
         do_when_not_running.push_back(func);
     }
-    void set_blocked(bool blocked) {
-        bits.blocked = blocked ? true : false;
-    }
+    void set_blocked(const char *name, bool blocked);
+    std::string get_blocked_by() const;
     bool is_blocked() {
         return bits.blocked;
     }
@@ -450,7 +450,7 @@ public:
      *
      * @param blocked
      */
-    void set_blocked(bool blocked, int8_t resource_acq = 0);
+    void set_blocked(const char *str, bool blocked, int8_t resource_acq = 0);
 
     void event_in_event_handler(uint64_t v0, uint64_t v1, uint64_t v2, uint8_t res_acq = 0);
 

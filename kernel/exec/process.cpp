@@ -1349,7 +1349,7 @@ bool Process::page_fault(ProcThread &thread, task &current_task, Interrupt &intr
     if (sync_resolve_page(address)) {
         return true;
     }
-    current_task.set_blocked(true);
+    current_task.set_blocked("pfault", true);
     std::lock_guard lock{pfault_lck};
     constexpr auto pageaddr_mask = ~((typeof(address)) (PAGESIZE-1));
     auto pageaddr_fault = address & pageaddr_mask;
@@ -2410,7 +2410,7 @@ void Process::resolved_read_page(uintptr_t addr, const std::vector<process_pfaul
 #endif
             auto *current_task = thr.current_task;
             get_scheduler()->when_not_running(*current_task, [current_task] () {
-                current_task->set_blocked(false);
+                current_task->set_blocked("pfresolv", false);
             });
         }
         for (auto callback : callbacks) {

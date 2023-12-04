@@ -28,7 +28,7 @@ SyscallCtxAsync::SyscallCtxAsync(SyscallAdditionalParams &params) :
 }
 
 void SyscallCtxAsync::async() {
-    current_task->set_blocked(true);
+    current_task->set_blocked("ctxasync", true);
     params->DoContextSwitch(true);
 }
 
@@ -54,7 +54,7 @@ void SyscallCtxAsync::returnAsync(intptr_t value) {
             return;
         }
         t->get_cpu_state().rax = (uint64_t) value;
-        t->set_blocked(false);
+        t->set_blocked("asyncret", false);
     });
 }
 

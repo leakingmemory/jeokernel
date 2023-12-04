@@ -171,7 +171,7 @@ bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
     if (intr.rip() == SIGTRAMP_ADDR) {
         uintptr_t signalFrameAddr = intr.rsp() - 8;
         auto *task = &current_task;
-        task->set_blocked(true);
+        task->set_blocked("sigtramp", true);
         process->resolve_read(signalFrameAddr, sizeof(SignalStackFrame), false, [] (uintptr_t) {}, [this, task, signalFrameAddr] (bool success, bool async, const std::function<void (uintptr_t)> &) {
             auto *scheduler = get_scheduler();
             UserMemory umem{*this, signalFrameAddr, sizeof(SignalStackFrame)};
@@ -215,7 +215,7 @@ bool ProcThread::page_fault(task &current_task, Interrupt &intr) {
                 cpustate.fs = frame.fs | 3;
                 // err;
                 // TODO - oldmask;
-                task->set_blocked(false);
+                task->set_blocked("signarun", false);
 #ifdef DEBUG_SIGNAL_RETURN
                 scheduler->when_out_of_lock([frame] () {
                     std::cout << "Returned from signal handler to " << std::hex << frame.cs << ":" << frame.rip << std::dec << "\n";

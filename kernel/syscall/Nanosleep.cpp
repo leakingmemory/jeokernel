@@ -32,7 +32,7 @@ void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, c
         }
         auto nanos_ref = get_nanotime_ref();
         if (nanos_ref >= nano_request) {
-            task.set_blocked(false);
+            task.set_blocked("nanslpre", false);
 #ifdef DEBUG_NANOSLEEP
             scheduler->when_out_of_lock([] () {
                 std::cout << "Nanosleep short\n";

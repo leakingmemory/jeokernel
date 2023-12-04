@@ -22,6 +22,7 @@ struct ProcData {
     std::string name;
     int syscallNumber;
     uint32_t taskId;
+    std::string blocked;
 };
 
 void kshell_ups::Exec(kshell &shell, const std::vector<std::string> &cmd) {
@@ -42,7 +43,8 @@ void kshell_ups::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                     .process = thr->GetProcess(),
                     .name = t.get_name(),
                     .syscallNumber = thr->GetSyscallNumber(),
-                    .taskId = t.get_id()
+                    .taskId = t.get_id(),
+                    .blocked = t.get_blocked_by()
             };
             procs.emplace_back(std::move(data));
         }
@@ -50,15 +52,17 @@ void kshell_ups::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     if (procs.empty()) {
         return;
     }
-    std::cout << "PID     KID     Syscall Name\n";
+    std::cout << "PID     KID     Blocked  Syscall Name\n";
     for (const auto &proc : procs) {
         std::stringstream sstr{};
         sstr << proc.process->getpid();
         tab(sstr, 8);
         sstr << proc.taskId;
         tab(sstr, 16);
+        sstr << proc.blocked;
+        tab(sstr, 25);
         sstr << proc.syscallNumber;
-        tab(sstr, 24);
+        tab(sstr, 33);
         sstr << proc.name << "\n";
         std::cout << sstr.str();
     }

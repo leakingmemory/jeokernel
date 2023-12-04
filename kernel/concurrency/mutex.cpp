@@ -43,7 +43,7 @@ public:
                  * sleep. Hence the handler will be called on our release instead
                  */
                 if (ticket == ticket_number) {
-                    t.set_blocked(false);
+                    t.set_blocked("mtxconti", false);
                     t.resource_acq(1);
                 }
                 if (t.remove_event_handler(this)) {
@@ -120,9 +120,9 @@ namespace std {
                 if (ticket != current_ticket()) {
                     /* Have acquired the lock in between */
                     critical_section cli{};
-                    scheduler->set_blocked(true);
+                    scheduler->set_blocked("mtxlock", true);
                     if (ticket == current_ticket())
-                        scheduler->set_blocked(false);
+                        scheduler->set_blocked("mtxlcon", false);
                 }
             }
             asm("int $0xFE"); // Task switch request
@@ -134,7 +134,7 @@ namespace std {
             //}
             scheduler->event(TASK_EVENT_CLEAR_WAIT_MUTEX, 0, 0);
         } else {
-            get_scheduler()->set_blocked(false, 1);
+            get_scheduler()->set_blocked("mtxlco2", false, 1);
         }
     }
 

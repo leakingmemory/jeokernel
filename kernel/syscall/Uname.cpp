@@ -34,7 +34,7 @@ int64_t Uname::Call(int64_t utsnameptr, int64_t, int64_t, int64_t, SyscallAdditi
     auto result = process->resolve_read(utsnameptr, sizeof(utsname), false, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;
-            current_task->set_blocked(false);
+            current_task->set_blocked("unameret", false);
         });
     }, [process, utsnameptr] (bool success, bool, const std::function<void (intptr_t)> &) {
         uint64_t pageaddr{(uint64_t) utsnameptr >> 12};
@@ -83,7 +83,7 @@ int64_t Uname::Call(int64_t utsnameptr, int64_t, int64_t, int64_t, SyscallAdditi
         return resolve_return_value::Return(0);
     });
     if (result.async) {
-        current_task->set_blocked(true);
+        current_task->set_blocked("uname", true);
         additionalParams.DoContextSwitch(true);
         return 0;
     } else {

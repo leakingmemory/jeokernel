@@ -19,6 +19,12 @@ namespace std {
         typedef std::size_t off_type;
         typedef std::size_t pos_type;
 
+        static char_type *assign(char_type *ptr, std::size_t count, char_type c2) {
+            for (typeof(count) i = 0; i < count; i++) {
+                ptr[i] = c2;
+            }
+            return ptr;
+        }
         static constexpr char_type *move(char_type *dest, const char_type *src, std::size_t count) {
             return (char_type *) memmove((void *) dest, (void *) src, count * sizeof(char_type));
         }
@@ -70,7 +76,7 @@ namespace std {
             return &(str[0]);
         }
 
-        void set_empty() {
+        constexpr void set_empty() {
             str[0] = 0;
             unused_capacity = get_capacity();
         }
@@ -268,7 +274,7 @@ namespace std {
                 string_pointer_s<CharT, size_type> ptr;
             }__attribute__((__packed__));
 
-            _data_container() : allocator(), shrt() {
+            constexpr _data_container() : allocator(), shrt() {
             }
         }__attribute__((__packed__));
 
@@ -279,7 +285,7 @@ namespace std {
         }
 
     public:
-        basic_string() {
+        constexpr basic_string() {
             c.shrt.set_empty();
         }
 
@@ -502,6 +508,21 @@ namespace std {
                 c.ptr.size = 0;
                 c.ptr.pointer[0] = 0;
             }
+        }
+
+        constexpr basic_string &append(size_type count, CharT ch) {
+            size_type s = size();
+            if ((s + count) > capacity()) {
+                reserve(s + count);
+            }
+            Traits::assign(data() + s, count, ch);
+            if (c.shrt.is_short()) {
+                c.shrt.set_size(s + count);
+            } else {
+                data()[s + count] = 0;
+                c.ptr.size = s + count;
+            }
+            return *this;
         }
 
         constexpr basic_string &append(const CharT *str, size_type count) {

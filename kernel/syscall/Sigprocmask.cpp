@@ -16,7 +16,7 @@ int64_t Sigprocmask::Call(int64_t how, int64_t uptrset, int64_t uptroldset, int6
     auto result = process->resolve_read(uptrset, sizeof(sigset_t), false, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;
-            current_task->set_blocked(false);
+            current_task->set_blocked("sigpmret", false);
         });
     }, [process, how, uptrset, uptroldset, sigsetsize] (bool success, bool, const std::function<void (intptr_t)> &) {
         UserMemory uptrset_mem{*process, (uintptr_t) uptrset, (uintptr_t) sigsetsize};
@@ -29,7 +29,7 @@ int64_t Sigprocmask::Call(int64_t how, int64_t uptrset, int64_t uptroldset, int6
         return resolve_return_value::Return(0);
     });
     if (result.async) {
-        current_task->set_blocked(true);
+        current_task->set_blocked("sigprocm", true);
         params.DoContextSwitch(true);
         return 0;
     } else {

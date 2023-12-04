@@ -34,7 +34,7 @@ public:
         } else if (event_id == TASK_EVENT_SEMAPHORE && mutex == lockaddr) {
             task &t = get_scheduler()->get_task_with_lock(current_task_id);
             if (ticket == ticket_number) {
-                t.set_blocked(false);
+                t.set_blocked("semacont", false);
                 if (t.remove_event_handler(this)) {
                     delete this;
                 } else {
@@ -130,11 +130,11 @@ void raw_semaphore::acquire() {
         diff = ticket_lim - current_tic;
         if (diff >= 0x80000000) {
             critical_section cli{};
-            scheduler->set_blocked(true);
+            scheduler->set_blocked("semaacq", true);
             ticket_lim = current_limit();
             diff = ticket_lim - current_tic;
             if (diff < 0x80000000) {
-                scheduler->set_blocked(false);
+                scheduler->set_blocked("semaacon", false);
             }
         }
         if (diff >= 0x80000000) {

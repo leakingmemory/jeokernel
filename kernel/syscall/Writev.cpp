@@ -37,7 +37,7 @@ file_descriptor_result Writev_Call::Call(tasklist *scheduler, task *current_task
     return desc->writev(process, user_iov_ptr, iovcnt, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;
-            current_task->set_blocked(false);
+            current_task->set_blocked("writvret", false);
         });
     });
 }
@@ -48,7 +48,7 @@ int64_t Writev::Call(int64_t fd, int64_t user_iov_ptr, int64_t iovcnt, int64_t, 
     auto *process = params.CurrentThread();
     auto result = Writev_Call::Create()->Call(scheduler, current_task, process, (int) fd, user_iov_ptr, (int) iovcnt);
     if (result.async) {
-        current_task->set_blocked(true);
+        current_task->set_blocked("writev", true);
         params.DoContextSwitch(true);
         return 0;
     } else {

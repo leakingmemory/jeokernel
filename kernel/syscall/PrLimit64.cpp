@@ -24,7 +24,7 @@ int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int6
         auto result = process->resolve_read(uptr_newlim, sizeof(rlimit), false, [scheduler, current_task] (intptr_t result) {
             scheduler->when_not_running(*current_task, [current_task, result] () {
                 current_task->get_cpu_state().rax = (uint64_t) result;
-                current_task->set_blocked(false);
+                current_task->set_blocked("prlimret", false);
             });
         }, [scheduler, current_task, process, uptr_newlim, uptr_oldlim, resource] (bool success, bool async, std::function<void (intptr_t)> asyncFunc) {
             if (!success) {
@@ -64,7 +64,7 @@ int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int6
             }
         });
         if (result.async) {
-            current_task->set_blocked(true);
+            current_task->set_blocked("prlim64", true);
             params.DoContextSwitch(true);
             return 0;
         } else {
@@ -75,7 +75,7 @@ int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int6
             auto result = process->resolve_read(uptr_oldlim, sizeof(rlimit), false, [scheduler, current_task] (intptr_t result) {
                 scheduler->when_not_running(*current_task, [current_task, result] () {
                     current_task->get_cpu_state().rax = (uint64_t) result;
-                    current_task->set_blocked(false);
+                    current_task->set_blocked("prlimret", false);
                 });
             }, [scheduler, current_task, process, uptr_oldlim, resource] (bool success, bool, const std::function<void (intptr_t)> &) {
                 if (success) {
@@ -91,7 +91,7 @@ int64_t PrLimit64::Call(int64_t pid, int64_t resource, int64_t uptr_newlim, int6
                 return resolve_return_value::Return(result);
             });
             if (result.async) {
-                current_task->set_blocked(true);
+                current_task->set_blocked("2prlim64", true);
                 params.DoContextSwitch(true);
                 return 0;
             } else {

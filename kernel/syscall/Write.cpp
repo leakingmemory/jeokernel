@@ -37,7 +37,7 @@ file_descriptor_result Write_Call::Call(tasklist *scheduler, task *current_task,
     return desc->write(process, ptr, len, [scheduler, current_task] (intptr_t result) {
         scheduler->when_not_running(*current_task, [current_task, result] () {
             current_task->get_cpu_state().rax = (uint64_t) result;
-            current_task->set_blocked(false);
+            current_task->set_blocked("writeret", false);
         });
     });
 }
@@ -48,7 +48,7 @@ int64_t Write::Call(int64_t fd, int64_t ptr, int64_t len, int64_t, SyscallAdditi
     auto *process = additionalParams.CurrentThread();
     auto result = Write_Call::Create()->Call(scheduler, current_task, process, (int) fd, ptr, len);
     if (result.async) {
-        current_task->set_blocked(true);
+        current_task->set_blocked("write", true);
         additionalParams.DoContextSwitch(true);
         return 0;
     } else {

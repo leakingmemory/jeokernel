@@ -76,7 +76,7 @@ static void LaunchSignal(struct sigaction sigaction, tasklist *scheduler, Interr
                     cpuframe.rip = sa_handler;
                     cpuframe.rsp = frameptr;
                     cpustate.rdi = signum;
-                    t->set_blocked(false);
+                    t->set_blocked("ctxsigna", false);
                 });
             } else {
                 scheduler->when_not_running(*t, [scheduler, t] () {
@@ -139,7 +139,7 @@ bool callctx::HandleSignalInFastReturn(Interrupt &intr) {
     if (sig <= 0) {
         return false;
     }
-    task.set_blocked(true);
+    task.set_blocked("ctxsigfa", true);
     auto &cpuframe = intr.get_cpu_frame();
     auto &cpustate = intr.get_cpu_state();
     auto optSigaction = pt->GetSigaction(sig);
@@ -518,7 +518,7 @@ void callctx_impl::ReturnWhenNotRunning(std::shared_ptr<callctx_impl> ref, intpt
             asm("ud2");
         }
         ref->current_task->get_cpu_state().rax = value;
-        ref->current_task->set_blocked(false);
+        ref->current_task->set_blocked("asyncret", false);
     });
 }
 
@@ -549,7 +549,7 @@ void callctx_impl::EntrypointAsync(std::shared_ptr<callctx_impl> ref, uintptr_t 
         state.fs = 0x20 | 3;
         state.gs = 0x20 | 3;
         state.fsbase = fsBase;
-        ref->current_task->set_blocked(false);
+        ref->current_task->set_blocked("entrypt", false);
     });
 }
 
