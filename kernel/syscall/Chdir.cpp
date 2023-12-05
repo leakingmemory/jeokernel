@@ -40,6 +40,12 @@ int Chdir_Call::Call(const std::shared_ptr<Process> &proc, const std::string &fi
             return -EIO;
         case kfile_status::NOT_DIRECTORY:
             return -ENOTDIR;
+        case kfile_status::TOO_MANY_LINKS:
+            return -ELOOP;
+        case kfile_status::NO_AVAIL_INODES:
+        case kfile_status::NO_AVAIL_BLOCKS:
+        case kfile_status::EXISTS:
+            return -EIO;
     }
     if (!file.result) {
         return -ENOENT;
@@ -53,7 +59,7 @@ int Chdir_Call::Call(const std::shared_ptr<Process> &proc, const std::string &fi
 }
 
 int64_t Chdir::Call(int64_t uptr_filename, int64_t, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Chdir"};
     auto task_id = params.TaskId();
     return ctx.ReadString(uptr_filename, [this, ctx, task_id] (const std::string &r_filename) {
         std::string filename{r_filename};

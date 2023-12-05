@@ -33,7 +33,7 @@ intptr_t
 Pread64_Call::Call(SyscallAdditionalParams &additionalParams, int fd, intptr_t uptr_buf, intptr_t count, intptr_t pos) {
     std::shared_ptr<Pread64_Call> selfRef = this->selfRef.lock();
     std::shared_ptr<class referrer> referrer = selfRef;
-    SyscallCtx ctx{additionalParams};
+    SyscallCtx ctx{additionalParams, "Pread64"};
     auto &process = ctx.GetProcess();
     desc = process.get_file_descriptor(referrer, fd);
     if (!desc) {

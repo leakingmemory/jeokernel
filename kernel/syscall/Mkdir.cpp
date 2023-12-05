@@ -97,7 +97,7 @@ resolve_return_value Mkdir_Call::Call(const SyscallCtx &i_ctx, const std::string
 }
 
 int64_t Mkdir::Call(int64_t uptr_pathname, int64_t u_mode, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Mkdir"};
     int32_t mode = (int32_t) u_mode;
     return ctx.ReadString(uptr_pathname, [ctx, mode] (const std::string &i_pathname) {
         std::cout << "mkdir(" << i_pathname << ", " << std::oct << mode << std::dec << ")\n";

@@ -7,7 +7,7 @@
 #include <exec/procthread.h>
 
 int64_t Munmap::Call(int64_t uptr_addr, int64_t len, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Munmap"};
     auto pages = len >> 12;
     if (pages == 0) {
         return 0;

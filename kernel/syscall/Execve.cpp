@@ -36,6 +36,13 @@ std::string Execve_Call::GetReferrerIdentifier() {
 }
 
 void Execve_Call::Call(SyscallCtx &ctx, const std::string &filename, const std::vector<std::string> &argv, const std::vector<std::string> &env) {
+#ifdef DEBUG_EXECVE
+    std::cout << "Exec: " << filename;
+    for (const auto &arg : argv) {
+        std::cout << " " << arg;
+    }
+    std::cout << "\n";
+#endif
     std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
     auto binary = ctx.GetProcess().ResolveFile(selfRef, filename);
     if (binary.status != kfile_status::SUCCESS) {
@@ -88,7 +95,7 @@ int64_t Execve::Call(int64_t uptr_filename, int64_t uptr_argv, int64_t uptr_envp
     if (uptr_filename == 0 || uptr_argv == 0 || uptr_envp == 0) {
         return -EINVAL;
     }
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Execve"};
     auto task_id = params.TaskId();
     return ctx.ReadString(uptr_filename, [this, ctx, task_id, uptr_argv, uptr_envp] (const std::string &rd_filename) mutable {
         std::string filename{rd_filename};

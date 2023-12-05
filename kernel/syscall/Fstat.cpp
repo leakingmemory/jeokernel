@@ -33,7 +33,7 @@ std::string Fstat_Call::GetReferrerIdentifier() {
 intptr_t Fstat_Call::Call(SyscallAdditionalParams &params, int fd, intptr_t uptr_statbuf) {
     std::shared_ptr<Fstat_Call> selfRef = this->selfRef.lock();
     std::shared_ptr<class referrer> referrer = selfRef;
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Fstat"};
     fdesc = ctx.GetProcess().get_file_descriptor(referrer, fd);
     if (!fdesc) {
         return -EBADF;

@@ -116,7 +116,7 @@ Mount_Call::Call(SyscallCtx &ctx, const std::string &i_dev, const std::string &d
 
 int64_t Mount::Call(int64_t uptr_dev, int64_t uptr_dir, int64_t uptr_type, int64_t u_flags, SyscallAdditionalParams &params) {
     int64_t uptr_data = params.Param5();
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Mount"};
     return ctx.ReadString(uptr_dev, [this, ctx, uptr_dir, uptr_type, u_flags, uptr_data] (const std::string &i_dev) mutable {
         std::string dev{i_dev};
         return ctx.NestedReadString(uptr_dir, [this, ctx, dev, uptr_type, u_flags, uptr_data] (const std::string &i_dir) mutable {

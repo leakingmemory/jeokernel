@@ -8,7 +8,7 @@
 #include "impl/SysFaccessatImpl.h"
 
 int64_t Faccessat2::Call(int64_t dfd, int64_t uptr_filename, int64_t mode, int64_t flags, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Faccess2"};
 
     auto task_id = params.TaskId();
 

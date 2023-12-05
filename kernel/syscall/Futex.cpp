@@ -17,7 +17,7 @@ int64_t SysFutex::Call(int64_t uptr_addr, int64_t futex_op, int64_t val, int64_t
     uintptr_t uptr_addr2 = params.Param5();
     int64_t val3 = params.Param6();
 
-    auto ctx = std::make_shared<SyscallCtx>(params);
+    auto ctx = std::make_shared<SyscallCtx>(params, "Futex");
     auto op = futex_op & FUTEX_COMMAND_MASK;
     switch (op) {
         case FUTEX_WAKE: {

@@ -38,6 +38,6 @@ intptr_t Readv_Call::Call(const std::shared_ptr<callctx> &ctx, int fd, intptr_t 
 }
 
 int64_t Readv::Call(int64_t fd, int64_t user_iov_ptr, int64_t iovcnt, int64_t, SyscallAdditionalParams &params) {
-    std::shared_ptr<callctx> ctx = std::make_shared<SyscallCtx>(params);
+    std::shared_ptr<callctx> ctx = std::make_shared<SyscallCtx>(params, "Readv");
     return Readv_Call::Create()->Call(ctx, (int) fd, user_iov_ptr, iovcnt);
 }

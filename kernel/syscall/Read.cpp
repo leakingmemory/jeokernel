@@ -33,7 +33,7 @@ std::string Read_Call::GetReferrerIdentifier() {
 intptr_t Read_Call::Call(SyscallAdditionalParams &additionalParams, int fd, intptr_t uptr_buf, intptr_t count) {
     std::shared_ptr<Read_Call> selfRef = this->selfRef.lock();
     std::shared_ptr<class referrer> referrer = selfRef;
-    SyscallCtx ctx{additionalParams};
+    SyscallCtx ctx{additionalParams, "Read"};
     auto &process = ctx.GetProcess();
     desc = process.get_file_descriptor(referrer, fd);
     if (!desc) {

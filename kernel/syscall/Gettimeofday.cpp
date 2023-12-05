@@ -11,7 +11,7 @@ void Gettimeofday::DoGettimeofday(timeval *tv, timezone *tz) {
 }
 
 int64_t Gettimeofday::Call(int64_t uptr_tv, int64_t uptr_tz, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Gettimeo"};
     if (uptr_tv != 0) {
         return ctx.Write(uptr_tv, sizeof(timeval), [this, ctx, uptr_tz] (void *ptr_tv) {
             if (uptr_tz != 0) {

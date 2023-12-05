@@ -124,7 +124,7 @@ int64_t Getdents64::Call(int64_t fd, int64_t uptr_dirent, int64_t count, int64_t
     if (uptr_dirent == 0 || count < (offsetof(dirent64, d_name) + 1)) {
         return -EINVAL;
     }
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Getden64"};
 #ifdef GETDENTS64_DEBUG
     std::cout << "getdents64(" << std::dec << fd << ", " << std::hex << uptr_dirent << std::dec << ", " << count << ")\n";
 #endif

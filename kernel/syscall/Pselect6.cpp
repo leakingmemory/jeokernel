@@ -319,7 +319,7 @@ Pselect6::DoSelect(SyscallCtx ctx, uint32_t task_id, int n, fdset *inp, fdset *o
 int64_t Pselect6::Call(int64_t n, int64_t uptr_inp, int64_t uptr_outp, int64_t uptr_excp, SyscallAdditionalParams &params) {
     int64_t uptr_timespec = params.Param5();
     int64_t uptr_sig = params.Param6();
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Pselect6"};
     if (n < 0) {
         return -EINVAL;
     }

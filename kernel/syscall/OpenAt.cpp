@@ -7,7 +7,7 @@
 #include "SyscallCtx.h"
 
 int64_t OpenAt::Call(int64_t dfd, int64_t uptr_filename, int64_t flags, int64_t mode, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "OpenAt"};
 
     auto task_id = params.TaskId();
 

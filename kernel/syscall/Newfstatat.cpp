@@ -111,7 +111,7 @@ int64_t Newfstatat::Call(int64_t i_dfd, int64_t uptr_filename, int64_t uptr_stat
         return -EINVAL;
     }
 
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Nfstatat"};
 
     auto task_id = params.TaskId();
 

@@ -10,7 +10,7 @@
 
 class SyscallCtx : public callctx {
 public:
-    explicit SyscallCtx(SyscallAdditionalParams &params);
+    SyscallCtx(SyscallAdditionalParams &params, const char *name);
 };
 
 

@@ -77,7 +77,7 @@ void Nanosleep::DoNanosleep(std::shared_ptr<SyscallCtx> ctx, class task &task, c
 }
 
 int64_t Nanosleep::Call(int64_t uptr_requested, int64_t uptr_remaining, int64_t, int64_t, SyscallAdditionalParams &params) {
-    auto ctx = std::make_shared<SyscallCtx>(params);
+    auto ctx = std::make_shared<SyscallCtx>(params, "Nanoslee");
     auto *task = params.CurrentTask();
     if (uptr_requested == 0) {
         return -EINVAL;

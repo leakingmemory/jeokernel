@@ -38,6 +38,6 @@ intptr_t Ioctl_Call::Call(SyscallCtx &ctx, int fd, intptr_t cmd, intptr_t arg) {
 }
 
 int64_t Ioctl::Call(int64_t fd, int64_t cmd, int64_t arg, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Ioctl"};
     return Ioctl_Call::Create()->Call(ctx, fd, cmd, arg);
 }

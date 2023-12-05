@@ -8,7 +8,7 @@
 #include <core/nanotime.h>
 
 int64_t Sysinfo::Call(int64_t uptr, int64_t, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Sysinfo"};
     return ctx.Write(uptr, sizeof(struct sysinfo), [ctx] (void *ptr) mutable {
         auto *info = (struct sysinfo *) ptr;
         {

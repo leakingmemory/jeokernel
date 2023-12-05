@@ -110,7 +110,7 @@ int64_t Statx::Call(int64_t i_dfd, int64_t uptr_filename, int64_t flag, int64_t 
         return -EINVAL;
     }
 
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Statx"};
 
     auto task_id = params.TaskId();
 

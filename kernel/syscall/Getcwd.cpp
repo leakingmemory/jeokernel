@@ -51,7 +51,7 @@ int Getcwd_Call::Call(ProcThread &process, char *buf, intptr_t len) {
 }
 
 int64_t Getcwd::Call(int64_t uptr_buf, int64_t len, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Getcwd"};
     if (uptr_buf == 0) {
         return -EINVAL;
     }

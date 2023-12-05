@@ -11,7 +11,7 @@
 //#define DEBUG_ACCESS_CALL
 
 int64_t Access::Call(int64_t uptr_filename, int64_t mode, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Access"};
 
     auto task_id = params.Scheduler()->get_current_task_id();
 

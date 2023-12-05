@@ -8,7 +8,7 @@
 #include <errno.h>
 
 int64_t Sigaltstack::Call(int64_t uptr_ss, int64_t uptr_old_ss, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Sigaltst"};
     return ctx.Read(uptr_ss, sizeof(struct sigaltstack), [ctx, uptr_old_ss] (void *ptr_ss) {
         auto *pss = (struct sigaltstack *) ptr_ss;
         auto ss = *pss;

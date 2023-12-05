@@ -13,22 +13,24 @@ private:
     tasklist *scheduler;
     task *current_task;
     ProcThread *process;
+    const char *name;
 public:
-    SyscallCtxAsync(SyscallAdditionalParams &params);
+    SyscallCtxAsync(SyscallAdditionalParams &params, const char *name);
     void async() override;
     void returnAsync(intptr_t value) override;
 };
 
-SyscallCtxAsync::SyscallCtxAsync(SyscallAdditionalParams &params) :
+SyscallCtxAsync::SyscallCtxAsync(SyscallAdditionalParams &params, const char *name) :
     params(&params),
     scheduler(params.Scheduler()),
     current_task(params.CurrentTask()),
-    process(params.CurrentThread())
+    process(params.CurrentThread()),
+    name(name)
 {
 }
 
 void SyscallCtxAsync::async() {
-    current_task->set_blocked("ctxasync", true);
+    current_task->set_blocked(name, true);
     params->DoContextSwitch(true);
 }
 
@@ -58,4 +60,4 @@ void SyscallCtxAsync::returnAsync(intptr_t value) {
     });
 }
 
-SyscallCtx::SyscallCtx(SyscallAdditionalParams &params) : callctx(std::make_shared<SyscallCtxAsync>(params)){}
+SyscallCtx::SyscallCtx(SyscallAdditionalParams &params, const char *name) : callctx(std::make_shared<SyscallCtxAsync>(params, name)){}

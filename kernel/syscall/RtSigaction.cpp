@@ -28,7 +28,7 @@ int RtSigaction::DoRtSigaction(ProcThread &process, int signal, const sigaction 
 }
 
 int64_t RtSigaction::Call(int64_t signal, int64_t uptr_act, int64_t uptr_oact, int64_t sigsetsize, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "RtSigact"};
 #ifdef DEBUG_RTSIGACTION_RAW
     std::cout << "sigaction(" << std::dec << signal << ", 0x" << std::hex << (uintptr_t) uptr_act << ", 0x" << (uintptr_t) uptr_oact << std::dec << ", " << sigsetsize << ")\n";
 #endif

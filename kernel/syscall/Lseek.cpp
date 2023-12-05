@@ -35,7 +35,7 @@ std::string Lseek_Call::GetReferrerIdentifier() {
 
 intptr_t Lseek_Call::Call(SyscallAdditionalParams &params, int fd, SeekWhence whence, intptr_t offset) {
     std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Lseek"};
     auto fdesc = ctx.GetProcess().get_file_descriptor(selfRef, fd);
     if (!fdesc) {
         return -EBADF;

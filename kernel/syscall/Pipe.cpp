@@ -46,7 +46,7 @@ resolve_return_value Pipe_Call::Call(const SyscallCtx &ctx, int *fdsptr) {
 }
 
 int64_t Pipe::Call(int64_t uptr_fds, int64_t, int64_t, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Pipe"};
     return ctx.Write(uptr_fds, sizeof(int) * 2, [ctx] (void *fdsptr) {
         return Pipe_Call::Create()->Call(ctx, (int *) fdsptr);
     });

@@ -186,7 +186,7 @@ int SysCloneImpl::DoClone(int64_t flags, int64_t new_stackp, int64_t uptr_parent
         std::cerr << "clone: unsupported flags 0x" << std::hex << flags << std::dec << "\n";
         return -EOPNOTSUPP;
     }
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "SysClone"};
     std::shared_ptr<Process> clonedProcess{};
     if ((flags & ThreadFlags) == 0) {
         clonedProcess = ctx.GetProcess().Clone();

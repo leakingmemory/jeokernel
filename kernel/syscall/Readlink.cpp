@@ -62,7 +62,7 @@ std::string Readlink_Call::Call(ProcThread &proc, const std::string &path, int &
 }
 
 int64_t Readlink::Call(int64_t uptr_path, int64_t uptr_buf, int64_t bufsize, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Readlink"};
     auto task_id = params.TaskId();
     return ctx.ReadString(uptr_path, [this, ctx, task_id, uptr_buf, bufsize] (const std::string &u_path) {
         std::string path{u_path};

@@ -8,7 +8,7 @@
 #include "Open.h"
 
 int64_t Open::Call(int64_t uptr_filename, int64_t flags, int64_t mode, int64_t, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Open"};
 
     auto task_id = params.TaskId();
 

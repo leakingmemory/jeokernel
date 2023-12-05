@@ -35,7 +35,7 @@ int64_t Wait4::Call(int64_t u_pid, int64_t uptr_stat_addr, int64_t options, int6
 #ifdef DEBUG_WAIT_CALL
         std::cout << "wait4(" << std::dec << pid << "/any, " << std::hex << uptr_stat_addr << ", " << options << ", " << uptr_rusage << ")\n";
 #endif
-        SyscallCtx ctx{params};
+        SyscallCtx ctx{params, "Wait4"};
         if (uptr_stat_addr != 0) {
             return ctx.Write(uptr_stat_addr, sizeof(int), [this, ctx] (void *ptr) mutable {
                 return WaitAny(ctx, (int *) ptr);

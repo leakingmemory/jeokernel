@@ -8,7 +8,7 @@
 #include <errno.h>
 
 int64_t Fadvise64::Call(int64_t i_fd, int64_t offset, int64_t len, int64_t advice, SyscallAdditionalParams &params) {
-    SyscallCtx ctx{params};
+    SyscallCtx ctx{params, "Fadvis64"};
     int32_t fd = (int32_t) (i_fd & 0x0ffffffff);
     auto fdesc = ctx.GetProcess().has_file_descriptor(fd);
     if (!fdesc) {
