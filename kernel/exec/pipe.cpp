@@ -8,6 +8,8 @@
 #include <exec/callctx.h>
 #include <resource/reference.h>
 
+//#define PIPE_READ_DEBUG
+
 PipeEnd::~PipeEnd() {
     auto other = otherEnd.lock();
     if (other) {
@@ -103,6 +105,9 @@ intptr_t PipeDescriptorHandler::seek(intptr_t offset, SeekWhence whence) {
 }
 
 resolve_return_value PipeDescriptorHandler::read(std::shared_ptr<callctx> ctx, void *ptr, intptr_t len) {
+#ifdef PIPE_READ_DEBUG
+    std::cout << "Pipe read len=" << len << "\n";
+#endif
     auto endpoint = this->end;
     std::lock_guard lock{endpoint->mtx};
     if (!endpoint->readQueue.empty() || (endpoint->buffer.size() < len && !endpoint->eof)) {
@@ -122,6 +127,9 @@ resolve_return_value PipeDescriptorHandler::read(std::shared_ptr<callctx> ctx, v
                 endpoint->buffer.erase(0, eraseLen);
                 len -= eraseLen;
             }
+#ifdef PIPE_READ_DEBUG
+            std::cout << "Pipe cb len=" << len << "\n";
+#endif
             ctx->AsyncCtx()->returnAsync(len);
         }, .len = len};
         endpoint->readQueue.push_back(q);
@@ -141,6 +149,9 @@ resolve_return_value PipeDescriptorHandler::read(std::shared_ptr<callctx> ctx, v
         endpoint->buffer.erase(0, eraseLen);
         len -= eraseLen;
     }
+#ifdef PIPE_READ_DEBUG
+    std::cout << "Pipe read direct len="<< len << "\n";
+#endif
     return resolve_return_value::Return(len);
 }
 

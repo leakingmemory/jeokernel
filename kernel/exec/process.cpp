@@ -1342,11 +1342,18 @@ void Process::activate_pfault_thread() {
 bool Process::page_fault(ProcThread &thread, task &current_task, Interrupt &intr) {
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
     std::cout << "Page fault in user process with pagetable root " << std::hex << ((uintptr_t) get_root_pagetable())
-    << " code " << intr.error_code() << std::dec << "\n";
+    << " code " << intr.error_code() << std::dec << " task " << current_task.get_id() << "\n";
 #endif
     uint64_t address{0};
     asm("mov %%cr2, %0" : "=r"(address));
     if (sync_resolve_page(address)) {
+#ifdef DEBUG_PAGE_FAULT_RESOLVE
+        if (current_task.is_blocked()) {
+            std::cout << "Resolved synchronously " << current_task.get_id() << ", but blocked(!?)\n";
+        } else {
+            std::cout << "Resolved synchronously " << current_task.get_id() << "\n";
+        }
+#endif
         return true;
     }
     current_task.set_blocked("pfault", true);
@@ -1883,7 +1890,8 @@ bool Process::sync_resolve_page(uintptr_t fault_addr) {
         auto &b3 = (*((pagetable *) vm.pointer()))[page & 511];
         if (b3.present == 0) {
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
-            std::cout << std::hex << ((b2phys) + (page & 511)) << " *" << (b3.user_access != 0 ? "u" : "k") << (b3.writeable != 0 ? "w" : "r")
+            std::cout << std::dec << "Pid " << pid << " : "
+                      << std::hex << ((b2phys) + (page & 511)) << " *" << (b3.user_access != 0 ? "u" : "k") << (b3.writeable != 0 ? "w" : "r")
                       << (b3.execution_disabled != 0 ? "n" : "e") << " " << b3.page_ppn << std::dec
                       << "\n";
 #endif
@@ -1913,7 +1921,7 @@ bool Process::sync_resolve_page(uintptr_t fault_addr) {
                         return false;
                     }
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
-                    std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+                    std::cout << "Memory copy(1) " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
 #endif
                     vmem vm{PAGESIZE * 2};
                     vm.page(0).rwmap(phys);
@@ -1938,7 +1946,7 @@ bool Process::sync_resolve_page(uintptr_t fault_addr) {
                         return false;
                     }
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
-                    std::cout << "Memory copy " << std::hex << page << ": " << pagemap.cow->GetPhysPage() << " -> " << phys << "\n";
+                    std::cout << "Memory copy(2) pid " <<std::dec << pid << " page " << std::hex << page << ": " << pagemap.cow->GetPhysPage() << " -> " << phys << "\n";
 #endif
                     vmem vm{PAGESIZE * 2};
                     vm.page(0).rwmap(phys);
@@ -2355,7 +2363,7 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
                     return ResolveWrite::ERROR;
                 }
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
-                std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+                std::cout << "Memory copy(3) " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
 #endif
                 vmem vm{PAGESIZE * 2};
                 vm.page(0).rwmap(phys);
@@ -2380,7 +2388,7 @@ ResolveWrite Process::resolve_write_page(uintptr_t fault_addr) {
                     return ResolveWrite::ERROR;
                 }
 #ifdef DEBUG_PAGE_FAULT_RESOLVE
-                std::cout << "Memory copy " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
+                std::cout << "Memory copy(4) " << std::hex << page << ": " << pagemap.data.PhysAddr() << " -> " << phys << "\n";
 #endif
                 vmem vm{PAGESIZE * 2};
                 vm.page(0).rwmap(phys);

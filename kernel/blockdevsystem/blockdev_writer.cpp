@@ -10,6 +10,9 @@
 #include <blockdevs/blockdev.h>
 #include <iostream>
 
+//#define FLUSH_COLLECTOR_DEBUG
+//#define FLUSH_SUBMIT_DEBUG
+
 static hw_spinlock bdevwriterinstance{};
 static std::unique_ptr<blockdev_writer> bdevwriter{};
 
@@ -65,6 +68,9 @@ void blockdev_writer::Collect() {
                 auto &inList = *inIterator;
                 auto &outList = *outIterator;
                 for (auto &inItem: inList) {
+#ifdef FLUSH_COLLECTOR_DEBUG
+                    std::cout << "Flush: Collected " << inItem.blockaddr << " of length " << inItem.length << "\n";
+#endif
                     outList.push_back(inItem);
                 }
                 ++inIterator;
@@ -72,6 +78,11 @@ void blockdev_writer::Collect() {
             }
             while (inIterator != blocks.end()) {
                 auto &inList = *inIterator;
+#ifdef FLUSH_COLLECTOR_DEBUG
+                for (const auto &inItem : inList) {
+                    std::cout << "Flush: Collected " << inItem.blockaddr << " of length " << inItem.length << "\n";
+                }
+#endif
                 fsw->dirtyBlocks.push_back(inList);
                 ++inIterator;
             }
@@ -83,11 +94,17 @@ void blockdev_writer::Collect() {
             if (outIterator != fsw->dirtyBlocks.end()) {
                 auto &list = *outIterator;
                 for (auto &db : result.blocks) {
+#ifdef FLUSH_COLLECTOR_DEBUG
+                    std::cout << "Flush: Collected " << db.blockaddr << " of length " << db.length << " (closing fs)\n";
+#endif
                     list.push_back(db);
                 }
             } else {
                 auto &list = fsw->dirtyBlocks.emplace_back();
                 for (auto &db : result.blocks) {
+#ifdef FLUSH_COLLECTOR_DEBUG
+                    std::cout << "Flush: Collected " << db.blockaddr << " of length " << db.length << " (closing fs)\n";
+#endif
                     list.push_back(db);
                 }
             }
@@ -185,6 +202,9 @@ void blockdev_writer::Submit() {
                 const auto blocks = chunkLength / blocksize;
                 std::remove_const<typeof(blocks)>::type wrBlocks;
                 if ((chunkLength + offset) <= FILEPAGE_PAGE_SIZE) {
+#ifdef FLUSH_SUBMIT_DEBUG
+                    std::cout << "Flush " << std::dec << blockaddr << ", num=" << blocks << " (p1 offset " << offset << ")\n";
+#endif
                     wrBlocks = bdev->WriteBlock(
                             ((uint8_t *) (wr.page1->Pointer()->Pointer())) + offset,
                             blockaddr, blocks);
@@ -193,6 +213,9 @@ void blockdev_writer::Submit() {
                         std::cerr << "Buffer overrun (fsync)\n";
                         break;
                     }
+#ifdef FLUSH_SUBMIT_DEBUG
+                    std::cout << "Flush " << std::dec << blockaddr << ", num=" << blocks << " (p2 offset+p " << offset << ")\n";
+#endif
                     wrBlocks = bdev->WriteBlock(
                             ((uint8_t *) (wr.page2->Pointer()->Pointer())) + offset - FILEPAGE_PAGE_SIZE,
                             blockaddr, blocks);
