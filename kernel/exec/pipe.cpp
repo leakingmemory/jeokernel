@@ -117,15 +117,16 @@ resolve_return_value PipeDescriptorHandler::read(std::shared_ptr<callctx> ctx, v
                 len = endpoint->buffer.size();
             }
             memcpy(ptr, endpoint->buffer.data(), len);
-            while (len > 0) {
+            auto clearLen = len;
+            while (clearLen > 0) {
                 int eraseLen;
-                if (len > std::numeric_limits<int>::max()) {
+                if (clearLen > std::numeric_limits<int>::max()) {
                     eraseLen = std::numeric_limits<int>::max();
                 } else {
-                    eraseLen = (int) len;
+                    eraseLen = (int) clearLen;
                 }
                 endpoint->buffer.erase(0, eraseLen);
-                len -= eraseLen;
+                clearLen -= eraseLen;
             }
 #ifdef PIPE_READ_DEBUG
             std::cout << "Pipe cb len=" << len << "\n";
