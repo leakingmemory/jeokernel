@@ -220,8 +220,14 @@ void blockdev_writer::Submit() {
                             ((uint8_t *) (wr.page2->Pointer()->Pointer())) + offset - FILEPAGE_PAGE_SIZE,
                             blockaddr, blocks);
                 } else {
-                    chunkLength = blocksize;
-                    void *buf = malloc(blocksize);
+                    if ((offset + chunkLength - FILEPAGE_PAGE_SIZE) > FILEPAGE_PAGE_SIZE) {
+                        std::cerr << "Buffer overrun (fsync)\n";
+                        break;
+                    }
+#ifdef FLUSH_SUBMIT_DEBUG
+                    std::cout << "Flush " << std::dec << blockaddr << ", num=" << blocks << " (p1,p2 offset " << offset << ")\n";
+#endif
+                    void *buf = malloc(chunkLength);
                     if (buf == nullptr) {
                         std::cerr << "Memory alloc (fsync)\n";
                         break;
@@ -229,7 +235,7 @@ void blockdev_writer::Submit() {
                     auto endLength = FILEPAGE_PAGE_SIZE - offset;
                     memcpy(buf, ((uint8_t *) (wr.page1->Pointer()->Pointer())) + offset, endLength);
                     memcpy(((uint8_t *) buf) + endLength, wr.page2->Pointer()->Pointer(), chunkLength - endLength);
-                    wrBlocks = bdev->WriteBlock(buf, blockaddr, 1);
+                    wrBlocks = bdev->WriteBlock(buf, blockaddr, blocks);
                     free(buf);
                 }
                 if (wrBlocks <= 0) {
