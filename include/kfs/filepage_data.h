@@ -11,12 +11,14 @@ class kfile;
 class kfile_impl;
 class filepage;
 class filepage_ref;
+class filepage_pointer_impl;
 
 class filepage_data {
     friend filepage;
     friend filepage_ref;
     friend kfile;
     friend kfile_impl;
+    friend filepage_pointer_impl;
 private:
     uintptr_t physpage;
     uint32_t ref;

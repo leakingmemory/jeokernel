@@ -14,9 +14,10 @@
 
 class filepage_pointer_impl : public filepage_pointer {
 private:
+    std::shared_ptr<filepage_data> data;
     vmem vm;
 public:
-    filepage_pointer_impl(uintptr_t addr) : vm(FP_PAGESIZE) {
+    filepage_pointer_impl(const std::shared_ptr<filepage_data> &data, uintptr_t addr) : data(data), vm(FP_PAGESIZE) {
         vm.page(0).rwmap(addr);
     }
     void *Pointer() const override;
@@ -28,13 +29,14 @@ void *filepage_pointer_impl::Pointer() const {
 }
 
 void filepage_pointer_impl::SetDirty(size_t length) {
+    data->setDirty(length);
 }
 
 filepage::filepage() : page(new filepage_data) {}
 
 std::shared_ptr<filepage_pointer> filepage::Pointer() {
     if (page->physpage != 0) {
-        return std::make_shared<filepage_pointer_impl>(page->physpage);
+        return std::make_shared<filepage_pointer_impl>(page, page->physpage);
     } else {
         return {};
     }
@@ -95,21 +97,20 @@ void filepage_data::initDone() {
 }
 
 void filepage_data::setDirty(uint32_t dirty) {
-    uint64_t set{dirty};
-    uint64_t expectdirty{0};
-    uint64_t olddirty{0};
+    uint32_t set{dirty};
+    uint32_t expectdirty{0};
+    uint32_t olddirty{0};
     do {
-        uint64_t expect{expectdirty};
+        uint32_t expect{expectdirty};
         expectdirty = olddirty;
         if (expect > set) {
             break;
         }
-        asm(""
-            "mov %1, %%rax;" // set
-            "mov %2, %%rcx;" // expect
+        asm("movl %2, %%ecx;" // set
+            "movl %3, %%eax;" // expect
             "lock cmpxchgl %%ecx, %0;"
-            "mov %%rcx, %3"
-                : "+m"(this->dirty), "=r"(set), "=r"(expect), "=rm"(olddirty) :: "%rax", "%rcx");
+            "movl %%eax, %1;"
+                : "+m"(this->dirty), "=rm"(olddirty) : "r"(set), "r"(expect) : "%rax", "%rcx");
     } while (olddirty != expectdirty);
 }
 
@@ -120,16 +121,16 @@ uint32_t filepage_data::getDirty() {
 
 uint32_t filepage_data::getDirtyAndClear() {
     asm("mfence");
-    uint64_t beforeClear;
-    uint64_t atClear{dirty};
+    uint32_t beforeClear;
+    uint32_t atClear{dirty};
     do {
         beforeClear = atClear;
         asm(""
-            "xor %%rax, %%rax;" // set
-            "mov %1, %%rcx;" // expect
+            "xorl %%ecx, %%ecx;" // set
+            "movl %2, %%eax;" // expect
             "lock cmpxchgl %%ecx, %0;"
-            "mov %%rcx, %2"
-                : "+m"(this->dirty), "=r"(beforeClear), "=rm"(atClear) :: "%rax", "%rcx");
+            "movl %%eax, %1"
+                : "+m"(this->dirty), "=rm"(atClear) : "r"(beforeClear) : "%eax", "%ecx");
     } while (atClear != beforeClear);
     return beforeClear;
 }
