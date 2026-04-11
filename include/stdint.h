@@ -33,8 +33,13 @@ typedef int32_t intptr_t;
 typedef uint32_t uintptr_t;
 typedef uint32_t phys_t;
 #else
+#ifdef EFI_LOADER
+typedef uint64_t size_t;
+typedef int64_t ssize_t;
+#else
 typedef unsigned long int size_t;
 typedef signed long int ssize_t;
+#endif
 typedef int64_t ptrdiff_t;
 typedef int64_t intptr_t;
 typedef uint64_t uintptr_t;

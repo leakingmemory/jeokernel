@@ -32,6 +32,7 @@ enable_language(C ASM)
 
 add_subdirectory(boot32)
 add_subdirectory(kernel)
+add_subdirectory(uefi64)
 
 if (NOT DEFINED ENV{DISABLE_TESTS})
         enable_testing()
@@ -43,6 +44,12 @@ endif (NOT DEFINED ENV{DISABLE_TESTS})
 #target_link_libraries(jeokernel kernel)
 
 #set(CMAKE_CXX_LINK_EXECUTABLE "ld -m elf_i386 -nostdlib -T ${CMAKE_SOURCE_DIR}/linker.ld <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS>  -o <TARGET> <LINK_LIBRARIES>")
+
+if(USE_CLANG)
+        set(UEFI64_SHIM_TARGET jeokernel_shim.efi)
+else(USE_CLANG)
+        set(UEFI64_SHIM_TARGET  jeokernel_shim)
+endif(USE_CLANG)
 
 add_custom_command(
         OUTPUT jeokernel.iso
@@ -62,9 +69,16 @@ add_custom_command(
         COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" ${CMAKE_SOURCE_DIR}/create_efiboot.sh
 )
 
+add_custom_command(
+        OUTPUT jeokernel_uefi64.img
+        DEPENDS ${UEFI64_SHIM_TARGET}
+        COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" sh ${CMAKE_SOURCE_DIR}/create_uefi64boot.sh
+)
+
 add_custom_target(jeokernel_disk ALL echo "ISO file built" DEPENDS jeokernel.img)
 
 IF(NOT (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
         add_custom_target(jeokernel_iso ALL echo "ISO file built" DEPENDS jeokernel.iso)
         add_custom_target(jeokernel_efi ALL echo "ISO file built" DEPENDS jeokernelefi.img)
 ENDIF()
+add_custom_target(jeokernel_uefi64 ALL echo "UEFI 64-bit image built" DEPENDS jeokernel_uefi64.img)
