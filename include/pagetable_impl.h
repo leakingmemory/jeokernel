@@ -49,15 +49,15 @@ pageentr &get_pt_pageentr64(pagetable &pt_ref, uint64_t addr) {
 
 pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr) {
     pageentr &pml4t_pe = get_pml4t_pageentr64(pml4t, addr);
-    if (pml4t_pe.present == 0) {
+    if (!pml4t_pe.present()) {
         return nullptr;
     }
     pageentr &pdpt = get_pdpt_pageentr64(pml4t_pe.get_subtable(), addr);
-    if (pdpt.present == 0) {
+    if (!pdpt.present()) {
         return nullptr;
     }
     pageentr &pdt = get_pdt_pageentr64(pdpt.get_subtable(), addr);
-    if (pdt.present == 0) {
+    if (!pdt.present()) {
         return nullptr;
     }
     pageentr &pt = get_pt_pageentr64(pdt.get_subtable(), addr);

@@ -151,7 +151,7 @@ void vmem_graph() {
     auto &pt = _get_pml4t()[0].get_subtable()[0].get_subtable()[0].get_subtable();
     for (int i = 0; i < 512; i++) {
         char *addr = (char *) (uint64_t) ((i << 1) + 0xb8000);
-        if (pt[i].os_virt_avail) {
+        if (pt[i].os_virt_avail()) {
             if (!phys->claimed(i)) {
                 *addr = '+';
             } else {
@@ -304,41 +304,41 @@ extern "C" {
                             uint32_t mem_ext_consumed = 0;
                             memory_extended = 0;
                             for (int i = 0; i < PMLT4_USERSPACE_HIGH_START; i++) {
-                                if (pml4t[i].present == 0) {
+                                if (!pml4t[i].present()) {
                                     pagetable *pt = allocate_pageentr();
                                     if (pt == nullptr) {
                                         break;
                                     }
-                                    pml4t[i].page_ppn = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
-                                    pml4t[i].writeable = 1;
-                                    pml4t[i].present = 1;
+                                    pml4t[i].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
+                                    pml4t[i].writeable() = 1;
+                                    pml4t[i].present() = 1;
                                     mem_ext_consumed += 4096;
                                 }
                                 auto &pdpt = pml4t[i].get_subtable();
                                 for (int j = i != 0 ? 0 : USERSPACE_LOW_END; j < 512; j++) {
-                                    if (pdpt[j].present == 0) {
+                                    if (!pdpt[j].present()) {
                                         pagetable *pt = allocate_pageentr();
                                         if (pt == nullptr) {
                                             goto done_with_mem_extension;
                                         }
-                                        pdpt[j].page_ppn = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
-                                        pdpt[j].writeable = 1;
-                                        pdpt[j].present = 1;
+                                        pdpt[j].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
+                                        pdpt[j].writeable() = 1;
+                                        pdpt[j].present() = 1;
                                         mem_ext_consumed += 4096;
                                     }
                                     auto &pdt = pdpt[j].get_subtable();
                                     for (int k = 0; k < 512; k++) {
-                                        if (pdt[k].present == 0) {
+                                        if (!pdt[k].present()) {
                                             pagetable *pt = allocate_pageentr();
                                             if (pt == nullptr) {
                                                 goto done_with_mem_extension;
                                             }
                                             for (int l = 0; l < 512; l++) {
-                                                (*pt)[l].os_virt_avail = 1;
+                                                (*pt)[l].os_virt_avail() = 1;
                                             }
-                                            pdt[k].page_ppn = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
-                                            pdt[k].writeable = 1;
-                                            pdt[k].present = 1;
+                                            pdt[k].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
+                                            pdt[k].writeable() = 1;
+                                            pdt[k].present() = 1;
                                             mem_ext_consumed += 4096;
                                             memory_extended += 512 * 4096;
                                         }
@@ -426,20 +426,20 @@ done_with_mem_extension:
                 auto &userCode = gdt->get_descriptor(3);
                 userCode.set_base(0);
                 userCode.set_limit(0xFFFFFF);
-                userCode.granularity = 0xA;
-                userCode.type = 0xFA;
+                userCode.granularity() = 0xA;
+                userCode.type() = 0xFA;
             }
             {
                 auto &userCode = gdt->get_descriptor(5);
                 userCode.set_base(0);
                 userCode.set_limit(0xFFFFFF);
-                userCode.granularity = 0xA;
-                userCode.type = 0xFA;
+                userCode.granularity() = 0xA;
+                userCode.type() = 0xFA;
             }
             userData.set_base(0);
             userData.set_limit(0);
-            userData.granularity = 0xA;
-            userData.type = 0xF2;
+            userData.granularity() = 0xA;
+            userData.type() = 0xF2;
         }
 
         uint64_t *gdt_ptr = (uint64_t *) &(gdt->get_descriptor(0));

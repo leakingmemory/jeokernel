@@ -40,11 +40,18 @@ struct efi_runtime_services {
     void *query_variable_info;
 };
 
+typedef enum {
+    AllocateAnyPages,
+    AllocateMaxAddress,
+    AllocateAddress,
+    MaxAllocateType
+} EfiAllocateType;
+
 struct efi_boot_services {
     efi_table_header header;
     void *raise_tpl;
     void *restore_tpl;
-    void *allocate_pages;
+    EFI_STATUS (EFIAPI *allocate_pages)(EfiAllocateType type, uint64_t memory_type, uint64_t pages, void **memory);
     void *free_pages;
     void *get_memory_map;
     void *allocate_pool;

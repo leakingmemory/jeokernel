@@ -43,15 +43,15 @@ KernelElf::KernelElf(const MultibootInfoHeader &multibootInfoHeader) : ptr(nullp
     }
     for (uint64_t i = 0; i < vsize; i += 0x1000) {
         std::optional<pageentr> pe = get_pageentr(vstart + i);
-        pe->page_ppn = (((uint64_t) kernel_info->mod_start) + i) >> 12;
-        pe->writeable = 0;
-        pe->accessed = 0;
-        pe->user_access = 0;
-        pe->write_through = 0;
-        pe->cache_disabled = 0;
-        pe->execution_disabled = 1;
-        pe->dirty = 0;
-        pe->present = 1;
+        pe->page_ppn() = (((uint64_t) kernel_info->mod_start) + i) >> 12;
+        pe->writeable() = 0;
+        pe->accessed() = 0;
+        pe->user_access() = 0;
+        pe->write_through() = 0;
+        pe->cache_disabled() = 0;
+        pe->execution_disabled() = 1;
+        pe->dirty() = 0;
+        pe->present() = 1;
         update_pageentr(vstart + i, *pe);
     }
     reload_pagetables();

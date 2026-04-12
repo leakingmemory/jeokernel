@@ -36,9 +36,9 @@ const uint32_t *install_ap_bootstrap() {
     *((uintptr_t *) (void *) (((uint8_t *) vm.pointer()) + 0x140)) = (uintptr_t) (void *) ap_started;
     stackptr_ref = stackptr;
     std::optional<pageentr> pe = get_pageentr(KERNEL_MEMORY_OFFSET + 0x8000);
-    pe->execution_disabled = 0;
-    pe->writeable = 0;
-    pe->present = 1;
+    pe->execution_disabled() = 0;
+    pe->writeable() = 0;
+    pe->present() = 1;
     update_pageentr(KERNEL_MEMORY_OFFSET + 0x8000, *pe);
     reload_pagetables();
     return (const uint32_t *) (KERNEL_MEMORY_OFFSET + 0x8FF0);

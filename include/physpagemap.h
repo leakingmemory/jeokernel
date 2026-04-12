@@ -8,12 +8,18 @@
 #include <cstdint>
 
 struct PhyspageMap {
-    uint32_t map[1024];
+    constexpr static size_t map_size = 1024;
+
+    uint32_t map[map_size];
 
     PhyspageMap() : map() {
         for (unsigned int & i : map) {
             i = 0;
         }
+    }
+
+    constexpr static uint32_t max_pageaddr() {
+        return map_size * 32;
     }
 
     constexpr void claim(uint32_t pageaddr) {

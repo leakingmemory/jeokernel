@@ -38,7 +38,7 @@ void vmem_dump(PhyspageMap *map) {
     pageentr *pt = (pageentr *) 0x4000;
     for (int i = 0; i < 512; i++) {
         char *addr = (char *) ((i << 1) + 0xb8000);
-        if (pt[i].os_virt_avail) {
+        if (pt[i].os_virt_avail()) {
             if (!map->claimed(i)) {
                 *addr = '+';
             } else {
@@ -167,194 +167,194 @@ void boot_stage1(void *multiboot_header_addr) {
         pt_raw23[i] = 0;
     }
 
-    pml4t[0].page_ppn = 0x2000 / 4096;
-    pml4t[0].writeable = 1;
-    pml4t[0].present = 1;
-    pml4t[0].os_virt_avail = 1;
-    pdpt[0].page_ppn = 0x3000 / 4096;
-    pdpt[0].writeable = 1;
-    pdpt[0].present = 1;
-    pdpt[0].os_virt_avail = 1;
-    pdpt[3].page_ppn = 0x4000 / 4096;
-    pdpt[3].writeable = 1;
-    pdpt[3].present = 1;
-    pdpt[3].os_virt_avail = 1;
-    pdt0[0].page_ppn = 0xa000 / 4096;
-    pdt0[0].writeable = 1;
-    pdt0[0].present = 1;
-    pdt0[0].os_virt_avail = 1;
-    pdt0[1].page_ppn = 0xb000 / 4096;
-    pdt0[1].writeable = 1;
-    pdt0[1].present = 1;
-    pdt0[1].os_virt_avail = 1;
+    pml4t[0].page_ppn() = 0x2000 / 4096;
+    pml4t[0].writeable() = 1;
+    pml4t[0].present() = 1;
+    pml4t[0].os_virt_avail() = 1;
+    pdpt[0].page_ppn() = 0x3000 / 4096;
+    pdpt[0].writeable() = 1;
+    pdpt[0].present() = 1;
+    pdpt[0].os_virt_avail() = 1;
+    pdpt[3].page_ppn() = 0x4000 / 4096;
+    pdpt[3].writeable() = 1;
+    pdpt[3].present() = 1;
+    pdpt[3].os_virt_avail() = 1;
+    pdt0[0].page_ppn() = 0xa000 / 4096;
+    pdt0[0].writeable() = 1;
+    pdt0[0].present() = 1;
+    pdt0[0].os_virt_avail() = 1;
+    pdt0[1].page_ppn() = 0xb000 / 4096;
+    pdt0[1].writeable() = 1;
+    pdt0[1].present() = 1;
+    pdt0[1].os_virt_avail() = 1;
     /* stack area for bootloader */
-    pdt0[5].page_ppn = 0xc000 / 4096;
-    pdt0[5].writeable = 1;
-    pdt0[5].present = 1;
-    pdt0[5].os_virt_avail = 1;
+    pdt0[5].page_ppn() = 0xc000 / 4096;
+    pdt0[5].writeable() = 1;
+    pdt0[5].present() = 1;
+    pdt0[5].os_virt_avail() = 1;
     /* ** */
-    pdt[0].page_ppn = 0xd000 / 4096;
-    pdt[0].writeable = 1;
-    pdt[0].present = 1;
-    pdt[0].os_virt_avail = 0;
-    pdt[1].page_ppn = 0xe000 / 4096;
-    pdt[1].writeable = 1;
-    pdt[1].present = 1;
-    pdt[1].os_virt_avail = 1;
-    pdt[2].page_ppn = 0xf000 / 4096;
-    pdt[2].writeable = 1;
-    pdt[2].present = 1;
-    pdt[2].os_virt_avail = 1;
-    pdt[3].page_ppn = 0x10000 / 4096;
-    pdt[3].writeable = 1;
-    pdt[3].present = 1;
-    pdt[3].os_virt_avail = 1;
-    pdt[4].page_ppn = 0x11000 / 4096;
-    pdt[4].writeable = 1;
-    pdt[4].present = 1;
-    pdt[4].os_virt_avail = 1;
-    pdt[5].page_ppn = 0x12000 / 4096;
-    pdt[5].writeable = 1;
-    pdt[5].present = 1;
-    pdt[5].os_virt_avail = 1;
-    pdt[6].page_ppn = 0x13000 / 4096;
-    pdt[6].writeable = 1;
-    pdt[6].present = 1;
-    pdt[6].os_virt_avail = 1;
-    pdt[7].page_ppn = 0x14000 / 4096;
-    pdt[7].writeable = 1;
-    pdt[7].present = 1;
-    pdt[7].os_virt_avail = 1;
-    pdt[8].page_ppn = 0x15000 / 4096;
-    pdt[8].writeable = 1;
-    pdt[8].present = 1;
-    pdt[8].os_virt_avail = 1;
-    pdt[9].page_ppn = 0x16000 / 4096;
-    pdt[9].writeable = 1;
-    pdt[9].present = 1;
-    pdt[9].os_virt_avail = 1;
-    pdt[10].page_ppn = 0x17000 / 4096;
-    pdt[10].writeable = 1;
-    pdt[10].present = 1;
-    pdt[10].os_virt_avail = 1;
-    pdt[11].page_ppn = 0x18000 / 4096;
-    pdt[11].writeable = 1;
-    pdt[11].present = 1;
-    pdt[11].os_virt_avail = 1;
-    pdt[12].page_ppn = 0x19000 / 4096;
-    pdt[12].writeable = 1;
-    pdt[12].present = 1;
-    pdt[12].os_virt_avail = 1;
-    pdt[13].page_ppn = 0x1a000 / 4096;
-    pdt[13].writeable = 1;
-    pdt[13].present = 1;
-    pdt[13].os_virt_avail = 1;
-    pdt[14].page_ppn = 0x1b000 / 4096;
-    pdt[14].writeable = 1;
-    pdt[14].present = 1;
-    pdt[14].os_virt_avail = 1;
-    pdt[15].page_ppn = 0x1c000 / 4096;
-    pdt[15].writeable = 1;
-    pdt[15].present = 1;
-    pdt[15].os_virt_avail = 1;
-    pdt[16].page_ppn = 0x1d000 / 4096;
-    pdt[16].writeable = 1;
-    pdt[16].present = 1;
-    pdt[16].os_virt_avail = 1;
-    pdt[17].page_ppn = 0x1e000 / 4096;
-    pdt[17].writeable = 1;
-    pdt[17].present = 1;
-    pdt[17].os_virt_avail = 1;
-    pdt[18].page_ppn = 0x1f000 / 4096;
-    pdt[18].writeable = 1;
-    pdt[18].present = 1;
-    pdt[18].os_virt_avail = 1;
-    pdt[19].page_ppn = 0x20000 / 4096;
-    pdt[19].writeable = 1;
-    pdt[19].present = 1;
-    pdt[19].os_virt_avail = 1;
+    pdt[0].page_ppn() = 0xd000 / 4096;
+    pdt[0].writeable() = 1;
+    pdt[0].present() = 1;
+    pdt[0].os_virt_avail() = 0;
+    pdt[1].page_ppn() = 0xe000 / 4096;
+    pdt[1].writeable() = 1;
+    pdt[1].present() = 1;
+    pdt[1].os_virt_avail() = 1;
+    pdt[2].page_ppn() = 0xf000 / 4096;
+    pdt[2].writeable() = 1;
+    pdt[2].present() = 1;
+    pdt[2].os_virt_avail() = 1;
+    pdt[3].page_ppn() = 0x10000 / 4096;
+    pdt[3].writeable() = 1;
+    pdt[3].present() = 1;
+    pdt[3].os_virt_avail() = 1;
+    pdt[4].page_ppn() = 0x11000 / 4096;
+    pdt[4].writeable() = 1;
+    pdt[4].present() = 1;
+    pdt[4].os_virt_avail() = 1;
+    pdt[5].page_ppn() = 0x12000 / 4096;
+    pdt[5].writeable() = 1;
+    pdt[5].present() = 1;
+    pdt[5].os_virt_avail() = 1;
+    pdt[6].page_ppn() = 0x13000 / 4096;
+    pdt[6].writeable() = 1;
+    pdt[6].present() = 1;
+    pdt[6].os_virt_avail() = 1;
+    pdt[7].page_ppn() = 0x14000 / 4096;
+    pdt[7].writeable() = 1;
+    pdt[7].present() = 1;
+    pdt[7].os_virt_avail() = 1;
+    pdt[8].page_ppn() = 0x15000 / 4096;
+    pdt[8].writeable() = 1;
+    pdt[8].present() = 1;
+    pdt[8].os_virt_avail() = 1;
+    pdt[9].page_ppn() = 0x16000 / 4096;
+    pdt[9].writeable() = 1;
+    pdt[9].present() = 1;
+    pdt[9].os_virt_avail() = 1;
+    pdt[10].page_ppn() = 0x17000 / 4096;
+    pdt[10].writeable() = 1;
+    pdt[10].present() = 1;
+    pdt[10].os_virt_avail() = 1;
+    pdt[11].page_ppn() = 0x18000 / 4096;
+    pdt[11].writeable() = 1;
+    pdt[11].present() = 1;
+    pdt[11].os_virt_avail() = 1;
+    pdt[12].page_ppn() = 0x19000 / 4096;
+    pdt[12].writeable() = 1;
+    pdt[12].present() = 1;
+    pdt[12].os_virt_avail() = 1;
+    pdt[13].page_ppn() = 0x1a000 / 4096;
+    pdt[13].writeable() = 1;
+    pdt[13].present() = 1;
+    pdt[13].os_virt_avail() = 1;
+    pdt[14].page_ppn() = 0x1b000 / 4096;
+    pdt[14].writeable() = 1;
+    pdt[14].present() = 1;
+    pdt[14].os_virt_avail() = 1;
+    pdt[15].page_ppn() = 0x1c000 / 4096;
+    pdt[15].writeable() = 1;
+    pdt[15].present() = 1;
+    pdt[15].os_virt_avail() = 1;
+    pdt[16].page_ppn() = 0x1d000 / 4096;
+    pdt[16].writeable() = 1;
+    pdt[16].present() = 1;
+    pdt[16].os_virt_avail() = 1;
+    pdt[17].page_ppn() = 0x1e000 / 4096;
+    pdt[17].writeable() = 1;
+    pdt[17].present() = 1;
+    pdt[17].os_virt_avail() = 1;
+    pdt[18].page_ppn() = 0x1f000 / 4096;
+    pdt[18].writeable() = 1;
+    pdt[18].present() = 1;
+    pdt[18].os_virt_avail() = 1;
+    pdt[19].page_ppn() = 0x20000 / 4096;
+    pdt[19].writeable() = 1;
+    pdt[19].present() = 1;
+    pdt[19].os_virt_avail() = 1;
     /*
      * Make first 2MiB adressable,writable,execable
      */
     for (uint16_t i = 0; i < 512; i++) {
         if (i > 0) {
-            pt[i].page_ppn = i;
-            pt[i].writeable = 1;
-            pt[i].present = 1;
+            pt[i].page_ppn() = i;
+            pt[i].writeable() = 1;
+            pt[i].present() = 1;
         }
         {
-            pt2[i].page_ppn = i + 512;
-            pt2[i].writeable = 1;
-            pt2[i].present = 1;
+            pt2[i].page_ppn() = i + 512;
+            pt2[i].writeable() = 1;
+            pt2[i].present() = 1;
         }
-        pt2[i].os_virt_avail = 0;
-        pt3[i].os_virt_avail = 1;
-        pt4[i].os_virt_avail = 0;
-        pt5[i].os_virt_avail = 1;
-        pt6[i].os_virt_avail = 1;
-        pt7[i].os_virt_avail = 1;
-        pt8[i].os_virt_avail = 1;
-        pt9[i].os_virt_avail = 1;
-        pt10[i].os_virt_avail = 1;
-        pt11[i].os_virt_avail = 1;
-        pt12[i].os_virt_avail = 1;
-        pt13[i].os_virt_avail = 1;
-        pt14[i].os_virt_avail = 1;
-        pt15[i].os_virt_avail = 1;
-        pt16[i].os_virt_avail = 1;
-        pt17[i].os_virt_avail = 1;
-        pt18[i].os_virt_avail = 1;
-        pt19[i].os_virt_avail = 1;
-        pt20[i].os_virt_avail = 1;
-        pt21[i].os_virt_avail = 1;
-        pt22[i].os_virt_avail = 1;
-        pt23[i].os_virt_avail = 1;
+        pt2[i].os_virt_avail() = 0;
+        pt3[i].os_virt_avail() = 1;
+        pt4[i].os_virt_avail() = 0;
+        pt5[i].os_virt_avail() = 1;
+        pt6[i].os_virt_avail() = 1;
+        pt7[i].os_virt_avail() = 1;
+        pt8[i].os_virt_avail() = 1;
+        pt9[i].os_virt_avail() = 1;
+        pt10[i].os_virt_avail() = 1;
+        pt11[i].os_virt_avail() = 1;
+        pt12[i].os_virt_avail() = 1;
+        pt13[i].os_virt_avail() = 1;
+        pt14[i].os_virt_avail() = 1;
+        pt15[i].os_virt_avail() = 1;
+        pt16[i].os_virt_avail() = 1;
+        pt17[i].os_virt_avail() = 1;
+        pt18[i].os_virt_avail() = 1;
+        pt19[i].os_virt_avail() = 1;
+        pt20[i].os_virt_avail() = 1;
+        pt21[i].os_virt_avail() = 1;
+        pt22[i].os_virt_avail() = 1;
+        pt23[i].os_virt_avail() = 1;
     }
     /*
      * Make second half, and next five, allocateable
      */
     for (uint16_t i = 0; i < 512; i++) {
         if (i >= 256) {
-            pt[i].os_virt_avail = 1;
+            pt[i].os_virt_avail() = 1;
         } else {
             physpageMap->claim(i);
         }
-        pt2[i].os_virt_avail = 1;
-        pt3[i].os_virt_avail = 1;
-        pt4[i].os_virt_avail = 0;
-        pt5[i].os_virt_avail = 1;
-        pt6[i].os_virt_avail = 1;
-        pt7[i].os_virt_avail = 1;
-        pt8[i].os_virt_avail = 1;
-        pt9[i].os_virt_avail = 1;
-        pt10[i].os_virt_avail = 1;
-        pt11[i].os_virt_avail = 1;
-        pt12[i].os_virt_avail = 1;
-        pt13[i].os_virt_avail = 1;
-        pt14[i].os_virt_avail = 1;
-        pt15[i].os_virt_avail = 1;
-        pt16[i].os_virt_avail = 1;
-        pt17[i].os_virt_avail = 1;
-        pt18[i].os_virt_avail = 1;
-        pt19[i].os_virt_avail = 1;
-        pt20[i].os_virt_avail = 1;
-        pt21[i].os_virt_avail = 1;
-        pt22[i].os_virt_avail = 1;
-        pt23[i].os_virt_avail = 1;
+        pt2[i].os_virt_avail() = 1;
+        pt3[i].os_virt_avail() = 1;
+        pt4[i].os_virt_avail() = 0;
+        pt5[i].os_virt_avail() = 1;
+        pt6[i].os_virt_avail() = 1;
+        pt7[i].os_virt_avail() = 1;
+        pt8[i].os_virt_avail() = 1;
+        pt9[i].os_virt_avail() = 1;
+        pt10[i].os_virt_avail() = 1;
+        pt11[i].os_virt_avail() = 1;
+        pt12[i].os_virt_avail() = 1;
+        pt13[i].os_virt_avail() = 1;
+        pt14[i].os_virt_avail() = 1;
+        pt15[i].os_virt_avail() = 1;
+        pt16[i].os_virt_avail() = 1;
+        pt17[i].os_virt_avail() = 1;
+        pt18[i].os_virt_avail() = 1;
+        pt19[i].os_virt_avail() = 1;
+        pt20[i].os_virt_avail() = 1;
+        pt21[i].os_virt_avail() = 1;
+        pt22[i].os_virt_avail() = 1;
+        pt23[i].os_virt_avail() = 1;
     }
     vga.display(0, 0, "/");
 
     // Our stack is at pt3[511] /* number 6 (index 5) in 1st (index 0) pdt */
     for (uint16_t i = 502; i < 512; i++) {
-        pt3[i].os_virt_avail = 0;
-        pt3[i].writeable = 1;
-        pt3[i].present = 1;
-        pt3[i].execution_disabled = 1;
-        pt3[i].page_ppn = 0xa00 + i;
+        pt3[i].os_virt_avail() = 0;
+        pt3[i].writeable() = 1;
+        pt3[i].present() = 1;
+        pt3[i].execution_disabled() = 1;
+        pt3[i].page_ppn() = 0xa00 + i;
         physpageMap->claim(0xa00 + i);
     }
-    pt3[502].os_virt_start = 1;
-    pt3[502].present = 0; // Crash barrier
+    pt3[502].os_virt_start() = 1;
+    pt3[502].present() = 0; // Crash barrier
 
     hexstr((char (&)[8]) *hex, (uint32_t) multiboot_header_addr);
     vga.display(2, 13, "multiboot=");
@@ -528,13 +528,13 @@ void boot_stage1(void *multiboot_header_addr) {
                             /*
                              * Default read only and non-exec
                              */
-                            pe->writeable = 0;
-                            pe->execution_disabled = 1;
+                            pe->writeable() = 0;
+                            pe->execution_disabled() = 1;
 
-                            pe->os_virt_avail = 0;
-                            pe->os_virt_start = 1;
-                            pe->page_ppn = page_ppn;
-                            pe->present = 1;
+                            pe->os_virt_avail() = 0;
+                            pe->os_virt_start() = 1;
+                            pe->page_ppn() = page_ppn;
+                            pe->present() = 1;
 
                             vaddr += 4096;
                             phaddr += 4096;
@@ -548,17 +548,17 @@ void boot_stage1(void *multiboot_header_addr) {
                                 if (!physpageMap->claimed(page_ppn)) {
                                     physpageMap->claim(page_ppn);
                                     pageentr *pe = get_pageentr64(pml4t, vaddr);
-                                    pe->os_virt_avail = 0;
-                                    pe->os_virt_start = 1;
+                                    pe->os_virt_avail() = 0;
+                                    pe->os_virt_start() = 1;
 
                                     /*
                                      * Default read-only and non-exec
                                      */
-                                    pe->writeable = 0;
-                                    pe->execution_disabled = 1;
+                                    pe->writeable() = 0;
+                                    pe->execution_disabled() = 1;
 
-                                    pe->page_ppn = page_ppn;
-                                    pe->present = 1;
+                                    pe->page_ppn() = page_ppn;
+                                    pe->present() = 1;
 
                                     {
                                         uint8_t *z = (uint8_t *) phdataaddr;
@@ -621,13 +621,13 @@ good_data_page_alloc:
 #ifdef DEBUG_ELF_ATTRIBUTES
                             vga.display(23, 54, "W");
 #endif
-                            pe->writeable = 1;
+                            pe->writeable() = 1;
                         }
                         if (section.sh_flags & SHF_EXECINSTR) {
 #ifdef DEBUG_ELF_ATTRIBUTES
                             vga.display(23, 55, "E");
 #endif
-                            pe->execution_disabled = 0;
+                            pe->execution_disabled() = 0;
                         }
 #ifdef DEBUG_ELF_ATTRIBUTES
                         for (int delay = 0; delay < DEBUG_ELF_ATTRIBUTES_BRAKE_VAL; delay++) {
@@ -656,7 +656,7 @@ good_data_page_alloc:
                                 if (pe == nullptr) {
                                     asm("ud2");
                                 }
-                                uint64_t phys = pe->page_ppn << 12;
+                                uint64_t phys = static_cast<uint64_t>(pe->page_ppn()) << 12;
                                 phys += rela_dyns[i].offset & 0xFFF;
                                 *((uint64_t *) phys) += rela_dyns[i].addendum;
                             }
@@ -679,7 +679,7 @@ good_data_page_alloc:
             for (int i = 256; i < 511; i++) {
                 int j = 0;
                 while (j < stack_pages && (i+j) < 512) {
-                    if (!pt3[i+j].os_virt_avail || physpageMap->claimed(0xa00 + i + j)) {
+                    if (!pt3[i+j].os_virt_avail() || physpageMap->claimed(0xa00 + i + j)) {
                         break;
                     }
                     j++;
@@ -687,20 +687,20 @@ good_data_page_alloc:
                 if (stack_pages == j) {
                     stack_ptr = 0xa00 + i;
                     stack_ptr = (stack_ptr << 12) + (stack_pages * 4096);
-                    pt3[i].os_virt_avail = 0;
-                    pt3[i].os_virt_start = 1;
-                    pt3[i].writeable = 0;
-                    pt3[i].present = 0;
-                    pt3[i].accessed = 0;
+                    pt3[i].os_virt_avail() = 0;
+                    pt3[i].os_virt_start() = 1;
+                    pt3[i].writeable() = 0;
+                    pt3[i].present() = 0;
+                    pt3[i].accessed() = 0;
                     for (int j = 1; j < stack_pages; j++) {
-                        pt3[i+j].os_virt_avail = 0;
-                        pt3[i+j].os_virt_start = 0;
-                        pt3[i+j].page_ppn = 0xa00 + i + j;
+                        pt3[i+j].os_virt_avail() = 0;
+                        pt3[i+j].os_virt_start() = 0;
+                        pt3[i+j].page_ppn() = 0xa00 + i + j;
                         physpageMap->claim(0xa00 + i + j);
-                        pt3[i+j].writeable = 1;
-                        pt3[i+j].present = 1;
-                        pt3[i+j].accessed = 0;
-                        pt3[i+j].execution_disabled = 1;
+                        pt3[i+j].writeable() = 1;
+                        pt3[i+j].present() = 1;
+                        pt3[i+j].accessed() = 0;
+                        pt3[i+j].execution_disabled() = 1;
                     }
                     goto stack_allocated;
                 }
@@ -712,9 +712,9 @@ good_data_page_alloc:
 stack_allocated:
 
             for (int i = 0;  i< 512; i++) {
-                pt[i].os_virt_avail = 0;
-                pt2[i].os_virt_avail = 0;
-                pt3[i].os_virt_avail = 0;
+                pt[i].os_virt_avail() = 0;
+                pt2[i].os_virt_avail() = 0;
+                pt3[i].os_virt_avail() = 0;
             }
 
             uint32_t entrypoint_addr = elf64_header.e_entry;

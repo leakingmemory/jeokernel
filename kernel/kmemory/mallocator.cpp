@@ -17,15 +17,15 @@ void *BasicMemoryAllocatorImpl::sm_allocate(uint32_t size) {
         vmem = vmem & 0xFFFFFFFFFFFFF000;
         for (; vmem < vmem_end; vmem += 0x1000) {
             std::optional<pageentr> pe = get_pageentr(vmem);
-            if (!pe->present) {
-                pe->page_ppn = ppagealloc(4096) >> 12;
-                pe->present = 1;
-                pe->writeable = 1;
-                pe->user_access = 0;
-                pe->execution_disabled = 1;
-                pe->write_through = 0;
-                pe->cache_disabled = 0;
-                pe->accessed = 0;
+            if (!pe->present()) {
+                pe->page_ppn() = ppagealloc(4096) >> 12;
+                pe->present() = 1;
+                pe->writeable() = 1;
+                pe->user_access() = 0;
+                pe->execution_disabled() = 1;
+                pe->write_through() = 0;
+                pe->cache_disabled() = 0;
+                pe->accessed() = 0;
                 update_pageentr(vmem, *pe);
             }
         }
@@ -46,11 +46,11 @@ BasicMemoryAllocatorImpl::~BasicMemoryAllocatorImpl() {
     uint64_t pageaddr_end = ((uint64_t) this) + sizeof(*this);
     for (uint64_t pageaddr = (uint64_t) this; pageaddr < pageaddr_end; pageaddr += 0x1000) {
         std::optional<pageentr> pe = get_pageentr(pageaddr);
-        if (pe->present) {
-            uint64_t paddr = pe->page_ppn;
+        if (pe->present()) {
+            uint64_t paddr = pe->page_ppn();
             paddr = paddr << 12;
-            pe->present = 0;
-            pe->page_ppn = 0;
+            pe->present() = 0;
+            pe->page_ppn() = 0;
             ppagefree(paddr, 4096);
         }
     }
@@ -147,13 +147,13 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
             if (ppage == 0) {
                 wild_panic("Out of kernel phys space");
             }
-            pe->page_ppn = ppage >> 12;
-            pe->writeable = 1;
-            pe->execution_disabled = 1;
-            pe->write_through = 0;
-            pe->cache_disabled = 0;
-            pe->accessed = 0;
-            pe->present = 1;
+            pe->page_ppn() = ppage >> 12;
+            pe->writeable() = 1;
+            pe->execution_disabled() = 1;
+            pe->write_through() = 0;
+            pe->cache_disabled() = 0;
+            pe->accessed() = 0;
+            pe->present() = 1;
             update_pageentr((uint64_t) memoryAllocatorP, *pe);
         }
         {
@@ -162,13 +162,13 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
             if (ppage == 0) {
                 wild_panic("Out of kernel phys space");
             }
-            pe->page_ppn = ppage >> 12;
-            pe->writeable = 1;
-            pe->execution_disabled = 1;
-            pe->write_through = 0;
-            pe->cache_disabled = 0;
-            pe->accessed = 0;
-            pe->present = 1;
+            pe->page_ppn() = ppage >> 12;
+            pe->writeable() = 1;
+            pe->execution_disabled() = 1;
+            pe->write_through() = 0;
+            pe->cache_disabled() = 0;
+            pe->accessed() = 0;
+            pe->present() = 1;
             update_pageentr(((uint64_t) memoryAllocatorP) + 4096, *pe);
         }
     }

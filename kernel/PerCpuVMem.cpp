@@ -39,18 +39,18 @@ uintptr_t PerCpuVMem::AllocStack() {
                 for (int i = 0; i < pagetables.numTables; i++) {
                     {
                         auto &pe = pagetables.tables[i][0];
-                        pe.page_ppn = 0;
-                        pe.present = 0;
+                        pe.page_ppn() = 0;
+                        pe.present() = 0;
                     }
                     for (int j = 1; j < needPages; j++) {
                         auto &pe = pagetables.tables[i][j];
-                        pe.page_ppn = (paddr >> 12) + (i * (needPages - 1)) + j - 1;
-                        pe.present = 1;
-                        pe.execution_disabled = 1;
-                        pe.writeable = 1;
-                        pe.user_access = 0;
-                        pe.accessed = 0;
-                        pe.dirty = 0;
+                        pe.page_ppn() = (paddr >> 12) + (i * (needPages - 1)) + j - 1;
+                        pe.present() = 1;
+                        pe.execution_disabled() = 1;
+                        pe.writeable() = 1;
+                        pe.user_access() = 0;
+                        pe.accessed() = 0;
+                        pe.dirty() = 0;
                     }
                 }
                 auto iterator = freePages.begin();

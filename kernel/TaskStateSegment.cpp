@@ -14,8 +14,8 @@ TaskStateSegment::TaskStateSegment() : tss_entry(new (pagealloc32(sizeof(*tss_en
     if (!pe) {
         wild_panic("pagealloc did not set up pages");
     }
-    physptr = pe->page_ppn << 12;
-    if ((physptr >> 12) != pe->page_ppn) {
+    physptr = static_cast<phys_t>(pe->page_ppn()) << 12;
+    if ((physptr >> 12) != pe->page_ppn()) {
         wild_panic("TSS address to high (32bit avail)");
     }
 }
@@ -33,8 +33,8 @@ int TaskStateSegment::install(GlobalDescriptorTable &gdt, int cpu_n) {
     GDT &gdt_e = gdt.get_descriptor(sel_idx);
     gdt_e.set_base((uintptr_t) tss_entry);
     gdt_e.set_limit(sizeof(*tss_entry));
-    gdt_e.type = 0x89;
-    gdt_e.granularity = 0x4;
+    gdt_e.type() = 0x89;
+    gdt_e.granularity() = 0x4;
     return sel_idx;
 }
 
@@ -43,8 +43,8 @@ int TaskStateSegment::install_bsp(GlobalDescriptorTable &gdt) {
     GDT &gdt_e = gdt.get_descriptor(sel_idx);
     gdt_e.set_base((uintptr_t) tss_entry);
     gdt_e.set_limit(sizeof(*tss_entry));
-    gdt_e.type = 0x89;
-    gdt_e.granularity = 0x4;
+    gdt_e.type() = 0x89;
+    gdt_e.granularity() = 0x4;
     return sel_idx;
 }
 

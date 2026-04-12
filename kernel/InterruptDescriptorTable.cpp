@@ -19,13 +19,13 @@ InterruptDescriptorTable::InterruptDescriptorTable() {
     }
     for (uintptr_t offset = 0; offset < sizeof(*idt_table); offset += 4096) {
         update_pageentr(((uintptr_t) idt_table) + offset, [this, offset] (pageentr &pe) {
-            pe.page_ppn = (physptr + offset) >> 12;
-            pe.present = 1;
-            pe.writeable = 1;
-            pe.execution_disabled = 1;
-            pe.user_access = 0;
-            pe.write_through = 0;
-            pe.cache_disabled = 0;
+            pe.page_ppn() = (physptr + offset) >> 12;
+            pe.present() = 1;
+            pe.writeable() = 1;
+            pe.execution_disabled() = 1;
+            pe.user_access() = 0;
+            pe.write_through() = 0;
+            pe.cache_disabled() = 0;
         });
     }
     idt_table = new ((void *) idt_table) IDTTable<256>();

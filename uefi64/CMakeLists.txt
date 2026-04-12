@@ -15,7 +15,7 @@ enable_language(C ASM)
         set(UEFI64_SHIM_TARGET  jeokernel_shim)
     endif(USE_CLANG)
 
-add_executable(${UEFI64_SHIM_TARGET} efi_main.cpp wrapbin.S)
+add_executable(${UEFI64_SHIM_TARGET} efi_main.cpp wrapbin.S strings.cpp)
 
 # Ensure the kernel binary exists before building the shim
 add_dependencies(${UEFI64_SHIM_TARGET} kernel)
