@@ -52,8 +52,8 @@ struct efi_boot_services {
     void *raise_tpl;
     void *restore_tpl;
     EFI_STATUS (EFIAPI *allocate_pages)(EfiAllocateType type, uint64_t memory_type, uint64_t pages, void **memory);
-    void *free_pages;
-    void *get_memory_map;
+    EFI_STATUS (EFIAPI *free_pages)(void *addr, uintptr_t pages);
+    EFI_STATUS (EFIAPI *get_memory_map)(uintptr_t *MemoryMapSize, void *MemoryMap, uintptr_t *MapKey,uintptr_t *DescriptorSize, uint32_t *DescriptorVersion);
     void *allocate_pool;
     void *free_pool;
     void *create_event;
@@ -75,7 +75,7 @@ struct efi_boot_services {
     void *start_image;
     void *exit;
     void *unload_image;
-    void *exit_boot_services;
+    EFI_STATUS (EFIAPI *exit_boot_services)(void *ImageHandle, uintptr_t MapKey);
     void *stall;
     void *set_watchdog_timer;
     void *connect_controller;

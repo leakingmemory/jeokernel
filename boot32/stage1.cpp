@@ -543,8 +543,7 @@ void boot_stage1(void *multiboot_header_addr) {
                         uint32_t cp = ph.p_filesz;
                         while (vaddr < vaddr_end) {
                             for (uint32_t phdataaddr = 0x200000; phdataaddr < 0xf00000; phdataaddr += 0x1000) {
-                                pageentr *phys_pe = get_pageentr64(pml4t, phdataaddr);
-                                uint32_t page_ppn = phdataaddr >> 12;
+                                    uint32_t page_ppn = phdataaddr >> 12;
                                 if (!physpageMap->claimed(page_ppn)) {
                                     physpageMap->claim(page_ppn);
                                     pageentr *pe = get_pageentr64(pml4t, vaddr);

@@ -18,13 +18,16 @@ enable_language(C ASM)
 add_executable(${UEFI64_SHIM_TARGET} efi_main.cpp wrapbin.S strings.cpp)
 
 # Ensure the kernel binary exists before building the shim
-add_dependencies(${UEFI64_SHIM_TARGET} kernel)
+add_dependencies(${UEFI64_SHIM_TARGET} uefi64stage kernel)
 
 # To allow wrapbin.S to find the kernel binary via .incbin
 # We'll pass the path as a preprocessor definition to the assembler
+get_target_property(UEFI64STAGE_BINARY_DIR uefi64stage BINARY_DIR)
 get_target_property(KERNEL_BINARY_DIR kernel BINARY_DIR)
-target_compile_options(${UEFI64_SHIM_TARGET} PRIVATE "$<$<COMPILE_LANGUAGE:ASM>:-DKERNEL_PATH=\"${CMAKE_BINARY_DIR}/kernel/kernel\">")
-
+target_compile_definitions(${UEFI64_SHIM_TARGET} PRIVATE
+        "$<$<COMPILE_LANGUAGE:ASM>:KERNEL_PATH=\"${CMAKE_BINARY_DIR}/kernel/kernel\">"
+        "$<$<COMPILE_LANGUAGE:ASM>:UEFI64STAGE_PATH=\"${CMAKE_BINARY_DIR}/uefi64stage/uefi64stage\">"
+)
 target_include_directories(${UEFI64_SHIM_TARGET} PRIVATE ../include)
 
 if (NOT USE_CLANG)

@@ -31,6 +31,7 @@ set(CMAKE_CXX_STANDARD 20)
 enable_language(C ASM)
 
 add_subdirectory(boot32)
+add_subdirectory(uefi64stage)
 add_subdirectory(kernel)
 add_subdirectory(uefi64)
 
