@@ -9,6 +9,7 @@ struct UefiStageContext {
     uint64_t vmem_root; // cr3
     uint64_t physpage_map;
     uint64_t entrypoint_addr;
+    uint64_t pml4t_addr;
 };
 
 #endif //JEOKERNEL_UEFISTAGE_H

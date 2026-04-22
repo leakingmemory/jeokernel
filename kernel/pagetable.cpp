@@ -20,7 +20,9 @@ hw_spinlock &get_pagetables_lock() {
     return *pagetables_lock;
 }
 
-#define _get_pml4t()  (*((pagetable *) ((uintptr_t) get_pagetable_virt_offset() + 0x1000)))
+extern uintptr_t init_pml4t_addr;
+
+#define _get_pml4t()  (*((pagetable *) ((uintptr_t) get_pagetable_virt_offset() + init_pml4t_addr)))
 
 static uintptr_t pagetable_virt_offset = 0;
 

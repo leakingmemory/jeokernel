@@ -70,7 +70,8 @@ extern "C" {
 
         Stage1Data stage1Data = {
             .multibootAddr = (uint32_t) 0,
-            .physpageMapAddr = static_cast<uint32_t>(ctx->physpage_map)
+            .physpageMapAddr = static_cast<uint32_t>(ctx->physpage_map),
+            .init_pml4t = static_cast<uint32_t>(ctx->pml4t_addr)
         };
         uint64_t stack_addr = reinterpret_cast<uint64_t>(&stage1Data);
         stack_addr &= 0xfffffffffffffff0ULL;

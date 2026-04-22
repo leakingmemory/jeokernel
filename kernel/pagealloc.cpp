@@ -26,34 +26,43 @@ static pagetable **per_cpu_pagetables = nullptr;
 static int v_num_cpus = 0;
 static bool is_v_multicpu = false;
 
-#define _get_pml4t_this_cpu()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[apStartup->GetCpuNum()]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + 0x1000))))
-#define _get_pml4t_cpu0()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[0]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + 0x1000))))
+uintptr_t init_pml4t_addr;
+
+#define _get_pml4t_this_cpu()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[apStartup->GetCpuNum()]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + init_pml4t_addr))))
+#define _get_pml4t_cpu0()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[0]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + init_pml4t_addr))))
 static phys_t ppagealloc_locked(uintptr_t size);
 
 pagetable &get_root_pagetable() {
     return _get_pml4t_this_cpu();
 }
 
+void set_init_pml4t(uintptr_t addr) {
+    init_pml4t_addr = addr;
+}
+
 void relocate_kernel_vmemory() {
     /* copy the initial pagetable for starting up APs - needs some of the 16/32bit memory fixed mappings */
-    memcpy((void *) 0x5000, (void *) 0x1000, 0x1000);
-    memcpy((void *) 0x6000, (void *) 0x2000, 0x1000);
-    memcpy((void *) 0x7000, (void *) 0x3000, 0x1000);
+    memcpy((void *) 0x5000, (void *) (get_pagetable_virt_offset() + init_pml4t_addr), 0x3000);
     (*((pagetable *) 0x5000))[0].page_ppn() = 0x6000 / 0x1000;
     (*((pagetable *) 0x6000))[0].page_ppn() = 0x7000 / 0x1000;
 
     auto pmlt4 = _get_pml4t_cpu0();
     auto &pdtp = pmlt4[0].get_subtable();
-    uint32_t pdt_ppn;
-    {
-        auto &pdt = pdtp[0].get_subtable();
-        pdt_ppn = pdt[0].page_ppn();
-    }
-    {
-        auto &pdt = pdtp[USERSPACE_LOW_END].get_subtable();
-        pdt[0].page_ppn() = pdt_ppn;
-        pdt[0].present() = 1;
-        pdt[0].os_virt_avail() = 1;
+    for (uint32_t i = 0; i < 2; i++) {
+        uint32_t pdt_ppn;
+        if (!pdtp[0].present()) {
+            continue;
+        }
+        {
+            auto &pdt = pdtp[0].get_subtable();
+            pdt_ppn = pdt[i].page_ppn();
+        }
+        {
+            auto &pdt = pdtp[USERSPACE_LOW_END].get_subtable();
+            pdt[i].page_ppn() = pdt_ppn;
+            pdt[i].present() = 1;
+            pdt[i].os_virt_avail() = 1;
+        }
     }
     {
         for (int low = 0; low < USERSPACE_LOW_END; low++) {

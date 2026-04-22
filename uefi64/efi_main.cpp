@@ -372,7 +372,7 @@ extern "C" {
         pdt[1].page_ppn() = reinterpret_cast<uint64_t>(physpageStructsAddr + 0xe000) / 4096;
         pdt[1].writeable() = 1;
         pdt[1].present() = 1;
-        pdt[1].os_virt_avail() = 1;
+        pdt[1].os_virt_avail() = 0;
         /* addr 0xc0400000 */
         pdt[2].page_ppn() = reinterpret_cast<uint64_t>(physpageStructsAddr + 0xf000) / 4096;
         pdt[2].writeable() = 1;
@@ -512,7 +512,7 @@ extern "C" {
             pt2[i].os_virt_avail() = 1;
             pt3[i].os_virt_avail() = 1;
             pt4[i].os_virt_avail() = 0;
-            pt5[i].os_virt_avail() = 1;
+            pt5[i].os_virt_avail() = 0;
             pt6[i].os_virt_avail() = 1;
             pt7[i].os_virt_avail() = 1;
             pt8[i].os_virt_avail() = 1;
@@ -580,11 +580,11 @@ extern "C" {
                 pe->page_ppn() = ph_page_addr;
                 pe->os_virt_start() = 1;
                 pe->execution_disabled() = 1;
-                //print(L"Confmap rw ");
-                //print_u64(vaddr);
-                //print(L" -> page:");
-                //print_u32(ph_page_addr);
-                //print(L"\r\n");
+                print(L"Confmap rw ");
+                print_u64(vaddr);
+                print(L" -> page:");
+                print_u32(ph_page_addr);
+                print(L"\r\n");
             }
         }
 
@@ -957,6 +957,7 @@ extern "C" {
         context->vmem_root = reinterpret_cast<uint64_t>(physpageStructsAddr + 0x1000);
         context->physpage_map = reinterpret_cast<uint64_t>(physpageMap);
         context->entrypoint_addr = entrypoint_addr;
+        context->pml4t_addr = reinterpret_cast<uint64_t>(&pml4t);
         uint64_t context_ptr{reinterpret_cast<uint64_t>(context)};
         rsp -= 8;
         {
@@ -966,78 +967,8 @@ extern "C" {
         *(reinterpret_cast<uint64_t *>(rsp)) = 0;
 
         asm("lgdt (%0)" :: "r"(gdt_ptr));
-        {
-            uint64_t jmpAddr[2] = {stageloader_entrypoint_addr, 8};
-            uint64_t jmpAddrPtr = reinterpret_cast<uint64_t>(&(jmpAddr[0]));
-            asm("mov %0, %%rax; mov %1, %%rdi; mov %2, %%rsp; ljmpq *(%%rax)" :: "r"(jmpAddrPtr), "r"(context_ptr), "r"(rsp) : "%rax", "%rdi", "%rsp");
-
-            // FPU config
-            {
-                asm("mov (0x1000), %%rbx; mov $0x037F, %%rax; mov %%rax, (0x1000); fninit; fldcw (0x1000); mov %%rbx, (0x1000)" ::: "%rax","%rbx");
-            }
-            // SSE FP enable:
-            {
-                uint64_t cr0;
-                asm("mov %%cr0,%0":"=r"(cr0));
-                cr0 &= 0xFFFFFFFFFFFFFFFBUL; // coprocessor emu off
-                cr0 |= 2; // coprocessor monitor
-                asm("mov %0,%%cr0"::"r"(cr0));
-            }
-            {
-                uint64_t cr4;
-                asm("mov %%cr4,%0":"=r"(cr4));
-                cr4 |= 0x700; // FXSR XMMSEXCEPT
-                asm("mov %0,%%cr4"::"r"(cr4));
-            }
-            {
-                uint64_t addr{stack_addr - 512};
-                addr = addr & ~0xF;
-                asm("fxsave (%0)" :: "r"(addr));
-                uint32_t mxcsr_mask = *((uint32_t *) (addr + 28));
-                if (mxcsr_mask == 0) {
-                    mxcsr_mask = 0xFFBF;
-                }
-                uint32_t mxcsr = 0x1F80 & mxcsr_mask;
-                asm("mov (0x1000),%%ebx; mov %0,(0x1000); ldmxcsr (0x1000); mov %%ebx, (0x1000)" ::"r"(mxcsr) : "%ebx");
-            }
-
-            auto cr3 = reinterpret_cast<uint64_t>(physpageStructsAddr + 0x1000);
-            asm("mov %0,%%cr3; " :: "r"(cr3));
-            asm("mov %%cr3, %0; " : "=r"(cr3));
-            //print(L"cr3=");
-            //print_u64(cr3);
-            uint64_t cr4;
-            asm("mov %%cr4, %0; " : "=r"(cr4));
-            cr4 |= 1 << 5;
-            asm("mov %0, %%cr4; " :: "r"(cr4));
-            asm("mov %%cr4, %0; " : "=r"(cr4));
-            asm("ud2");
-
-            // enable long mode: 0x100 (1 << 8) and 0x800 (1 << 11)
-            asm("mov $0x0C0000080, %%rcx; rdmsr; or $0x0900, %%rax; wrmsr; " ::: "%rax", "%rcx");
-
-            uint64_t cr0;
-            asm("mov %%cr0, %0" : "=r"(cr0));
-
-            cr0 |= 1 << 16; // Write protected memory enabled
-            cr0 |= 1 << 31; // Paging bit = 1
-            asm("mov %0, %%cr0" :: "r"(cr0));
-
-        }
-
-        Stage1Data stage1Data = {
-            .multibootAddr = (uint32_t) 0,
-            .physpageMapAddr = reinterpret_cast<uint32_t>(physpageMap)
-        };
-        uint64_t stage1DataPtr = (uint64_t) &stage1Data;
-        uint64_t jmpAddr[2] = {entrypoint_addr, 8};
+        uint64_t jmpAddr[2] = {stageloader_entrypoint_addr, 8};
         uint64_t jmpAddrPtr = reinterpret_cast<uint64_t>(&(jmpAddr[0]));
-
-        //asm("mov $0x10,%%ax; mov %%ax, %%ds; mov %%ax, %%es; mov %%ax, %%fs; mov %%ax, %%ss; " ::: "%ax");
-        asm("mov %1, %%rbx; mov %2, %%rsi; ljmp *(%0)" :: "r"(entrypoint_addr), "r"(stage1DataPtr), "r"(stack_addr));
-
-        while (1) {
-            asm("hlt");
-        }
+        asm("mov %0, %%rax; mov %1, %%rdi; mov %2, %%rsp; ljmpq *(%%rax)" :: "r"(jmpAddrPtr), "r"(context_ptr), "r"(rsp) : "%rax", "%rdi", "%rsp");
     }
 }

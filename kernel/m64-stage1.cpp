@@ -185,6 +185,7 @@ extern "C" {
         /*
          * Let's try to alloc a stack
          */
+        set_init_pml4t(stage1Data->init_pml4t);
         init_simple_physpagemap(physmapaddr);
         initialize_pagetable_control();
         setup_simplest_malloc_impl();

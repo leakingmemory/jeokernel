@@ -10,6 +10,7 @@
 struct Stage1Data {
     uint32_t multibootAddr;
     uint32_t physpageMapAddr;
+    uint32_t init_pml4t;
 };
 
 #endif //JEOKERNEL_STAGE1_H

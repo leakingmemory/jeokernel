@@ -32,6 +32,7 @@ struct VPerCpuPagetables {
     uintptr_t pointer;
 };
 
+void set_init_pml4t(uintptr_t addr);
 void relocate_kernel_vmemory();
 pagetable &get_root_pagetable();
 uintptr_t vpagealloc(uintptr_t size);

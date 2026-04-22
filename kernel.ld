@@ -2,8 +2,8 @@ ENTRY(bootstrap)
 
 SECTIONS
 {
-	/* 3G up */
-	. = 3074M;
+	/* 3G+4MB up */
+	. = 3076M;
 
   	/* text section */
 	.text ALIGN(4K) : SUBALIGN(8)

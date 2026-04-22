@@ -290,7 +290,7 @@ void boot_stage1(void *multiboot_header_addr) {
         pt2[i].os_virt_avail() = 0;
         pt3[i].os_virt_avail() = 1;
         pt4[i].os_virt_avail() = 0;
-        pt5[i].os_virt_avail() = 1;
+        pt5[i].os_virt_avail() = 0;
         pt6[i].os_virt_avail() = 1;
         pt7[i].os_virt_avail() = 1;
         pt8[i].os_virt_avail() = 1;
@@ -322,7 +322,7 @@ void boot_stage1(void *multiboot_header_addr) {
         pt2[i].os_virt_avail() = 1;
         pt3[i].os_virt_avail() = 1;
         pt4[i].os_virt_avail() = 0;
-        pt5[i].os_virt_avail() = 1;
+        pt5[i].os_virt_avail() = 0;
         pt6[i].os_virt_avail() = 1;
         pt7[i].os_virt_avail() = 1;
         pt8[i].os_virt_avail() = 1;
@@ -825,7 +825,8 @@ stack_allocated:
 
             Stage1Data stage1Data = {
                     .multibootAddr = (uint32_t) multiboot_header_addr,
-                    .physpageMapAddr = physpagemap_addr
+                    .physpageMapAddr = physpagemap_addr,
+                    .init_pml4t = 0x1000
             };
             uint32_t stage1DataPtr = (uint32_t) &stage1Data;
 
