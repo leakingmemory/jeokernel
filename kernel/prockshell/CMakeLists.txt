@@ -1,6 +1,6 @@
 include(../toolchain.cmake)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 add_library(prockshell OBJECT prockshell.cpp kshell_ups.cpp kshell_ups.h)
 

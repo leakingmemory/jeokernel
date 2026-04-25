@@ -132,6 +132,9 @@ namespace std {
     template <typename T> struct is_polymorphic<T, decltype(impl::polymorphic_f<T>(), void())> {
         static constexpr bool value = true;
     };
+
+    template <typename T1, typename T2> struct is_same : std::false_type {};
+    template <typename T> struct is_same<T, T> : std::true_type {};
 }
 
 #endif //JEOKERNEL_TYPE_TRAITS_H

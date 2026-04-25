@@ -1,6 +1,6 @@
 include(../toolchain.cmake)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 add_library(tasks OBJECT tasklist.cpp thread.cpp thread_trampoline.S schedwrapper.cpp)
 

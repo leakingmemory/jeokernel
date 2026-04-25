@@ -12,4 +12,7 @@ struct UefiStageContext {
     uint64_t pml4t_addr;
 };
 
+struct UefiStageInfo {
+};
+
 #endif //JEOKERNEL_UEFISTAGE_H

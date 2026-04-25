@@ -62,6 +62,9 @@
 #include <tty/tty.h>
 #include <tty/ttyinit.h>
 #include <core/x86fpu.h>
+#include <variant>
+
+#include "uefistage/uefistage.h"
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -74,6 +77,7 @@ void init_keyboard();
 void init_fpu0_initial();
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
+static const UefiStageInfo *uefi_stage_info = nullptr;
 static normal_stack *stage1_stack = nullptr;
 static GlobalDescriptorTable *gdt = nullptr;
 static TaskStateSegment *glob_tss[TSS_MAX_CPUS] = {};
@@ -86,15 +90,19 @@ static uint64_t lapic_100ms = 0;
 static tasklist *scheduler = nullptr;
 static ApStartup *apStartup = nullptr;
 
-const MultibootInfoHeader &get_multiboot2(vmem &vm) {
-    uint64_t base_addr = (uint64_t) multiboot_info;
-    uint64_t offset = base_addr & 0x0FFF;
-    base_addr -= offset;
-    vm.page(0).rmap(base_addr);
-    vm.page(1).rmap(base_addr + 0x1000);
-    vm.page(2).rmap(base_addr + 0x2000);
-    vm.page(3).rmap(base_addr + 0x3000);
-    return *((const MultibootInfoHeader *) (((uint64_t )vm.pointer()) + offset));
+std::variant<const MultibootInfoHeader *,const UefiStageInfo *> get_boot_info(vmem &vm) {
+    if (multiboot_info != nullptr) {
+        uint64_t base_addr = (uint64_t) multiboot_info;
+        uint64_t offset = base_addr & 0x0FFF;
+        base_addr -= offset;
+        vm.page(0).rmap(base_addr);
+        vm.page(1).rmap(base_addr + 0x1000);
+        vm.page(2).rmap(base_addr + 0x2000);
+        vm.page(3).rmap(base_addr + 0x3000);
+        return ((const MultibootInfoHeader *) (((uint64_t )vm.pointer()) + offset));
+    } else {
+        return uefi_stage_info;
+    }
 }
 
 const KernelElf &get_kernel_elf() {
@@ -209,11 +217,26 @@ extern "C" {
         std::vector<std::tuple<uint64_t,uint64_t>> reserved_mem{};
 
         vmem multiboot_vm(16384);
-        const auto &multiboot2 = get_multiboot2(multiboot_vm);
+        auto boot_info = get_boot_info(multiboot_vm);
 
+        const MultibootInfoHeader *multiboot2;
+        {
+            struct {
+                constexpr const MultibootInfoHeader *operator()(const MultibootInfoHeader *mboot) const {
+                    return mboot;
+                }
+                constexpr const MultibootInfoHeader *operator()(const UefiStageInfo *) const {
+                    get_klogger() << "Error: UEFI info\n";
+                    while (1) {
+                        asm("hlt");
+                    }
+                }
+            } GetMultiboot2Visitor;
+            multiboot2 = std::visit(GetMultiboot2Visitor, boot_info);
+        }
         {
             get_klogger() << "Multiboot2 info at " << ((uint64_t) &multiboot2) << "\n";
-            if (!multiboot2.has_parts()) {
+            if (!multiboot2->has_parts()) {
                 get_klogger() << "Error: Multiboot2 structure has no information\n";
                 while (1) {
                     asm("hlt");
@@ -226,7 +249,7 @@ extern "C" {
             uint64_t end_phys_addr = phys->max() << 12;
             {
                 uint64_t phys_mem_added = 0;
-                const auto *part = multiboot2.first_part();
+                const auto *part = multiboot2->first_part();
                 do {
                     if (part->type == 6) {
                         get_klogger() << "Memory map:\n";
@@ -362,7 +385,7 @@ done_with_mem_extension:
                         } while (phys_mem_added > 0 || memory_extended > 0);
                         get_klogger() << "Done with mapping physical memory\n";
                     }
-                    if (part->hasNext(multiboot2)) {
+                    if (part->hasNext(*multiboot2)) {
                         part = part->next();
                     } else {
                         part = nullptr;
@@ -378,7 +401,7 @@ done_with_mem_extension:
         std::shared_ptr<framebuffer_kconsole> kcons{};
         framebuffer_kconsole_spinlocked *fb_kcons_locked{nullptr};
         {
-            const auto *part = multiboot2.first_part();
+            const auto *part = multiboot2->first_part();
             do {
                 if (part->type == 8) {
                     auto *fb = new framebuffer(part->get_type8());
@@ -388,7 +411,7 @@ done_with_mem_extension:
                     set_klogger(fb_kcons_locked);
                     get_klogger() << "Framebuffer at addr " << part->get_type8().framebuffer_addr << "\n";
                 }
-                if (part->hasNext(multiboot2)) {
+                if (part->hasNext(*multiboot2)) {
                     part = part->next();
                 } else {
                     part = nullptr;
@@ -720,7 +743,7 @@ done_with_mem_extension:
             get_klogger() << idt_ptr[i << 1] << " " << idt_ptr[(i << 1) + 1] << "\n";
         }*/
 
-        kernel_elf = new KernelElf(multiboot2);
+        kernel_elf = new KernelElf(*multiboot2);
 
         {
             const auto *init_table_section = kernel_elf->elf().get_elf64_header().get_init_table();
@@ -979,7 +1002,7 @@ done_with_mem_extension:
         get_drivers().AddDriver(new scsidevice_driver());
         get_drivers().AddDriver(new scsida_driver());
 
-        AcpiBoot acpi_boot{multiboot2};
+        AcpiBoot acpi_boot{*multiboot2};
 
         std::shared_ptr<kshell> shell{};
 

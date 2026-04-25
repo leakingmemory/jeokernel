@@ -12,6 +12,12 @@ namespace std {
     constexpr std::remove_reference_t<T> &&move(T &&t) noexcept {
         return static_cast<typename std::remove_reference<T>::type&&>(t);
     }
+    template<class T> constexpr T&& forward(typename std::remove_reference<T>::type &&t) noexcept {
+        return t;
+    }
+    template<class T> constexpr T&& forward(typename std::remove_reference<T>::type &t) noexcept {
+        return static_cast<T&&>(t);
+    }
 }
 
 #endif //JEOKERNEL_UTILITY_H

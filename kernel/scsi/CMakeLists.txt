@@ -1,6 +1,6 @@
 include(../toolchain.cmake)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 add_library(scsi OBJECT scsidevice.cpp scsidevice.h scsida.cpp scsida.h CallbackLatch.cpp CallbackLatch.h)
 

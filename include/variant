@@ -1,0 +1,6 @@
+#ifndef JEOKERNEL_VARIANT_H
+#define JEOKERNEL_VARIANT_H
+
+#include "std/variant.h"
+
+#endif

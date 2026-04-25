@@ -1,6 +1,6 @@
 include(../toolchain.cmake)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 add_library(pci OBJECT pci.cpp pci.h pci_bridge.cpp pci_bridge.h pci_irq.cpp)
 
