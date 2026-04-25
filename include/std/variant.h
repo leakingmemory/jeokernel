@@ -13,6 +13,9 @@
 
 namespace std {
     namespace detail {
+        template <typename T> struct variant_capsule {
+            T value;
+        };
         template <const int idx, typename Tdef, typename... T> struct type_from_index {
             static constexpr int max = -1;
             typedef Tdef type;
@@ -31,25 +34,38 @@ namespace std {
         template <typename T> union variant_union<T> {
             static constexpr int count = 1;
             T value;
+            int dummy;
             constexpr variant_union() {}
-            constexpr variant_union(T &&mv) : value(mv) {}
+            constexpr variant_union(T &&mv) : value(std::forward<T>(mv)) {}
             constexpr variant_union(const T &cp) : value(cp) {}
+            template <typename... Args> constexpr variant_union(std::in_place_type_t<T>, Args &&...args)
+                : value(std::forward<Args>(args)...) {
+            }
+            constexpr ~variant_union() {}
         };
         template <> union variant_union<char> {
             static constexpr int count = 1;
             char value;
             constexpr variant_union() {}
             constexpr variant_union(char ch) : value(ch) {}
+            constexpr ~variant_union() {}
         };
         template <typename T, typename... Tres> union variant_union<T, Tres...> {
             static constexpr int count = variant_union<Tres...>::count + 1;
             T value;
             variant_union<Tres...> rest;
-            constexpr variant_union(T &&mv) : value(mv) {}
+            constexpr variant_union(T &&mv) : value(std::forward<T>(mv)) {}
             constexpr variant_union(const T &cp) : value(cp) {}
+            template <typename... Args> constexpr variant_union(std::in_place_type_t<T>, Args &&...args)
+                : value(std::forward<Args>(args)...) {
+            }
             template <typename Targ> constexpr variant_union(Targ bv) requires (std::is_same<variant_union<Tres...>,variant_union<char>>::value) : rest(bv) {}
-            template <typename Targ> constexpr variant_union(Targ &&mv) requires (!std::is_same<variant_union<Tres...>,variant_union<char>>::value) : rest(std::move(mv)) {}
-            template <typename Targ> constexpr variant_union(const Targ &cp) requires (!std::is_same<variant_union<Tres...>,variant_union<char>>::value) : rest(std::move(cp)) {}
+            template <typename Targ> constexpr variant_union(Targ &&mv) requires (!std::is_same<variant_union<Tres...>,variant_union<char>>::value) : rest(std::forward<Targ>(mv)) {}
+            template <typename Targ> constexpr variant_union(const Targ &cp) requires (!std::is_same<variant_union<Tres...>,variant_union<char>>::value) : rest(cp) {}
+            template <typename Targ, typename... Args> constexpr variant_union(std::in_place_type_t<Targ>, Args &&...args)
+                : rest(std::in_place_type<Targ>, std::forward<Args>(args)...) {
+            }
+            constexpr ~variant_union() {}
         };
         template <typename... T> struct first_type {
             typedef int type;
@@ -124,6 +140,10 @@ namespace std {
             variant_union<T...> data;
             int type;
             template <typename Targ> constexpr variant_storage(Targ &&mv) : data(std::forward<Targ>(mv)), type(type_index<Targ,T...>::value) {}
+            template <typename Targ, typename... Args> constexpr variant_storage(std::in_place_type_t<Targ>, Args &&...args)
+                 : data(std::in_place_type<Targ>, std::forward<Args>(args)...),
+                   type(type_index<Targ,T...>::value) {
+            }
             template <typename Tres> constexpr Tres *as_ptr() {
                 return &variant_union_get<type_index<Tres,T...>::value>(data);
             }
@@ -166,7 +186,7 @@ namespace std {
                     using type = std::remove_reference<decltype(v)>::type;
                     if constexpr(!std::is_pointer<type>::value &&
                                 !std::is_same<char,type>::value) {
-                        v.~decltype(v)();
+                        v.~type();
                     }
                 });
             }
@@ -206,6 +226,10 @@ namespace std {
         }
         template <typename Targ> constexpr variant(Targ &&mv) : container(std::forward<Targ>(mv)) {
         }
+        template <typename Targ, typename... Args> constexpr variant(std::in_place_type_t<Targ>, Args &&...args)
+            : container(std::in_place_type<Targ>, std::forward<Args>(args)...) {
+        }
+
         constexpr ~variant() noexcept = default;
     };
 
@@ -213,6 +237,9 @@ namespace std {
         class variant_visitor {
         public:
             template <typename Visitor, typename... T> static constexpr decltype(auto) visit(Visitor &&v, variant<T...> &&cp) {
+                return cp.container.template visit<Visitor>(std::forward<Visitor>(v));
+            }
+            template <typename Visitor, typename... T> static constexpr decltype(auto) visit(Visitor &&v, variant<T...> &cp) {
                 return cp.container.template visit<Visitor>(std::forward<Visitor>(v));
             }
             template <typename Visitor, typename... T> static constexpr decltype(auto) visit(Visitor &&v, const variant<T...> &cp) {
@@ -226,6 +253,9 @@ namespace std {
 
     template <typename Visitor, typename... T> constexpr decltype(auto) visit(Visitor &&v, variant<T...> &&cp) {
         return detail::variant_visitor::visit<Visitor,T...>(std::forward<Visitor>(v), std::forward<variant<T...>>(cp));
+    }
+    template <typename Visitor, typename... T> constexpr decltype(auto) visit(Visitor &&v, variant<T...> &cp) {
+        return detail::variant_visitor::visit<Visitor,T...>(std::forward<Visitor>(v), cp);
     }
     template <typename Visitor, typename... T> constexpr decltype(auto) visit(Visitor &&v, const variant<T...> &cp) {
         return detail::variant_visitor::visit<Visitor,T...>(std::forward<Visitor>(v), cp);
@@ -246,6 +276,103 @@ namespace std {
 
         static_assert(std::visit(VariantTest1(), std::variant<const char *, char>(static_cast<const char *>("AB"))) == 1);
         static_assert(std::visit(VariantTest1(), std::variant<char *, char>(static_cast<char>('a'))) == 'a');
+
+        struct VariantVisitCounts {
+            int a_visit{0};
+            int b_visit{0};
+            int c_visit{0};
+            int a_destroyed{0};
+            int b_destroyed{0};
+            int c_destroyed{0};
+        };
+        class VariantTypeA {
+        private:
+            VariantVisitCounts &counts;
+        public:
+            constexpr VariantTypeA(VariantVisitCounts &counts) : counts(counts) {}
+            constexpr VariantTypeA(const VariantTypeA &) = delete;
+            constexpr VariantTypeA(VariantTypeA &&mv) = delete;
+            constexpr VariantTypeA &operator =(const VariantTypeA &) = delete;
+            constexpr VariantTypeA &operator =(VariantTypeA &&) = delete;
+            constexpr void visit() {
+                ++counts.a_visit;
+            }
+            constexpr ~VariantTypeA() {
+                ++counts.a_destroyed;
+            }
+        };
+        class VariantTypeB {
+        private:
+            VariantVisitCounts &counts;
+        public:
+            constexpr VariantTypeB(VariantVisitCounts &counts) : counts(counts) {}
+            constexpr VariantTypeB(const VariantTypeB &) = delete;
+            constexpr VariantTypeB(VariantTypeB &&mv) = delete;
+            constexpr VariantTypeB &operator =(const VariantTypeB &) = delete;
+            constexpr VariantTypeB &operator =(VariantTypeB &&) = delete;
+            constexpr void visit() {
+                ++counts.b_visit;
+            }
+            constexpr ~VariantTypeB() {
+                ++counts.b_destroyed;
+            }
+        };
+        class VariantTypeC {
+        private:
+            VariantVisitCounts &counts;
+        public:
+            constexpr VariantTypeC(VariantVisitCounts &counts) : counts(counts) {}
+            constexpr VariantTypeC(const VariantTypeC &) = delete;
+            constexpr VariantTypeC(VariantTypeC &&mv) = delete;
+            constexpr VariantTypeC &operator =(const VariantTypeC &) = delete;
+            constexpr VariantTypeC &operator =(VariantTypeC &&) = delete;
+            constexpr void visit() {
+                ++counts.c_visit;
+            }
+            constexpr ~VariantTypeC() {
+                ++counts.c_destroyed;
+            }
+        };
+        template <typename T> class VariantVisitAndDestroyTester {
+        private:
+            VariantVisitCounts counts;
+        public:
+            constexpr VariantVisitAndDestroyTester() {
+                VariantVisitCounts c;
+                {
+                    variant<VariantTypeA,VariantTypeB,VariantTypeC> variant{std::in_place_type<T>, c};
+                    std::visit([] (auto &v) {v.visit();}, variant);
+                }
+                counts = c;
+            }
+            constexpr operator VariantVisitCounts () const {
+                return counts;
+            }
+        };
+        static_assert(VariantVisitAndDestroyTester<VariantTypeA>().operator VariantVisitCounts().a_visit == 1);
+#if !(defined(__GNUC__) && !defined(__clang__))
+        static_assert(VariantVisitAndDestroyTester<VariantTypeA>().operator VariantVisitCounts().a_destroyed == 1);
+#endif
+        static_assert(VariantVisitAndDestroyTester<VariantTypeA>().operator VariantVisitCounts().b_visit == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeA>().operator VariantVisitCounts().b_destroyed == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeA>().operator VariantVisitCounts().c_visit == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeA>().operator VariantVisitCounts().c_destroyed == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeB>().operator VariantVisitCounts().a_visit == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeB>().operator VariantVisitCounts().a_destroyed == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeB>().operator VariantVisitCounts().b_visit == 1);
+#if !(defined(__GNUC__) && !defined(__clang__))
+        static_assert(VariantVisitAndDestroyTester<VariantTypeB>().operator VariantVisitCounts().b_destroyed == 1);
+#endif
+        static_assert(VariantVisitAndDestroyTester<VariantTypeB>().operator VariantVisitCounts().c_visit == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeB>().operator VariantVisitCounts().c_destroyed == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeC>().operator VariantVisitCounts().a_visit == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeC>().operator VariantVisitCounts().a_destroyed == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeC>().operator VariantVisitCounts().b_visit == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeC>().operator VariantVisitCounts().b_destroyed == 0);
+        static_assert(VariantVisitAndDestroyTester<VariantTypeC>().operator VariantVisitCounts().c_visit == 1);
+#if !(defined(__GNUC__) && !defined(__clang__))
+        static_assert(VariantVisitAndDestroyTester<VariantTypeC>().operator VariantVisitCounts().c_destroyed == 1);
+#endif
     }
 }
 

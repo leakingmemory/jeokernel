@@ -12,12 +12,18 @@ namespace std {
     constexpr std::remove_reference_t<T> &&move(T &&t) noexcept {
         return static_cast<typename std::remove_reference<T>::type&&>(t);
     }
-    template<class T> constexpr T&& forward(typename std::remove_reference<T>::type &&t) noexcept {
-        return t;
-    }
     template<class T> constexpr T&& forward(typename std::remove_reference<T>::type &t) noexcept {
         return static_cast<T&&>(t);
     }
+    template<class T> constexpr T&& forward(typename std::remove_reference<T>::type &&t) noexcept {
+        return static_cast<T&&>(t);
+    }
+
+    template <typename T> struct in_place_type_t {
+        explicit in_place_type_t() = default;
+    };
+
+    template <typename T> inline constexpr in_place_type_t<T> in_place_type{};
 }
 
 #endif //JEOKERNEL_UTILITY_H
