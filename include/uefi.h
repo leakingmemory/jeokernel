@@ -129,4 +129,13 @@ struct efi_system_table {
     efi_table_header_ptr *table_entries[];
 };
 
+struct efi_memory_descriptor {
+    uint32_t type;
+    uint32_t pad;
+    uint64_t physical_start;
+    uint64_t virtual_start;
+    uint64_t number_of_pages;
+    uint32_t attribute;
+};
+
 #endif //JEOKERNEL_UEFI_H

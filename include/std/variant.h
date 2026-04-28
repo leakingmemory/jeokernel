@@ -31,6 +31,8 @@ namespace std {
         template <typename... T> union variant_union {
             static constexpr int count = -1;
         };
+        template <const int idx> struct type_index_specifier {
+        };
         template <typename T> union variant_union<T> {
             static constexpr int count = 1;
             T value;
@@ -40,6 +42,8 @@ namespace std {
             constexpr variant_union(const T &cp) : value(cp) {}
             template <typename... Args> constexpr variant_union(std::in_place_type_t<T>, Args &&...args)
                 : value(std::forward<Args>(args)...) {
+            }
+            constexpr variant_union(const variant_union<T> &cp) : value(cp.value) {
             }
             constexpr ~variant_union() {}
         };
@@ -139,15 +143,15 @@ namespace std {
         template <typename... T> struct variant_storage {
             variant_union<T...> data;
             int type;
-            template <typename Targ> constexpr variant_storage(Targ &&mv) : data(std::forward<Targ>(mv)), type(type_index<Targ,T...>::value) {}
+            template <typename Targ> constexpr variant_storage(Targ &&mv) : data(std::forward<Targ>(mv)), type(type_index<typename std::remove_const<typename std::remove_reference<Targ>::type>::type,T...>::value) {}
             template <typename Targ, typename... Args> constexpr variant_storage(std::in_place_type_t<Targ>, Args &&...args)
                  : data(std::in_place_type<Targ>, std::forward<Args>(args)...),
                    type(type_index<Targ,T...>::value) {
             }
-            template <typename Tres> constexpr Tres *as_ptr() {
+            template <typename Tres> constexpr typename std::remove_reference<Tres>::type *as_ptr() {
                 return &variant_union_get<type_index<Tres,T...>::value>(data);
             }
-            template <typename Tres> constexpr const Tres *as_ptr() const {
+            template <typename Tres> constexpr const typename std::remove_reference<Tres>::type *as_ptr() const {
                 return &variant_union_get<type_index<Tres,T...>::value>(data);
             }
             template <const int idx> constexpr bool is() const {
@@ -181,6 +185,26 @@ namespace std {
             template <typename Visitor> constexpr decltype(auto) visit(Visitor &&v) const {
                 return call_visitor<type_index<int, T...>::max,Visitor>(std::forward<Visitor>(v));
             }
+            template <const int max_idx> constexpr bool compare_objs(const variant_storage &other) const{
+                if (max_idx == type) {
+                    const typename type_from_index<max_idx,T...>::type &ref = *(as_ptr<typename type_from_index<max_idx,T...>::type>());
+                    const typename type_from_index<max_idx,T...>::type &other_ref = *(other.as_ptr<typename type_from_index<max_idx,T...>::type>());
+                    return ref == other_ref;
+                }
+                if constexpr(max_idx > 0) {
+                    return compare_objs<max_idx - 1>(other);
+                }
+                return false;
+            }
+            constexpr bool operator ==(const variant_storage &other) const {
+                if (type != other.type) {
+                    return false;
+                }
+                return compare_objs<type_index<int, T...>::max>(other);
+            }
+            constexpr bool operator !=(const variant_storage &other) const {
+                return !(*this == other);
+            }
             constexpr ~variant_storage() noexcept {
                 visit([](auto &v) {
                     using type = std::remove_reference<decltype(v)>::type;
@@ -208,26 +232,19 @@ namespace std {
         detail::variant_storage<T...> container;
     public:
         variant() = delete;
-        constexpr variant(const variant<T...> &cp) : container() {
-            this->container.type = cp.container.type;
-            cp.container.visit([this] (const auto &cpval) {
-                const typename std::remove_cv<typeof(cpval)>::type *ptr = this->container->as_ptr();
-                ptr = new (reinterpret_cast<void *>(ptr)) std::remove_cv<typeof(cpval)>::type(*ptr);
-            });
-        }
-        constexpr variant(variant<T...> &&mv) : container() {
-            this->container.type = mv.container.type;
-            mv.container.visit([this] (auto &&mvval) {
-                typename std::remove_cv<typeof(mvval)>::type *ptr = this->container->as_ptr();
-                ptr = new (reinterpret_cast<void *>(ptr)) std::remove_cv<typeof(mvval)>::type(std::move(*ptr));
-            });
-        }
         template <typename Targ> constexpr variant(const Targ &cp) : container(cp) {
         }
         template <typename Targ> constexpr variant(Targ &&mv) : container(std::forward<Targ>(mv)) {
         }
         template <typename Targ, typename... Args> constexpr variant(std::in_place_type_t<Targ>, Args &&...args)
             : container(std::in_place_type<Targ>, std::forward<Args>(args)...) {
+        }
+
+        constexpr bool operator == (const variant &other) {
+            return container == other.container;
+        }
+        constexpr bool operator != (const variant &other) {
+            return !(*this == other);
         }
 
         constexpr ~variant() noexcept = default;
@@ -276,6 +293,8 @@ namespace std {
 
         static_assert(std::visit(VariantTest1(), std::variant<const char *, char>(static_cast<const char *>("AB"))) == 1);
         static_assert(std::visit(VariantTest1(), std::variant<char *, char>(static_cast<char>('a'))) == 'a');
+        static_assert(std::variant<char *, char>(static_cast<char>('a')) == std::variant<char *, char>(static_cast<char>('a')));
+        static_assert(std::variant<char *, char>(static_cast<char>('a')) != std::variant<char *, char>(static_cast<char>('b')));
 
         struct VariantVisitCounts {
             int a_visit{0};

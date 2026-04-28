@@ -64,6 +64,7 @@
 #include <core/x86fpu.h>
 #include <variant>
 
+#include "uefi.h"
 #include "uefistage/uefistage.h"
 
 //#define THREADING_TESTS // Master switch
@@ -77,7 +78,9 @@ void init_keyboard();
 void init_fpu0_initial();
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
-static const UefiStageInfo *uefi_stage_info = nullptr;
+uint32_t uefiMemoryMapPage;
+uint32_t uefiMemoryMapDescrSize;
+uint32_t uefiMemoryMapNumDescr;
 static normal_stack *stage1_stack = nullptr;
 static GlobalDescriptorTable *gdt = nullptr;
 static TaskStateSegment *glob_tss[TSS_MAX_CPUS] = {};
@@ -90,18 +93,251 @@ static uint64_t lapic_100ms = 0;
 static tasklist *scheduler = nullptr;
 static ApStartup *apStartup = nullptr;
 
-std::variant<const MultibootInfoHeader *,const UefiStageInfo *> get_boot_info(vmem &vm) {
-    if (multiboot_info != nullptr) {
+class MultibootPartsPtr;
+class MultibootMemoryMapPart;
+
+class MultibootInfo {
+private:
+    vmem multiboot_vm;
+    const MultibootInfoHeader *ptr;
+public:
+    MultibootInfo() : multiboot_vm(16384) {
         uint64_t base_addr = (uint64_t) multiboot_info;
         uint64_t offset = base_addr & 0x0FFF;
         base_addr -= offset;
-        vm.page(0).rmap(base_addr);
-        vm.page(1).rmap(base_addr + 0x1000);
-        vm.page(2).rmap(base_addr + 0x2000);
-        vm.page(3).rmap(base_addr + 0x3000);
-        return ((const MultibootInfoHeader *) (((uint64_t )vm.pointer()) + offset));
+        multiboot_vm.page(0).rmap(base_addr);
+        multiboot_vm.page(1).rmap(base_addr + 0x1000);
+        multiboot_vm.page(2).rmap(base_addr + 0x2000);
+        multiboot_vm.page(3).rmap(base_addr + 0x3000);
+        ptr = reinterpret_cast<const MultibootInfoHeader *>(((uint64_t )multiboot_vm.pointer()) + offset);
+    }
+    const MultibootInfoHeader *GetPtr() const {
+        return ptr;
+    }
+    constexpr MultibootPartsPtr GetParts() const;
+    MultibootMemoryMapPart GetMemoryMap() const;
+};
+
+class MultibootPartPtrIterator;
+
+class MultibootPartsPtr {
+    friend class MultibootInfo;
+private:
+    const MultibootInfoHeader *multiboot2;
+    constexpr MultibootPartsPtr(const MultibootInfoHeader *mboot) : multiboot2(mboot) {}
+public:
+    MultibootPartPtrIterator begin() const;
+    constexpr MultibootPartPtrIterator end() const;
+};
+
+constexpr MultibootPartsPtr MultibootInfo::GetParts() const {
+    return {ptr};
+}
+
+class MultibootPartPtrIterator {
+    friend MultibootPartsPtr;
+private:
+    const MultibootInfoHeader *multiboot2;
+    const MultibootInfoHeaderPart *part;
+    constexpr MultibootPartPtrIterator(const MultibootInfoHeader *mboot, const MultibootInfoHeaderPart *part) : multiboot2(mboot), part(part) {}
+public:
+    MultibootPartPtrIterator &operator ++() {
+        if (part != nullptr && part->hasNext(*multiboot2)) {
+            part = part->next();
+        } else {
+            part = nullptr;
+        }
+        return *this;
+    }
+    MultibootPartPtrIterator operator ++(int) {
+        MultibootPartPtrIterator tmp = *this;
+        ++(*this);
+        return tmp;
+    }
+    constexpr bool operator ==(const MultibootPartPtrIterator &other) const {
+        return multiboot2 == other.multiboot2 && part == other.part;
+    }
+    constexpr bool operator !=(const MultibootPartPtrIterator &other) const {
+        return !(*this == other);
+    }
+    constexpr const MultibootInfoHeaderPart &operator *() const {
+        return *part;
+    }
+};
+
+MultibootPartPtrIterator MultibootPartsPtr::begin() const {
+    if (!multiboot2->has_parts()) {
+        return end();
+    }
+    return {multiboot2, multiboot2->first_part()};
+}
+constexpr MultibootPartPtrIterator MultibootPartsPtr::end() const {
+    return {multiboot2, nullptr};
+}
+
+class MultibootMemoryMapPartIterator;
+
+class MultibootMemoryMapPart {
+    friend MultibootInfo;
+private:
+    const MultibootMemoryMap *part;
+    constexpr MultibootMemoryMapPart(const MultibootMemoryMap *part) : part(part) {}
+public:
+    constexpr MultibootMemoryMapPartIterator begin() const;
+    MultibootMemoryMapPartIterator end() const;
+};
+
+MultibootMemoryMapPart MultibootInfo::GetMemoryMap() const {
+    auto parts = GetParts();
+    for (const auto &part : parts) {
+        if (part.type == 6) {
+            return {&(part.get_type6())};
+        }
+    }
+    return {nullptr};
+}
+
+class MultibootMemoryMapPartIterator {
+    friend MultibootMemoryMapPart;
+private:
+    const MultibootMemoryMap *part;
+    int n;
+    constexpr MultibootMemoryMapPartIterator(const MultibootMemoryMap *part, int n) : part(part), n(n) {}
+public:
+    constexpr MultibootMemoryMapPartIterator(const MultibootMemoryMapPartIterator &other) = default;
+    constexpr MultibootMemoryMapPartIterator &operator++() {
+        ++n;
+        return *this;
+    }
+    constexpr MultibootMemoryMapPartIterator operator++(int) {
+        MultibootMemoryMapPartIterator tmp = *this;
+        ++(*this);
+        return tmp;
+    }
+    constexpr MultibootMemoryMapPartIterator &operator--() {
+        --n;
+        return *this;
+    }
+    constexpr MultibootMemoryMapPartIterator operator--(int) {
+        MultibootMemoryMapPartIterator tmp = *this;
+        --(*this);
+        return tmp;
+    }
+    constexpr bool operator==(const MultibootMemoryMapPartIterator &other) const {
+        return part == other.part && n == other.n;
+    }
+    constexpr bool operator !=(const MultibootMemoryMapPartIterator &other) const {
+        return !(*this == other);
+    }
+    constexpr const MultibootMemoryMapEntry &operator*() const {
+        return part->get_entry(n);
+    }
+};
+
+constexpr MultibootMemoryMapPartIterator MultibootMemoryMapPart::begin() const {
+    return {part, 0};
+}
+MultibootMemoryMapPartIterator MultibootMemoryMapPart::end() const {
+    return {part, part->get_num_entries()};
+}
+
+class UefiMemoryMap;
+
+class UefiInfo {
+    friend UefiMemoryMap;
+private:
+    vmem memory_map_vm;
+    void *memory_map;
+    uint32_t desc_size, desc_num;
+    static uintptr_t round_up_page(uintptr_t addr) {
+        return (addr + 0xfff) & ~(static_cast<uintptr_t>(0xfff));
+    }
+public:
+    UefiInfo() : memory_map_vm(round_up_page(static_cast<uintptr_t>(uefiMemoryMapNumDescr) * uefiMemoryMapDescrSize)), desc_size(uefiMemoryMapDescrSize), desc_num(uefiMemoryMapNumDescr) {
+        uint32_t pages;
+        {
+            auto size = static_cast<uintptr_t>(uefiMemoryMapNumDescr) * uefiMemoryMapDescrSize;
+            pages = static_cast<uint32_t>(size / 0x1000);
+            if ((size % 0x1000) != 0) {
+                ++pages;
+            }
+        }
+        for (uint32_t i = 0; i < pages; i++) {
+            memory_map_vm.page(i).rmap((static_cast<phys_t>(uefiMemoryMapPage) + static_cast<phys_t>(i)) * 0x1000);
+        }
+        memory_map = memory_map_vm.pointer();
+    }
+    constexpr UefiMemoryMap GetMemoryMap() const;
+};
+
+class UefiMemoryMapIterator;
+
+class UefiMemoryMap {
+    friend UefiInfo;
+private:
+    const void *ptr;
+    uint32_t desc_size, desc_num;
+    UefiMemoryMap(const UefiInfo &uefi) : ptr(uefi.memory_map), desc_size(uefi.desc_size), desc_num(uefi.desc_num){
+    }
+public:
+    constexpr UefiMemoryMapIterator begin() const;
+    UefiMemoryMapIterator end() const;
+};
+
+constexpr UefiMemoryMap UefiInfo::GetMemoryMap() const {
+    return {*this};
+}
+
+class UefiMemoryMapIterator {
+    friend UefiMemoryMap;
+private:
+    const void *ptr;
+    uint32_t size;
+    constexpr UefiMemoryMapIterator(const void *ptr, uint32_t size) : ptr(ptr), size(size) {}
+public:
+    constexpr UefiMemoryMapIterator(const UefiMemoryMapIterator &other) = default;
+    UefiMemoryMapIterator &operator++() {
+        ptr = reinterpret_cast<const void *>(reinterpret_cast<const uint8_t *>(ptr) + size);
+        return *this;
+    }
+    UefiMemoryMapIterator operator++(int) {
+        auto tmp = *this;
+        ++(*this);
+        return tmp;
+    }
+    UefiMemoryMapIterator &operator--() {
+        ptr = reinterpret_cast<const void *>(reinterpret_cast<const uint8_t *>(ptr) - size);
+        return *this;
+    }
+    UefiMemoryMapIterator operator--(int) {
+        auto tmp = *this;
+        --(*this);
+        return tmp;
+    }
+    bool operator==(const UefiMemoryMapIterator &other) const {
+        return ptr == other.ptr && size == other.size;
+    }
+    bool operator!=(const UefiMemoryMapIterator &other) const {
+        return !(*this == other);
+    }
+    const efi_memory_descriptor &operator*() const {
+        return *reinterpret_cast<const efi_memory_descriptor *>(ptr);
+    }
+};
+
+constexpr UefiMemoryMapIterator UefiMemoryMap::begin() const {
+    return {ptr, desc_size};
+}
+UefiMemoryMapIterator UefiMemoryMap::end() const {
+    return {reinterpret_cast<const void *>(reinterpret_cast<const uint8_t *>(ptr) + (static_cast<uintptr_t>(desc_size) * desc_num)), desc_size};
+}
+
+
+std::variant<MultibootInfo, UefiInfo> get_boot_info() {
+    if (multiboot_info != nullptr) {
+        return std::in_place_type<MultibootInfo>;
     } else {
-        return uefi_stage_info;
+        return std::in_place_type<UefiInfo>;
     }
 }
 
@@ -190,6 +426,9 @@ extern "C" {
         uint64_t physmapaddr = stage1Data->physpageMapAddr;
 
         multiboot_info = multibootInfoHeaderPtr;
+        uefiMemoryMapPage = stage1Data->uefiMemoryMapPage;
+        uefiMemoryMapDescrSize = stage1Data->uefiMemoryMapDescrSize;
+        uefiMemoryMapNumDescr = stage1Data->uefiMemoryMapNumDescr;
         /*
          * Let's try to alloc a stack
          */
@@ -216,28 +455,37 @@ extern "C" {
 
         std::vector<std::tuple<uint64_t,uint64_t>> reserved_mem{};
 
-        vmem multiboot_vm(16384);
-        auto boot_info = get_boot_info(multiboot_vm);
+        auto boot_info = get_boot_info();
 
-        const MultibootInfoHeader *multiboot2;
         {
             struct {
-                constexpr const MultibootInfoHeader *operator()(const MultibootInfoHeader *mboot) const {
-                    return mboot;
+                void operator ()(const MultibootInfo &minfo) {
+                    get_klogger() << "Multiboot2 info at " << reinterpret_cast<uintptr_t>(minfo.GetPtr()) << "\n";
                 }
-                constexpr const MultibootInfoHeader *operator()(const UefiStageInfo *) const {
-                    get_klogger() << "Error: UEFI info\n";
-                    while (1) {
-                        asm("hlt");
-                    }
+                void operator ()(const UefiInfo &uinfo) {
+                    get_klogger() << "Using UEFI info\n";
                 }
-            } GetMultiboot2Visitor;
-            multiboot2 = std::visit(GetMultiboot2Visitor, boot_info);
+            } PrintInfo;
+            std::visit(PrintInfo, boot_info);
         }
         {
-            get_klogger() << "Multiboot2 info at " << ((uint64_t) &multiboot2) << "\n";
-            if (!multiboot2->has_parts()) {
-                get_klogger() << "Error: Multiboot2 structure has no information\n";
+            auto memoryMap = ([&boot_info] () {
+                struct {
+                    std::variant<MultibootMemoryMapPart,UefiMemoryMap> operator () (const MultibootInfo &minfo) {
+                        return minfo.GetMemoryMap();
+                    }
+                    std::variant<MultibootMemoryMapPart,UefiMemoryMap> operator () (const UefiInfo &uinfo) {
+                        return uinfo.GetMemoryMap();
+                    }
+                } GetMemoryMap;
+                return std::visit(GetMemoryMap, boot_info);
+            })();
+            auto memory_map_iterator =
+                std::visit([] (auto &map) -> std::variant<MultibootMemoryMapPartIterator,UefiMemoryMapIterator> {return map.begin();}, memoryMap);
+            auto memory_map_end_iterator =
+                std::visit([] (auto &map) -> std::variant<MultibootMemoryMapPartIterator,UefiMemoryMapIterator> {return map.end();}, memoryMap);
+            if (memory_map_iterator == memory_map_end_iterator) {
+                get_klogger() << "Error: Memory map from loader is missing or empty\n";
                 while (1) {
                     asm("hlt");
                 }
@@ -249,149 +497,197 @@ extern "C" {
             uint64_t end_phys_addr = phys->max() << 12;
             {
                 uint64_t phys_mem_added = 0;
-                const auto *part = multiboot2->first_part();
+                auto &pml4t = _get_pml4t();
+                uint64_t phys_mem_watermark_next = phys_mem_watermark;
+                bool first_pass = true;
+                uint64_t memory_extended = 0;
                 do {
-                    if (part->type == 6) {
-                        get_klogger() << "Memory map:\n";
-                        auto &pml4t = _get_pml4t();
-                        const auto &memoryMap = part->get_type6();
-                        int num = memoryMap.get_num_entries();
-                        uint64_t phys_mem_watermark_next = phys_mem_watermark;
-                        bool first_pass = true;
-                        uint64_t memory_extended = 0;
-                        do {
-                            if (!first_pass) {
-                                get_klogger() << "Adding more physical memory:\n";
-                            }
-                            phys_mem_added = 0;
-                            for (int i = 0; i < num; i++) {
-                                const auto &entr = memoryMap.get_entry(i);
-                                if (first_pass) {
-                                    get_klogger() << " - Region " << entr.base_addr << " (" << entr.length << ") type "
-                                                  << entr.type << "\n";
+                    if (!first_pass) {
+                        get_klogger() << "Adding more physical memory:\n";
+                    }
+                    phys_mem_added = 0;
+                    auto iterator = std::visit([] (const auto &iterator) -> decltype(memory_map_iterator) { return iterator; }, memory_map_iterator);
+                    while (iterator != memory_map_end_iterator) {
+                        const auto &entr = std::visit([] (const auto &iterator) -> std::variant<const MultibootMemoryMapEntry *,const efi_memory_descriptor *> {
+                            return &(*iterator);
+                        }, iterator);
+                        std::visit([] (auto &i) {
+                            ++i;
+                        }, iterator);
+                        if (first_pass) {
+                            struct {
+                                void operator ()(const MultibootMemoryMapEntry *entr) {
+                                    get_klogger() << " - Region " << entr->base_addr << " (" << entr->length << ") type "
+                                                  << entr->type << "\n";
                                 }
-                                if (entr.type == 1) {
-                                    uint64_t region_end = entr.base_addr + entr.length;
-                                    if (region_end > end_phys_addr) {
-                                        end_phys_addr = region_end;
-                                    }
-                                    if (region_end > phys_mem_watermark) {
-                                        uint64_t start = entr.base_addr >= phys_mem_watermark ? entr.base_addr
-                                                                                              : phys_mem_watermark;
-                                        uint64_t last = start + 1;
-                                        get_klogger() << "   - Added " << start << " - ";
-                                        for (uint64_t addr = start;
-                                             addr < (entr.base_addr + entr.length); addr += 0x1000) {
-                                            if (phys->max() <= (addr >> 12)) {
-                                                auto i = phys->max();
-                                                phys->set_max((addr >> 12) + 1);
-                                                while (i < phys->max()) {
-                                                    phys->claim(i);
-                                                    ++i;
-                                                }
-                                            }
-                                            if (addr >= release_lim && (addr >> 12) < phys->max()) {
-                                                phys->release(addr >> 12);
-                                            }
-                                            last = addr + 0x1000;
-                                            if (last > phys_mem_watermark_next) {
-                                                phys_mem_watermark_next = last;
-                                            }
-                                            phys_mem_added += 0x1000;
+                                void operator ()(const efi_memory_descriptor *entry) {
+                                    get_klogger() << " - Region " << entry->physical_start << " (pages:" << entry->number_of_pages << ") type "
+                                                  << entry->type << "\n";
+                                }
+                            } PrintRegion;
+                            std::visit(PrintRegion, entr);
+                        }
+                        uint64_t base_addr = ([&entr] () {
+                            struct {
+                                uint64_t operator ()(const MultibootMemoryMapEntry *entry) {
+                                    return entry->base_addr;
+                                }
+                                uint64_t operator ()(const efi_memory_descriptor *entry) {
+                                    return entry->physical_start;
+                                }
+                            } GetBaseAddr;
+                            return std::visit(GetBaseAddr, entr);
+                        })();
+                        uint64_t length = ([&entr] () {
+                            struct {
+                                uint64_t operator ()(const MultibootMemoryMapEntry *entry) {
+                                    return entry->length;
+                                }
+                                uint64_t operator ()(const efi_memory_descriptor *entry) {
+                                    return entry->number_of_pages * 0x1000;
+                                }
+                            } GetLength;
+                            return std::visit(GetLength, entr);
+                        })();
+                        struct {
+                            bool operator ()(const MultibootMemoryMapEntry *entry) {
+                                return entry->type == 1;
+                            }
+                            bool operator ()(const efi_memory_descriptor *entry) {
+                                return entry->type == 7;
+                            }
+                        } IsMemoryAvailable;
+                        if (std::visit(IsMemoryAvailable, entr)) {
+                            uint64_t region_end = base_addr + length;
+                            if (region_end > end_phys_addr) {
+                                end_phys_addr = region_end;
+                            }
+                            if (region_end > phys_mem_watermark) {
+                                uint64_t start = base_addr >= phys_mem_watermark ? base_addr
+                                                                                      : phys_mem_watermark;
+                                uint64_t last = start + 1;
+                                get_klogger() << "   - Added " << start << " - ";
+                                for (uint64_t addr = start;
+                                     addr < (base_addr + length); addr += 0x1000) {
+                                    if (phys->max() <= (addr >> 12)) {
+                                        auto i = phys->max();
+                                        phys->set_max((addr >> 12) + 1);
+                                        while (i < phys->max()) {
+                                            phys->claim(i);
+                                            ++i;
                                         }
-                                        --last;
-                                        get_klogger() << last << "\n";
                                     }
-                                } else if (first_pass) {
-                                    uint64_t start = entr.base_addr >= phys_mem_watermark ? entr.base_addr
-                                                                                          : phys_mem_watermark;
-                                    uint64_t end = entr.base_addr + entr.length;
-                                    auto end_page = end >> 12;
-                                    {
-                                        auto prev_max = phys->max();
-                                        if (prev_max < end_page) {
-                                            phys->set_max(end_page);
-                                            phys->claim(prev_max, end_page - prev_max);
-                                        }
+                                    if (addr >= release_lim && (addr >> 12) < phys->max()) {
+                                        phys->release(addr >> 12);
                                     }
-                                    auto start_page = entr.base_addr >> 12;
-                                    phys->claim(start_page, end_page - start_page);
-                                    reserved_mem.push_back(std::make_tuple<uint64_t,uint64_t>(entr.base_addr,entr.length));
+                                    last = addr + 0x1000;
+                                    if (last > phys_mem_watermark_next) {
+                                        phys_mem_watermark_next = last;
+                                    }
+                                    phys_mem_added += 0x1000;
+                                }
+                                --last;
+                                get_klogger() << last << "\n";
+                            }
+                        } else if (first_pass) {
+                            uint64_t start = base_addr >= phys_mem_watermark ? base_addr
+                                                                                  : phys_mem_watermark;
+                            uint64_t end = base_addr + length;
+                            auto end_page = end >> 12;
+                            {
+                                auto prev_max = phys->max();
+                                if (prev_max < end_page) {
+                                    phys->set_max(end_page);
+                                    phys->claim(prev_max, end_page - prev_max);
                                 }
                             }
-                            if (phys_mem_watermark != phys_mem_watermark_next || phys_mem_added != 0) {
-                                phys_mem_watermark = phys_mem_watermark_next;
-                                get_klogger() << "Added " << phys_mem_added << " bytes, watermark "
-                                              << phys_mem_watermark
-                                              << ", end " << end_phys_addr << "\n";
+                            auto start_page = base_addr >> 12;
+                            phys->claim(start_page, end_page - start_page);
+                            reserved_mem.push_back(std::make_tuple<uint64_t,uint64_t>(base_addr,length));
+                        }
+                    }
+                    if (phys_mem_watermark != phys_mem_watermark_next || phys_mem_added != 0) {
+                        phys_mem_watermark = phys_mem_watermark_next;
+                        get_klogger() << "Added " << phys_mem_added << " bytes, watermark "
+                                      << phys_mem_watermark
+                                      << ", end " << end_phys_addr << "\n";
+                    }
+                    uint32_t mem_ext_consumed = 0;
+                    memory_extended = 0;
+                    for (int i = 0; i < PMLT4_USERSPACE_HIGH_START; i++) {
+                        if (!pml4t[i].present()) {
+                            pagetable *pt = allocate_pageentr();
+                            if (pt == nullptr) {
+                                break;
                             }
-                            uint32_t mem_ext_consumed = 0;
-                            memory_extended = 0;
-                            for (int i = 0; i < PMLT4_USERSPACE_HIGH_START; i++) {
-                                if (!pml4t[i].present()) {
+                            pml4t[i].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
+                            pml4t[i].writeable() = 1;
+                            pml4t[i].present() = 1;
+                            mem_ext_consumed += 4096;
+                        }
+                        auto &pdpt = pml4t[i].get_subtable();
+                        for (int j = i != 0 ? 0 : USERSPACE_LOW_END; j < 512; j++) {
+                            if (!pdpt[j].present()) {
+                                pagetable *pt = allocate_pageentr();
+                                if (pt == nullptr) {
+                                    goto done_with_mem_extension;
+                                }
+                                pdpt[j].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
+                                pdpt[j].writeable() = 1;
+                                pdpt[j].present() = 1;
+                                mem_ext_consumed += 4096;
+                            }
+                            auto &pdt = pdpt[j].get_subtable();
+                            for (int k = 0; k < 512; k++) {
+                                if (!pdt[k].present()) {
                                     pagetable *pt = allocate_pageentr();
                                     if (pt == nullptr) {
-                                        break;
+                                        goto done_with_mem_extension;
                                     }
-                                    pml4t[i].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
-                                    pml4t[i].writeable() = 1;
-                                    pml4t[i].present() = 1;
+                                    for (int l = 0; l < 512; l++) {
+                                        (*pt)[l].os_virt_avail() = 1;
+                                    }
+                                    pdt[k].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
+                                    pdt[k].writeable() = 1;
+                                    pdt[k].present() = 1;
                                     mem_ext_consumed += 4096;
+                                    memory_extended += 512 * 4096;
                                 }
-                                auto &pdpt = pml4t[i].get_subtable();
-                                for (int j = i != 0 ? 0 : USERSPACE_LOW_END; j < 512; j++) {
-                                    if (!pdpt[j].present()) {
-                                        pagetable *pt = allocate_pageentr();
-                                        if (pt == nullptr) {
-                                            goto done_with_mem_extension;
-                                        }
-                                        pdpt[j].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
-                                        pdpt[j].writeable() = 1;
-                                        pdpt[j].present() = 1;
-                                        mem_ext_consumed += 4096;
-                                    }
-                                    auto &pdt = pdpt[j].get_subtable();
-                                    for (int k = 0; k < 512; k++) {
-                                        if (!pdt[k].present()) {
-                                            pagetable *pt = allocate_pageentr();
-                                            if (pt == nullptr) {
-                                                goto done_with_mem_extension;
-                                            }
-                                            for (int l = 0; l < 512; l++) {
-                                                (*pt)[l].os_virt_avail() = 1;
-                                            }
-                                            pdt[k].page_ppn() = ((((phys_t) pt) - KERNEL_MEMORY_OFFSET) >> 12);
-                                            pdt[k].writeable() = 1;
-                                            pdt[k].present() = 1;
-                                            mem_ext_consumed += 4096;
-                                            memory_extended += 512 * 4096;
-                                        }
-                                        uint64_t addr = i;
-                                        addr = (addr << 9) + j;
-                                        addr = (addr << 9) + k;
-                                        addr = addr << (9 + 12);
-                                        if (addr > (end_phys_addr + KERNEL_MEMORY_OFFSET)) {
-                                            goto done_with_mem_extension;
-                                        }
-                                    }
+                                uint64_t addr = i;
+                                addr = (addr << 9) + j;
+                                addr = (addr << 9) + k;
+                                addr = addr << (9 + 12);
+                                if (addr > (end_phys_addr + KERNEL_MEMORY_OFFSET)) {
+                                    goto done_with_mem_extension;
                                 }
                             }
+                        }
+                    }
 done_with_mem_extension:
-                            if (memory_extended != 0 || mem_ext_consumed != 0) {
-                                get_klogger() << "Virtual memory extended by " << memory_extended << ", consumed "
-                                              << mem_ext_consumed << "\n";
-                            }
-                            first_pass = false;
-                        } while (phys_mem_added > 0 || memory_extended > 0);
-                        get_klogger() << "Done with mapping physical memory\n";
+                    if (memory_extended != 0 || mem_ext_consumed != 0) {
+                        get_klogger() << "Virtual memory extended by " << memory_extended << ", consumed "
+                                      << mem_ext_consumed << "\n";
                     }
-                    if (part->hasNext(*multiboot2)) {
-                        part = part->next();
-                    } else {
-                        part = nullptr;
-                    }
-                } while (part != nullptr);
+                    first_pass = false;
+                } while (phys_mem_added > 0 || memory_extended > 0);
+                get_klogger() << "Done with mapping physical memory\n";
             }
+        }
+
+        const MultibootInfoHeader *multiboot2;
+        {
+            struct {
+                constexpr const MultibootInfoHeader *operator()(const MultibootInfo &mboot) const {
+                    return mboot.GetPtr();
+                }
+                constexpr const MultibootInfoHeader *operator()(const UefiInfo &) const {
+                    get_klogger() << "Error: UEFI info\n";
+                    while (1) {
+                        asm("hlt");
+                    }
+                }
+            } GetMultiboot2Visitor;
+            multiboot2 = std::visit(GetMultiboot2Visitor, boot_info);
         }
 
         setup_pvpage_stats();

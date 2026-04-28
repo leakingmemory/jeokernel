@@ -10,9 +10,8 @@ struct UefiStageContext {
     uint64_t physpage_map;
     uint64_t entrypoint_addr;
     uint64_t pml4t_addr;
-};
-
-struct UefiStageInfo {
+    uint64_t efi_memory_map_page_aligned_plus_descriptor_size;
+    uint64_t efi_memory_map_size;
 };
 
 #endif //JEOKERNEL_UEFISTAGE_H

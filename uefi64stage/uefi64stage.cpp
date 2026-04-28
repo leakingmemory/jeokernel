@@ -68,10 +68,18 @@ extern "C" {
 
         }
 
+        uint64_t uefiMemMap = ctx->efi_memory_map_page_aligned_plus_descriptor_size;
+        uint64_t uefiMemMapNumRecords = ctx->efi_memory_map_size;
+        auto uefiMemMapDescrSize = static_cast<uint32_t>(uefiMemMap & 0x1000);
+        uefiMemMapNumRecords = uefiMemMapNumRecords / uefiMemMapDescrSize;
+        uefiMemMap = uefiMemMap / 0x1000;
         Stage1Data stage1Data = {
-            .multibootAddr = (uint32_t) 0,
+            .multibootAddr = static_cast<uint32_t>(0),
             .physpageMapAddr = static_cast<uint32_t>(ctx->physpage_map),
-            .init_pml4t = static_cast<uint32_t>(ctx->pml4t_addr)
+            .init_pml4t = static_cast<uint32_t>(ctx->pml4t_addr),
+            .uefiMemoryMapPage = static_cast<uint32_t>(uefiMemMap),
+            .uefiMemoryMapDescrSize = uefiMemMapDescrSize,
+            .uefiMemoryMapNumDescr = static_cast<uint32_t>(uefiMemMapNumRecords)
         };
         uint64_t stack_addr = reinterpret_cast<uint64_t>(&stage1Data);
         stack_addr &= 0xfffffffffffffff0ULL;
