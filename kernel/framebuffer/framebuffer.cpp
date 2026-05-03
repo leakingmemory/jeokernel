@@ -6,10 +6,9 @@
 #include <thread>
 #include <physpagemap.h>
 
-framebuffer::framebuffer(const MultibootFramebuffer &info) : vm(nullptr), frames(nullptr), pitch(info.framebuffer_pitch), width(info.framebuffer_width), height(info.framebuffer_height), bpp(info.framebuffer_bpp) {
-    uint64_t physaddr{info.framebuffer_addr};
-    uint64_t size{pitch};
-    size *= height;
+framebuffer::framebuffer(phys_t base_addr, uintptr_t pitch, uint32_t width, uint32_t height, uint8_t bpp) : vm(nullptr), frames(nullptr), pitch(pitch), width(width), height(height), bpp(bpp) {
+    uint64_t physaddr{base_addr};
+    uintptr_t size{pitch * height};
     vm = new vmem{size};
     {
         uint64_t end{physaddr + size};
@@ -28,6 +27,9 @@ framebuffer::framebuffer(const MultibootFramebuffer &info) : vm(nullptr), frames
         }
     }
     frames = (uint8_t *) vm->pointer();
+}
+
+framebuffer::framebuffer(const MultibootFramebuffer &info) : framebuffer(info.framebuffer_addr, info.framebuffer_pitch, info.framebuffer_width, info.framebuffer_height, info.framebuffer_bpp) {
 }
 
 framebuffer::~framebuffer() {

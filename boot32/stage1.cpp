@@ -826,7 +826,11 @@ stack_allocated:
             Stage1Data stage1Data = {
                     .multibootAddr = (uint32_t) multiboot_header_addr,
                     .physpageMapAddr = physpagemap_addr,
-                    .init_pml4t = 0x1000
+                    .init_pml4t = 0x1000,
+                    .uefiMemoryMapPage = 0,
+                    .uefiMemoryMapDescrSize = 0,
+                    .uefiMemoryMapNumDescr = 0,
+                    .gdtAddr = gdtAddr
             };
             uint32_t stage1DataPtr = (uint32_t) &stage1Data;
 

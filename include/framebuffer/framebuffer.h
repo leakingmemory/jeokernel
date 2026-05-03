@@ -17,6 +17,7 @@ private:
     uint32_t height;
     uint8_t bpp;
 public:
+    framebuffer(phys_t base_addr, uintptr_t size, uint32_t width, uint32_t height, uint8_t bpp);
     framebuffer(const MultibootFramebuffer &info);
     ~framebuffer();
     int GetWidth() const override;

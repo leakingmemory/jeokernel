@@ -25,6 +25,7 @@ public:
     virtual int GetHeight() const = 0;
     virtual int GetBitsPerPixel() const = 0;
     virtual framebuffer_line Line(int x, int y, int width) const = 0;
+    virtual ~drawingdisplay() = default;
 
     void Draw8x8Char(int x, int y, uint32_t color, uint32_t background, uint64_t bitmap);
     void ShiftUpLines(int lines, uint32_t color);

@@ -81,6 +81,12 @@ static const MultibootInfoHeader *multiboot_info = nullptr;
 uint32_t uefiMemoryMapPage;
 uint32_t uefiMemoryMapDescrSize;
 uint32_t uefiMemoryMapNumDescr;
+uint32_t loaderGdtAddr;
+uint32_t efi_horiz;
+uint32_t efi_vert;
+uint32_t efi_pixel_format;
+uint64_t efi_framebuffer;
+uint64_t efi_framebuffer_size;
 static normal_stack *stage1_stack = nullptr;
 static GlobalDescriptorTable *gdt = nullptr;
 static TaskStateSegment *glob_tss[TSS_MAX_CPUS] = {};
@@ -249,11 +255,17 @@ private:
     vmem memory_map_vm;
     void *memory_map;
     uint32_t desc_size, desc_num;
+    uint32_t m_efi_horiz;
+    uint32_t m_efi_vert;
+    uint32_t m_efi_pixel_format;
+    uint64_t m_efi_framebuffer;
+    uint64_t m_efi_framebuffer_size;
     static uintptr_t round_up_page(uintptr_t addr) {
         return (addr + 0xfff) & ~(static_cast<uintptr_t>(0xfff));
     }
 public:
-    UefiInfo() : memory_map_vm(round_up_page(static_cast<uintptr_t>(uefiMemoryMapNumDescr) * uefiMemoryMapDescrSize)), desc_size(uefiMemoryMapDescrSize), desc_num(uefiMemoryMapNumDescr) {
+    UefiInfo() : memory_map_vm(round_up_page(static_cast<uintptr_t>(uefiMemoryMapNumDescr) * uefiMemoryMapDescrSize)), desc_size(uefiMemoryMapDescrSize), desc_num(uefiMemoryMapNumDescr),
+                 m_efi_horiz(efi_horiz), m_efi_vert(efi_vert), m_efi_pixel_format(efi_pixel_format), m_efi_framebuffer(efi_framebuffer), m_efi_framebuffer_size(efi_framebuffer_size) {
         uint32_t pages;
         {
             auto size = static_cast<uintptr_t>(uefiMemoryMapNumDescr) * uefiMemoryMapDescrSize;
@@ -268,6 +280,13 @@ public:
         memory_map = memory_map_vm.pointer();
     }
     constexpr UefiMemoryMap GetMemoryMap() const;
+    drawingdisplay *CreateDisplay() const {
+        if (m_efi_framebuffer == 0) {
+            return nullptr;
+        }
+        uintptr_t pitch{m_efi_horiz * 4};
+        return new framebuffer(m_efi_framebuffer, pitch, m_efi_horiz, m_efi_vert, 32);
+    }
 };
 
 class UefiMemoryMapIterator;
@@ -429,6 +448,12 @@ extern "C" {
         uefiMemoryMapPage = stage1Data->uefiMemoryMapPage;
         uefiMemoryMapDescrSize = stage1Data->uefiMemoryMapDescrSize;
         uefiMemoryMapNumDescr = stage1Data->uefiMemoryMapNumDescr;
+        loaderGdtAddr = stage1Data->gdtAddr;
+        efi_horiz = stage1Data->efi_horiz;
+        efi_vert = stage1Data->efi_vert;
+        efi_pixel_format = stage1Data->efi_pixel_format;
+        efi_framebuffer = stage1Data->efi_framebuffer;
+        efi_framebuffer_size = stage1Data->efi_framebuffer_size;
         /*
          * Let's try to alloc a stack
          */
@@ -674,47 +699,45 @@ done_with_mem_extension:
             }
         }
 
-        const MultibootInfoHeader *multiboot2;
-        {
-            struct {
-                constexpr const MultibootInfoHeader *operator()(const MultibootInfo &mboot) const {
-                    return mboot.GetPtr();
-                }
-                constexpr const MultibootInfoHeader *operator()(const UefiInfo &) const {
-                    get_klogger() << "Error: UEFI info\n";
-                    while (1) {
-                        asm("hlt");
-                    }
-                }
-            } GetMultiboot2Visitor;
-            multiboot2 = std::visit(GetMultiboot2Visitor, boot_info);
-        }
-
         setup_pvpage_stats();
         setup_simplest_malloc_stats();
 
+        struct {
+            drawingdisplay *operator ()(const MultibootInfo &multiboot_info) {
 #ifndef VGA_TEXT_CONSOLE
+                const auto *multiboot2 = multiboot_info.GetPtr();
+                {
+                    const auto *part = multiboot2->first_part();
+                    do {
+                        if (part->type == 8) {
+                            return new framebuffer(part->get_type8());
+                        }
+                        if (part->hasNext(*multiboot2)) {
+                            part = part->next();
+                        } else {
+                            part = nullptr;
+                        }
+                    } while (part != nullptr);
+                }
+#endif
+                return nullptr;
+            }
+            drawingdisplay *operator ()(const UefiInfo &uefi_info) {
+                return uefi_info.CreateDisplay();
+            }
+        } CreateDrawingdisplay;
         std::shared_ptr<framebuffer_kconsole> kcons{};
         framebuffer_kconsole_spinlocked *fb_kcons_locked{nullptr};
         {
-            const auto *part = multiboot2->first_part();
-            do {
-                if (part->type == 8) {
-                    auto *fb = new framebuffer(part->get_type8());
-                    std::shared_ptr<framebuffer_console> fb_cons{new framebuffer_console(*fb)};
-                    kcons = std::shared_ptr<framebuffer_kconsole>(new framebuffer_kconsole(fb_cons));
-                    fb_kcons_locked = new framebuffer_kconsole_spinlocked(kcons);
-                    set_klogger(fb_kcons_locked);
-                    get_klogger() << "Framebuffer at addr " << part->get_type8().framebuffer_addr << "\n";
-                }
-                if (part->hasNext(*multiboot2)) {
-                    part = part->next();
-                } else {
-                    part = nullptr;
-                }
-            } while (part != nullptr);
+            auto *fb = std::visit(CreateDrawingdisplay, boot_info);
+            if (fb != nullptr) {
+                std::shared_ptr<framebuffer_console> fb_cons{new framebuffer_console(*fb)};
+                kcons = std::shared_ptr<framebuffer_kconsole>(new framebuffer_kconsole(fb_cons));
+                fb_kcons_locked = new framebuffer_kconsole_spinlocked(kcons);
+                set_klogger(fb_kcons_locked);
+                //get_klogger() << "Framebuffer at addr " << part->get_type8().framebuffer_addr << "\n";
+            }
         }
-#endif
 
         for (const std::tuple<uint64_t,uint64_t> &res_mem : reserved_mem) {
             uint64_t base_addr = std::get<0>(res_mem);
@@ -731,7 +754,7 @@ done_with_mem_extension:
         create_hw_interrupt_handler();
         create_cpu_interrupt_handler();
 
-        gdt = new GlobalDescriptorTable;
+        gdt = new GlobalDescriptorTable(static_cast<phys_t>(loaderGdtAddr));
 
         TaskStateSegment *tss = new TaskStateSegment;
         InterruptTaskState *int_task_state = new InterruptTaskState(*tss);
@@ -1039,6 +1062,21 @@ done_with_mem_extension:
             get_klogger() << idt_ptr[i << 1] << " " << idt_ptr[(i << 1) + 1] << "\n";
         }*/
 
+        const MultibootInfoHeader *multiboot2;
+        {
+            struct {
+                constexpr const MultibootInfoHeader *operator()(const MultibootInfo &mboot) const {
+                    return mboot.GetPtr();
+                }
+                constexpr const MultibootInfoHeader *operator()(const UefiInfo &) const {
+                    get_klogger() << "Error: UEFI info\n";
+                    while (1) {
+                        asm("hlt");
+                    }
+                }
+            } GetMultiboot2Visitor;
+            multiboot2 = std::visit(GetMultiboot2Visitor, boot_info);
+        }
         kernel_elf = new KernelElf(*multiboot2);
 
         {

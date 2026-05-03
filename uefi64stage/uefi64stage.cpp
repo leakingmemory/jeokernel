@@ -70,7 +70,7 @@ extern "C" {
 
         uint64_t uefiMemMap = ctx->efi_memory_map_page_aligned_plus_descriptor_size;
         uint64_t uefiMemMapNumRecords = ctx->efi_memory_map_size;
-        auto uefiMemMapDescrSize = static_cast<uint32_t>(uefiMemMap & 0x1000);
+        auto uefiMemMapDescrSize = static_cast<uint32_t>(uefiMemMap & 0xFFF);
         uefiMemMapNumRecords = uefiMemMapNumRecords / uefiMemMapDescrSize;
         uefiMemMap = uefiMemMap / 0x1000;
         Stage1Data stage1Data = {
@@ -79,7 +79,13 @@ extern "C" {
             .init_pml4t = static_cast<uint32_t>(ctx->pml4t_addr),
             .uefiMemoryMapPage = static_cast<uint32_t>(uefiMemMap),
             .uefiMemoryMapDescrSize = uefiMemMapDescrSize,
-            .uefiMemoryMapNumDescr = static_cast<uint32_t>(uefiMemMapNumRecords)
+            .uefiMemoryMapNumDescr = static_cast<uint32_t>(uefiMemMapNumRecords),
+            .gdtAddr = static_cast<uint32_t>(ctx->gdt_addr),
+            .efi_horiz = static_cast<uint32_t>(ctx->efi_horiz),
+            .efi_vert = static_cast<uint32_t>(ctx->efi_vert),
+            .efi_pixel_format = static_cast<uint32_t>(ctx->efi_pixel_format),
+            .efi_framebuffer = ctx->efi_framebuffer,
+            .efi_framebuffer_size = ctx->efi_framebuffer_size
         };
         uint64_t stack_addr = reinterpret_cast<uint64_t>(&stage1Data);
         stack_addr &= 0xfffffffffffffff0ULL;

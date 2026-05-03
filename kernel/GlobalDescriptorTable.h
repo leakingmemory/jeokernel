@@ -20,6 +20,9 @@ public:
     GlobalDescriptorTable()  : gdt((typeof(gdt)) (GDT_ADDR + KERNEL_MEMORY_OFFSET)) {
         gdt->set_ptr();
     }
+    GlobalDescriptorTable(phys_t phaddr) : gdt((typeof(gdt)) (phaddr + KERNEL_MEMORY_OFFSET)) {
+        gdt->set_ptr();
+    }
 
     constexpr uint16_t get_selector(int n) const {
         return sizeof(gdt->gdt[0]) * n;
@@ -44,7 +47,7 @@ public:
     }
 
     void reload() {
-        uintptr_t gdt64 = (uintptr_t) GDT_ADDR + KERNEL_MEMORY_OFFSET + ((GDT_SIZE + (LDT_DESC_SIZE * 2)) * 8);
+        uintptr_t gdt64 = reinterpret_cast<uintptr_t>(gdt) + ((GDT_SIZE + (LDT_DESC_SIZE * 2)) * 8);
         asm("lgdt (%0)" :: "r"(gdt64));
     }
 };

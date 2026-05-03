@@ -909,7 +909,73 @@ extern "C" {
             print(L"\r\n");
         }
 
+        efi_gop_protocol *gop_proto;
+        {
+            auto gop_id = GOP_PROTOCOL_ID;
+            auto status = efi_system_table_ptr->boot_services->locate_protocol(&gop_id, nullptr, reinterpret_cast<void **>(&gop_proto));
+            if (status != 0) {
+                print(L"Failed to locate GOP protocol - ");
+                print_u64(static_cast<uint64_t>(status));
+                print(L"\r\n");
+                asm("ud2");
+            }
+        }
+        print(L"GOP ");
+        print_ptr(gop_proto);
+        print(L" b=");
+        print_ptr(gop_proto->blt);
+        print(L" m=");
+        print_ptr(gop_proto->mode);
+        print(L"\r\nMode max=");
+        print_u32(gop_proto->mode->max_mode);
+        print(L" m=");
+        print_u32(gop_proto->mode->mode);
+        print(L"\r\n");
+
+        uint32_t efi_mode;
+        uint32_t efi_horiz{0};
+        uint32_t efi_vert{0};
+        uint32_t efi_pixel_fmt;
+        for (uint32_t i = 0; i < gop_proto->mode->max_mode; i++) {
+            const efi_graphics_output_mode_info *info;
+            uintptr_t size;
+            if (gop_proto->query_mode(gop_proto, i, &size, &info) != 0) {
+                print(L"Failed to query mode\r\n");
+                asm("ud2");
+            }
+            print(L"Avail mode ");
+            print_u32(i);
+            print(L" ");
+            print_u32(info->horizontal_resolution);
+            print(L"x");
+            print_u32(info->vertical_resolution);
+            print(L" ");
+            print_u32(info->pixel_format);
+            print(L"\r\n");
+            if (info->horizontal_resolution > 0 && info->horizontal_resolution <= 1024 &&
+                info->vertical_resolution > 0 && info->vertical_resolution <= 768 &&
+                (info->pixel_format == dword_RGBR || info->pixel_format == dword_BGRR) &&
+                (efi_horiz == 0 || efi_vert == 0 ||
+                    (efi_horiz < info->horizontal_resolution && efi_vert <= info->vertical_resolution) ||
+                    (efi_vert < info->vertical_resolution && efi_horiz <= info->horizontal_resolution))) {
+                efi_mode = i;
+                efi_horiz = info->horizontal_resolution;
+                efi_vert = info->vertical_resolution;
+                efi_pixel_fmt = info->pixel_format;
+            }
+        }
+
         print(L"Go for launch!\r\n");
+
+        bool efi_gop_enabled = efi_horiz > 0 && efi_vert > 0;
+        if (efi_gop_enabled) {
+            if (gop_proto->set_mode(gop_proto, efi_mode) != 0) {
+                print(L"EFI framebuffer unavailable\r\n");
+                efi_gop_enabled = false;
+            }
+        }
+        uint64_t efi_fb_addr{efi_gop_enabled ? gop_proto->mode->frame_buffer_base : 0};
+        uint64_t efi_fb_size{gop_proto->mode->size_of_frame_buffer};
 
         uintptr_t memoryMapSize{0};
         uintptr_t memoryMapDescriptorSize{0};
@@ -984,6 +1050,8 @@ extern "C" {
             print_u64(memoryMapDescriptor->attribute);
             print(L"\r\n");
         }*/
+        print(L"Exit boot - then jmp ");
+        print_u64(stageloader_entrypoint_addr);
         efi_system_table_ptr->boot_services->exit_boot_services(ImageHandle, memoryMapKey);
 
         phys_t rsp = stack_addr - sizeof(UefiStageContext);
@@ -999,6 +1067,12 @@ extern "C" {
         context->pml4t_addr = reinterpret_cast<uint64_t>(&pml4t);
         context->efi_memory_map_page_aligned_plus_descriptor_size = reinterpret_cast<uint64_t>(memoryMap) + memoryMapDescriptorSize;
         context->efi_memory_map_size = memoryMapSize;
+        context->gdt_addr = gdtAddr;
+        context->efi_horiz = efi_horiz;
+        context->efi_vert = efi_vert;
+        context->efi_pixel_format = efi_pixel_fmt;
+        context->efi_framebuffer = efi_fb_addr;
+        context->efi_framebuffer_size = efi_fb_size;
         uint64_t context_ptr{reinterpret_cast<uint64_t>(context)};
         rsp -= 8;
         {
@@ -1010,6 +1084,9 @@ extern "C" {
         asm("lgdt (%0)" :: "r"(gdt_ptr));
         uint64_t jmpAddr[2] = {stageloader_entrypoint_addr, 8};
         uint64_t jmpAddrPtr = reinterpret_cast<uint64_t>(&(jmpAddr[0]));
+        /*
+         * THis jumps to the starting point of uefi64stage(elf), this is the uefi shim(pecoff)
+         */
         asm("mov %0, %%rax; mov %1, %%rdi; mov %2, %%rsp; ljmpq *(%%rax)" :: "r"(jmpAddrPtr), "r"(context_ptr), "r"(rsp) : "%rax", "%rdi", "%rsp");
     }
 }

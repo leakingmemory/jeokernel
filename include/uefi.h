@@ -17,6 +17,32 @@
 
 typedef int EFI_STATUS;
 
+struct efi_guid {
+    uint32_t data1;
+    uint16_t data2;
+    uint16_t data3;
+    uint8_t data4[8];
+
+    constexpr bool operator==(const efi_guid &other) const {
+        if (data1 == other.data1 && data2 == other.data2 && data3 == other.data3) {
+            for (int i = 0; i < 8; i++) {
+                if (data4[i] != other.data4[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+};
+
+constexpr efi_guid GOP_PROTOCOL_ID = {
+    0x9042a9de,
+    0x23dc,
+    0x4a38,
+    {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a}
+};
+
 struct efi_table_header {
     uint64_t signature;
     uint32_t revision;
@@ -76,6 +102,7 @@ struct efi_boot_services {
     void *exit;
     void *unload_image;
     EFI_STATUS (EFIAPI *exit_boot_services)(void *ImageHandle, uintptr_t MapKey);
+    void *get_next_monotonic_count;
     void *stall;
     void *set_watchdog_timer;
     void *connect_controller;
@@ -85,7 +112,7 @@ struct efi_boot_services {
     void *open_protocol_information;
     void *protocols_per_handle;
     void *locate_handle_buffer;
-    void *locate_protocol;
+    EFI_STATUS (EFIAPI *locate_protocol)(efi_guid *guid, void *registration, void **interface);
     void *install_multiple_protocol_interfaces;
     void *uninstall_multiple_protocol_interfaces;
     void *calculate_checksum;
@@ -136,6 +163,38 @@ struct efi_memory_descriptor {
     uint64_t virtual_start;
     uint64_t number_of_pages;
     uint32_t attribute;
+};
+
+enum efi_pixel_format {
+    dword_RGBR = 0,
+    dword_BGRR = 1,
+    pixel_bit_mask = 2,
+    blt_only = 3
+};
+
+struct efi_graphics_output_mode_info {
+    uint32_t version;
+    uint32_t horizontal_resolution;
+    uint32_t vertical_resolution;
+    uint32_t pixel_format;
+    uint32_t pixel_information;
+    uint32_t pixels_per_scan_line;
+};
+
+struct efi_graphics_output_mode {
+    uint32_t max_mode;
+    uint32_t mode;
+    const efi_graphics_output_mode_info *info;
+    uintptr_t size_of_info;
+    phys_t frame_buffer_base;
+    uintptr_t size_of_frame_buffer;
+};
+
+struct efi_gop_protocol {
+    EFI_STATUS (EFIAPI *query_mode)(efi_gop_protocol *, uint32_t mode, uintptr_t *sizeofinfo, const efi_graphics_output_mode_info **info);
+    EFI_STATUS (EFIAPI *set_mode)(efi_gop_protocol *, uint32_t);
+    void *blt;
+    const efi_graphics_output_mode *mode;
 };
 
 #endif //JEOKERNEL_UEFI_H

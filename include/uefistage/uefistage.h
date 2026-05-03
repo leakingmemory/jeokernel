@@ -12,6 +12,12 @@ struct UefiStageContext {
     uint64_t pml4t_addr;
     uint64_t efi_memory_map_page_aligned_plus_descriptor_size;
     uint64_t efi_memory_map_size;
+    uint64_t gdt_addr;
+    uint64_t efi_horiz;
+    uint64_t efi_vert;
+    uint64_t efi_pixel_format;
+    uint64_t efi_framebuffer;
+    uint64_t efi_framebuffer_size;
 };
 
 #endif //JEOKERNEL_UEFISTAGE_H
