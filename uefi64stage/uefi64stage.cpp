@@ -84,8 +84,11 @@ extern "C" {
             .efi_horiz = static_cast<uint32_t>(ctx->efi_horiz),
             .efi_vert = static_cast<uint32_t>(ctx->efi_vert),
             .efi_pixel_format = static_cast<uint32_t>(ctx->efi_pixel_format),
+            .kernel_phys = static_cast<uint32_t>(ctx->kernel_phys),
+            .kernel_size = static_cast<uint32_t>(ctx->kernel_size),
             .efi_framebuffer = ctx->efi_framebuffer,
-            .efi_framebuffer_size = ctx->efi_framebuffer_size
+            .efi_framebuffer_size = ctx->efi_framebuffer_size,
+            .efi_rsdp_ptr = ctx->efi_rsdp_ptr,
         };
         uint64_t stack_addr = reinterpret_cast<uint64_t>(&stage1Data);
         stack_addr &= 0xfffffffffffffff0ULL;

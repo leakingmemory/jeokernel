@@ -9,6 +9,8 @@
 #include <core/vmem.h>
 #include <memory>
 
+#include "klogger.h"
+
 struct RSDPv1descriptor {
     char signature[8];
     uint8_t checksum;
@@ -139,14 +141,17 @@ public:
                 physaddr = physaddr & 0xFFFFFFFFFFFFF000;
                 vm_sdt->page(0).rmap(physaddr);
                 vm_sdt->page(1).rmap(physaddr + 0x1000);
+                vm_sdt->reload();
                 sdt = (const Table *) (void *) (((uint8_t *) vm_sdt->pointer()) + offset);
             }
+            get_klogger() << "ACPI SDT at " << physaddr << " with length " << sdt->length << "\n";
             uint64_t length = sdt->length;
             vm_sdt = std::unique_ptr<vmem>(new vmem(offset + length));
             for (int i = 0; i < vm_sdt->npages(); i++) {
                 vm_sdt->page(i).rmap(physaddr);
                 physaddr += 0x1000;
             }
+            vm_sdt->reload();
             sdt = (const Table *) (void *) (((uint8_t *) vm_sdt->pointer()) + offset);
         }
     }

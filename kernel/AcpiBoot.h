@@ -14,7 +14,8 @@ private:
     std::thread acpi_thread;
     bool has8042;
 public:
-    explicit AcpiBoot(const MultibootInfoHeader &multiboot);
+    static const RSDPv1descriptor *GetRsdpPtrFromMultiboot(const MultibootInfoHeader &multiboot);
+    explicit AcpiBoot(const RSDPv1descriptor *rsdp1);
     ~AcpiBoot();
 private:
     void acpi_boot(const RSDPv1descriptor *rsdp1);

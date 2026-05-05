@@ -78,15 +78,18 @@ void init_keyboard();
 void init_fpu0_initial();
 
 static const MultibootInfoHeader *multiboot_info = nullptr;
-uint32_t uefiMemoryMapPage;
-uint32_t uefiMemoryMapDescrSize;
-uint32_t uefiMemoryMapNumDescr;
-uint32_t loaderGdtAddr;
-uint32_t efi_horiz;
-uint32_t efi_vert;
-uint32_t efi_pixel_format;
-uint64_t efi_framebuffer;
-uint64_t efi_framebuffer_size;
+static uint32_t uefiMemoryMapPage;
+static uint32_t uefiMemoryMapDescrSize;
+static uint32_t uefiMemoryMapNumDescr;
+static uint32_t loaderGdtAddr;
+static uint32_t efi_horiz;
+static uint32_t efi_vert;
+static uint32_t efi_pixel_format;
+static uint32_t kernel_phys;
+static uint32_t kernel_size;
+static uint64_t efi_framebuffer;
+static uint64_t efi_framebuffer_size;
+static uint64_t efi_rsdp_ptr;
 static normal_stack *stage1_stack = nullptr;
 static GlobalDescriptorTable *gdt = nullptr;
 static TaskStateSegment *glob_tss[TSS_MAX_CPUS] = {};
@@ -253,19 +256,24 @@ class UefiInfo {
     friend UefiMemoryMap;
 private:
     vmem memory_map_vm;
+    vmem rsdp_vm;
     void *memory_map;
+    const void *rsdp_ptr;
     uint32_t desc_size, desc_num;
     uint32_t m_efi_horiz;
     uint32_t m_efi_vert;
     uint32_t m_efi_pixel_format;
+    uint32_t m_kernel_phys;
+    uint32_t m_kernel_size;
     uint64_t m_efi_framebuffer;
     uint64_t m_efi_framebuffer_size;
     static uintptr_t round_up_page(uintptr_t addr) {
         return (addr + 0xfff) & ~(static_cast<uintptr_t>(0xfff));
     }
 public:
-    UefiInfo() : memory_map_vm(round_up_page(static_cast<uintptr_t>(uefiMemoryMapNumDescr) * uefiMemoryMapDescrSize)), desc_size(uefiMemoryMapDescrSize), desc_num(uefiMemoryMapNumDescr),
-                 m_efi_horiz(efi_horiz), m_efi_vert(efi_vert), m_efi_pixel_format(efi_pixel_format), m_efi_framebuffer(efi_framebuffer), m_efi_framebuffer_size(efi_framebuffer_size) {
+    UefiInfo() : memory_map_vm(round_up_page(static_cast<uintptr_t>(uefiMemoryMapNumDescr) * uefiMemoryMapDescrSize)), rsdp_vm(0x2000), desc_size(uefiMemoryMapDescrSize), desc_num(uefiMemoryMapNumDescr),
+                 m_efi_horiz(efi_horiz), m_efi_vert(efi_vert), m_efi_pixel_format(efi_pixel_format), m_kernel_phys(kernel_phys), m_kernel_size(kernel_size), m_efi_framebuffer(efi_framebuffer),
+                 m_efi_framebuffer_size(efi_framebuffer_size) {
         uint32_t pages;
         {
             auto size = static_cast<uintptr_t>(uefiMemoryMapNumDescr) * uefiMemoryMapDescrSize;
@@ -278,6 +286,18 @@ public:
             memory_map_vm.page(i).rmap((static_cast<phys_t>(uefiMemoryMapPage) + static_cast<phys_t>(i)) * 0x1000);
         }
         memory_map = memory_map_vm.pointer();
+        if (efi_rsdp_ptr != 0) {
+            auto rsdp_offset = efi_rsdp_ptr & 0xFFFULL;
+            auto rsdp_page = static_cast<phys_t>(efi_rsdp_ptr & ~0xFFFULL);
+            rsdp_vm.page(0).rmap(rsdp_page);
+            if (rsdp_offset > 0x800) {
+                rsdp_vm.page(1).rmap(rsdp_page + 0x1000ULL);
+            }
+            rsdp_vm.reload();
+            rsdp_ptr = reinterpret_cast<const void *>(reinterpret_cast<const uint8_t *>(rsdp_vm.pointer()) + rsdp_offset);
+        } else {
+            rsdp_ptr = nullptr;
+        }
     }
     constexpr UefiMemoryMap GetMemoryMap() const;
     drawingdisplay *CreateDisplay() const {
@@ -286,6 +306,15 @@ public:
         }
         uintptr_t pitch{m_efi_horiz * 4};
         return new framebuffer(m_efi_framebuffer, pitch, m_efi_horiz, m_efi_vert, 32);
+    }
+    constexpr uint32_t GetKernelPhys() const {
+        return m_kernel_phys;
+    }
+    constexpr uint32_t GetKernelSize() const {
+        return m_kernel_size;
+    }
+    constexpr const RSDPv1descriptor *GetRsdpPtr() const {
+        return reinterpret_cast<const RSDPv1descriptor *>(rsdp_ptr);
     }
 };
 
@@ -452,8 +481,11 @@ extern "C" {
         efi_horiz = stage1Data->efi_horiz;
         efi_vert = stage1Data->efi_vert;
         efi_pixel_format = stage1Data->efi_pixel_format;
+        kernel_phys = stage1Data->kernel_phys;
+        kernel_size = stage1Data->kernel_size;
         efi_framebuffer = stage1Data->efi_framebuffer;
         efi_framebuffer_size = stage1Data->efi_framebuffer_size;
+        efi_rsdp_ptr = stage1Data->efi_rsdp_ptr;
         /*
          * Let's try to alloc a stack
          */
@@ -1062,22 +1094,17 @@ done_with_mem_extension:
             get_klogger() << idt_ptr[i << 1] << " " << idt_ptr[(i << 1) + 1] << "\n";
         }*/
 
-        const MultibootInfoHeader *multiboot2;
         {
             struct {
-                constexpr const MultibootInfoHeader *operator()(const MultibootInfo &mboot) const {
-                    return mboot.GetPtr();
+                KernelElf *operator()(const MultibootInfo &mboot) const {
+                    return KernelElf::CreateFromMultiboot(*(mboot.GetPtr()));
                 }
-                constexpr const MultibootInfoHeader *operator()(const UefiInfo &) const {
-                    get_klogger() << "Error: UEFI info\n";
-                    while (1) {
-                        asm("hlt");
-                    }
+                KernelElf *operator()(const UefiInfo &info) const {
+                    return new KernelElf(info.GetKernelPhys(), info.GetKernelSize());
                 }
-            } GetMultiboot2Visitor;
-            multiboot2 = std::visit(GetMultiboot2Visitor, boot_info);
+            } CreateKernelElf;
+            kernel_elf = std::visit(CreateKernelElf, boot_info);
         }
-        kernel_elf = new KernelElf(*multiboot2);
 
         {
             const auto *init_table_section = kernel_elf->elf().get_elf64_header().get_init_table();
@@ -1336,7 +1363,15 @@ done_with_mem_extension:
         get_drivers().AddDriver(new scsidevice_driver());
         get_drivers().AddDriver(new scsida_driver());
 
-        AcpiBoot acpi_boot{*multiboot2};
+        struct {
+            const RSDPv1descriptor *operator()(const MultibootInfo &mboot) const {
+                return AcpiBoot::GetRsdpPtrFromMultiboot(*(mboot.GetPtr()));
+            }
+            const RSDPv1descriptor *operator()(const UefiInfo &uefi_info) const {
+                return uefi_info.GetRsdpPtr();
+            }
+        } GetRSDP;
+        AcpiBoot acpi_boot{std::visit(GetRSDP, boot_info)};
 
         std::shared_ptr<kshell> shell{};
 

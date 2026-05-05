@@ -977,6 +977,31 @@ extern "C" {
         uint64_t efi_fb_addr{efi_gop_enabled ? gop_proto->mode->frame_buffer_base : 0};
         uint64_t efi_fb_size{gop_proto->mode->size_of_frame_buffer};
 
+        uint64_t efi_rsdp{0};
+        for (uint32_t i = 0; i < efi_system_table_ptr->num_table_entries; i++) {
+            if (efi_system_table_ptr->table_entries[i].vendor_guid == RSDP_V2_ID) {
+                print(L"RSDV v2 - ");
+                efi_rsdp = reinterpret_cast<uint64_t>(efi_system_table_ptr->table_entries[i].table);
+                break;
+            }
+        }
+        if (efi_rsdp == 0) {
+            for (uint32_t i = 0; i < efi_system_table_ptr->num_table_entries; i++) {
+                if (efi_system_table_ptr->table_entries[i].vendor_guid == RSDP_V1_ID) {
+                    print(L"RSDV v1 - ");
+                    efi_rsdp = reinterpret_cast<uint64_t>(efi_system_table_ptr->table_entries[i].table);
+                    break;
+                }
+            }
+        }
+        if (efi_rsdp != 0) {
+            print(L"RSDP found at ");
+            print_u64(efi_rsdp);
+            print(L"\r\n");
+        } else {
+            print(L"No RSDP found\r\n");
+        }
+
         uintptr_t memoryMapSize{0};
         uintptr_t memoryMapDescriptorSize{0};
         efi_system_table_ptr->boot_services->get_memory_map(&memoryMapSize, nullptr, nullptr, &memoryMapDescriptorSize, nullptr);
@@ -1071,8 +1096,11 @@ extern "C" {
         context->efi_horiz = efi_horiz;
         context->efi_vert = efi_vert;
         context->efi_pixel_format = efi_pixel_fmt;
+        context->kernel_phys = reinterpret_cast<uint64_t>(phys_kernel);
+        context->kernel_size = kernel_size;
         context->efi_framebuffer = efi_fb_addr;
         context->efi_framebuffer_size = efi_fb_size;
+        context->efi_rsdp_ptr = efi_rsdp;
         uint64_t context_ptr{reinterpret_cast<uint64_t>(context)};
         rsp -= 8;
         {

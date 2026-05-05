@@ -16,7 +16,8 @@ private:
     void *ptr, *end_ptr;
     ELF kernel_elf;
 public:
-    KernelElf(const MultibootInfoHeader &multibootInfoHeader);
+    KernelElf(uint64_t phys_start, uint64_t size);
+    static KernelElf *CreateFromMultiboot(const MultibootInfoHeader &multibootInfoHeader);
     ~KernelElf();
 
     const ELF &elf() const;

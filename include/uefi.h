@@ -42,6 +42,20 @@ constexpr efi_guid GOP_PROTOCOL_ID = {
     0x4a38,
     {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a}
 };
+// 8868e871-e4f1-11d3-bc22-0080c73c8881
+constexpr efi_guid RSDP_V2_ID = {
+    0x8868e871,
+    0xe4f1,
+    0x11d3,
+    {0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81}
+};
+// eb9d2d30-2d88-11d3-9a16-0090273fc14d
+constexpr efi_guid RSDP_V1_ID = {
+    0xeb9d2d30,
+    0x2d88,
+    0x11d3,
+    {0x9a, 0x16, 0x00, 0x90, 0x27, 0x3f, 0xc1, 0x4d}
+};
 
 struct efi_table_header {
     uint64_t signature;
@@ -122,8 +136,7 @@ struct efi_boot_services {
 };
 
 struct efi_table_header_ptr {
-    uint64_t vendor_guid_1;
-    uint64_t vendor_guid_2;
+    efi_guid vendor_guid;
     void *table;
 };
 
@@ -153,7 +166,7 @@ struct efi_system_table {
     efi_runtime_services *runtime_services;
     efi_boot_services *boot_services;
     uint32_t num_table_entries;
-    efi_table_header_ptr *table_entries[];
+    efi_table_header_ptr *table_entries;
 };
 
 struct efi_memory_descriptor {

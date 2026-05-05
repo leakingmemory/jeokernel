@@ -4,10 +4,9 @@
 
 #include "AcpiBoot.h"
 
-AcpiBoot::AcpiBoot(const MultibootInfoHeader &multiboot) : has8042(false), acpi_thread([this, &multiboot] () {
-    std::this_thread::set_name("[acpiboot]");
+const RSDPv1descriptor *AcpiBoot::GetRsdpPtrFromMultiboot(const MultibootInfoHeader &multiboot) {
     if (!multiboot.has_parts()) {
-        return;
+        return nullptr;
     }
     const MultibootRsdp1 *rsdp1{nullptr};
     const MultibootRsdp2 *rsdp2{nullptr};
@@ -25,12 +24,21 @@ AcpiBoot::AcpiBoot(const MultibootInfoHeader &multiboot) : has8042(false), acpi_
     }
     if (rsdp2 != nullptr) {
         get_klogger() << "ACPI v2 tables through multiboot2\n";
-        acpi_boot(&(rsdp2->rsdp));
+        return &(rsdp2->rsdp);
     } else if (rsdp1 != nullptr) {
         get_klogger() << "ACPI v1 tables through multiboot2\n";
-        acpi_boot(&(rsdp1->rsdp));
+        return &(rsdp1->rsdp);
     } else {
         get_klogger() << "ACPI not available through multiboot2\n";
+    }
+    return nullptr;
+}
+
+AcpiBoot::AcpiBoot(const RSDPv1descriptor *rsdp1) : has8042(false), acpi_thread([this, rsdp1] () {
+    std::this_thread::set_name("[acpiboot]");
+    if (rsdp1 != nullptr) {
+        get_klogger() << "Starting ACPI boot thread with RSDPv1 at virtual " << reinterpret_cast<uintptr_t>(rsdp1) << "\n";
+        acpi_boot(rsdp1);
     }
 }) {
 }

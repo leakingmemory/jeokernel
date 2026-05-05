@@ -23,9 +23,14 @@ struct Stage1Data {
     uint32_t efi_vert;
     uint32_t efi_pixel_format;
 
+    uint32_t kernel_phys;
+    uint32_t kernel_size;
+
     uint64_t efi_framebuffer;
 
     uint64_t efi_framebuffer_size;
+
+    uint64_t efi_rsdp_ptr;
 };
 
 #endif //JEOKERNEL_STAGE1_H
