@@ -59,11 +59,11 @@ extern "C" {
             // enable long mode: 0x100 (1 << 8) and 0x800 (1 << 11)
             asm("mov $0x0C0000080, %%rcx; rdmsr; or $0x0900, %%rax; wrmsr; " ::: "%rax", "%rcx");
 
-            uint64_t cr0;
+            uint64_t cr0{0};
             asm("mov %%cr0, %0" : "=r"(cr0));
 
-            cr0 |= 1 << 16; // Write protected memory enabled
-            cr0 |= 1 << 31; // Paging bit = 1
+            cr0 |= 1ULL << 16; // Write protected memory enabled
+            cr0 |= 1ULL << 31; // Paging bit = 1
             asm("mov %0, %%cr0" :: "r"(cr0));
 
         }
