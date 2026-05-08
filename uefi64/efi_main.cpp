@@ -88,6 +88,62 @@ static int print_ptr(const void *ptr) {
     return print_u64(reinterpret_cast<uint64_t>(ptr));
 }
 
+struct MemoryMapData {
+    uintptr_t memoryMapSize{0};
+    uintptr_t memoryMapDescriptorSize{0};
+    void *memoryMap{nullptr};
+    uintptr_t memoryMapKey;
+};
+
+static MemoryMapData GetMemoryMapData(PhyspageMap *claimPagesOptional) {
+    MemoryMapData result;
+    efi_system_table_ptr->boot_services->get_memory_map(&result.memoryMapSize, nullptr, nullptr, &result.memoryMapDescriptorSize, nullptr);
+    //print(L"Mem map size query result ");
+    //print_u64(result.memoryMapSize);
+    //print(L" desc ");
+    //print_u64(result.memoryMapDescriptorSize);
+    //print(L"\r\n");
+    {
+        result.memoryMapSize += result.memoryMapDescriptorSize * 2;
+        auto pages = result.memoryMapSize / 0x1000;
+        if ((result.memoryMapSize % 0x1000) > 0) {
+            ++pages;
+        }
+        result.memoryMap = allocate_pages(pages);
+        if (result.memoryMap == nullptr) {
+            print(L"FATAL ERROR: Could not allocate memory for memory map\r\n");
+            asm("ud2");
+        }
+        result.memoryMapSize = pages;
+        result.memoryMapSize *= 0x1000;
+        uint32_t version;
+        //print(L"Try get map size=");
+        //print_u64(result.memoryMapSize);
+        //print(L" bytes\r\n");
+        if (efi_system_table_ptr->boot_services->get_memory_map(&result.memoryMapSize, result.memoryMap, &result.memoryMapKey, &result.memoryMapDescriptorSize, &version) == 0) {
+            //print(L"Map ");
+            //print_ptr(memoryMap);
+            //print(L"size=");
+            //print_u64(memoryMapSize);
+            //print(L" bytes\r\n");
+        } else {
+            print(L"OOps size=");
+            print_u64(result.memoryMapSize);
+            print(L" pages=");
+            print_u32(pages);
+            print(L"\r\n");
+            print(L"FATAL ERROR: Failed to get memory map\r\n");
+            asm("ud2");
+        }
+    }
+    if (claimPagesOptional != nullptr) {
+        for (phys_t i = reinterpret_cast<phys_t>(result.memoryMap); i < reinterpret_cast<phys_t>(result.memoryMap) + result.memoryMapSize; i += 0x1000) {
+            claimPagesOptional->claim(i / 0x1000);
+        }
+    }
+    return result;
+}
+
 extern "C" {
 
     extern const void *wrapped_binary;
@@ -1002,79 +1058,8 @@ extern "C" {
             print(L"No RSDP found\r\n");
         }
 
-        uintptr_t memoryMapSize{0};
-        uintptr_t memoryMapDescriptorSize{0};
-        efi_system_table_ptr->boot_services->get_memory_map(&memoryMapSize, nullptr, nullptr, &memoryMapDescriptorSize, nullptr);
-        print(L"Mem map size query result ");
-        print_u64(memoryMapSize);
-        print(L" desc ");
-        print_u64(memoryMapDescriptorSize);
-        print(L"\r\n");
-        void *memoryMap;
-        uintptr_t memoryMapKey;
-        {
-            memoryMapSize += memoryMapDescriptorSize * 2;
-            auto pages = memoryMapSize / 0x1000;
-            if ((memoryMapSize % 0x1000) > 0) {
-                ++pages;
-            }
-            memoryMap = allocate_pages(pages);
-            if (memoryMap == nullptr) {
-                print(L"FATAL ERROR: Could not allocate memory for memory map\r\n");
-                asm("ud2");
-            }
-            memoryMapSize = pages;
-            memoryMapSize *= 0x1000;
-            uint32_t version;
-            print(L"Try get map size=");
-            print_u64(memoryMapSize);
-            print(L" bytes\r\n");
-            if (efi_system_table_ptr->boot_services->get_memory_map(&memoryMapSize, memoryMap, &memoryMapKey, &memoryMapDescriptorSize, &version) == 0) {
-                //print(L"Map ");
-                //print_ptr(memoryMap);
-                //print(L"size=");
-                //print_u64(memoryMapSize);
-                //print(L" bytes\r\n");
-            } else {
-                print(L"OOps size=");
-                print_u64(memoryMapSize);
-                print(L" pages=");
-                print_u32(pages);
-                print(L"\r\n");
-                print(L"FATAL ERROR: Failed to get memory map\r\n");
-                asm("ud2");
-            }
-        }
-        for (phys_t i = reinterpret_cast<phys_t>(memoryMap); i < reinterpret_cast<phys_t>(memoryMap) + memoryMapSize; i += 0x1000) {
-            physpageMap->claim(i / 0x1000);
-        }
-        /*print(L"Memory map size ");
-        print_u64(memoryMapSize);
-        print(L" descriptor size ");
-        print_u64(memoryMapDescriptorSize);
-        phys_t memoryMapSlots = memoryMapSize / memoryMapDescriptorSize;
-        print(L" -> slots ");
-        print_u64(memoryMapSlots);
-        print(L"\r\n");
-        for (phys_t i = 0; i < memoryMapSlots; i++) {
-            efi_memory_descriptor *memoryMapDescriptor = reinterpret_cast<efi_memory_descriptor *>(reinterpret_cast<phys_t>(memoryMap) + (memoryMapDescriptorSize * i));
-            if (memoryMapDescriptor->number_of_pages == 0) {
-                continue;
-            }
-            print(L"Mem ");
-            print_ptr(memoryMapDescriptor);
-            print(L" type ");
-            print_u32(memoryMapDescriptor->type);
-            print(L" phys ");
-            print_u64(memoryMapDescriptor->physical_start);
-            print(L" virt ");
-            print_u64(memoryMapDescriptor->virtual_start);
-            print(L" count ");
-            print_u64(memoryMapDescriptor->number_of_pages);
-            print(L" attr ");
-            print_u64(memoryMapDescriptor->attribute);
-            print(L"\r\n");
-        }*/
+        auto memoryMapResult = GetMemoryMapData(physpageMap);
+        auto memoryMapKey = memoryMapResult.memoryMapKey;
         print(L"Exit boot - then jmp ");
         print_u64(stageloader_entrypoint_addr);
         efi_system_table_ptr->boot_services->exit_boot_services(ImageHandle, memoryMapKey);
@@ -1090,8 +1075,8 @@ extern "C" {
         context->physpage_map = reinterpret_cast<uint64_t>(physpageMap);
         context->entrypoint_addr = entrypoint_addr;
         context->pml4t_addr = reinterpret_cast<uint64_t>(&pml4t);
-        context->efi_memory_map_page_aligned_plus_descriptor_size = reinterpret_cast<uint64_t>(memoryMap) + memoryMapDescriptorSize;
-        context->efi_memory_map_size = memoryMapSize;
+        context->efi_memory_map_page_aligned_plus_descriptor_size = reinterpret_cast<uint64_t>(memoryMapResult.memoryMap) + memoryMapResult.memoryMapDescriptorSize;
+        context->efi_memory_map_size = memoryMapResult.memoryMapSize;
         context->gdt_addr = gdtAddr;
         context->efi_horiz = efi_horiz;
         context->efi_vert = efi_vert;
