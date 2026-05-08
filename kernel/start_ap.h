@@ -18,6 +18,7 @@ raw_spinlock *get_ap_start_lock();
  *
  * @return Pointer to AP start counter
  */
-const uint32_t *install_ap_bootstrap();
+class GlobalDescriptorTable;
+const uint32_t *install_ap_bootstrap(GlobalDescriptorTable &);
 
 #endif //JEOKERNEL_START_AP_H

@@ -65,12 +65,6 @@ add_custom_command(
 )
 
 add_custom_command(
-        OUTPUT jeokernelefi.img
-        DEPENDS jeokernel kernel
-        COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" ${CMAKE_SOURCE_DIR}/create_efiboot.sh
-)
-
-add_custom_command(
         OUTPUT jeokernel_uefi64.img
         DEPENDS ${UEFI64_SHIM_TARGET}
         COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" sh ${CMAKE_SOURCE_DIR}/create_uefi64boot.sh
@@ -80,6 +74,5 @@ add_custom_target(jeokernel_disk ALL echo "ISO file built" DEPENDS jeokernel.img
 
 IF(NOT (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
         add_custom_target(jeokernel_iso ALL echo "ISO file built" DEPENDS jeokernel.iso)
-        add_custom_target(jeokernel_efi ALL echo "ISO file built" DEPENDS jeokernelefi.img)
 ENDIF()
 add_custom_target(jeokernel_uefi64 ALL echo "UEFI 64-bit image built" DEPENDS jeokernel_uefi64.img)

@@ -4,10 +4,12 @@
 
 #include "start_ap.h"
 #include <core/vmem.h>
-#include <cstdint>
+#include <cstring>
 #include <pagetable.h>
 #include <pagealloc.h>
 #include <concurrency/raw_spinlock.h>
+
+#include "GlobalDescriptorTable.h"
 
 static raw_spinlock *ap_start_lock = nullptr;
 
@@ -19,7 +21,7 @@ extern "C" {
 void ap_started();
 }
 
-const uint32_t *install_ap_bootstrap() {
+const uint32_t *install_ap_bootstrap(GlobalDescriptorTable &gdt) {
     ap_start_lock = new raw_spinlock();
     vmem vm{4096};
     vm.page(0).rwmap(0x8000, true);
@@ -33,8 +35,10 @@ const uint32_t *install_ap_bootstrap() {
         ++bootstrap_ptr;
         ++bootstrap_location;
     }
-    *((uintptr_t *) (void *) (((uint8_t *) vm.pointer()) + 0x140)) = (uintptr_t) (void *) ap_started;
+    *((uintptr_t *) (void *) (((uint8_t *) vm.pointer()) + 0x140)) = reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(ap_started));
     stackptr_ref = stackptr;
+    *((uint32_t *) (void *) (((uint8_t *) vm.pointer()) + 0x160)) = static_cast<uint32_t>(get_init_pml4t() + 0x4000);
+    memcpy(reinterpret_cast<void *>(reinterpret_cast<uint8_t *>(vm.pointer()) + 0x170), gdt.pointer(), 12);
     std::optional<pageentr> pe = get_pageentr(KERNEL_MEMORY_OFFSET + 0x8000);
     pe->execution_disabled() = 0;
     pe->writeable() = 0;

@@ -21,7 +21,7 @@ void set_tss(int cpun, struct TaskStateSegment *tss);
 void set_its(int cpun, struct InterruptTaskState *its);
 
 ApStartup::ApStartup(GlobalDescriptorTable *gdt, TaskStateSegment *cpu_tss, InterruptTaskState *cpu_its, const std::vector<std::tuple<uint64_t,uint64_t>> &reserved_mem) :
-        mtx(), reserved_mem(reserved_mem) {
+        mtx(), reserved_mem(reserved_mem), gdt(gdt) {
     auto &acpi = get_acpi_madt_provider();
     madtptr = acpi.get_madt();
     if (!madtptr) {
@@ -79,7 +79,7 @@ void ApStartup::Init(PITTimerCalib *calib_timer) {
     vmem_switch_to_multicpu(this, apicsInfo->GetNumberOfCpus());
     SyscallSupport::Instance().GlobalSetup().CpuSetup();
 
-    const uint32_t *ap_count = install_ap_bootstrap();
+    const uint32_t *ap_count = install_ap_bootstrap(*gdt);
 
     critical_section cli{};
     for (int i = 0; i < apicsInfo->GetNumberOfCpus(); i++) {

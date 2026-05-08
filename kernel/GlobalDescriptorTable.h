@@ -46,6 +46,9 @@ public:
         return TSS_MAX_CPUS;
     }
 
+    void *pointer() {
+        return gdt->vpointer();
+    }
     void reload() {
         uintptr_t gdt64 = reinterpret_cast<uintptr_t>(gdt) + ((GDT_SIZE + (LDT_DESC_SIZE * 2)) * 8);
         asm("lgdt (%0)" :: "r"(gdt64));

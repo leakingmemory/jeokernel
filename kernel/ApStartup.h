@@ -22,6 +22,7 @@ private:
     std::vector<std::tuple<uint64_t,uint64_t>> reserved_mem;
     std::shared_ptr<acpi_madt_info> madtptr;
     std::unique_ptr<cpu_mpfp> mpfp;
+    GlobalDescriptorTable *gdt;
     const apics_info *apicsInfo;
     LocalApic *lapic;
     IOApic *ioapic;

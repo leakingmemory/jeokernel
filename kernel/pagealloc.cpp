@@ -39,12 +39,15 @@ pagetable &get_root_pagetable() {
 void set_init_pml4t(uintptr_t addr) {
     init_pml4t_addr = addr;
 }
+uintptr_t get_init_pml4t() {
+    return init_pml4t_addr;
+}
 
 void relocate_kernel_vmemory() {
     /* copy the initial pagetable for starting up APs - needs some of the 16/32bit memory fixed mappings */
-    memcpy((void *) 0x5000, (void *) (get_pagetable_virt_offset() + init_pml4t_addr), 0x3000);
-    (*((pagetable *) 0x5000))[0].page_ppn() = 0x6000 / 0x1000;
-    (*((pagetable *) 0x6000))[0].page_ppn() = 0x7000 / 0x1000;
+    memcpy((void *) (init_pml4t_addr + 0x4000), (void *) (get_pagetable_virt_offset() + init_pml4t_addr), 0x3000);
+    (*((pagetable *) (init_pml4t_addr + 0x4000)))[0].page_ppn() = (init_pml4t_addr + 0x5000) / 0x1000;
+    (*((pagetable *) (init_pml4t_addr + 0x5000)))[0].page_ppn() = (init_pml4t_addr + 0x6000) / 0x1000;
 
     auto pmlt4 = _get_pml4t_cpu0();
     auto &pdtp = pmlt4[0].get_subtable();

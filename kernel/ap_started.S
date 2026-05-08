@@ -5,7 +5,8 @@
 
 ap_started:
     // Page tables
-    mov $0x01000, %rax
+    mov %cr3, %rax
+    sub $0x04000, %rax
     mov %rax, %cr3
     movq $0x10,%rax
     mov %ax,%ds

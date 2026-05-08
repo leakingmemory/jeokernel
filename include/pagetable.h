@@ -471,6 +471,19 @@ template <int n> struct GDT_table {
         }
     }
 
+    void *vpointer() {
+        set_size();
+        set_ptr();
+
+#ifndef UNIT_TESTING
+        COMPILER_WARNINGS_PUSH()
+        GNU_AND_CLANG_IGNORE_WARNING(-Waddress-of-packed-member)
+        #endif
+                return reinterpret_cast<void *>(&size);
+#ifndef UNIT_TESTING
+        COMPILER_WARNINGS_POP()
+        #endif
+    }
     uint64_t pointer() {
         set_size();
         set_ptr();

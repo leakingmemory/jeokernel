@@ -47,7 +47,7 @@ ap_trampoline_8060:
     mov %ax,%gs
     mov %ax,%ss
     lock incw (0x8FF0)
-    lgdt GDTR_PTR_ADDR
+    lgdtl 0x8170
 
     fninit
     fldcw (0x8158)
@@ -70,7 +70,8 @@ ap_has_mxcsr_mask:
     ldmxcsr (0x815C)
 
     // Page tables
-    mov $0x05000, %eax
+    mov $0x08160, %eax
+    mov (%eax), %eax
     mov %eax, %cr3
 
     mov %cr4, %eax
@@ -114,6 +115,11 @@ ap_trampoline_8150:
     .quad 0x557744cccc997733 # stackptr
     .long 0x0000037F # 0x8158 (used low word)
     .long 0x00001F80 # 0x815C
+    .long 0x00005000 # 0x8160 pagetables root
+    .long 0x0        # 0x8164 padding/unused
+    .quad 0x0        # 0x8168 padding/unused
+    .quad 0x0        # 0x8170 GDT-ptr
+    .quad 0x0        # 0x8178 GDT-ptr-2
 
 ap_trampoline_end:
     hlt
