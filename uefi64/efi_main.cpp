@@ -152,6 +152,18 @@ extern "C" {
 
     void EFIAPI efi_main(EFI_HANDLE ImageHandle, void *ptr_SystemTable) {
         efi_system_table_ptr = reinterpret_cast<efi_system_table *>(ptr_SystemTable);
+
+        constexpr const int conf_pages = 0x22;
+        auto *physpageStructsAddr = (uint8_t *) allocate_config_pages(conf_pages);
+        auto *physpageMap = new (physpageStructsAddr) PhyspageMap();
+        phys_t gdtAddr = reinterpret_cast<phys_t>(physpageStructsAddr) + 0x21000;
+
+        auto memoryMapResult = GetMemoryMapData(physpageMap);
+
+        print(L"\r\nPhyspages for memory management structs: ");
+        print_ptr(physpageStructsAddr);
+        print(L"\r\n");
+
         uint8_t *stageloader_src = reinterpret_cast<uint8_t *>(&wrapped_uefistage_start);
         uint8_t *kernel_src = reinterpret_cast<uint8_t *>(&wrapped_binary);
         print(L"UEFI shimloader detected entrypoint: ");
@@ -160,6 +172,7 @@ extern "C" {
         print_ptr(wrapped_uefistage_start);
         print(L"\r\nKernel embedded binary: ");
         print_ptr(kernel_src);
+
         print(L"\r\nStage loader size: ");
         auto stageloader_size = reinterpret_cast<uintptr_t>(&wrapped_uefistage_end) - reinterpret_cast<uintptr_t>(stageloader_src);
         print_u32(static_cast<uint32_t>(stageloader_size));
@@ -281,13 +294,6 @@ extern "C" {
             print(L"FATAL ERROR: Kernel virtual address must start above CONFIG_BELOW_ADDRESS");
             asm("ud2");
         }
-        print(L"\r\nPhyspages for memory management structs: ");
-        constexpr const int conf_pages = 0x22;
-        auto *physpageStructsAddr = (uint8_t *) allocate_config_pages(conf_pages);
-        print_ptr(physpageStructsAddr);
-        print(L"\r\n");
-        auto *physpageMap = new (physpageStructsAddr) PhyspageMap();
-        phys_t gdtAddr = reinterpret_cast<phys_t>(physpageStructsAddr) + 0x21000;
 
         {
             uint32_t k_base_page{static_cast<uint32_t>(reinterpret_cast<uint64_t>(phys_kernel) / 0x1000)};
@@ -1058,11 +1064,17 @@ extern "C" {
             print(L"No RSDP found\r\n");
         }
 
-        auto memoryMapResult = GetMemoryMapData(physpageMap);
-        auto memoryMapKey = memoryMapResult.memoryMapKey;
-        print(L"Exit boot - then jmp ");
-        print_u64(stageloader_entrypoint_addr);
-        efi_system_table_ptr->boot_services->exit_boot_services(ImageHandle, memoryMapKey);
+        uintptr_t memoryMapKey;
+        {
+            auto memoryMapResult = GetMemoryMapData(nullptr);
+            memoryMapKey = memoryMapResult.memoryMapKey;
+        }
+        //print(L"Exit boot - then jmp\r\n");
+        //print_u64(stageloader_entrypoint_addr);
+        if (efi_system_table_ptr->boot_services->exit_boot_services(ImageHandle, memoryMapKey) != 0) {
+            print(L"Exit boot services failed\r\n");
+            asm("ud2");
+        }
 
         phys_t rsp = stack_addr - sizeof(UefiStageContext);
         {
