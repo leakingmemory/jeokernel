@@ -611,7 +611,7 @@ extern "C" {
                                 return entry->type == 1;
                             }
                             bool operator ()(const efi_memory_descriptor *entry) {
-                                return entry->type == 7;
+                                return entry->type == 7 || entry->type >= 0x80000000 || (entry->type >= 1 && entry->type <= 4);
                             }
                         } IsMemoryAvailable;
                         if (std::visit(IsMemoryAvailable, entr)) {
