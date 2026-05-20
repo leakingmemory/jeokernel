@@ -63,8 +63,10 @@
 #include <tty/ttyinit.h>
 #include <core/x86fpu.h>
 #include <variant>
+#include "serial/serialport.h"
 
 #include "uefi.h"
+#include "serial/serialtty.h"
 #include "uefistage/uefistage.h"
 
 //#define THREADING_TESTS // Master switch
@@ -508,7 +510,17 @@ extern "C" {
 
         b8000logger *b8000Logger = new b8000logger();
 
-        set_klogger(b8000Logger);
+        serialport *spcom_cons{nullptr};
+        auto primary_console = add_klogger(b8000Logger);
+        int secondary_console;
+
+        {
+            serialport spcom{0x3F8, 4};
+            if (spcom.probe()) {
+                spcom_cons = new serialport(std::move(spcom));
+                secondary_console = add_klogger(spcom_cons);
+            }
+        }
 
         std::vector<std::tuple<uint64_t,uint64_t>> reserved_mem{};
 
@@ -766,7 +778,7 @@ done_with_mem_extension:
                 std::shared_ptr<framebuffer_console> fb_cons{new framebuffer_console(*fb)};
                 kcons = std::shared_ptr<framebuffer_kconsole>(new framebuffer_kconsole(fb_cons));
                 fb_kcons_locked = new framebuffer_kconsole_spinlocked(kcons);
-                set_klogger(fb_kcons_locked);
+                replace_klogger(primary_console, fb_kcons_locked);
                 //get_klogger() << "Framebuffer at addr " << part->get_type8().framebuffer_addr << "\n";
             }
         }
@@ -1193,7 +1205,7 @@ done_with_mem_extension:
 #ifndef SYNC_FB_CONSOLE
         if (fb_kcons_locked != nullptr) {
             auto *fb_kcons_wthread = new framebuffer_kcons_with_worker_thread(kcons);
-            set_klogger(fb_kcons_wthread);
+            replace_klogger(primary_console, fb_kcons_wthread);
             delete fb_kcons_locked;
         }
 #endif
@@ -1376,12 +1388,19 @@ done_with_mem_extension:
         std::shared_ptr<kshell> shell{};
 
         {
-            std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state, reserved_mem, &shell]() {
+            std::thread pci_scan_thread{[&acpi_boot, &calib_timer, tss, int_task_state, reserved_mem, &shell, spcom_cons, secondary_console]() {
                 std::this_thread::set_name("[pciscan]");
                 acpi_boot.join();
 
                 apStartup = new ApStartup(gdt, tss, int_task_state, reserved_mem);
                 apStartup->Init(&calib_timer);
+
+                if (spcom_cons != nullptr) {
+                    auto *stty = new serialtty(spcom_cons);
+                    devices().add(*stty);
+                    stty->init();
+                    replace_klogger(secondary_console, stty);
+                }
 
                 detect_root_pcis();
                 if (acpi_boot.has_8042()) {

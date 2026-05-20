@@ -55,7 +55,8 @@ public:
     }
 };
 
-void set_klogger(KLogger *klogger);
+int add_klogger(KLogger *klogger);
+void replace_klogger(int h, KLogger *klogger);
 KLogger &get_klogger();
 
 extern "C" {
