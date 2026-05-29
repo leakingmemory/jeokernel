@@ -41,6 +41,8 @@ public:
     void print_at(uint8_t col, uint8_t row, const char *str) override;
     void erase(int backtrack, int erase) override;
     KLogger & operator << (const char *str) override;
+
+    bool has_input() const override;
 };
 
 

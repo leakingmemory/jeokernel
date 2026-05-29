@@ -1416,9 +1416,26 @@ done_with_mem_extension:
                     }
                 }
 
-                std::shared_ptr<tty> term = tty::Create();
-                shell = kshell::Create(term);
-                kshell_commands shellcmd{*shell};
+                {
+                    KLogger *vga{nullptr};
+                    auto kloggers = get_kloggers();
+                    {
+                        auto iterator = kloggers.begin();
+                        while (iterator != kloggers.end()) {
+                            if (!(*iterator)->has_input()) {
+                                vga = *iterator;
+                                kloggers.erase(iterator);
+                                break;
+                            }
+                            ++iterator;
+                        }
+                    }
+                    if (vga != nullptr) {
+                        std::shared_ptr<tty> term = tty::Create(std::make_shared<tty_output_klogger>(vga));
+                        shell = kshell::Create(term);
+                        kshell_commands shellcmd{*shell};
+                    }
+                }
             }};
             pci_scan_thread.detach();
         }

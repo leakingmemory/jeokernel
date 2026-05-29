@@ -9,12 +9,14 @@
 #include <vector>
 #include <string>
 
+class kshell;
+
 class kshell_argsparser {
 private:
     std::function<int (char)> params;
 public:
     kshell_argsparser(const std::function<int (char)> &params);
-    bool Parse(std::vector<const std::string>::iterator &iterator, const std::vector<const std::string>::iterator &iterator_end, const std::function<void (char, const std::vector<std::string> &params)> &option);
+    bool Parse(kshell &, std::vector<const std::string>::iterator &iterator, const std::vector<const std::string>::iterator &iterator_end, const std::function<void (char, const std::vector<std::string> &params)> &option);
 };
 
 

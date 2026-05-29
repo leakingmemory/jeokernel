@@ -17,6 +17,10 @@ namespace std {
     public:
         stdout() noexcept;
         ~stdout();
+        stdout(const stdout &) = delete;
+        stdout(stdout &&) = delete;
+        stdout & operator =(const stdout &) = delete;
+        stdout & operator =(stdout &&) = delete;
         stdout& write(const char* s, std::streamsize count) override;
     };
 

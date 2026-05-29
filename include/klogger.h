@@ -8,6 +8,9 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
+
+#include <vector>
+
 class KLogger {
 public:
     virtual ~KLogger() {}
@@ -53,10 +56,15 @@ public:
     KLogger & operator << (uint64_t num) {
         return print_u64(num);
     }
+
+    virtual bool has_input() const {
+        return false;
+    }
 };
 
 int add_klogger(KLogger *klogger);
 void replace_klogger(int h, KLogger *klogger);
+std::vector<KLogger *> get_kloggers();
 KLogger &get_klogger();
 
 extern "C" {

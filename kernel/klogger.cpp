@@ -6,6 +6,7 @@
 
 #include "mutex"
 #include "concurrency/hw_spinlock.h"
+#include <vector>
 
 struct KLoggerRecord {
     KLoggerRecord *next;
@@ -138,6 +139,43 @@ void replace_klogger(int h, KLogger *klogger) {
         }
         klr = klr->next;
     }
+}
+
+std::vector<KLogger *> get_kloggers() {
+    if (klrec_lock == nullptr) {
+        return {};
+    }
+    size_t sz{0};
+    {
+        std::lock_guard lock{*klrec_lock};
+        auto *klr = klrec;
+        while (klr != nullptr) {
+            ++sz;
+            klr = klr->next;
+        }
+    }
+    if (sz == 0) {
+        return {};
+    }
+    std::vector<KLogger *> vec{};
+    vec.resize(sz);
+    size_t i{0};
+    {
+        std::lock_guard lock{*klrec_lock};
+        auto *klr = klrec;
+        while (klr != nullptr) {
+            if (i >= sz) {
+                break;
+            }
+            vec[i] = klr->klogger;
+            ++i;
+            klr = klr->next;
+        }
+    }
+    if (i < sz) {
+        vec.resize(i);
+    }
+    return vec;
 }
 
 KLogger &get_klogger() {

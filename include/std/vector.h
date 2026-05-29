@@ -265,6 +265,21 @@ namespace std {
                 c._capacity = new_cap;
             }
         }
+        void resize(size_type sz) {
+            if (sz > capacity()) {
+                reserve(sz);
+            }
+            if (sz > c._size) {
+                for (size_type i = c._size; i < sz; ++i) {
+                    new (reinterpret_cast<void *>(&(c._data[i]))) T();
+                }
+                c._size = sz;
+            } else if (sz < c._size) {
+                for (size_type i = sz; i < c._size; ++i) {
+                    c._data[i].~vector_container_element<T>();
+                }
+            }
+        }
 
         constexpr void shrink_to_fit() {
             if (c._data != nullptr && c._size < c._capacity) {

@@ -161,3 +161,7 @@ KLogger & serialtty::operator << (const char *str) {
     write(str, len);
     return *this;
 }
+
+bool serialtty::has_input() const {
+    return true;
+}

@@ -16,11 +16,65 @@
 #include <kshell/kshell_commands.h>
 #include <prockshell/prockshell.h>
 
-tty::tty() : mtx(), self(), sema(-1), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
+tty_output_klogger::tty_output_klogger(KLogger *klogger) : klogger(klogger) {
 }
 
-std::shared_ptr<tty> tty::Create() {
-    std::shared_ptr<tty> inst{new tty()};
+int tty_output_klogger::write(const void *ptr, size_t len) {
+    if (len <= 0) {
+        return 0;
+    }
+    if (len > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        len = static_cast<size_t>(std::numeric_limits<int>::max());
+    }
+    const char *str = reinterpret_cast<const char *>(ptr);
+    size_t l = 0;
+    while (l < len) {
+        if (str[l] == '\0') {
+            break;
+        }
+        ++l;
+    }
+    if (l == 0) {
+        auto r = write(str + 1, len - 1);
+        if (r >= 0) {
+            return r + 1;
+        } else {
+            return 1;
+        }
+    }
+    if (l < len) {
+        *klogger << str;
+        auto r = write(str + l + 1, len - l - 1);
+        if (r >= 0) {
+            return r + static_cast<int>(l) + 1;
+        } else {
+            return static_cast<int>(l) + 1;
+        }
+    }
+    char buf[129];
+    size_t i = 0;
+    while (i < len) {
+        l = len - i;
+        if (l > 128) {
+            l = 128;
+        }
+        memcpy(buf, str + i, l);
+        buf[l] = '\0';
+        *klogger << buf;
+        i += l;
+    }
+    return static_cast<int>(len);
+}
+
+void tty_output_klogger::erase(int backtrack, int erase) {
+    klogger->erase(backtrack, erase);
+}
+
+tty::tty(const std::shared_ptr<tty_output> &output) : mtx(), self(), sema(-1), output(output), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
+}
+
+std::shared_ptr<tty> tty::Create(const std::shared_ptr<tty_output> &output) {
+    std::shared_ptr<tty> inst{new tty(output)};
     std::weak_ptr<tty> weak{inst};
     inst->self = weak;
     return inst;
@@ -176,7 +230,7 @@ bool tty::Consume(uint32_t keycode) {
     if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
         char ch[2] = {(char) codepage->Translate(keycode), 0};
         if ((ch[0] == 'c' || ch[0] == 'C') && (keycode & (KEYBOARD_CODE_BIT_LCONTROL | KEYBOARD_CODE_BIT_RCONTROL)) != 0) {
-            get_klogger() << "^C\n";
+            Write("^C\n", 3);
             if (pgrp > 0) {
                 auto *scheduler = get_scheduler();
                 auto processes = std::make_shared<std::vector<std::shared_ptr<Process>>>();
@@ -222,7 +276,7 @@ bool tty::Consume(uint32_t keycode) {
         std::lock_guard lock{mtx};
         if (lineedit) {
             if (ch[0] == '\n') {
-                get_klogger() << ch;
+                Write(&ch, 1);
                 linebuffer.append(ch, 1);
                 buffer.append(linebuffer);
                 linebuffer.resize(0);
@@ -230,15 +284,15 @@ bool tty::Consume(uint32_t keycode) {
             } else if (ch[0] == '\10') {
                 auto s = linebuffer.size();
                 if (s > 0) {
-                    get_klogger().erase(1, 1);
+                    Erase(1, 1);
                     linebuffer.resize(s - 1);
                 }
             } else {
-                get_klogger() << ch;
+                Write(&ch, 1);
                 linebuffer.append(ch, 1);
             }
         } else {
-            get_klogger() << ch;
+            Write(&ch, 1);
             buffer.append(ch, 1);
             sema.release();
         }
@@ -292,6 +346,14 @@ int tty::Read(void *ptr, int len) {
     memcpy(ptr, buffer.data(), len);
     buffer.erase(0, len);
     return len;
+}
+
+int tty::Write(const void *ptr, size_t len) {
+    return output->write(ptr, len);
+}
+
+void tty::Erase(int backtrack, int erase) {
+    output->erase(backtrack, erase);
 }
 
 void tty::SetPgrp(pid_t pgrp) {

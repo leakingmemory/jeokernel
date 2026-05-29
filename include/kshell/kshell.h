@@ -20,6 +20,8 @@ public:
     virtual void Exec(kshell &shell, const std::vector<std::string> &cmd) = 0;
 };
 
+class kshell_stream;
+
 class kshell : public referrer {
 private:
     std::mutex mtx{};
@@ -51,10 +53,14 @@ public:
     constexpr bool is_white(int ch) const {
         return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
     }
+    void Print(const char *str) const;
     std::vector<std::string> Parse(const std::string &cmd);
     void Exec(const std::vector<std::string> &cmd);
 
     void AddCommand(std::shared_ptr<kshell_command> command);
+
+    kshell_stream Out();
+    kshell_stream Err();
 
     void Exit() {
         exit = true;

@@ -38,7 +38,12 @@ namespace std {
 
     stdout::stdout() noexcept : std::basic_ostream<char, char_traits<char>>(), impl(nullptr) {}
 
-    stdout::~stdout() {}
+    stdout::~stdout() {
+        if (impl != nullptr) {
+            delete impl;
+            impl = nullptr;
+        }
+    }
 
     stdout &stdout::write(const char *s, std::streamsize count) {
         if (impl == nullptr) {

@@ -100,3 +100,7 @@ KLogger & serialport::operator << (const char *str) {
     }
     return *this;
 }
+
+bool serialport::has_input() const {
+    return true;
+}

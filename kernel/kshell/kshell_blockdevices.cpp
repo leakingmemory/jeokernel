@@ -6,8 +6,9 @@
 #include <core/blockdevsystem.h>
 #include <sstream>
 #include <blockdevs/blockdev.h>
+#include <tty/tty.h>
 
-void kshell_blockdevices::Exec(kshell &, const std::vector<std::string> &cmd) {
+void kshell_blockdevices::Exec(kshell &sh, const std::vector<std::string> &cmd) {
     auto &system = get_blockdevsystem();
     auto names = system.GetBlockdevices();
     std::stringstream str{};
@@ -17,5 +18,6 @@ void kshell_blockdevices::Exec(kshell &, const std::vector<std::string> &cmd) {
         auto blocksize = blockdev->GetBlocksize();
         str << name << ": " << blocks << " with blocksize " << blocksize << "\n";
     }
-    get_klogger() << str.str().c_str();
+    auto stdstr = str.str();
+    sh.Tty()->Write(stdstr.c_str(), stdstr.size());
 }

@@ -16,9 +16,9 @@ static void tab(std::stringstream &str, uint8_t characters) {
     str << padding;
 }
 
-void kshell_ps::Exec(kshell &, const std::vector<std::string> &cmd) {
+void kshell_ps::Exec(kshell &sh, const std::vector<std::string> &cmd) {
     auto tasks = get_scheduler()->get_task_infos();
-    get_klogger() << "PID     CPU   FLA PRI PTS NAME\n";
+    sh.Print("PID     CPU   FLA PRI PTS NAME\n");
     for (auto &task : tasks) {
         std::stringstream str{};
         str << task.bits.id;
@@ -35,6 +35,6 @@ void kshell_ps::Exec(kshell &, const std::vector<std::string> &cmd) {
         tab(str,4);
         str << task.name;
         str << "\n";
-        get_klogger() << str.str().c_str();
+        sh.Print(str.str().c_str());
     }
 }

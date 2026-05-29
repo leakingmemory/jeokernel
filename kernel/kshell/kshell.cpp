@@ -5,6 +5,8 @@
 #include <kshell/kshell.h>
 #include "keyboard/keyboard.h"
 #include "sstream"
+#include <tty/tty.h>
+#include "kshell_stream.h"
 
 kshell::kshell(const std::shared_ptr<class tty> &tty) : referrer("kshell"), tty(tty) {
 }
@@ -63,14 +65,14 @@ void kshell::run() {
     std::string input{};
     CwdRoot();
     while (!exit) {
-        std::shared_ptr<keyboard_line_consumer> consumer{new keyboard_line_consumer()};
-        get_klogger() << "# ";
+        std::shared_ptr<keyboard_line_consumer> consumer{new keyboard_line_consumer(tty->GetOutput())};
+        tty->Write("# ", 2);
         Keyboard().consume(consumer);
         keyboard_blocking_string *stringGetter = consumer->GetBlockingString();
         input.clear();
         {
             const std::string &keyboardString = stringGetter->GetString();
-            get_klogger() << "\n";
+            tty->Write("\n", 1);
             input.append(keyboardString);
         }
         std::vector<std::string> parsed{Parse(input)};
@@ -88,6 +90,11 @@ void kshell::run() {
     for (auto &func : exitFuncs) {
         func();
     }
+}
+
+void kshell::Print(const char *str) const {
+    auto len = strlen(str);
+    tty->Write(str, len);
 }
 
 std::vector<std::string> kshell::Parse(const std::string &cmd) {
@@ -179,4 +186,12 @@ void kshell::Exec(const std::vector<std::string> &cmd) {
 
 void kshell::AddCommand(std::shared_ptr<kshell_command> command) {
     commands.push_back(command);
+}
+
+kshell_stream kshell::Out() {
+    return {selfRef.lock()};
+}
+
+kshell_stream kshell::Err() {
+    return {selfRef.lock()};
 }

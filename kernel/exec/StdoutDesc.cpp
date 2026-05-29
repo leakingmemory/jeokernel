@@ -54,9 +54,18 @@ resolve_return_value StdoutDesc::read(std::shared_ptr<callctx> ctx, void *ptr, i
 
 intptr_t StdoutDesc::write(const void *ptr, intptr_t len) {
     if (len > 0) {
-        std::string str{(const char *) ptr, (std::size_t) len};
-        get_klogger() << str.c_str();
-        return len;
+        auto *scheduler = get_scheduler();
+        task *current_task = &(scheduler->get_current_task());
+        auto *process = scheduler->get_resource<ProcThread>(*current_task);
+        if (process == nullptr) {
+            return -EOPNOTSUPP;
+        }
+        const auto tty = process->GetProcess()->GetTty();
+        if (tty) {
+            return tty->Write(ptr, len);
+        } else {
+            return -EOPNOTSUPP;
+        }
     }
     return 0;
 }

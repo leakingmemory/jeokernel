@@ -4,6 +4,9 @@
 
 #include <iostream>
 #include "kshell_argsparser.h"
+#include "kshell_stream.h"
+#include <kshell/kshell.h>
+
 
 kshell_argsparser::kshell_argsparser(const std::function<int(char)> &params) : params(params){
 }
@@ -14,8 +17,9 @@ struct kshell_argparser_consume {
     char opt;
 };
 
-bool kshell_argsparser::Parse(std::vector<const std::string>::iterator &iterator, const std::vector<const std::string>::iterator &iterator_end,
+bool kshell_argsparser::Parse(kshell &sh, std::vector<const std::string>::iterator &iterator, const std::vector<const std::string>::iterator &iterator_end,
                               const std::function<void(char, const std::vector<std::string> &)> &f_option) {
+    auto cerr = sh.Err();
     std::function<void (char, const std::vector<std::string> &params)> option{f_option};
     std::vector<kshell_argparser_consume> opts;
     while (iterator != iterator_end) {
@@ -34,7 +38,7 @@ bool kshell_argsparser::Parse(std::vector<const std::string>::iterator &iterator
                     } else if (num > 0) {
                         opts.push_back({.params = {}, .remaining = num, .opt = ch});
                     } else {
-                        std::cerr << "Error at param " << *iterator << "\n";
+                        cerr << "Error at param " << *iterator << "\n";
                         return false;
                     }
                 }

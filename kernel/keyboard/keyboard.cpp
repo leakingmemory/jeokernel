@@ -4,6 +4,7 @@
 #include "concurrency/critical_section.h"
 #include "mutex"
 #include "keyboard/keyboard_en.h"
+#include <tty/tty.h>
 
 //#define KEYBOARD_DUMP_ALL_CODES
 
@@ -571,7 +572,7 @@ bool keyboard_line_consumer::Consume(uint32_t keycode) {
         if (specificKeycode == KEYBOARD_CODE_BACKSPACE) {
             if (str.size() > 0) {
                 str.resize(str.size() - 1);
-                get_klogger().erase(1, 1);
+                output->erase(1, 1);
             }
         } else {
             char ch[2] = {(char) this->codepage->Translate(keycode), 0};
@@ -580,7 +581,7 @@ bool keyboard_line_consumer::Consume(uint32_t keycode) {
                 return false;
             } else if (ch[0] != 0) {
                 str.append(ch, 1);
-                get_klogger() << ch;
+                output->write(&ch, 1);
             }
         }
     }

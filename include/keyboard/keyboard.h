@@ -93,14 +93,17 @@ public:
     }
 };
 
+class tty_output;
+
 class keyboard_line_consumer : public keycode_consumer, private keyboard_blocking_string {
 private:
     raw_semaphore sema;
+    std::shared_ptr<tty_output> output;
     std::shared_ptr<keyboard_codepage> codepage;
     std::string str;
 public:
-    explicit keyboard_line_consumer(std::shared_ptr<keyboard_codepage> codepage) : keyboard_blocking_string(), sema(-1), codepage(codepage), str() {}
-    keyboard_line_consumer() : keyboard_line_consumer(KeyboardCodepage()) {}
+    explicit keyboard_line_consumer(const std::shared_ptr<tty_output> &output, const std::shared_ptr<keyboard_codepage> &codepage) : keyboard_blocking_string(), sema(-1), output(output), codepage(codepage), str() {}
+    explicit keyboard_line_consumer(const std::shared_ptr<tty_output> &output) : keyboard_line_consumer(output, KeyboardCodepage()) {}
     bool Consume(uint32_t keycode) override;
     keyboard_blocking_string *GetBlockingString() override {
         return keyboard_blocking_string::GetBlockingString();

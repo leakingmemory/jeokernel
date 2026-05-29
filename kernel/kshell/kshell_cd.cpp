@@ -6,6 +6,7 @@
 #include "kshell_cd.h"
 #include <resource/referrer.h>
 #include <resource/reference.h>
+#include "kshell_stream.h"
 
 class kshell_cd_exec : public referrer {
 private:
@@ -33,6 +34,7 @@ std::string kshell_cd_exec::GetReferrerIdentifier() {
 }
 
 void kshell_cd_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
+    auto cerr = shell.Err();
     auto &cwd = shell.Cwd();
     auto iterator = cmd.begin();
     if (iterator != cmd.end()) {
@@ -46,7 +48,7 @@ void kshell_cd_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
     std::string dir = *iterator;
     ++iterator;
     if (iterator != cmd.end()) {
-        std::cerr << "cd: Too many arguments\n";
+        cerr << "cd: Too many arguments\n";
         return;
     }
     std::shared_ptr<class referrer> selfRef = this->selfRef.lock();
@@ -62,16 +64,16 @@ void kshell_cd_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
         newDirRes = cwd.Resolve(&(*rootdir), selfRef, dir);
     }
     if (newDirRes.status != kfile_status::SUCCESS) {
-        std::cerr << "Error: " << text(newDirRes.status) << "\n";
+        cerr << "Error: " << text(newDirRes.status) << "\n";
         return;
     }
     auto newDir = std::move(newDirRes.result);
     if (!newDir) {
-        std::cerr << "cd: Not found\n";
+        cerr << "cd: Not found\n";
         return;
     }
     if (dynamic_cast<kdirectory *>(&(*newDir)) == nullptr) {
-        std::cerr << "cd: Not a directory\n";
+        cerr << "cd: Not a directory\n";
         return;
     }
     shell.Cwd(newDir);

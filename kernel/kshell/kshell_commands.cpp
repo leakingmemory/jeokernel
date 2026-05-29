@@ -15,6 +15,8 @@
 #include "kshell_exec.h"
 #include "kshell_umount.h"
 #include <acpi/acpica_interface.h>
+#include <tty/tty.h>
+#include "kshell_stream.h"
 
 class kshell_echo : public kshell_command {
 private:
@@ -24,7 +26,7 @@ public:
     const std::string &Command() const override {
         return command;
     }
-    void Exec(kshell &, const std::vector<std::string> &cmd) override {
+    void Exec(kshell &shell, const std::vector<std::string> &cmd) override {
         auto iterator = cmd.cbegin();
         if (iterator == cmd.cend()) {
             get_klogger() << "\n";
@@ -41,7 +43,8 @@ public:
             }
         }
         str << "\n";
-        get_klogger() << str.str().c_str();
+        auto stdstr = str.str();
+        shell.Tty()->Write(stdstr.c_str(), stdstr.size());
     }
 };
 
@@ -81,7 +84,8 @@ public:
     }
     void Exec(kshell &shell, const std::vector<std::string> &cmd) override {
         auto &cwd = shell.Cwd();
-        std::cout << cwd.Kpath() << "\n";
+        auto cout = shell.Out();
+        cout << cwd.Kpath() << "\n";
     }
 };
 

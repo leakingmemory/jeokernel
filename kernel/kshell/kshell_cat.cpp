@@ -6,6 +6,7 @@
 #include "kshell_cat.h"
 #include <resource/referrer.h>
 #include <resource/reference.h>
+#include "kshell_stream.h"
 
 class kshell_cat_exec : public referrer {
 private:
@@ -34,6 +35,8 @@ std::string kshell_cat_exec::GetReferrerIdentifier() {
 }
 
 void kshell_cat_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
+    auto cout = shell.Out();
+    auto cerr = shell.Err();
     std::shared_ptr<kdirectory> dir_ref{};
     kdirectory *dir = &(shell.Cwd());
     auto iterator = cmd.begin();
@@ -57,7 +60,7 @@ void kshell_cat_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             if (!resname.empty()) {
                 auto resolveResult = rootdir->Resolve(&(*rootdir), selfRef, resname);
                 if (resolveResult.status != kfile_status::SUCCESS) {
-                    std::cerr << "Error: " << text(resolveResult.status) << "\n";
+                    cerr << "Error: " << text(resolveResult.status) << "\n";
                     return;
                 }
                 litem = std::move(resolveResult.result);
@@ -66,14 +69,14 @@ void kshell_cat_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
             }
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {
-                std::cerr << "cat: is a directory: " << filename << "\n";
+                cerr << "cat: is a directory: " << filename << "\n";
             } else {
                 uint64_t offset{0};
                 while (true) {
                     auto readResult = litem->Read(offset, &(buf[0]), sizeof(buf));
                     auto rd = readResult.result;
                     if (rd == 0 && readResult.status != kfile_status::SUCCESS) {
-                        std::cerr << "Error: " << text(readResult.status) << "\n";
+                        cerr << "Error: " << text(readResult.status) << "\n";
                         return;
                     }
                     if (rd == 0) {
@@ -82,26 +85,26 @@ void kshell_cat_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                     offset += rd;
                     output.clear();
                     output.append((char *) &(buf[0]), rd);
-                    std::cout << output;
+                    cout << output;
                 }
             }
         } else {
             auto resolveResult = dir->Resolve(&(*rootdir), selfRef, filename);
             if (resolveResult.status != kfile_status::SUCCESS) {
-                std::cerr << "Error: " << text(resolveResult.status) << "\n";
+                cerr << "Error: " << text(resolveResult.status) << "\n";
                 return;
             }
             reference<kfile> litem = std::move(resolveResult.result);
             kdirectory *ldir = dynamic_cast<kdirectory *> (&(*litem));
             if (ldir != nullptr) {
-                std::cerr << "cat: is a directory: " << filename << "\n";
+                cerr << "cat: is a directory: " << filename << "\n";
             } else {
                 uint64_t offset{0};
                 while (true) {
                     auto readResult = litem->Read(offset, &(buf[0]), sizeof(buf));
                     auto rd = readResult.result;
                     if (rd == 0 && readResult.status != kfile_status::SUCCESS) {
-                        std::cerr << "Error: " << text(readResult.status) << "\n";
+                        cerr << "Error: " << text(readResult.status) << "\n";
                         return;
                     }
                     if (rd == 0) {
@@ -110,7 +113,7 @@ void kshell_cat_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) {
                     offset += rd;
                     output.clear();
                     output.append((char *) &(buf[0]), rd);
-                    std::cout << output;
+                    cout << output;
                 }
             }
         }

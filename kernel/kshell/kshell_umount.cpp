@@ -6,7 +6,7 @@
 #include <kfs/blockdev_writer.h>
 #include <resource/referrer.h>
 #include <resource/reference.h>
-#include <iostream>
+#include "kshell_stream.h"
 
 class kshell_umount_exec : public referrer {
 private:
@@ -34,6 +34,7 @@ std::string kshell_umount_exec::GetReferrerIdentifier() {
 }
 
 void kshell_umount_exec::Exec(kshell &sh, const std::string &mountpoint_orig) {
+    auto cerr = sh.Err();
     std::string mountpoint{mountpoint_orig};
     reference<kfile> mountfile{};
     auto rootdir = get_kernel_rootdir();
@@ -48,50 +49,51 @@ void kshell_umount_exec::Exec(kshell &sh, const std::string &mountpoint_orig) {
     } else {
         mountfile = sh.CwdRef(selfRef);
         if (mountpoint.empty()) {
-            std::cerr << "Mountpoint not found " << mountpoint_orig << "\n";
+            cerr << "Mountpoint not found " << mountpoint_orig << "\n";
             return;
         }
     }
     if (!mountpoint.empty()) {
         kdirectory *dir = dynamic_cast<kdirectory *> (&(*mountfile));
         if (dir == nullptr) {
-            std::cerr << "Mountpoint not found " << mountpoint_orig << "\n";
+            cerr << "Mountpoint not found " << mountpoint_orig << "\n";
             return;
         }
         auto resolveResult = dir->Resolve(&(*rootdir), selfRef, mountpoint);
         if (resolveResult.status != kfile_status::SUCCESS) {
-            std::cerr << "Error: " << text(resolveResult.status) << "\n";
+            cerr << "Error: " << text(resolveResult.status) << "\n";
             return;
         }
         mountfile = std::move(resolveResult.result);
         if (!mountfile) {
-            std::cerr << "Mountpoint not found " << mountpoint_orig << "\n";
+            cerr << "Mountpoint not found " << mountpoint_orig << "\n";
             return;
         }
     }
 
     kdirectory *dir = dynamic_cast<kdirectory *> (&(*mountfile));
     if (dir == nullptr) {
-        std::cerr << "Mountpoint not found " << mountpoint_orig << ": Not a directory\n";
+        cerr << "Mountpoint not found " << mountpoint_orig << ": Not a directory\n";
         return;
     }
 
     auto fs = dir->Unmount();
 
     if (!fs) {
-        std::cerr << mountpoint_orig << ": Not mounted\n";
+        cerr << mountpoint_orig << ": Not mounted\n";
     }
 
     blockdev_writer::GetInstance().CloseForWrite(fs);
 }
 
 void kshell_umount::Exec(kshell &sh, const std::vector<std::string> &cmd) {
+    auto cerr = sh.Err();
     auto iterator = cmd.begin();
     if (iterator != cmd.end()) {
         ++iterator;
     }
     if (iterator == cmd.end()) {
-        std::cerr << "Expected device to unmount\n";
+        cerr << "Expected device to unmount\n";
         return;
     }
 
@@ -99,7 +101,7 @@ void kshell_umount::Exec(kshell &sh, const std::vector<std::string> &cmd) {
     ++iterator;
 
     if (iterator != cmd.end()) {
-        std::cerr << "Unexpected arguments to unmount\n";
+        cerr << "Unexpected arguments to unmount\n";
         return;
     }
 
