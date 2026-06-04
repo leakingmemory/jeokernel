@@ -70,11 +70,11 @@ void tty_output_klogger::erase(int backtrack, int erase) {
     klogger->erase(backtrack, erase);
 }
 
-tty::tty(const std::shared_ptr<tty_output> &output) : mtx(), self(), sema(-1), output(output), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
+tty::tty(const std::shared_ptr<tty_output> &output, std::unique_ptr<keyboard_source_interface> &&input) : mtx(), self(), sema(-1), input(std::move(input)), output(output), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
 }
 
-std::shared_ptr<tty> tty::Create(const std::shared_ptr<tty_output> &output) {
-    std::shared_ptr<tty> inst{new tty(output)};
+std::shared_ptr<tty> tty::Create(const std::shared_ptr<tty_output> &output, std::unique_ptr<keyboard_source_interface> &&input) {
+    std::shared_ptr<tty> inst{new tty(output, std::move(input))};
     std::weak_ptr<tty> weak{inst};
     inst->self = weak;
     return inst;
@@ -265,7 +265,7 @@ bool tty::Consume(uint32_t keycode) {
             return true;
         } else if ((ch[0] == 's' || ch[0] == 'S') && (keycode & (KEYBOARD_CODE_BIT_LCONTROL | KEYBOARD_CODE_BIT_RCONTROL)) != 0 && (keycode & KEYBOARD_CODE_BIT_LALT) != 0) {
             std::shared_ptr<tty> ref = self.lock();
-            std::shared_ptr<kshell> shell = kshell::Create(ref);
+            std::shared_ptr<kshell> shell = kshell::Create(ref, std::move(input->clone()));
             shell->OnExit([ref] () {
                 Keyboard().consume(ref);
             });

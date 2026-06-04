@@ -11,6 +11,8 @@
 
 #include <vector>
 
+class keyboard_source_interface;
+
 class KLogger {
 public:
     virtual ~KLogger() {}
@@ -57,6 +59,9 @@ public:
         return print_u64(num);
     }
 
+    virtual std::unique_ptr<keyboard_source_interface> get_keyboard_source() {
+        return {};
+    }
     virtual bool has_input() const {
         return false;
     }

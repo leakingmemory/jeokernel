@@ -1396,10 +1396,11 @@ done_with_mem_extension:
                 apStartup->Init(&calib_timer);
 
                 if (spcom_cons != nullptr) {
-                    auto *stty = new serialtty(spcom_cons);
-                    devices().add(*stty);
-                    stty->init();
-                    replace_klogger(secondary_console, stty);
+                    auto stty = serialtty::Create(spcom_cons);
+                    auto *stty_dev = new serialtty_device(stty);
+                    devices().add(*stty_dev);
+                    stty_dev->init();
+                    replace_klogger(secondary_console, new serialtty_klogger(stty));
                 }
 
                 detect_root_pcis();
@@ -1422,7 +1423,12 @@ done_with_mem_extension:
                     {
                         auto iterator = kloggers.begin();
                         while (iterator != kloggers.end()) {
-                            if (!(*iterator)->has_input()) {
+                            if ((*iterator)->has_input()) {
+                                std::unique_ptr<keyboard_source_interface> source = (*iterator)->get_keyboard_source();
+                                std::shared_ptr<tty> term = tty::Create(std::make_shared<tty_output_klogger>(*iterator), std::move(source->clone()));
+                                shell = kshell::Create(term, std::move(source));
+                                kshell_commands shellcmd{*shell};
+                            } else {
                                 vga = *iterator;
                                 kloggers.erase(iterator);
                                 break;
@@ -1431,8 +1437,9 @@ done_with_mem_extension:
                         }
                     }
                     if (vga != nullptr) {
-                        std::shared_ptr<tty> term = tty::Create(std::make_shared<tty_output_klogger>(vga));
-                        shell = kshell::Create(term);
+                        std::unique_ptr<keyboard_source_interface> source{new keyboard_source_interface_impl(&(Keyboard()))};
+                        std::shared_ptr<tty> term = tty::Create(std::make_shared<tty_output_klogger>(vga), std::move(source->clone()));
+                        shell = kshell::Create(term, std::move(source));
                         kshell_commands shellcmd{*shell};
                     }
                 }

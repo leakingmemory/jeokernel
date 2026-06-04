@@ -7,6 +7,7 @@
 
 #include "thread"
 #include "string"
+#include "keyboard/keyboard.h"
 #include "kfs/kfiles.h"
 #include "resource/reference.h"
 #include "resource/referrer.h"
@@ -26,6 +27,7 @@ class kshell : public referrer {
 private:
     std::mutex mtx{};
     std::weak_ptr<kshell> selfRef{};
+    std::unique_ptr<keyboard_source_interface> source;
     std::vector<std::shared_ptr<kshell_command>> commands{};
     std::vector<std::function<void ()>> exitFuncs{};
     reference<kfile> cwd_ref{};
@@ -34,10 +36,10 @@ private:
     std::thread shell{};
     bool exit{false};
 private:
-    explicit kshell(const std::shared_ptr<class tty> &tty);
+    kshell(const std::shared_ptr<class tty> &tty, std::unique_ptr<keyboard_source_interface> &&source);
 public:
     void Init(const std::shared_ptr<kshell> &selfRef);
-    static std::shared_ptr<kshell> Create(const std::shared_ptr<class tty> &tty);
+    static std::shared_ptr<kshell> Create(const std::shared_ptr<class tty> &tty, std::unique_ptr<keyboard_source_interface> &&source);
     std::string GetReferrerIdentifier() override;
     ~kshell();
     void OnExit(const std::function<void ()> &);

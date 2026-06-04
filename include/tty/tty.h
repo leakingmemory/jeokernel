@@ -39,6 +39,7 @@ private:
     hw_spinlock mtx;
     std::weak_ptr<tty> self;
     raw_semaphore sema;
+    std::unique_ptr<keyboard_source_interface> input;
     std::shared_ptr<tty_output> output;
     std::thread thr;
     std::shared_ptr<keyboard_codepage> codepage;
@@ -51,9 +52,9 @@ private:
     bool signals;
     bool stop;
 private:
-    tty(const std::shared_ptr<tty_output> &output);
+    tty(const std::shared_ptr<tty_output> &output, std::unique_ptr<keyboard_source_interface> &&input);
 public:
-    static std::shared_ptr<tty> Create(const std::shared_ptr<tty_output> &output);
+    static std::shared_ptr<tty> Create(const std::shared_ptr<tty_output> &output, std::unique_ptr<keyboard_source_interface> &&input);
     void thread();
     ~tty();
     std::shared_ptr<tty_output> GetOutput() const {

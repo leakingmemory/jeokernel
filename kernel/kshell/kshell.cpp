@@ -8,7 +8,7 @@
 #include <tty/tty.h>
 #include "kshell_stream.h"
 
-kshell::kshell(const std::shared_ptr<class tty> &tty) : referrer("kshell"), tty(tty) {
+kshell::kshell(const std::shared_ptr<class tty> &tty, std::unique_ptr<keyboard_source_interface> &&source) : source(std::move(source)), referrer("kshell"), tty(tty) {
 }
 
 void kshell::Init(const std::shared_ptr<kshell> &selfRefIn) {
@@ -22,8 +22,8 @@ void kshell::Init(const std::shared_ptr<kshell> &selfRefIn) {
     this->shell = std::move(shell);
 }
 
-std::shared_ptr<kshell> kshell::Create(const std::shared_ptr<class tty> &tty) {
-    std::shared_ptr<kshell> shell{new kshell(tty)};
+std::shared_ptr<kshell> kshell::Create(const std::shared_ptr<class tty> &tty, std::unique_ptr<keyboard_source_interface> &&source) {
+    std::shared_ptr<kshell> shell{new kshell(tty, std::move(source))};
     shell->Init(shell);
     return shell;
 }
@@ -67,7 +67,7 @@ void kshell::run() {
     while (!exit) {
         std::shared_ptr<keyboard_line_consumer> consumer{new keyboard_line_consumer(tty->GetOutput())};
         tty->Write("# ", 2);
-        Keyboard().consume(consumer);
+        source->consume(consumer);
         keyboard_blocking_string *stringGetter = consumer->GetBlockingString();
         input.clear();
         {

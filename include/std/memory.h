@@ -59,6 +59,9 @@ namespace std {
         }
         explicit unique_ptr(pointer ptr) noexcept : ptr(ptr) {
         }
+        constexpr unique_ptr(unique_ptr &&mv) noexcept : ptr(mv.ptr) {
+            mv.ptr = nullptr;
+        }
 
         ~unique_ptr() {
             if (ptr != nullptr) {

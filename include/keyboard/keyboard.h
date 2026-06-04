@@ -33,6 +33,7 @@
 #include "vector"
 #include "string"
 #include "concurrency/raw_semaphore.h"
+#include <concepts>
 
 class keyboard_type2_state_machine {
 private:
@@ -69,6 +70,48 @@ public:
     virtual bool Consume(uint32_t keycode) = 0;
 };
 
+template <class keyboard_source> concept keyboard_source_type = requires(keyboard_source source) {
+    { keyboard_source(static_cast<const keyboard_source &>(source)) } -> std::same_as<keyboard_source>;
+    { source->consume(std::declval<const std::shared_ptr<keycode_consumer> &>()) };
+    { source->unconsume(std::declval<const std::shared_ptr<keycode_consumer> &>()) };
+};
+
+template <class keyboard_source> struct is_keyboard_source_type {
+    static constexpr bool value = false;
+};
+
+class keyboard_source_interface {
+public:
+    virtual std::unique_ptr<keyboard_source_interface> clone() = 0;
+    virtual void consume(const std::shared_ptr<keycode_consumer> &consumer) = 0;
+    virtual void unconsume(const std::shared_ptr<keycode_consumer> &consumer) = 0;
+    virtual ~keyboard_source_interface() = default;
+};
+
+template <keyboard_source_type T> class keyboard_source_interface_impl : public keyboard_source_interface {
+private:
+    T source;
+public:
+    constexpr keyboard_source_interface_impl(const T &source) : source(source) {}
+    std::unique_ptr<keyboard_source_interface> clone() override {
+        std::unique_ptr<keyboard_source_interface> impl{static_cast<keyboard_source_interface *>(new keyboard_source_interface_impl(source))};
+        return impl;
+    }
+    void consume(const std::shared_ptr<keycode_consumer> &consumer) override {
+        source->consume(consumer);
+    }
+    void unconsume(const std::shared_ptr<keycode_consumer> &consumer) override {
+        source->unconsume(consumer);
+    }
+};
+
+template <class keyboard_source> requires (keyboard_source_type<keyboard_source>) struct is_keyboard_source_type<keyboard_source> {
+    static constexpr bool value = true;
+};
+
+static_assert(!is_keyboard_source_type<void *>::value);
+static_assert(!is_keyboard_source_type<keycode_consumer *>::value);
+
 class keyboard {
 private:
     hw_spinlock lock;
@@ -80,6 +123,9 @@ public:
     void consume(std::shared_ptr<keycode_consumer> consumer);
     void unconsume(std::shared_ptr<keycode_consumer> consumer);
 };
+
+static_assert(is_keyboard_source_type<keyboard *>::value);
+static_assert(is_keyboard_source_type<std::shared_ptr<keyboard>>::value);
 
 keyboard &Keyboard();
 void KeyboardCodepage(std::shared_ptr<keyboard_codepage> codepage);
