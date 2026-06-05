@@ -83,7 +83,24 @@ void serialtty_input_thread::run(std::shared_ptr<serialtty_input_thread> &&stty_
         }
         for (const char ch : buf) {
             if (consumer) {
-                consumer->Consume(ch);
+                if (consumer->IsRawModeSupported()) {
+                    auto continueSending = consumer->Consume(KEYCODE_CONSUMER_RAW_MODE, ch);
+                    if (!continueSending) {
+                        std::lock_guard lock{stty->mtx};
+                        if (stty->consumer == consumer) {
+                            stty->consumer = {};
+                        }
+                        consumer = stty->consumer;
+                        if (!consumer) {
+                            auto iterator = stty->consumers.begin();
+                            if (iterator != stty->consumers.end()) {
+                                stty->consumer = *iterator;
+                                stty->consumers.erase(iterator);
+                                consumer = stty->consumer;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -276,6 +293,29 @@ uint32_t serialtty::GetHeight() {
 void serialtty::print_at(uint8_t col, uint8_t row, const char *str) {
 }
 void serialtty::erase(int backtrack, int erase) {
+    std::string str{};
+    if (backtrack < erase) {
+        str.reserve(backtrack + (erase * 2) + 1);
+        for (int i = 0; i < backtrack; ++i) {
+            str.append("\10 \10");
+        }
+        std::string sp{};
+        sp.reserve((erase - backtrack ) * 2 + 1);
+        for (int i = 0; i < (erase - backtrack); ++i) {
+            str.append("\10");
+            sp.append(" ");
+        }
+        str.append(sp);
+    } else {
+        str.reserve((erase * 2) + backtrack + 1);
+        for (int i = 0; i < erase; ++i) {
+            str.append("\10 \10");
+        }
+        for (int i = 0; i < (backtrack - erase); ++i) {
+            str.append("\10");
+        }
+    }
+    write(str.c_str(), str.size());
 }
 serialtty & serialtty::operator << (const char *str) {
     auto len = strlen(str);

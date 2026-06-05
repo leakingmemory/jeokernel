@@ -61,7 +61,7 @@ public:
         return output;
     }
     intptr_t ioctl(callctx &ctx, intptr_t cmd, intptr_t arg);
-    bool Consume(uint32_t keycode) override;
+    bool Consume(keycode_consumer_mode mode, uint32_t keycode) override;
     bool HasInput();
     void Subscribe(std::shared_ptr<FileDescriptorHandler> handler);
     void Unsubscribe(FileDescriptorHandler *handler);

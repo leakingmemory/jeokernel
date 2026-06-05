@@ -536,8 +536,8 @@ void keyboard::keycode(uint32_t code) {
             consumers.erase(iterator);
         }
     }
-    if (consumer) {
-        if (!consumer->Consume(code)) {
+    if (consumer && consumer->IsJeokernelModeSupported()) {
+        if (!consumer->Consume(KEYCODE_CONSUMER_JEOKERNEL_MODE, code)) {
             consumer = nullptr;
         }
     }
@@ -566,23 +566,37 @@ void keyboard::unconsume(std::shared_ptr<keycode_consumer> consumer) {
     }
 }
 
-bool keyboard_line_consumer::Consume(uint32_t keycode) {
-    if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
-        uint32_t specificKeycode = keycode & KEYBOARD_CODE_MASK;
-        if (specificKeycode == KEYBOARD_CODE_BACKSPACE) {
-            if (str.size() > 0) {
-                str.resize(str.size() - 1);
-                output->erase(1, 1);
+bool keyboard_line_consumer::Consume(keycode_consumer_mode mode, uint32_t keycode) {
+    if (mode == keycode_consumer_mode::KEYCODE_CONSUMER_JEOKERNEL_MODE) {
+        if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
+            uint32_t specificKeycode = keycode & KEYBOARD_CODE_MASK;
+            if (specificKeycode == KEYBOARD_CODE_BACKSPACE) {
+                if (str.size() > 0) {
+                    str.resize(str.size() - 1);
+                    output->erase(1, 1);
+                }
+            } else {
+                char ch[2] = {(char) this->codepage->Translate(keycode), 0};
+                if (ch[0] == '\n') {
+                    sema.release();
+                    return false;
+                } else if (ch[0] != 0) {
+                    str.append(ch, 1);
+                    output->write(&ch, 1);
+                }
             }
-        } else {
-            char ch[2] = {(char) this->codepage->Translate(keycode), 0};
-            if (ch[0] == '\n') {
-                sema.release();
-                return false;
-            } else if (ch[0] != 0) {
-                str.append(ch, 1);
-                output->write(&ch, 1);
-            }
+        }
+    } else {
+        char ch[2] = {static_cast<char>(keycode), 0};
+        if (ch[0] == '\r') {
+            sema.release();
+            return false;
+        } else if (ch[0] == '\x7F') {
+            str.resize(str.size() - 1);
+            output->erase(1, 1);
+        } else if (ch[0] != 0) {
+            str.append(ch, 1);
+            output->write(&ch, 1);
         }
     }
     return true;

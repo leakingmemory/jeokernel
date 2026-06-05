@@ -64,10 +64,24 @@ public:
     virtual uint32_t Translate(uint32_t keycode) = 0;
 };
 
+enum keycode_consumer_mode {
+    KEYCODE_CONSUMER_JEOKERNEL_MODE,
+    KEYCODE_CONSUMER_RAW_MODE
+};
+
 class keycode_consumer {
+private:
+    bool rawModeSupported;
 public:
+    constexpr keycode_consumer(bool rawModeSupported) : rawModeSupported(rawModeSupported) {}
     virtual ~keycode_consumer() = default;
-    virtual bool Consume(uint32_t keycode) = 0;
+    constexpr static bool IsJeokernelModeSupported() {
+        return true;
+    }
+    constexpr bool IsRawModeSupported() const {
+        return rawModeSupported;
+    }
+    virtual bool Consume(keycode_consumer_mode mode, uint32_t keycode) = 0;
 };
 
 template <class keyboard_source> concept keyboard_source_type = requires(keyboard_source source) {
@@ -148,9 +162,9 @@ private:
     std::shared_ptr<keyboard_codepage> codepage;
     std::string str;
 public:
-    explicit keyboard_line_consumer(const std::shared_ptr<tty_output> &output, const std::shared_ptr<keyboard_codepage> &codepage) : keyboard_blocking_string(), sema(-1), output(output), codepage(codepage), str() {}
+    explicit keyboard_line_consumer(const std::shared_ptr<tty_output> &output, const std::shared_ptr<keyboard_codepage> &codepage) : keycode_consumer(true), keyboard_blocking_string(), sema(-1), output(output), codepage(codepage), str() {}
     explicit keyboard_line_consumer(const std::shared_ptr<tty_output> &output) : keyboard_line_consumer(output, KeyboardCodepage()) {}
-    bool Consume(uint32_t keycode) override;
+    bool Consume(keycode_consumer_mode mode, uint32_t keycode) override;
     keyboard_blocking_string *GetBlockingString() override {
         return keyboard_blocking_string::GetBlockingString();
     }

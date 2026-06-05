@@ -70,7 +70,7 @@ void tty_output_klogger::erase(int backtrack, int erase) {
     klogger->erase(backtrack, erase);
 }
 
-tty::tty(const std::shared_ptr<tty_output> &output, std::unique_ptr<keyboard_source_interface> &&input) : mtx(), self(), sema(-1), input(std::move(input)), output(output), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
+tty::tty(const std::shared_ptr<tty_output> &output, std::unique_ptr<keyboard_source_interface> &&input) : keycode_consumer(true), mtx(), self(), sema(-1), input(std::move(input)), output(output), thr([this] () {thread();}), codepage(KeyboardCodepage()), buffer(), linebuffer(), subscribers(), pgrp(0), hasPgrp(false), lineedit(true), signals(false), stop(false) {
 }
 
 std::shared_ptr<tty> tty::Create(const std::shared_ptr<tty_output> &output, std::unique_ptr<keyboard_source_interface> &&input) {
@@ -226,56 +226,83 @@ intptr_t tty::ioctl(callctx &ctx, intptr_t cmd, intptr_t arg) {
     return -EOPNOTSUPP;
 }
 
-bool tty::Consume(uint32_t keycode) {
-    if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
-        char ch[2] = {(char) codepage->Translate(keycode), 0};
-        if ((ch[0] == 'c' || ch[0] == 'C') && (keycode & (KEYBOARD_CODE_BIT_LCONTROL | KEYBOARD_CODE_BIT_RCONTROL)) != 0) {
-            Write("^C\n", 3);
-            if (pgrp > 0) {
-                auto *scheduler = get_scheduler();
-                auto processes = std::make_shared<std::vector<std::shared_ptr<Process>>>();
-                auto pids = std::make_shared<std::vector<pid_t>>();
-                scheduler->all_tasks([pids, processes] (task &t) {
-                    auto *procthread = t.get_resource<ProcThread>();
-                    if (procthread == nullptr) {
-                        return;
-                    }
-                    auto process = procthread->GetProcess();
-                    auto pid = process->getpid();
-                    bool found{false};
-                    for (const auto fpid : *pids) {
-                        if (pid == fpid) {
-                            found = true;
-                            break;
+bool tty::Consume(keycode_consumer_mode mode, uint32_t keycode) {
+    if (mode == keycode_consumer_mode::KEYCODE_CONSUMER_JEOKERNEL_MODE) {
+        if ((keycode & KEYBOARD_CODE_BIT_RELEASE) == 0) {
+            char ch[2] = {(char) codepage->Translate(keycode), 0};
+            if ((ch[0] == 'c' || ch[0] == 'C') && (keycode & (KEYBOARD_CODE_BIT_LCONTROL | KEYBOARD_CODE_BIT_RCONTROL)) != 0) {
+                Write("^C\n", 3);
+                if (pgrp > 0) {
+                    auto *scheduler = get_scheduler();
+                    auto processes = std::make_shared<std::vector<std::shared_ptr<Process>>>();
+                    auto pids = std::make_shared<std::vector<pid_t>>();
+                    scheduler->all_tasks([pids, processes] (task &t) {
+                        auto *procthread = t.get_resource<ProcThread>();
+                        if (procthread == nullptr) {
+                            return;
                         }
-                    }
-                    if (!found) {
-                        pids->push_back(pid);
-                        processes->push_back(process);
-                    }
-                });
-                for (const auto &process : *processes) {
-                    if (process->getpgrp() == pgrp) {
-                        if (process->setsignal(SIGINT) > 0) {
-                            process->CallAbort();
+                        auto process = procthread->GetProcess();
+                        auto pid = process->getpid();
+                        bool found{false};
+                        for (const auto fpid : *pids) {
+                            if (pid == fpid) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            pids->push_back(pid);
+                            processes->push_back(process);
+                        }
+                    });
+                    for (const auto &process : *processes) {
+                        if (process->getpgrp() == pgrp) {
+                            if (process->setsignal(SIGINT) > 0) {
+                                process->CallAbort();
+                            }
                         }
                     }
                 }
+                return true;
+            } else if ((ch[0] == 's' || ch[0] == 'S') && (keycode & (KEYBOARD_CODE_BIT_LCONTROL | KEYBOARD_CODE_BIT_RCONTROL)) != 0 && (keycode & KEYBOARD_CODE_BIT_LALT) != 0) {
+                std::shared_ptr<tty> ref = self.lock();
+                std::shared_ptr<kshell> shell = kshell::Create(ref, std::move(input->clone()));
+                shell->OnExit([ref] () {
+                    Keyboard().consume(ref);
+                });
+                kshell_commands cmds{*shell};
+                prockshell proc{*shell};
+                return false; // Unconsume keycodes, need reconnect after shell
             }
-            return true;
-        } else if ((ch[0] == 's' || ch[0] == 'S') && (keycode & (KEYBOARD_CODE_BIT_LCONTROL | KEYBOARD_CODE_BIT_RCONTROL)) != 0 && (keycode & KEYBOARD_CODE_BIT_LALT) != 0) {
-            std::shared_ptr<tty> ref = self.lock();
-            std::shared_ptr<kshell> shell = kshell::Create(ref, std::move(input->clone()));
-            shell->OnExit([ref] () {
-                Keyboard().consume(ref);
-            });
-            kshell_commands cmds{*shell};
-            prockshell proc{*shell};
-            return false; // Unconsume keycodes, need reconnect after shell
+            std::lock_guard lock{mtx};
+            if (lineedit) {
+                if (ch[0] == '\n') {
+                    Write(&ch, 1);
+                    linebuffer.append(ch, 1);
+                    buffer.append(linebuffer);
+                    linebuffer.resize(0);
+                    sema.release();
+                } else if (ch[0] == '\10') {
+                    auto s = linebuffer.size();
+                    if (s > 0) {
+                        Erase(1, 1);
+                        linebuffer.resize(s - 1);
+                    }
+                } else {
+                    Write(&ch, 1);
+                    linebuffer.append(ch, 1);
+                }
+            } else {
+                Write(&ch, 1);
+                buffer.append(ch, 1);
+                sema.release();
+            }
         }
-        std::lock_guard lock{mtx};
+    } else {
+        char ch[2] = {static_cast<char>(keycode), 0};
         if (lineedit) {
-            if (ch[0] == '\n') {
+            if (ch[0] == '\r') {
+                ch[0] = '\n';
                 Write(&ch, 1);
                 linebuffer.append(ch, 1);
                 buffer.append(linebuffer);
