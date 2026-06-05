@@ -90,7 +90,8 @@ void kshell_exec_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) 
                 cerr << "exec: is a directory: " << filename << "\n";
             } else {
                 std::shared_ptr<class Exec> exec = Exec::Create(shell.Tty(), dir_ref, *dir, litem, filename, args, env, 0);
-                Keyboard().consume(keycodeConsumer);
+                auto stdin = shell.In();
+                stdin->consume(keycodeConsumer);
                 auto process = exec->Run([] (const std::shared_ptr<Process> &process) {
                     auto pgrp = process->getpgrp();
                     auto tty = process->GetTty();
@@ -105,7 +106,7 @@ void kshell_exec_exec::Exec(kshell &shell, const std::vector<std::string> &cmd) 
                     process = {};
                     latch.acquire();
                 }
-                Keyboard().unconsume(keycodeConsumer);
+                stdin->unconsume(keycodeConsumer);
             }
         } else {
             cerr << "exec: not found: " << filename << "\n";

@@ -160,7 +160,7 @@ std::vector<std::string> kshell::Parse(const std::string &cmd) {
     if (quoted) {
         std::stringstream str{};
         str << "error: unterminated " << quote << "\n";
-        get_klogger() << str.str().c_str();
+        Print(str.str().c_str());
         return {};
     }
     if (tmp.size() > 0 || quote != '\0') {
@@ -180,12 +180,16 @@ void kshell::Exec(const std::vector<std::string> &cmd) {
         }
         std::stringstream str{};
         str << "error: command not found: " << cmdstr << "\n";
-        get_klogger() << str.str().c_str();
+        Print(str.str().c_str());
     }
 }
 
 void kshell::AddCommand(std::shared_ptr<kshell_command> command) {
     commands.push_back(command);
+}
+
+std::unique_ptr<keyboard_source_interface> kshell::In() const {
+    return source->clone();
 }
 
 kshell_stream kshell::Out() {

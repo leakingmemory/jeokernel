@@ -61,6 +61,7 @@ public:
 
     void AddCommand(std::shared_ptr<kshell_command> command);
 
+    std::unique_ptr<keyboard_source_interface> In() const;
     kshell_stream Out();
     kshell_stream Err();
 
