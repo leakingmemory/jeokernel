@@ -42,6 +42,9 @@ public:
     void *pointer() const {
         return (void *) base;
     }
+    constexpr bool is_valid() const {
+        return base != 0;
+    }
 
     vmem(vmem &&mv) : base(mv.base), size(mv.size) {
         mv.base = 0;

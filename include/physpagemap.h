@@ -85,7 +85,7 @@ public:
     virtual void claim(uint32_t pageaddr, uint32_t num) = 0;
     virtual void release(uint32_t pageaddr) = 0;
     virtual bool claimed(uint32_t pageaddr) = 0;
-    virtual uint32_t max() = 0;
+    virtual uint32_t max() const = 0;
     virtual void set_max(uint32_t max) = 0;
 };
 

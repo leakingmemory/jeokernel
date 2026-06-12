@@ -666,7 +666,6 @@ extern "C" {
                             {
                                 auto prev_max = phys->max();
                                 if (prev_max < end_page) {
-                                    phys->set_max(end_page);
                                     phys->claim(prev_max, end_page - prev_max);
                                 }
                             }

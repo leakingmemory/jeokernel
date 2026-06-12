@@ -9,6 +9,7 @@
 #include <vector>
 #include <pagealloc.h>
 #include <klogger.h>
+#include <std/limits.h>
 
 class extendable_physpagemap_managed;
 
@@ -23,27 +24,46 @@ public:
     void claim(uint32_t pageaddr, uint32_t num) override;
     void release(uint32_t pageaddr) override;
     bool claimed(uint32_t pageaddr) override;
-    uint32_t max() override;
+    uint32_t max() const override;
     void set_max(uint32_t max) override;
 };
 
 void simple_physpagemap_managed::claim(uint32_t pageaddr) {
+    if (pageaddr >= max()) {
+        return;
+    }
     map->claim(pageaddr);
 }
 
 void simple_physpagemap_managed::claim(uint32_t pageaddr, uint32_t num) {
+    if (pageaddr >= max()) {
+        return;
+    }
+    uint32_t overflmax = std::numeric_limits<uint32_t>::max() - pageaddr;
+    if (num > overflmax) {
+        num = overflmax;
+    }
+    if ((pageaddr + num) >= max()) {
+        num = max() - pageaddr;
+    }
     map->claim(pageaddr, num);
 }
 
 void simple_physpagemap_managed::release(uint32_t pageaddr) {
+    if (pageaddr >= max()) {
+        return;
+    }
     map->release(pageaddr);
 }
 
 bool simple_physpagemap_managed::claimed(uint32_t pageaddr) {
+    if (pageaddr >= max()) {
+        return true;
+    }
     return map->claimed(pageaddr);
 }
 
-uint32_t simple_physpagemap_managed::max() {
+uint32_t simple_physpagemap_managed::max() const {
     return map->mappageaddr_to_pageaddr(1);
 }
 
@@ -76,7 +96,7 @@ public:
     }
     static void memmap(vmem &vm, std::vector<uint64_t> &pages, int need_pages);
     void relocate();
-    uint32_t max() override;
+    uint32_t max() const override;
     void set_max(uint32_t max) override;
 };
 
@@ -95,7 +115,7 @@ void extendable_physpagemap_managed::memmap(vmem &vm, std::vector<uint64_t> &pag
     }
 }
 
-uint32_t extendable_physpagemap_managed::max() {
+uint32_t extendable_physpagemap_managed::max() const {
     return size;
 }
 
