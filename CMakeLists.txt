@@ -30,13 +30,12 @@ set(CMAKE_CXX_STANDARD 23)
 
 enable_language(C ASM)
 
-option(BUILD_DISKBOOT "Build the BIOS disk image (jeokernel.img) using boot32 as intermediate loader" ON)
 option(BUILD_ISOBOOT "Build the BIOS ISO image (jeokernel.iso) using boot32 as intermediate loader" ON)
 option(BUILD_UEFI64BOOT "Build the UEFI 64-bit image (jeokernel_uefi64.img) using uefi64 and uefi64stage as loader stages" ON)
 
 add_subdirectory(kernel)
 
-if (BUILD_DISKBOOT OR BUILD_ISOBOOT)
+if (BUILD_ISOBOOT)
         add_subdirectory(boot32)
 endif()
 
@@ -68,15 +67,6 @@ if (BUILD_ISOBOOT)
                 DEPENDS jeokernel kernel
                 COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" ${CMAKE_SOURCE_DIR}/create_isoboot.sh
                 )
-endif()
-
-if (BUILD_DISKBOOT)
-        add_custom_command(
-                OUTPUT jeokernel.img
-                DEPENDS jeokernel kernel
-                COMMAND env CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}" ${CMAKE_SOURCE_DIR}/create_diskboot.sh
-        )
-        add_custom_target(jeokernel_disk ALL echo "Disk image built" DEPENDS jeokernel.img)
 endif()
 
 if (BUILD_ISOBOOT AND NOT (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD"))
