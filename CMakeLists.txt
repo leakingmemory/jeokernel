@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
 function(detect_clang)
@@ -17,13 +19,20 @@ function(detect_clang)
         message(FATAL_ERROR "clang was not found")
 endfunction()
 
+# Select the clang/lld toolchain instead of the gcc cross toolchain. Prefer the
+# CMake option (-DUSE_CLANG=ON); the USE_CLANG environment variable is still
+# honoured so the existing build scripts keep working. option() runs first to
+# pick up -DUSE_CLANG, then the env var overrides it; both must be resolved
+# before project() so the compiler is chosen before CMake probes it.
+option(USE_CLANG "Build with the clang/lld toolchain instead of gcc" OFF)
 if(DEFINED ENV{USE_CLANG})
-        set(USE_CLANG true)
+        set(USE_CLANG ON)
+endif()
 
+if(USE_CLANG)
         detect_clang("clang++-21" "clang++21" "clang++-20" "clang++20" "clang++-19" "clang++19" "clang++-18" "clang++18" "clang++-17" "clang++17" "clang++-16" "clang++16" "clang++-15" "clang++15" "clang++-14" "clang++14" "clang++-13" "clang++13" "clang++-12" "clang++12" "clang++-11" "clang++11" "clang++")
-endif(DEFINED ENV{USE_CLANG})
+endif()
 
-cmake_minimum_required(VERSION 3.16)
 project(jeokernel)
 
 set(CMAKE_CXX_STANDARD 23)
