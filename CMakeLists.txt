@@ -32,6 +32,15 @@ enable_language(C ASM)
 
 option(BUILD_ISOBOOT "Build the BIOS ISO image (jeokernel.iso) using boot32 as intermediate loader" ON)
 option(BUILD_UEFI64BOOT "Build the UEFI 64-bit image (jeokernel_uefi64.img) using uefi64 and uefi64stage as loader stages" ON)
+option(BUILD_ARM64SHIM "Build the cross-compiled arm64 boot shim (arm64shim.bin) instead of the x86_64 kernel; requires -DCMAKE_TOOLCHAIN_FILE=arm64shim/toolchain.cmake" OFF)
+
+# The arm64 shim targets aarch64, which a single CMake configure cannot mix with
+# the x86_64 kernel. When it is requested we build only the shim (with the arm64
+# toolchain file) and skip the entire x86_64 tree below.
+if (BUILD_ARM64SHIM)
+        add_subdirectory(arm64shim)
+        return()
+endif()
 
 add_subdirectory(kernel)
 
