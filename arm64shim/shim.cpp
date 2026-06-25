@@ -10,6 +10,7 @@
 // Freestanding build (-nostdinc): use the compiler's built-in fixed-width
 // types instead of <cstdint>, which isn't available without libc++ headers.
 using u32 = __UINT32_TYPE__;
+using u64 = __UINT64_TYPE__;
 using uptr = __UINTPTR_TYPE__;
 
 namespace {
@@ -38,10 +39,60 @@ namespace {
 			putc(*s);
 		}
 	}
+
+	void put_hex(u64 v) {
+		puts("0x");
+		for (int shift = 60; shift >= 0; shift -= 4) {
+			putc("0123456789abcdef"[(v >> shift) & 0xf]);
+		}
+	}
+
+	// AArch64 has no x86-style "long mode" to enable - the core is already in
+	// the 64-bit execution state and the MMU is always present. What we can
+	// query is *how* paging can be configured: the supported physical address
+	// range and translation granules in ID_AA64MMFR0_EL1. This is the first
+	// step toward turning the MMU on in a later milestone.
+	void report_paging() {
+		u64 mmfr0;
+		asm volatile("mrs %0, ID_AA64MMFR0_EL1" : "=r"(mmfr0));
+
+		u64 cur_el;
+		asm volatile("mrs %0, CurrentEL" : "=r"(cur_el));
+
+		static const char *const pa_range[] = {
+			"32-bit (4GB)",   "36-bit (64GB)",  "40-bit (1TB)",
+			"42-bit (4TB)",   "44-bit (16TB)",  "48-bit (256TB)",
+			"52-bit (4PB)",
+		};
+		const unsigned parange = mmfr0 & 0xf;
+
+		puts("Running at EL");
+		putc("0123"[(cur_el >> 2) & 0x3]);
+		puts("\n");
+
+		puts("ID_AA64MMFR0_EL1 = ");
+		put_hex(mmfr0);
+		puts("\n");
+
+		puts("  PA range: ");
+		puts(parange < 7 ? pa_range[parange] : "reserved");
+		puts("\n");
+
+		// Encoding asymmetry: TGran4/TGran64 use 0b0000 = supported, whereas
+		// TGran16 uses 0b0001 = supported (0b0000 = not supported).
+		puts("  4KB  granule: ");
+		puts(((mmfr0 >> 28) & 0xf) == 0 ? "yes\n" : "no\n");
+		puts("  16KB granule: ");
+		puts(((mmfr0 >> 20) & 0xf) != 0 ? "yes\n" : "no\n");
+		puts("  64KB granule: ");
+		puts(((mmfr0 >> 24) & 0xf) == 0 ? "yes\n" : "no\n");
+	}
 }
 
 extern "C" [[noreturn]] void shim_main() {
 	puts("Hello, world from the jeokernel arm64 boot shim!\n");
+
+	report_paging();
 
 	for (;;) {
 		asm volatile("wfe");
