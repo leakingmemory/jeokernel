@@ -14,6 +14,13 @@ using u32 = __UINT32_TYPE__;
 using u64 = __UINT64_TYPE__;
 using uptr = __UINTPTR_TYPE__;
 
+// Bounds of the shim image, defined by arm64shim.ld. _start is the load
+// address (0x40080000) and __end is just past the boot stack, so [_start,__end)
+// covers text/rodata/data/bss/stack. With the MMU off these symbol addresses
+// are physical addresses.
+extern "C" u8 _start[];
+extern "C" u8 __end[];
+
 namespace {
 	// QEMU virt PL011 UART. (Pi4: 0xfe201000 - to come from the DTB later.)
 	constexpr uptr PL011_BASE = 0x09000000;
@@ -128,10 +135,13 @@ namespace {
 		return reinterpret_cast<const u8 *>((uptr(p) + 3) & ~uptr(3));
 	}
 
-	void report_memory(u64 dtb) {
+	// Walk the device tree's /memory nodes, invoking fn(ctx, base, size) once
+	// per (base,size) pair. Shared by the RAM report and the free-page search.
+	using bank_fn = void (*)(void *ctx, u64 base, u64 size);
+
+	void for_each_memory_bank(u64 dtb, bank_fn fn, void *ctx) {
 		const u8 *blob = reinterpret_cast<const u8 *>(dtb);
 		if (dtb == 0 || be32(blob) != FDT_MAGIC) {
-			puts("No valid device tree - cannot enumerate RAM\n");
 			return;
 		}
 
@@ -152,8 +162,6 @@ namespace {
 		bool is_memory = false;
 		const u8 *reg = nullptr;
 		u32 reg_len = 0;
-
-		puts("Physical RAM banks (from device tree):\n");
 
 		for (;;) {
 			const u32 tok = be32(p);
@@ -179,11 +187,7 @@ namespace {
 						const u64 base = read_cells(reg + o, addr_cells);
 						const u64 size =
 							read_cells(reg + o + addr_cells * 4, size_cells);
-						puts("  base ");
-						put_hex(base);
-						puts("  size ");
-						put_hex(size);
-						puts("\n");
+						fn(ctx, base, size);
 					}
 				}
 				--depth;
@@ -214,6 +218,111 @@ namespace {
 			}
 		}
 	}
+
+	void print_bank(void *, u64 base, u64 size) {
+		puts("  base ");
+		put_hex(base);
+		puts("  size ");
+		put_hex(size);
+		puts("\n");
+	}
+
+	void report_memory(u64 dtb) {
+		const u8 *blob = reinterpret_cast<const u8 *>(dtb);
+		if (dtb == 0 || be32(blob) != FDT_MAGIC) {
+			puts("No valid device tree - cannot enumerate RAM\n");
+			return;
+		}
+		puts("Physical RAM banks (from device tree):\n");
+		for_each_memory_bank(dtb, print_bank, nullptr);
+	}
+
+	// ---- First-stage free page search -------------------------------------
+	// Pick the lowest physical page that lies inside a RAM bank and is not
+	// occupied by something the loader left in memory. For this first stage
+	// that is the shim image itself and the DTB; this page is the seed the
+	// PhyspageMap bootstrap will build from.
+	constexpr u64 PAGE_SIZE = 0x1000;
+
+	u64 page_align_up(u64 x) {
+		return (x + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
+	}
+
+	struct FreePageSearch {
+		u64 res_start[2];	// reserved regions to step over
+		u64 res_end[2];
+		unsigned n_res;
+		bool found;
+		u64 page;
+	};
+
+	void scan_bank(void *ctxv, u64 base, u64 size) {
+		FreePageSearch *s = static_cast<FreePageSearch *>(ctxv);
+		const u64 bank_end = base + size;
+		u64 cand = page_align_up(base);
+
+		// Bump the candidate past any reserved region it overlaps, repeating
+		// until it lands in a gap (or runs off the end of the bank).
+		bool moved = true;
+		while (moved) {
+			moved = false;
+			for (unsigned i = 0; i < s->n_res; ++i) {
+				if (cand < s->res_end[i] &&
+				    cand + PAGE_SIZE > s->res_start[i]) {
+					cand = page_align_up(s->res_end[i]);
+					moved = true;
+				}
+			}
+		}
+
+		if (cand + PAGE_SIZE <= bank_end) {
+			if (!s->found || cand < s->page) {	// keep the lowest across banks
+				s->found = true;
+				s->page = cand;
+			}
+		}
+	}
+
+	void report_first_free_page(u64 dtb) {
+		FreePageSearch s{};
+
+		const u64 shim_start = reinterpret_cast<u64>(_start);
+		const u64 shim_end   = reinterpret_cast<u64>(__end);
+		s.res_start[s.n_res] = shim_start;
+		s.res_end[s.n_res]   = shim_end;
+		++s.n_res;
+
+		// DTB header byte 4 holds totalsize (big-endian).
+		const u8 *blob = reinterpret_cast<const u8 *>(dtb);
+		if (dtb != 0 && be32(blob) == FDT_MAGIC) {
+			s.res_start[s.n_res] = dtb;
+			s.res_end[s.n_res]   = dtb + be32(blob + 4);
+			++s.n_res;
+		}
+
+		puts("Reserved by shim image: ");
+		put_hex(shim_start);
+		puts(" .. ");
+		put_hex(shim_end);
+		puts("\n");
+		if (s.n_res > 1) {
+			puts("Reserved by DTB:        ");
+			put_hex(s.res_start[1]);
+			puts(" .. ");
+			put_hex(s.res_end[1]);
+			puts("\n");
+		}
+
+		for_each_memory_bank(dtb, scan_bank, &s);
+
+		if (s.found) {
+			puts("First free physical page: ");
+			put_hex(s.page);
+			puts("\n");
+		} else {
+			puts("No free physical page found\n");
+		}
+	}
 }
 
 // dtb = the device tree pointer the loader left in x0; head.S does not touch
@@ -223,6 +332,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 
 	report_paging();
 	report_memory(dtb);
+	report_first_free_page(dtb);
 
 	for (;;) {
 		asm volatile("wfe");
