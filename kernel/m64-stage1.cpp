@@ -492,10 +492,10 @@ extern "C" {
          * Let's try to alloc a stack
          */
         set_init_pml4t(stage1Data->init_pml4t);
-        init_simple_physpagemap(physmapaddr);
+        init_simple_physpagemap(physmapaddr, 0);
         initialize_pagetable_control();
         setup_simplest_malloc_impl();
-        extend_to_advanced_physpagemap(physmapaddr);
+        extend_to_advanced_physpagemap();
 
         auto *ap_boot_stack = new normal_stack;
         *((uint64_t *) 0x8150) = ap_boot_stack->get_addr();

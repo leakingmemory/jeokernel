@@ -26,8 +26,8 @@ private:
     uint32_t base_addr;
 public:
     explicit simple_physpagemap_managed(PhyspageMap *map, uint32_t base_addr) : physpagemap_managed(), map(map), base_addr(base_addr) {}
-#ifndef LOADER
     explicit simple_physpagemap_managed(uint64_t addr, uint32_t base_addr) : physpagemap_managed(), map((PhyspageMap *) (void *) addr), base_addr(base_addr) {}
+#ifndef LOADER
     ~simple_physpagemap_managed() override = default;
 #else
     ~simple_physpagemap_managed() = default;
@@ -107,18 +107,11 @@ void simple_physpagemap_managed::set_max(uint32_t max) {
 
 physpagemap_managed *physp = nullptr;
 
-#ifdef LOADER
 uint8_t space_for_simple_physpagemap[sizeof(simple_physpagemap_managed)];
 
-physpagemap_managed *new_simple_physpagemap_for_loader(PhyspageMap *ppmap, uint32_t base_addr) {
-    return new ((void *) &(space_for_simple_physpagemap[0])) simple_physpagemap_managed(ppmap, base_addr);
-}
-#else
-
-void init_simple_physpagemap(uint64_t mapaddr, uint64_t base_addr) {
+void init_simple_physpagemap(uint64_t mapaddr, uint32_t base_addr) {
     physp = new ((void *) &(space_for_simple_physpagemap[0])) simple_physpagemap_managed(mapaddr, base_addr);
 }
-#endif
 
 physpagemap_managed *get_physpagemap() {
     return physp;

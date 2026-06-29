@@ -457,8 +457,8 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	auto *ppmap = new (reinterpret_cast<void *>(pagesearch.page)) PhyspageMap();
 	const u32 base_page =
 		static_cast<u32>(pagesearch.first_memory_page / PAGE_SIZE);
-	physpagemap_managed *sppmap =
-		new_simple_physpagemap_for_loader(ppmap, base_page);
+	init_simple_physpagemap(reinterpret_cast<uint64_t>(reinterpret_cast<void*>(ppmap)), base_page);
+	auto *sppmap = get_physpagemap();
 
 	populate_physpagemap(sppmap, dtb, pagesearch);
 
