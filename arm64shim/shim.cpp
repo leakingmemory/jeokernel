@@ -348,29 +348,120 @@ namespace {
 		report_first_free_page(s);
 		return s;
 	}
+
+	// ---- Populate the PhyspageMap -----------------------------------------
+	// Hand the page allocator a complete picture of the window the map covers,
+	// [base, max()): every page that is usable RAM is released, everything else
+	// is claimed. We do it in three passes - claim the whole window, release
+	// the pages that sit wholly inside a RAM bank, then re-claim the pages the
+	// loader is itself occupying - so holes between/around banks stay claimed.
+	struct ReleaseCtx {
+		physpagemap_managed *map;
+		u32 base_page;
+		u32 max_page;
+		u64 released;
+	};
+
+	void release_usable_bank(void *ctxv, u64 base, u64 size) {
+		auto *c = static_cast<ReleaseCtx *>(ctxv);
+		// Only whole pages fully contained in the bank are usable: round the
+		// start up and the end down.
+		u64 first = page_align_up(base) / PAGE_SIZE;
+		u64 end   = (base + size) / PAGE_SIZE;
+		if (first < c->base_page) {
+			first = c->base_page;
+		}
+		if (end > c->max_page) {
+			end = c->max_page;
+		}
+		for (u64 p = first; p < end; ++p) {
+			c->map->release(static_cast<u32>(p));
+			++c->released;
+		}
+	}
+
+	// Claim [first, end) (page numbers); the map clips to its own window, so
+	// this returns how many of those pages actually fell inside it.
+	u64 claim_clipped(physpagemap_managed *map, u32 base_page, u32 max_page,
+	                  u32 first, u32 end) {
+		map->claim(first, end - first);
+		if (first < base_page) {
+			first = base_page;
+		}
+		if (end > max_page) {
+			end = max_page;
+		}
+		return end > first ? static_cast<u64>(end - first) : 0;
+	}
+
+	void populate_physpagemap(physpagemap_managed *map, u64 dtb,
+	                          const FreePageSearch &s) {
+		const u32 base_page = static_cast<u32>(s.first_memory_page / PAGE_SIZE);
+		const u32 max_page  = map->max();
+
+		puts("Populating physpagemap: pages ");
+		put_hex(base_page);
+		puts(" .. ");
+		put_hex(max_page);
+		puts("\n");
+
+		// Start with the whole window unusable...
+		map->claim(base_page, max_page - base_page);
+
+		// ...release the pages that lie wholly inside a RAM bank...
+		ReleaseCtx ctx{map, base_page, max_page, 0};
+		for_each_memory_bank(dtb, release_usable_bank, &ctx);
+
+		// ...then take back the pages the loader occupies. Round the reserved
+		// byte ranges outward so any page they touch stays claimed.
+		u64 reclaimed = 0;
+		for (unsigned i = 0; i < s.n_res; ++i) {
+			const u32 first = static_cast<u32>(s.res_start[i] / PAGE_SIZE);
+			const u32 end   =
+				static_cast<u32>(page_align_up(s.res_end[i]) / PAGE_SIZE);
+			if (end > first) {
+				reclaimed += claim_clipped(map, base_page, max_page, first, end);
+			}
+		}
+		const u32 seed = static_cast<u32>(s.page / PAGE_SIZE);	// PhyspageMap page
+		reclaimed += claim_clipped(map, base_page, max_page, seed, seed + 1);
+
+		const u64 usable = ctx.released - reclaimed;
+		puts("Usable pages released:  ");
+		put_hex(usable);
+		puts("\n");
+		puts("Unusable pages claimed: ");
+		put_hex((max_page - base_page) - usable);
+		puts("\n");
+	}
 }
 
 // dtb = the device tree pointer the loader left in x0; head.S does not touch
 // x0 before the call, so AAPCS delivers it here as the first argument.
 extern "C" [[noreturn]] void shim_main(u64 dtb) {
-	physpagemap_managed *sppmap;
-	PhyspageMap *ppmap;
 	puts("Hello, world from the jeokernel arm64 boot shim!\n");
 
 	report_paging();
 	report_memory(dtb);
-	{
-		auto pagesearch = get_and_report_first_free_page(dtb);
-		if (!pagesearch.found) {
-			puts("No free physical page found - aborting\n");
-			for (;;) {
-				asm volatile("wfe");
-			}
+
+	auto pagesearch = get_and_report_first_free_page(dtb);
+	if (!pagesearch.found) {
+		puts("No free physical page found - aborting\n");
+		for (;;) {
+			asm volatile("wfe");
 		}
-		ppmap = new (reinterpret_cast<void *>(pagesearch.page)) PhyspageMap();
 	}
-	sppmap = new_simple_physpagemap_for_loader(ppmap);
-	
+
+	// Seed the PhyspageMap in the first free page, and base its window at the
+	// lowest RAM page so the bank addresses land inside [base, max()).
+	auto *ppmap = new (reinterpret_cast<void *>(pagesearch.page)) PhyspageMap();
+	const u32 base_page =
+		static_cast<u32>(pagesearch.first_memory_page / PAGE_SIZE);
+	physpagemap_managed *sppmap =
+		new_simple_physpagemap_for_loader(ppmap, base_page);
+
+	populate_physpagemap(sppmap, dtb, pagesearch);
+
 	for (;;) {
 		asm volatile("wfe");
 	}

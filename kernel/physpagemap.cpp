@@ -110,8 +110,8 @@ physpagemap_managed *physp = nullptr;
 #ifdef LOADER
 uint8_t space_for_simple_physpagemap[sizeof(simple_physpagemap_managed)];
 
-physpagemap_managed *new_simple_physpagemap_for_loader(PhyspageMap *ppmap) {
-    return new ((void *) &(space_for_simple_physpagemap[0])) simple_physpagemap_managed(ppmap, 0);
+physpagemap_managed *new_simple_physpagemap_for_loader(PhyspageMap *ppmap, uint32_t base_addr) {
+    return new ((void *) &(space_for_simple_physpagemap[0])) simple_physpagemap_managed(ppmap, base_addr);
 }
 #else
 

@@ -94,7 +94,7 @@ public:
 };
 
 #ifdef LOADER
-physpagemap_managed *new_simple_physpagemap_for_loader(PhyspageMap *ppmap);
+physpagemap_managed *new_simple_physpagemap_for_loader(PhyspageMap *ppmap, uint32_t base_addr);
 #endif
 void init_simple_physpagemap(uint64_t mapaddr, uint64_t base_mapaddr);
 void extend_to_advanced_physpagemap(uint64_t base_mapaddr);
