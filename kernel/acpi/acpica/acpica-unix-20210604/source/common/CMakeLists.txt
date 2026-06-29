@@ -1,4 +1,4 @@
-include(../../../../../toolchain.cmake)
+include(../../../../../arch/x86_64/toolchain.cmake)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DACPI_MACHINE_WIDTH=64 -D_LINUX -DACPI_USE_SYSTEM_CLIBRARY -DACPI_DISASSEMBLER -DACPI_ASL_COMPILER")
 

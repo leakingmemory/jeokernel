@@ -4,9 +4,17 @@
 # x86_64 kernel, boot loaders and tests. See jeokernel-builds/clang-arm64.sh.
 include(toolchain.cmake)
 
-add_executable(arm64shim.elf head.S shim.cpp strings.cpp ../kernel/physpagemap.cpp)
+add_executable(arm64shim.elf head.S shim.cpp strings.cpp wrapbin.S ../kernel/physpagemap.cpp)
 target_compile_options(arm64shim.elf PRIVATE -g -Wall -Wextra -DLOADER)
 target_include_directories(arm64shim.elf PRIVATE ../include)
+
+# Embed the aarch64 kernel image into the shim, the same way uefi64 embeds the
+# x86_64 kernel: wrapbin.S .incbin's it, and the path is handed to the assembler
+# as KERNEL_PATH. We embed the stripped "kernel" (no debug symbols), produced by
+# the kernel custom target, which must exist before we assemble wrapbin.S.
+add_dependencies(arm64shim.elf kernel)
+target_compile_definitions(arm64shim.elf PRIVATE
+	"$<$<COMPILE_LANGUAGE:ASM>:KERNEL_PATH=\"${CMAKE_BINARY_DIR}/kernel/kernel\">")
 
 # The loader consumes a flat "Image", not an ELF, so strip the ELF down to a
 # raw binary. Keep the .elf around for gdb (qemu -s -S; gdb arm64shim.elf).

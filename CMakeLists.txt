@@ -76,9 +76,11 @@ if(DEFINED ENV{DISABLE_TESTS})
         set(BUILD_TESTS OFF)
 endif()
 
-# aarch64: build the selected arm64 boot loaders (with the arm64 toolchain file
-# pulled in by their own CMakeLists) and skip the entire x86_64 tree below.
+# aarch64: build the kernel and the selected arm64 boot loaders (with the arm64
+# toolchain files pulled in by their own CMakeLists) and skip the entire x86_64
+# tree below. The shim embeds the kernel image, so the kernel is built first.
 if (ARCH STREQUAL "aarch64")
+        add_subdirectory(kernel)
         if (BUILD_ARM64SHIM)
                 add_subdirectory(arm64shim)
         endif()
