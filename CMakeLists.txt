@@ -39,9 +39,35 @@ set(CMAKE_CXX_STANDARD 23)
 
 enable_language(C ASM)
 
+# Target architecture. x86_64 builds the kernel and all its boot loaders/tests;
+# aarch64 builds the arm64 boot loaders (currently just the shim). A single
+# CMake configure cannot mix the two, so the aarch64 build skips the entire
+# x86_64 tree below.
+set(ARCH "x86_64" CACHE STRING "Target architecture: x86_64 or aarch64")
+set_property(CACHE ARCH PROPERTY STRINGS x86_64 aarch64)
+
+# Backwards compat: -DBUILD_ARM64SHIM=ON used to be how the shim was selected;
+# honour it by switching to the aarch64 architecture.
+if (DEFINED BUILD_ARM64SHIM AND BUILD_ARM64SHIM)
+        set(ARCH "aarch64")
+endif()
+
+if (NOT (ARCH STREQUAL "x86_64" OR ARCH STREQUAL "aarch64"))
+        message(FATAL_ERROR "ARCH must be x86_64 or aarch64 (got '${ARCH}')")
+endif()
+
+# arm64 boot loader options. The shim is on by default on aarch64 and off (and
+# unused) on x86_64; further aarch64 boot loaders can join it here later.
+if (ARCH STREQUAL "aarch64")
+        set(BUILD_ARM64SHIM_DEFAULT ON)
+else()
+        set(BUILD_ARM64SHIM_DEFAULT OFF)
+endif()
+option(BUILD_ARM64SHIM "Build the cross-compiled arm64 boot shim (aarch64)" ${BUILD_ARM64SHIM_DEFAULT})
+
+# x86_64 boot loader / test options (ignored on aarch64).
 option(BUILD_ISOBOOT "Build the BIOS ISO image (jeokernel.iso) using boot32 as intermediate loader" ON)
 option(BUILD_UEFI64BOOT "Build the UEFI 64-bit image (jeokernel_uefi64.img) using uefi64 and uefi64stage as loader stages" ON)
-option(BUILD_ARM64SHIM "Build the cross-compiled arm64 boot shim (arm64shim.bin) instead of the x86_64 kernel; requires -DCMAKE_TOOLCHAIN_FILE=arm64shim/toolchain.cmake" OFF)
 # Tests are built by default; disable with -DBUILD_TESTS=OFF. The DISABLE_TESTS
 # environment variable is still honoured (set to anything) so existing scripts
 # keep working; it overrides the option when present.
@@ -50,11 +76,12 @@ if(DEFINED ENV{DISABLE_TESTS})
         set(BUILD_TESTS OFF)
 endif()
 
-# The arm64 shim targets aarch64, which a single CMake configure cannot mix with
-# the x86_64 kernel. When it is requested we build only the shim (with the arm64
-# toolchain file) and skip the entire x86_64 tree below.
-if (BUILD_ARM64SHIM)
-        add_subdirectory(arm64shim)
+# aarch64: build the selected arm64 boot loaders (with the arm64 toolchain file
+# pulled in by their own CMakeLists) and skip the entire x86_64 tree below.
+if (ARCH STREQUAL "aarch64")
+        if (BUILD_ARM64SHIM)
+                add_subdirectory(arm64shim)
+        endif()
         return()
 endif()
 
