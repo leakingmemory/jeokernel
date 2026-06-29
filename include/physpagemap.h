@@ -75,7 +75,11 @@ static_assert(sizeof(PhyspageMap) == 4096);
 class physpagemap_managed {
 public:
     physpagemap_managed() {}
+#ifndef LOADER
     virtual ~physpagemap_managed() {}
+#else
+    ~physpagemap_managed() = default;
+#endif
     physpagemap_managed(const physpagemap_managed &) = delete;
     physpagemap_managed(physpagemap_managed &&) = delete;
     physpagemap_managed &operator =(const physpagemap_managed &) = delete;
@@ -89,7 +93,10 @@ public:
     virtual void set_max(uint32_t max) = 0;
 };
 
-void init_simple_physpagemap(uint64_t mapaddr);
+#ifdef LOADER
+physpagemap_managed *new_simple_physpagemap_for_loader(PhyspageMap *ppmap);
+#endif
+void init_simple_physpagemap(uint64_t mapaddr, uint64_t base_mapaddr);
 void extend_to_advanced_physpagemap(uint64_t base_mapaddr);
 physpagemap_managed *get_physpagemap();
 

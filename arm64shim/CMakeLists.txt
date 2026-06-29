@@ -4,8 +4,9 @@
 # x86_64 kernel, boot loaders and tests. See jeokernel-builds/clang-arm64.sh.
 include(toolchain.cmake)
 
-add_executable(arm64shim.elf head.S shim.cpp)
-target_compile_options(arm64shim.elf PRIVATE -g -Wall -Wextra)
+add_executable(arm64shim.elf head.S shim.cpp strings.cpp ../kernel/physpagemap.cpp)
+target_compile_options(arm64shim.elf PRIVATE -g -Wall -Wextra -DLOADER)
+target_include_directories(arm64shim.elf PRIVATE ../include)
 
 # The loader consumes a flat "Image", not an ELF, so strip the ELF down to a
 # raw binary. Keep the .elf around for gdb (qemu -s -S; gdb arm64shim.elf).

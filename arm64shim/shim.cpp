@@ -7,6 +7,9 @@
  * stop hard-coding the address and read it from the DTB.
  */
 
+#include <physpagemap.h>
+#include <new>
+
 // Freestanding build (-nostdinc): use the compiler's built-in fixed-width
 // types instead of <cstdint>, which isn't available without libc++ headers.
 using u8 = __UINT8_TYPE__;
@@ -253,13 +256,20 @@ namespace {
 		u64 res_end[2];
 		unsigned n_res;
 		bool found;
+		u64 first_memory_page;
 		u64 page;
+		bool first_memory_page_set;
 	};
 
 	void scan_bank(void *ctxv, u64 base, u64 size) {
 		FreePageSearch *s = static_cast<FreePageSearch *>(ctxv);
 		const u64 bank_end = base + size;
 		u64 cand = page_align_up(base);
+
+		if (!s->first_memory_page_set || s->first_memory_page > cand) {
+			s->first_memory_page = cand;
+			s->first_memory_page_set = true;
+		}
 
 		// Bump the candidate past any reserved region it overlaps, repeating
 		// until it lands in a gap (or runs off the end of the bank).
@@ -283,8 +293,8 @@ namespace {
 		}
 	}
 
-	void report_first_free_page(u64 dtb) {
-		FreePageSearch s{};
+	FreePageSearch get_first_free_page(u64 dtb) {
+		FreePageSearch s{.first_memory_page = 0, .first_memory_page_set = false};
 
 		const u64 shim_start = reinterpret_cast<u64>(_start);
 		const u64 shim_end   = reinterpret_cast<u64>(__end);
@@ -315,6 +325,10 @@ namespace {
 
 		for_each_memory_bank(dtb, scan_bank, &s);
 
+		return s;
+	}
+
+	void report_first_free_page(FreePageSearch &s) {
 		if (s.found) {
 			puts("First free physical page: ");
 			put_hex(s.page);
@@ -323,17 +337,40 @@ namespace {
 			puts("No free physical page found\n");
 		}
 	}
+
+	void report_first_free_page(u64 dtb) {
+		FreePageSearch s = get_first_free_page(dtb);
+		report_first_free_page(s);
+	}
+
+	FreePageSearch get_and_report_first_free_page(u64 dtb) {
+		auto s = get_first_free_page(dtb);
+		report_first_free_page(s);
+		return s;
+	}
 }
 
 // dtb = the device tree pointer the loader left in x0; head.S does not touch
 // x0 before the call, so AAPCS delivers it here as the first argument.
 extern "C" [[noreturn]] void shim_main(u64 dtb) {
+	physpagemap_managed *sppmap;
+	PhyspageMap *ppmap;
 	puts("Hello, world from the jeokernel arm64 boot shim!\n");
 
 	report_paging();
 	report_memory(dtb);
-	report_first_free_page(dtb);
-
+	{
+		auto pagesearch = get_and_report_first_free_page(dtb);
+		if (!pagesearch.found) {
+			puts("No free physical page found - aborting\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		ppmap = new (reinterpret_cast<void *>(pagesearch.page)) PhyspageMap();
+	}
+	sppmap = new_simple_physpagemap_for_loader(ppmap);
+	
 	for (;;) {
 		asm volatile("wfe");
 	}

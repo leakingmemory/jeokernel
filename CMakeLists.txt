@@ -30,7 +30,7 @@ if(DEFINED ENV{USE_CLANG})
 endif()
 
 if(USE_CLANG)
-        detect_clang("clang++-21" "clang++21" "clang++-20" "clang++20" "clang++-19" "clang++19" "clang++-18" "clang++18" "clang++-17" "clang++17" "clang++-16" "clang++16" "clang++-15" "clang++15" "clang++-14" "clang++14" "clang++-13" "clang++13" "clang++-12" "clang++12" "clang++-11" "clang++11" "clang++")
+        detect_clang("clang++-23" "clang++23" "clang++-22" "clang++22" "clang++-21" "clang++21" "clang++-20" "clang++20" "clang++-19" "clang++19" "clang++-18" "clang++18" "clang++-17" "clang++17" "clang++-16" "clang++16" "clang++-15" "clang++15" "clang++-14" "clang++14" "clang++-13" "clang++13" "clang++-12" "clang++12" "clang++-11" "clang++11" "clang++")
 endif()
 
 project(jeokernel)
