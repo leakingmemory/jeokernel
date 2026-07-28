@@ -383,8 +383,8 @@ bool acpica_lib::walk_namespace(void *handle, std::function<void(std::string, ui
     }
 }
 
-std::optional<IRQLink> acpica_lib::get_extended_irq(void *handle) {
-    std::optional<IRQLink> opt{};
+std::unique_ptr<IRQLink> acpica_lib::get_extended_irq(void *handle) {
+    std::unique_ptr<IRQLink> opt{};
     find_resources(handle, [&opt] (ACPI_RESOURCE *resource) {
        if (resource->Type == ACPI_RESOURCE_TYPE_EXTENDED_IRQ) {
            const auto &ei = resource->Data.ExtendedIrq;
@@ -401,7 +401,7 @@ std::optional<IRQLink> acpica_lib::get_extended_irq(void *handle) {
            for (int i = 0; i < ei.InterruptCount; i++) {
                link.Interrupts.push_back(ei.Interrupts[i]);
            }
-           opt = link;
+           opt = std::make_unique<IRQLink>(std::move(link));
        }
     });
     return opt;

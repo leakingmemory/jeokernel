@@ -9,6 +9,11 @@
 
 namespace std {
     template <typename T, typename U> concept same_as = is_same<T, U>::value;
+
+    template <typename From, typename To> concept convertible_to = std::is_convertible_v<From, To> &&
+        requires {
+            static_cast<To>(std::declval<From>());
+        };
 }
 
 #endif //JEOKERNEL_CONCEPTS_H

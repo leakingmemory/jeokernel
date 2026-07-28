@@ -65,11 +65,19 @@ public:
     resource &operator =(resource &&) = delete;
     reference<T> CreateReference(const std::shared_ptr<referrer> &referrer) {
         if (!referrer) {
+#if defined(__x86_64__)
             asm("ud2");
+#elif defined(__aarch64__)
+            __builtin_trap();
+#endif
         }
 #ifdef RESOURCE_CHECK_MAGIC
         if (magic != resource_magic) {
+#if defined(__x86_64__)
             asm("ud2");
+#elif defined(__aarch64__)
+            __builtin_trap();
+#endif
         }
 #endif
         std::weak_ptr<class referrer> w{referrer};

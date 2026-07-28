@@ -144,7 +144,7 @@ void xhci::init() {
     runtimeregs = capabilities->runtimeregs();
     doorbellregs = capabilities->doorbellregs();
     {
-        std::optional<xhci_ext_cap> extcap = capabilities->extcap();
+        std::unique_ptr<xhci_ext_cap> extcap = capabilities->extcap();
         while (extcap)  {
             if (extcap->cap_id == 1) {
                 auto *legsup = extcap->legsup();

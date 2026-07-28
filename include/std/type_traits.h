@@ -12,6 +12,7 @@ namespace std {
 }
 
 #include <std/declval.h>
+#include <cstdint>
 
 namespace std {
     template< class T, T v >
@@ -135,6 +136,29 @@ namespace std {
 
     template <typename T1, typename T2> struct is_same : std::false_type {};
     template <typename T> struct is_same<T, T> : std::true_type {};
+
+    namespace detail {
+        template <class To> void test_convertible_to(To);
+
+        template <typename From, typename To, class = void> struct is_convertible_impl : std::false_type {
+        };
+        template <typename From, typename To> struct is_convertible_impl<From,To,decltype(test_convertible_to<To>(std::declval<From>()), void())> : std::true_type {
+        };
+
+        struct test_is_convertible {
+        };
+    }
+
+    template <typename From, typename To> struct is_convertible : detail::is_convertible_impl<From,To> {
+    };
+
+    template <typename From, typename To> constexpr bool is_convertible_v = is_convertible<From,To>::value;
+
+    static_assert(is_convertible<uint16_t,uint32_t>::value);
+    static_assert(!is_convertible<uint16_t,detail::test_is_convertible>::value);
+    static_assert(!is_convertible<detail::test_is_convertible,uint16_t>::value);
+    static_assert(is_convertible<void *,void *>::value);
+    static_assert(is_convertible<uint16_t *,void *>::value);
 }
 
 #endif //JEOKERNEL_TYPE_TRAITS_H

@@ -40,12 +40,9 @@ std::optional<pageentr> get_pageentr(uint64_t addr) {
 
     pageentr *pe = get_pageentr64(_get_pml4t(), addr);
     if (pe != nullptr) {
-        pageentr cp = *pe;
-        std::optional<pageentr> opt{cp};
-        return opt;
+        return *pe;
     } else {
-        std::optional<pageentr> opt{};
-        return opt;
+        return {};
     }
 }
 

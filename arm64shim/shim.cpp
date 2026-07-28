@@ -9,6 +9,7 @@
 
 #include <physpagemap.h>
 #include <new>
+#include <vpallocator.h>
 
 // Freestanding build (-nostdinc): use the compiler's built-in fixed-width
 // types instead of <cstdint>, which isn't available without libc++ headers.

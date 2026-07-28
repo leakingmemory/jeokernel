@@ -171,7 +171,7 @@ pci::pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func) : Bu
 void pci::ProbeDevices() {
     Bus::ProbeDevices();
     for (uint8_t i = 0; i < 0x20; i++) {
-        std::optional<PciDeviceInformation> opt = probeDevice(i);
+        std::unique_ptr<PciDeviceInformation> opt = probeDevice(i);
         if (opt) {
             if (br_bus != bus || br_slot != i || br_func != 0) {
                 if (!get_drivers().probe(*this, *opt)) {
@@ -183,7 +183,7 @@ void pci::ProbeDevices() {
             }
             if (opt->multifunction) {
                 for (uint8_t func = 1; func < 8; func++) {
-                    std::optional<PciDeviceInformation> mfd = probeDevice(i, func);
+                    std::unique_ptr<PciDeviceInformation> mfd = probeDevice(i, func);
                     if (mfd && !get_drivers().probe(*this, *mfd)) {
                         get_klogger() << "PCI device " << mfd->vendor_id << ":" << mfd->device_id << " CL " << mfd->device_class << ":" << mfd->device_subclass << ":" << mfd->prog_if  << " rev " << mfd->revision_id << " header  " << mfd->header_type << (mfd->multifunction ? " MFD\n" : "\n");
                     }
@@ -193,7 +193,7 @@ void pci::ProbeDevices() {
     }
 }
 
-std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func) {
+std::unique_ptr<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func) {
     uint32_t reg0 = read_pci_config(bus, addr, func, 0);
     uint16_t device_id = (uint16_t) (reg0 >> 16);
     uint16_t vendor_id = (uint16_t) (reg0 & 0xFFFF);
@@ -208,19 +208,19 @@ std::optional<PciDeviceInformation> pci::probeDevice(uint8_t addr, uint8_t func)
     uint32_t reg3 = read_pci_config(bus, addr, func, 0xC);
     uint8_t mfd = (uint8_t) ((reg3 >> 16) & 0x80);
     uint8_t header_type = (uint8_t) ((reg3 >> 16) & 0x7F);
-    PciDeviceInformation info{};
-    info.vendor_id = vendor_id;
-    info.device_id = device_id;
-    info.device_subclass = subclass_id;
-    info.device_class = class_id;
-    info.prog_if = prog_if;
-    info.bus = bus;
-    info.slot = addr;
-    info.func = func;
-    info.revision_id = revision_id;
-    info.multifunction = mfd == 0x80;
-    info.header_type = header_type;
-    return {info};
+    auto info = std::make_unique<PciDeviceInformation>();
+    info->vendor_id = vendor_id;
+    info->device_id = device_id;
+    info->device_subclass = subclass_id;
+    info->device_class = class_id;
+    info->prog_if = prog_if;
+    info->bus = bus;
+    info->slot = addr;
+    info->func = func;
+    info->revision_id = revision_id;
+    info->multifunction = mfd == 0x80;
+    info->header_type = header_type;
+    return info;
 }
 
 void pci::ReadIrqRouting(void *acpi_handle) {

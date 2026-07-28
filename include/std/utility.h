@@ -19,6 +19,11 @@ namespace std {
         return static_cast<T&&>(t);
     }
 
+    struct in_place_t {
+    };
+
+    inline constexpr in_place_t in_place;
+
     template <typename T> struct in_place_type_t {
         explicit in_place_type_t() = default;
     };

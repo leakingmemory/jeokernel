@@ -90,7 +90,7 @@ public:
     acpibuffer get_irq_routing_table(void *handle);
     std::vector<PciIRQRouting> get_irq_routing(void *handle);
 
-    std::optional<IRQLink> get_extended_irq(void *handle);
+    std::unique_ptr<IRQLink> get_extended_irq(void *handle);
 
     std::shared_ptr<acpi_madt_info> get_madt() override;
 

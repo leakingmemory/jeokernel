@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <utility>
 #include <type_traits>
+#include <memory>
 
 #include "variant.h"
 
@@ -37,7 +38,7 @@ namespace std {
             static constexpr int count = 1;
             T value;
             int dummy;
-            constexpr variant_union() {}
+            constexpr variant_union() = default;
             constexpr variant_union(T &&mv) : value(std::forward<T>(mv)) {}
             constexpr variant_union(const T &cp) : value(cp) {}
             template <typename... Args> constexpr variant_union(std::in_place_type_t<T>, Args &&...args)
@@ -50,7 +51,7 @@ namespace std {
         template <> union variant_union<char> {
             static constexpr int count = 1;
             char value;
-            constexpr variant_union() {}
+            constexpr variant_union() : value('\0') {}
             constexpr variant_union(char ch) : value(ch) {}
             constexpr ~variant_union() {}
         };
@@ -58,6 +59,8 @@ namespace std {
             static constexpr int count = variant_union<Tres...>::count + 1;
             T value;
             variant_union<Tres...> rest;
+            constexpr variant_union() : rest() {
+            }
             constexpr variant_union(T &&mv) : value(std::forward<T>(mv)) {}
             constexpr variant_union(const T &cp) : value(cp) {}
             template <typename... Args> constexpr variant_union(std::in_place_type_t<T>, Args &&...args)
@@ -139,11 +142,33 @@ namespace std {
             static constexpr int max = type_index<Tval, T2...>::max + 1;
             static constexpr int value = std::is_same<Tval,T>::value ? max : type_index<Tval,T2...>::value;
         };
+        template <const size_t start, const size_t max, typename Callable> constexpr void variant_loop_expander(Callable &callable) {
+            if constexpr(start >= max) {
+                return;
+            }
+            callable(start);
+            variant_loop_expander<start + 1, max>(callable);
+        }
         static_assert(type_index<bool,int>::value == -1);
         template <typename... T> struct variant_storage {
             variant_union<T...> data;
             int type;
-            template <typename Targ> constexpr variant_storage(Targ &&mv) : data(std::forward<Targ>(mv)), type(type_index<typename std::remove_const<typename std::remove_reference<Targ>::type>::type,T...>::value) {}
+            constexpr variant_storage(const variant_storage &cp) : type(cp.type) {
+                cp.visit([this] (const auto &v) constexpr {
+                    std::construct_at(&data, v);
+                });
+            }
+            constexpr variant_storage(variant_storage &&mv) : type(mv.type) {
+                mv.visit([this] (auto &&v) constexpr {
+                    std::construct_at(&data, std::move(v));
+                });
+                /*variant_loop_expander<0, variant_union<T...>::count>([this, &mv] (size_t i) constexpr {
+                    if (mv.type == i) {
+                        std::construct_at(&data, std::move(variant_union_get<i>(mv.data)));
+                    }
+                });*/
+            }
+            template <typename Targ> constexpr variant_storage(std::in_place_type_t<Targ>, Targ &&mv) noexcept : data(std::forward<Targ>(mv)), type(type_index<typename std::remove_const<typename std::remove_reference<Targ>::type>::type,T...>::value) {}
             template <typename Targ, typename... Args> constexpr variant_storage(std::in_place_type_t<Targ>, Args &&...args)
                  : data(std::in_place_type<Targ>, std::forward<Args>(args)...),
                    type(type_index<Targ,T...>::value) {
@@ -196,6 +221,36 @@ namespace std {
                 }
                 return false;
             }
+            template <typename Type> constexpr Type &get() {
+                return visit([](auto &v) constexpr -> Type & {
+                    using type = std::remove_reference<decltype(v)>::type;
+                    if constexpr(std::is_same<type,Type>::value) {
+                        return v;
+                    } else {
+#if defined(__x86_64__)
+                        asm("ud2");
+#elif defined(__aarch64__)
+                        __builtin_trap();
+#endif
+                        while (true) {}
+                    }
+                });
+            }
+            template <typename Type> constexpr const Type &get() const {
+                return visit([](const auto &v) constexpr -> const Type & {
+                    using type = std::remove_const<typename std::remove_reference<decltype(v)>::type>::type;
+                    if constexpr(std::is_same<type,Type>::value) {
+                        return v;
+                    } else {
+#if defined(__x86_64__)
+                        asm("ud2");
+#elif defined(__aarch64__)
+                        __builtin_trap();
+#endif
+                        while (true) {}
+                    }
+                });
+            }
             constexpr bool operator ==(const variant_storage &other) const {
                 if (type != other.type) {
                     return false;
@@ -232,12 +287,26 @@ namespace std {
         detail::variant_storage<T...> container;
     public:
         variant() = delete;
-        template <typename Targ> constexpr variant(const Targ &cp) : container(cp) {
+        template <typename Targ> constexpr variant(const Targ &cp) : container(std::in_place_type<Targ>, cp) {
         }
-        template <typename Targ> constexpr variant(Targ &&mv) : container(std::forward<Targ>(mv)) {
+        template <typename Targ> constexpr variant(Targ &&mv) noexcept : container(std::in_place_type<Targ>, std::forward<Targ>(mv)) {
         }
+        constexpr variant(const variant &) = default;
+        constexpr variant(variant &&) noexcept = default;
         template <typename Targ, typename... Args> constexpr variant(std::in_place_type_t<Targ>, Args &&...args)
             : container(std::in_place_type<Targ>, std::forward<Args>(args)...) {
+        }
+        constexpr variant &operator = (variant &&mv) {
+            detail::variant_storage<T...> tmp{std::move(mv.container)};
+            std::destroy_at(&container);
+            std::construct_at(&container, std::move(tmp));
+            return *this;
+        }
+        constexpr variant &operator = (const variant &cp) {
+            detail::variant_storage<T...> tmp{cp.container};
+            std::destroy_at(&container);
+            std::construct_at(&container, std::move(tmp));
+            return *this;
         }
 
         constexpr bool operator == (const variant &other) {

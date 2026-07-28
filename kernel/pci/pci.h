@@ -139,7 +139,7 @@ public:
     pci(uint16_t bus, uint16_t br_bus, uint16_t br_slot, uint16_t br_func);
     ~pci() override;
     virtual void ProbeDevices() override;
-    std::optional<PciDeviceInformation> probeDevice(uint8_t addr, uint8_t func=0);
+    std::unique_ptr<PciDeviceInformation> probeDevice(uint8_t addr, uint8_t func=0);
     pci_irq *GetIrq(uint8_t irqn);
     virtual void InstallIrqHandler(const IRQLink &link);
 private:

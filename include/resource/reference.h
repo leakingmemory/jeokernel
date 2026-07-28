@@ -117,7 +117,11 @@ public:
     }
     reference<T> CreateReference(const std::shared_ptr<class referrer> &referrer) const {
         if (!referrer) {
+#if defined(__x86_64__)
             asm("ud2");
+#elif defined(__aarch64__)
+            __builtin_trap();
+#endif
         }
         reference<T> newRef{};
         if (ref) {

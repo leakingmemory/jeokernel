@@ -10,6 +10,7 @@
 #include <core/malloc.h>
 #include <std/cstdint.h>
 #include <utility>
+#include <new>
 
 #endif
 #ifndef WEAK_PTR_CRITICAL_SECTION
@@ -22,6 +23,25 @@
 
 namespace std {
 #ifndef UNIT_TESTING
+#if defined(__cpp_constexpr) && __has_builtin(__builtin_construct_at)
+    template <class T, class... Args> constexpr T *construct_at(T *location, Args &&...args) {
+        return new (location) T(std::forward<Args>(args)...);
+    }
+#else
+    template <class T, class... Args> constexpr T *construct_at(T *location, Args &&...args) {
+        return ::new (const_cast<void *>(static_cast<volatile void *>(location))) T(std::forward<Args>(args)...);
+    }
+#endif
+#if defined(__cpp_constexpr) && __has_builtin(__builtin_destroy_at)
+    template <class T> constexpr void destroy_at(T *ptr) {
+        __builtin_destroy_at(ptr);
+    }
+#else
+    template <class T> constexpr void destroy_at(T *ptr) {
+        ptr->~T();
+    }
+#endif
+
     template<class T> class allocator {
     public:
         typedef std::size_t size_type;
@@ -123,18 +143,27 @@ namespace std {
             weak_ptr_dir &operator =(weak_ptr_dir &&) = delete;
 
             void acquire() {
+#if defined(__x86_64__)
                 asm("lock incl %0;" : "+m"(ref));
+#elif defined(__aarch64__)
+                __atomic_add_fetch(&ref, 1, __ATOMIC_SEQ_CST);
+#endif
             }
 
             uint32_t release() {
+#if defined(__x86_64__)
                 uint32_t xref;
                 asm("xor %%rax, %%rax; dec %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ref), "=rm"(xref)::"%rax");
                 --xref;
                 return xref;
+#elif defined(__aarch64__)
+                return __atomic_sub_fetch(&ref, 1, __ATOMIC_SEQ_CST);
+#endif
             }
 
             bool xacquire() {
                 while (true) {
+#if defined(__x86_64__)
                     uint8_t ret;
                     {
                         uint32_t xref = this->xref;
@@ -149,11 +178,22 @@ namespace std {
                     if ((ret & 1) == 1) {
                         return true;
                     }
+#elif defined(__aarch64__)
+                    uint32_t expected = this->xref;
+                    if (expected == 0) {
+                        return false;
+                    }
+                    uint32_t desired = expected + 1;
+                    if (__atomic_compare_exchange_n(&this->xref, &expected, desired, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+                        return true;
+                    }
+#endif
                 }
             }
 
             bool xrelease_or_take_ownership() {
                 while (true) {
+#if defined(__x86_64__)
                     uint8_t ret;
                     {
                         uint32_t xref = this->xref;
@@ -168,20 +208,38 @@ namespace std {
                     if ((ret & 1) == 1) {
                         return true;
                     }
+#elif defined(__aarch64__)
+                    uint32_t expected = this->xref;
+                    if (expected <= 1) {
+                        return false;
+                    }
+                    uint32_t desired = expected - 1;
+                    if (__atomic_compare_exchange_n(&this->xref, &expected, desired, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+                        return true;
+                    }
+#endif
                 }
             }
 
             uint32_t xrelease() {
+#if defined(__x86_64__)
                 uint32_t xref;
                 asm("xor %%rax, %%rax; dec %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(this->xref), "=rm"(xref)::"%rax");
                 --xref;
                 return xref;
+#elif defined(__aarch64__)
+                return __atomic_sub_fetch(&this->xref, 1, __ATOMIC_SEQ_CST);
+#endif
             }
 
             uint32_t xrefcount() {
+#if defined(__x86_64__)
                 uint32_t xref;
                 asm("xor %%rax, %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(this->xref), "=rm"(xref)::"%rax");
                 return xref;
+#elif defined(__aarch64__)
+                return __atomic_load_n(&this->xref, __ATOMIC_SEQ_CST);
+#endif
             }
         };
 
@@ -217,10 +275,15 @@ namespace std {
             }
 
             void acquire() {
+#if defined(__x86_64__)
                 asm("lock incl %0;" : "+m"(ref));
+#elif defined(__aarch64__)
+                __atomic_add_fetch(&ref, 1, __ATOMIC_SEQ_CST);
+#endif
             }
 
             uint32_t release() {
+#if defined(__x86_64__)
                 uint32_t xref;
                 asm("xor %%rax, %%rax; dec %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ref), "=rm"(xref)::"%rax");
                 --xref;
@@ -234,27 +297,56 @@ namespace std {
                     weak = nullptr;
                 }
                 return xref;
+#elif defined(__aarch64__)
+                uint32_t xref = __atomic_sub_fetch(&ref, 1, __ATOMIC_SEQ_CST);
+                if (xref == 0 && weak != nullptr) {
+                    if (weak->xrelease() != 0) {
+                        return 1;
+                    }
+                    if (weak->release() == 0) {
+                        delete weak;
+                    }
+                    weak = nullptr;
+                }
+                return xref;
+#endif
             }
 
             uint32_t use_count() const noexcept {
+#if defined(__x86_64__)
                 asm("mfence");
+#elif defined(__aarch64__)
+                __atomic_thread_fence(__ATOMIC_SEQ_CST);
+#endif
                 return ref;
             }
 
             uint32_t create_ticket() noexcept {
+#if defined(__x86_64__)
                 uint32_t ticket;
                 asm("xor %%rax, %%rax; inc %%rax; lock xaddl %%eax, %0; movl %%eax, %1" : "+m"(ticketgen), "=rm"(ticket) :: "%rax");
                 return ticket;
+#elif defined(__aarch64__)
+                return __atomic_fetch_add(&ticketgen, 1, __ATOMIC_SEQ_CST);
+#endif
             }
 
             void release_ticket() noexcept {
+#if defined(__x86_64__)
                 asm("lock incl %0" : "+m"(currentticket));
+#elif defined(__aarch64__)
+                __atomic_add_fetch(&currentticket, 1, __ATOMIC_SEQ_CST);
+#endif
             }
 
             void lock() noexcept {
                 uint32_t ticket = create_ticket();
                 while (ticket != currentticket) {
+#if defined(__x86_64__)
                     asm("pause");
+#elif defined(__aarch64__)
+                    asm volatile("yield" ::: "memory");
+#endif
                 }
             }
 

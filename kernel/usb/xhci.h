@@ -172,12 +172,12 @@ struct xhci_ext_cap {
         return *this;
     }
 
-    std::optional<xhci_ext_cap> next() {
+    std::unique_ptr<xhci_ext_cap> next() {
         if (next_ptr != 0) {
             uint32_t *ptr = pointer;
             uint16_t off = next_ptr;
             ptr += off;
-            return { xhci_ext_cap(ptr) };
+            return std::make_unique<xhci_ext_cap>(ptr);
         } else {
             return { };
         }
@@ -290,13 +290,13 @@ struct xhci_capabilities {
         return (xhci_doorbell_registers *) (void *) ptr;
     }
 
-    std::optional<xhci_ext_cap> extcap() {
+    std::unique_ptr<xhci_ext_cap> extcap() {
         xhci_hccparams1 par(hccparams1);
         if (par.xhciExtCapPtr != 0) {
             uint32_t *ptr = (uint32_t *) (void *) this;
             uint32_t off = par.xhciExtCapPtr;
             ptr += off;
-            return { xhci_ext_cap(ptr) };
+            return std::make_unique<xhci_ext_cap>(xhci_ext_cap(ptr));
         } else {
             return { };
         }
