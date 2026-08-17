@@ -36,6 +36,7 @@ public:
     void claim(uint32_t pageaddr, uint32_t num) override;
     void release(uint32_t pageaddr) override;
     bool claimed(uint32_t pageaddr) override;
+    uint32_t base() const override;
     uint32_t max() const override;
     void set_max(uint32_t max) override;
 };
@@ -96,6 +97,10 @@ bool simple_physpagemap_managed::claimed(uint32_t pageaddr) {
     }
     pageaddr -= base_addr;
     return map->claimed(pageaddr);
+}
+
+uint32_t simple_physpagemap_managed::base() const {
+    return base_addr;
 }
 
 uint32_t simple_physpagemap_managed::max() const {

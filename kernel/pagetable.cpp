@@ -20,9 +20,11 @@ hw_spinlock &get_pagetables_lock() {
     return *pagetables_lock;
 }
 
+#if defined(__x86_64__)
 extern uintptr_t init_pml4t_addr;
 
 #define _get_pml4t()  (*((pagetable *) ((uintptr_t) get_pagetable_virt_offset() + init_pml4t_addr)))
+#endif
 
 static uintptr_t pagetable_virt_offset = 0;
 
@@ -34,6 +36,7 @@ void set_pagetable_virt_offset(uintptr_t offset) {
     pagetable_virt_offset = offset;
 }
 
+#if defined(__x86_64__)
 std::optional<pageentr> get_pageentr(uint64_t addr) {
     critical_section cli{};
     std::lock_guard lock{*pagetables_lock};
@@ -91,3 +94,4 @@ uint64_t get_phys_from_virt(uint64_t vaddr) {
         return 0;
     }
 }
+#endif

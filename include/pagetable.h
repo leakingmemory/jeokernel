@@ -276,6 +276,7 @@ public:
     }
 };
 
+#if defined(__x86_64__)
 struct GDT {
     uint64_t value;
 
@@ -500,7 +501,9 @@ COMPILER_WARNINGS_POP()
 } __attribute__((__packed__));
 
 static_assert(sizeof(GDT) == 8);
+#endif
 
+#if defined(__x86_64__)
 struct pageentr {
     uint64_t value;
 
@@ -612,16 +615,154 @@ struct pageentr {
         return *((pdpt *) get_subtable_addr());
     }
 } __attribute__((__packed__));
+#elif defined(__aarch64__)
+struct pageentr {
+    uint64_t value;
+
+    /** Entry is valid */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,0> valid() const {
+        return {value};
+    }
+    /** For L0-L2: 1 = points to next level table, 0 = block. For L3: 1 = page. */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,1> table() const {
+        return {value};
+    }
+    /** Memory attributes index into MAIR_ELx */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,2,3> attr_indx() const {
+        return {value};
+    }
+    /** Non-secure */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,5> ns() const {
+        return {value};
+    }
+    /** Access Permissions (AP[2:1]): 00=RW priv, 01=RW all, 10=RO priv, 11=RO all */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,6,2> ap() const {
+        return {value};
+    }
+    /** Shareability: 00=None, 10=Outer, 11=Inner */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,8,2> sh() const {
+        return {value};
+    }
+    /** Access Flag: set to 1 by hardware on access (if enabled) or software */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,10> af() const {
+        return {value};
+    }
+    /** Not Global: if 1, translation is ASID-specific */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,11> ng() const {
+        return {value};
+    }
+    /** Physical Page Number (Output Address bits [47:12]) */
+    constexpr const ptbl64_ReadBitfieldOfValue<uint64_t,12,36> ppn() const {
+        return {value};
+    }
+    /** Guarded Page (for Branch Target Identification) */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,50> gp() const {
+        return {value};
+    }
+    /** Dirty Bit Modifier (if enabled) */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,51> dbm() const {
+        return {value};
+    }
+    /** Hint that 16 adjacent entries point to a contiguous range */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,52> contiguous() const {
+        return {value};
+    }
+    /** Privileged Execute-Never */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,53> pxn() const {
+        return {value};
+    }
+    /** Unprivileged Execute-Never */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,54> uxn() const {
+        return {value};
+    }
+    /** Software-defined bits (ignored by hardware) */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,55,4> software() const {
+        return {value};
+    }
+    /** Page-Based Hardware Attributes */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,59,3> pbha() const {
+        return {value};
+    }
+    /** Software-defined bits (ignored by hardware) */
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,62,2> software2() const {
+        return {value};
+    }
+
+    constexpr ptbl_BitfieldOfValue<uint64_t,0> valid() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,1> table() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,2,3> attr_indx() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,5> ns() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,6,2> ap() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,8,2> sh() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,10> af() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,11> ng() {
+        return {value};
+    }
+    constexpr ptbl64_BitfieldOfValue<uint64_t,12,36> ppn() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,50> gp() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,51> dbm() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,52> contiguous() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,53> pxn() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,54> uxn() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,55,4> software() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,59,3> pbha() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,62,2> software2() {
+        return {value};
+    }
+
+    uint64_t get_subtable_addr() const {
+        uint64_t addr = ppn();
+        addr *= 4096;
+        return addr + get_pagetable_virt_offset();
+    }
+    typedef pageentr pdpt[512];
+    pdpt &get_subtable() const {
+        return *((pdpt *) get_subtable_addr());
+    }
+} __attribute__((__packed__));
+#endif
 
 static_assert(sizeof(pageentr) == 8);
 
 typedef pageentr pagetable[512];
 
+#if defined(__x86_64__)
 pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr);
 pageentr &get_pdpt_pageentr64(pagetable &pdpt_ref, uint64_t addr);
 pageentr &get_pdt_pageentr64(pagetable &pdt_ref, uint64_t addr);
 pageentr &get_pt_pageentr64(pagetable &pt_ref, uint64_t addr);
 pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr);
+#endif
 
 #ifndef LOADER
 
@@ -637,6 +778,7 @@ void initialize_pagetable_control();
 
 hw_spinlock &get_pagetables_lock();
 
+#if defined(__x86_64__)
 uint64_t get_phys_from_virt(uint64_t vaddr);
 std::optional<pageentr> get_pageentr(uint64_t addr);
 /**
@@ -649,6 +791,7 @@ std::optional<pageentr> get_pageentr(uint64_t addr);
  */
 bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update);
 bool update_pageentr(uint64_t addr, std::function<void (pageentr &pe)>);
+#endif
 
 #endif
 #endif //JEOKERNEL_PAGETABLE_H

@@ -7,6 +7,7 @@
 
 #include <pagetable.h>
 
+#if defined(__x86_64__)
 pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr) {
     uint16_t vector{0};
     {
@@ -63,5 +64,6 @@ pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr) {
     pageentr &pt = get_pt_pageentr64(pdt.get_subtable(), addr);
     return &pt;
 }
+#endif
 
 #endif //JEOKERNEL_PAGETABLE_IMPL_H

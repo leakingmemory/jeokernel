@@ -435,7 +435,49 @@ namespace {
 		put_hex((max_page - base_page) - usable);
 		puts("\n");
 	}
+
+	std::optional<u32> allocate_physpage(physpagemap_managed *map, u32 pages) {
+		u32 start{0};
+		u32 p{map->base()};
+		u32 n{0};
+		if (pages <= 0) {
+			return {};
+		}
+		while (p < map->max() && n < pages) {
+			if (!map->claimed(p)) {
+				if (n == 0) {
+					start = p;
+				}
+				++n;
+			} else {
+				n = 0;
+			}
+			++p;
+		}
+		if (n >= pages) {
+			for (uint32_t i = 0; i < pages; i++) {
+				map->claim(start + i);
+			}
+			return {start};
+		} else {
+			return {};
+		}
+	}
 }
+
+class ArmShimVPPageAllocator {
+public:
+	constexpr ArmShimVPPageAllocator() = default;
+	constexpr ~ArmShimVPPageAllocator() = default;
+	constexpr std::optional<VPAllocatorPage *> TryAllocate() const {
+		return {};
+	}
+	constexpr void Free(VPAllocatorPage *) const {
+	}
+	constexpr bool IsVirtualAddress() const {
+		return false;
+	}
+};
 
 // dtb = the device tree pointer the loader left in x0; head.S does not touch
 // x0 before the call, so AAPCS delivers it here as the first argument.
@@ -462,6 +504,20 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	auto *sppmap = get_physpagemap();
 
 	populate_physpagemap(sppmap, dtb, pagesearch);
+
+	uint32_t kvmap_phys;
+	{
+		auto o_kvmap_phys = allocate_physpage(sppmap, 1);
+		if (!o_kvmap_phys) {
+			puts("Failed to allocate kvmap_phys - aborting\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		kvmap_phys = *o_kvmap_phys;
+	}
+	VPAllocatorPage *vpalloc_root = new (reinterpret_cast<void *>(kvmap_phys)) VPAllocatorPage();
+	VPAllocator<ArmShimVPPageAllocator> vpalloc({}, vpalloc_root);
 
 	for (;;) {
 		asm volatile("wfe");
