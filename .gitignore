@@ -3,3 +3,4 @@ build-arm64/
 cmake-build-*/
 .idea/
 Testing/
+acpica*.tar*.gz

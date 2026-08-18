@@ -98,6 +98,19 @@ namespace {
 		puts(((mmfr0 >> 20) & 0xf) != 0 ? "yes\n" : "no\n");
 		puts("  64KB granule: ");
 		puts(((mmfr0 >> 24) & 0xf) == 0 ? "yes\n" : "no\n");
+
+		// VA range support.
+		u64 mmfr2;
+		asm volatile("mrs %0, ID_AA64MMFR2_EL1" : "=r"(mmfr2));
+		const unsigned varange = (mmfr2 >> 12) & 0xf;
+		puts("  VA range: ");
+		if (varange == 0) {
+			puts("48-bit (256TB)\n");
+		} else if (varange == 1) {
+			puts("52-bit (4PB)\n");
+		} else {
+			puts("reserved\n");
+		}
 	}
 
 	// ---- Flattened Device Tree (FDT) parsing -------------------------------
@@ -463,21 +476,30 @@ namespace {
 			return {};
 		}
 	}
-}
 
-class ArmShimVPPageAllocator {
-public:
-	constexpr ArmShimVPPageAllocator() = default;
-	constexpr ~ArmShimVPPageAllocator() = default;
-	constexpr std::optional<VPAllocatorPage *> TryAllocate() const {
-		return {};
-	}
-	constexpr void Free(VPAllocatorPage *) const {
-	}
-	constexpr bool IsVirtualAddress() const {
-		return false;
-	}
-};
+	class ArmShimVPPageAllocator {
+	public:
+		constexpr ArmShimVPPageAllocator() = default;
+		constexpr ~ArmShimVPPageAllocator() = default;
+		std::optional<VPAllocatorPage *> TryAllocate() const {
+			auto *map = get_physpagemap();
+			if (!map) {
+				return {};
+			}
+			auto o_page = allocate_physpage(map, 1);
+			if (!o_page) {
+				return {};
+			}
+			u64 addr = static_cast<u64>(*o_page) * PAGE_SIZE;
+			return new (reinterpret_cast<void *>(addr)) VPAllocatorPage();
+		}
+		constexpr void Free(VPAllocatorPage *) const {
+		}
+		constexpr bool IsVirtualAddress() const {
+			return false;
+		}
+	};
+}
 
 // dtb = the device tree pointer the loader left in x0; head.S does not touch
 // x0 before the call, so AAPCS delivers it here as the first argument.
@@ -516,8 +538,32 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 		}
 		kvmap_phys = *o_kvmap_phys;
 	}
-	VPAllocatorPage *vpalloc_root = new (reinterpret_cast<void *>(kvmap_phys)) VPAllocatorPage();
-	VPAllocator<ArmShimVPPageAllocator> vpalloc({}, vpalloc_root);
+	VPAllocatorPage *vpalloc_root = new (reinterpret_cast<void *>(static_cast<uptr>(kvmap_phys) * PAGE_SIZE)) VPAllocatorPage();
+	ArmShimVPPageAllocator vpPageAllocator{};
+	VPAllocator<ArmShimVPPageAllocator> vpalloc(&vpPageAllocator, vpalloc_root);
+
+	{
+		u64 mmfr2;
+		asm volatile("mrs %0, ID_AA64MMFR2_EL1" : "=r"(mmfr2));
+		const unsigned varange = (mmfr2 >> 12) & 0xf;
+		unsigned va_bits = 48;
+		if (varange == 1) {
+			va_bits = 52;
+		}
+
+		u64 supervisor_start = ~0ULL << va_bits;
+		u64 supervisor_size = 1ULL << va_bits;
+
+		puts("Releasing supervisor virtual memory: ");
+		put_hex(supervisor_start);
+		puts(" size ");
+		put_hex(supervisor_size);
+		puts("\n");
+
+		if (vpalloc.TryFree(supervisor_start, supervisor_size) != VPAllocatorResult::DONE) {
+			puts("Failed to release kernel virtual memory\n");
+		}
+	}
 
 	for (;;) {
 		asm volatile("wfe");
