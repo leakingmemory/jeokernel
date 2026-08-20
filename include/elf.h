@@ -210,9 +210,26 @@ struct ELF64_header {
         off += e_phentsize * index;
         return off;
     }
+    template <typename T> static T read_f(const T &field) {
+        T value{};
+        memcpy(&value, &field, sizeof(value));
+        return value;
+    }
+    uintptr_t get_program_entry_offset_unaligned(uint16_t index) const {
+        uintptr_t off = read_f<typename std::remove_const<decltype(e_phoff)>::type>(e_phoff);
+        index = index % read_f<typename std::remove_const<decltype(e_phnum)>::type>(e_phnum);
+        off += read_f<typename std::remove_const<decltype(e_phentsize)>::type>(e_phentsize) * index;
+        return off;
+    }
     const ELF64_program_entry &get_program_entry(uint16_t index) const {
         uint8_t *ptr = (uint8_t *) this;
         ptr += get_program_entry_offset(index);
+        ELF64_program_entry *pe = (ELF64_program_entry *) ptr;
+        return *pe;
+    }
+    const ELF64_program_entry &get_program_entry_unaligned(uint16_t index) const {
+        uint8_t *ptr = (uint8_t *) this;
+        ptr += get_program_entry_offset_unaligned(index);
         ELF64_program_entry *pe = (ELF64_program_entry *) ptr;
         return *pe;
     }

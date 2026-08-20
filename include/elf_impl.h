@@ -45,10 +45,17 @@ ELF::ELF(void *ptr, void *end_ptr) : elf_header((ELF_header *) ptr), valid(false
         error = "BE not supported";
         return;
     }
+#if defined(__aarch64__)
+    if (elf_header->e_machine != EI_ARM64) {
+        error = "Not arm64";
+        return;
+    }
+#else
     if (elf_header->e_machine != EI_AMD_X86_64) {
         error = "Not X86-64";
         return;
     }
+#endif
     valid = true;
 }
 

@@ -12,6 +12,8 @@
 using u8 = __UINT8_TYPE__;
 using usize = __SIZE_TYPE__;
 
+#include <cstdint>
+
 namespace {
 	// The actual byte fill, kept naive on purpose: one byte at a time, no
 	// alignment or word-at-a-time tricks. constexpr lets the compiler fold the
@@ -27,8 +29,40 @@ namespace {
 	}
 }
 
+extern "C" void *memmove(void *dest, const void *src, size_t n) {
+	if (dest != src) {
+		uint8_t *dest_ptr = (uint8_t *) dest;
+		const uint8_t *src_ptr = (uint8_t *) src;
+		const uint8_t *src_end = &(src_ptr[n]);
+		if (dest_ptr < src_ptr || dest_ptr > src_end) {
+			while (src_ptr < src_end) {
+				*dest_ptr = *src_ptr;
+				++dest_ptr;
+				++src_ptr;
+			}
+		} else {
+			uint8_t *dest_end = &(dest_ptr[n]);
+			while (dest_end > dest_ptr) {
+				--dest_end;
+				--src_end;
+				*dest_end = *src_end;
+			}
+		}
+	}
+	return dest;
+}
+
+extern "C" void bcopy(const void *src, void *dest, size_t n) {
+	memmove(dest, src, n);
+}
+
 extern "C" void *memset(void *dst, int value, usize n) {
 	return fill_bytes(dst, value, n);
+}
+
+extern "C" void *memcpy(void *dst, const void *src, size_t n) {
+	bcopy(src, dst, n);
+	return dst;
 }
 
 // The compiler points every pure-virtual vtable slot at this symbol; it is the

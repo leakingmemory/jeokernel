@@ -9,7 +9,10 @@
 
 #include <physpagemap.h>
 #include <new>
+#include <cstring>
 #include <vpallocator.h>
+#include <elf.h>
+#include <elf_impl.h>
 
 // Freestanding build (-nostdinc): use the compiler's built-in fixed-width
 // types instead of <cstdint>, which isn't available without libc++ headers.
@@ -22,8 +25,10 @@ using uptr = __UINTPTR_TYPE__;
 // address (0x40080000) and __end is just past the boot stack, so [_start,__end)
 // covers text/rodata/data/bss/stack. With the MMU off these symbol addresses
 // are physical addresses.
-extern "C" u8 _start[];
-extern "C" u8 __end[];
+extern "C" const u8 _start[];
+extern "C" const u8 __end[];
+extern "C" const u8 wrapped_kernel_start[];
+extern "C" const u8 wrapped_kernel_end[];
 
 namespace {
 	// QEMU virt PL011 UART. (Pi4: 0xfe201000 - to come from the DTB later.)
@@ -564,6 +569,160 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 			puts("Failed to release kernel virtual memory\n");
 		}
 	}
+
+	//u8 *stageloader_src = reinterpret_cast<uint8_t *>(&wrapped_uefistage_start);
+	const uint8_t *kernel_src = &wrapped_kernel_start[0];
+	const uint8_t *kernel_src_end = &wrapped_kernel_end[0];
+	puts("Shimloader detected entrypoint: ");
+	put_hex(reinterpret_cast<u64>(&shim_main));
+	//puts(L"\nStage loader embedded binary: ");
+	//put_hex(reinterpret_cast<u64>(wrapped_uefistage_start));
+	puts("\nKernel embedded binary: ");
+	put_hex(reinterpret_cast<u64>(kernel_src));
+	puts("\n");
+
+	//puts("Stage loader size: ");
+	//auto stageloader_size = reinterpret_cast<uintptr_t>(&wrapped_uefistage_end) - reinterpret_cast<uintptr_t>(stageloader_src);
+	//put_hex(static_cast<uint32_t>(stageloader_size));
+	//auto stageloader_pages = static_cast<uint32_t>(stageloader_size / 0x1000);
+	//if ((stageloader_size % 0x1000) != 0) {
+	//	++stageloader_pages;
+	//}
+	//puts(" (pages: ");
+	//put_hex(stageloader_pages);
+	//void *phys_stageloader = allocate_config_pages(stageloader_pages);
+	//puts(")\n");
+	//if (phys_stageloader == nullptr){
+		//puts(L"FATAL ERROR: Failed to allocate kernel pages");
+		//for (;;) {
+		//	asm volatile("wfe");
+		//}
+	//}
+	//memcpy(phys_stageloader, stageloader_src, stageloader_size);
+	puts("Kernel size: ");
+	auto kernel_size = reinterpret_cast<uintptr_t>(kernel_src_end) - reinterpret_cast<uintptr_t>(kernel_src);
+	put_hex(static_cast<uint32_t>(kernel_size));
+	auto kernel_pages = static_cast<uint32_t>(kernel_size / 0x1000);
+	if ((kernel_size % 0x1000) != 0) {
+		++kernel_pages;
+	}
+	puts(" (pages: ");
+	put_hex(kernel_pages);
+	std::optional<u32> phys_kernel_p = allocate_physpage(sppmap, kernel_pages);
+	puts(")\n");
+	if (!phys_kernel_p){
+		puts("FATAL ERROR: Failed to allocate kernel pages\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
+	}
+	void *phys_kernel = reinterpret_cast<void *>(*phys_kernel_p * PAGE_SIZE);
+	memcpy(phys_kernel, kernel_src, kernel_size);
+	puts("Kernel phys addr: ");
+	put_hex(reinterpret_cast<u64>(phys_kernel));
+	puts("\n");
+
+    //if (!stageloader.is_valid()) {
+    //    puts("FATAL ERROR: stageloader binary is not valid");
+    //    asm("ud2");
+    //}
+    ELF kernel{(void *) kernel_src, (void *) kernel_src_end};
+    if (!kernel.is_valid()) {
+        puts("FATAL ERROR: Kernel binary is not valid: ");
+    	puts(kernel.get_error());
+    	puts("\n");
+    	for (;;) {
+    		asm volatile("wfe");
+    	}
+    }
+    //const auto &stageloader_header = stageloader.get_elf64_header();
+    //uint64_t stageloader_entrypoint_addr = stageloader_header.e_entry;
+    //puts("Stageloader entrypoint: ");
+    //put_hex(reinterpret_cast<u64>(stageloader_entrypoint_addr));
+    //puts("\n");
+    //uintptr_t stageloader_vmem_start;
+    /*{
+        bool loaded_first_offset{false};
+        uintptr_t first_offset;
+        for (uint16_t i = 0; i < stageloader_header.e_phnum; i++) {
+            const auto &ph = stageloader_header.get_program_entry(i);
+            if (ph.p_type != PHT_LOAD || ph.p_memsz <= 0) {
+                continue;
+            }
+            if (!loaded_first_offset || ph.p_offset < first_offset) {
+                first_offset = ph.p_offset;
+                stageloader_vmem_start = ph.p_vaddr;
+                loaded_first_offset = true;
+            }
+        }
+        if (!loaded_first_offset) {
+            print(L"FATAL ERROR: No loadable sections found in stageloader binary");
+            asm("ud2");
+        }
+        if (stageloader_vmem_start < first_offset) {
+            print(L"FATAL ERROR: Stageloader binary is not properly relocated");
+            asm("ud2");
+        }
+        stageloader_vmem_start -= first_offset;
+        if (stageloader_vmem_start % 0x1000 != 0) {
+            print(L"FATAL ERROR: Stageloader binary is not properly page aligned");
+            asm("ud2");
+        }
+    }*/
+    //print(L"Stageloader virtual start addr: ");
+    //print_u64(stageloader_vmem_start);
+	puts("Examining ELF header: ");
+
+	// The embedded image is probably not aligned
+	ELF64_header elf64_header{};
+	const ELF64_header &elf64_header_unaligned = kernel.get_elf64_header();
+    memcpy(&elf64_header, &elf64_header_unaligned, sizeof(elf64_header));
+
+	puts(".\n");
+    uint64_t entrypoint_addr = elf64_header.e_entry;
+    puts("Kernel entrypoint: ");
+    put_hex(entrypoint_addr);
+    puts("\n");
+    uintptr_t kernel_vmem_start;
+    {
+        bool loaded_first_offset{false};
+        uintptr_t first_offset;
+        for (uint16_t i = 0; i < elf64_header.e_phnum; i++) {
+        	ELF64_program_entry ph{};
+            const auto &ph_unaligned = elf64_header_unaligned.get_program_entry_unaligned(i);
+        	memcpy(&ph, &ph_unaligned, sizeof(ph));
+            if (ph.p_type != PHT_LOAD || ph.p_memsz <= 0) {
+                continue;
+            }
+            if (!loaded_first_offset || ph.p_offset < first_offset) {
+                first_offset = ph.p_offset;
+                kernel_vmem_start = ph.p_vaddr;
+                loaded_first_offset = true;
+            }
+        }
+        if (!loaded_first_offset) {
+            puts("FATAL ERROR: No loadable sections found in kernel binary\n");
+        	for (;;) {
+        		asm volatile("wfe");
+        	}
+        }
+        if (kernel_vmem_start < first_offset) {
+            puts("FATAL ERROR: Kernel binary is not properly relocated\n");
+        	for (;;) {
+        		asm volatile("wfe");
+        	}
+        }
+        kernel_vmem_start -= first_offset;
+        if (kernel_vmem_start % 0x1000 != 0) {
+            puts("FATAL ERROR: Kernel binary is not properly page aligned\n");
+        	for (;;) {
+        		asm volatile("wfe");
+        	}
+        }
+    }
+    puts("Kernel virtual start addr: ");
+    put_hex(kernel_vmem_start);
+	puts("\n");
 
 	for (;;) {
 		asm volatile("wfe");
