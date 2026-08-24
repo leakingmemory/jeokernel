@@ -119,6 +119,12 @@
 #define SHT_SYMTAB_SHNDX    0x12
 #define SHT_NUM             0x13
 
+template <typename T> static T read_elf(const T &field) {
+    T value{};
+    memcpy(&value, &field, sizeof(value));
+    return value;
+}
+
 struct ELF32_section_entry {
     uint32_t sh_name;
     uint32_t sh_type;
@@ -210,15 +216,10 @@ struct ELF64_header {
         off += e_phentsize * index;
         return off;
     }
-    template <typename T> static T read_f(const T &field) {
-        T value{};
-        memcpy(&value, &field, sizeof(value));
-        return value;
-    }
     uintptr_t get_program_entry_offset_unaligned(uint16_t index) const {
-        uintptr_t off = read_f<typename std::remove_const<decltype(e_phoff)>::type>(e_phoff);
-        index = index % read_f<typename std::remove_const<decltype(e_phnum)>::type>(e_phnum);
-        off += read_f<typename std::remove_const<decltype(e_phentsize)>::type>(e_phentsize) * index;
+        uintptr_t off = read_elf<typename std::remove_const<decltype(e_phoff)>::type>(e_phoff);
+        index = index % read_elf<typename std::remove_const<decltype(e_phnum)>::type>(e_phnum);
+        off += read_elf<typename std::remove_const<decltype(e_phentsize)>::type>(e_phentsize) * index;
         return off;
     }
     const ELF64_program_entry &get_program_entry(uint16_t index) const {
@@ -247,6 +248,14 @@ struct ELF64_header {
         ELF64_section_entry *se = (ELF64_section_entry *) ptr;
         return *se;
     }
+    const ELF64_section_entry &get_section_entry_unaligned(uint16_t index) const {
+        uint8_t *ptr = (uint8_t *) this;
+        ptr += read_elf<typename std::remove_const<decltype(e_shoff)>::type>(e_shoff);
+        index = index % read_elf<typename std::remove_const<decltype(e_shnum)>::type>(e_shnum);
+        ptr += read_elf<typename std::remove_const<decltype(e_shentsize)>::type>(e_shentsize) * index;
+        ELF64_section_entry *se = (ELF64_section_entry *) ptr;
+        return *se;
+    }
     const ELF64_section_entry *get_rela_dyn_section() const {
         const char *strtab = nullptr;
         for (uint16_t i = 0; i < e_shnum; i++) {
@@ -255,6 +264,20 @@ struct ELF64_header {
             ptr += se.sh_offset;
             const char *str = (const char *) ptr;
             if (se.sh_type == SHT_RELA && strcmp(get_cstring(se.sh_name), ".rela.dyn") == 0) {
+                return &se;
+            }
+        }
+        return nullptr;
+    }
+    const ELF64_section_entry *get_rela_dyn_section_unaligned() const {
+        const char *strtab = nullptr;
+        auto e_shnum = read_elf<typename std::remove_const<decltype(this->e_shnum)>::type>(this->e_shnum);
+        for (uint16_t i = 0; i < e_shnum; i++) {
+            const ELF64_section_entry &se = get_section_entry_unaligned(i);
+            const int8_t *ptr = (int8_t *) ((void *) &start);
+            ptr += read_elf<typename std::remove_const<decltype(se.sh_offset)>::type>(se.sh_offset);
+            const char *str = (const char *) ptr;
+            if (read_elf<typename std::remove_const<decltype(se.sh_type)>::type>(se.sh_type) == SHT_RELA && strcmp(get_cstring(se.sh_name), ".rela.dyn") == 0) {
                 return &se;
             }
         }
@@ -383,6 +406,7 @@ struct ELF64_header {
 #define R_X86_64_GLOB_DAT   6
 #define R_X86_64_JUMP_SLOT  7
 #define R_X86_64_RELATIVE   8
+#define R_AARCH64_RELATIVE  0x403
 
 struct ELF64_rela_dyn {
     uint64_t offset;

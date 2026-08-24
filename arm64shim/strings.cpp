@@ -65,6 +65,19 @@ extern "C" void *memcpy(void *dst, const void *src, size_t n) {
 	return dst;
 }
 
+namespace {
+	constexpr int strcmp_impl(const char *str, const char *str2) {
+		for (; *str && *str2; str++, str2++) {
+		}
+		return *str - *str2;
+	}
+}
+
+extern "C" int strcmp(const char *str, const char *str2) {
+	return strcmp_impl(str, str2);
+}
+
+
 // The compiler points every pure-virtual vtable slot at this symbol; it is the
 // thing that would run if a pure virtual were ever called through a base under
 // construction. Hosted C++ gets it from libc++abi, but the freestanding shim

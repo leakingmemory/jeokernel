@@ -11,6 +11,7 @@
 #include <new>
 #include <cstring>
 #include <vpallocator.h>
+#include <pagetable.h>
 #include <elf.h>
 #include <elf_impl.h>
 
@@ -20,6 +21,16 @@ using u8 = __UINT8_TYPE__;
 using u32 = __UINT32_TYPE__;
 using u64 = __UINT64_TYPE__;
 using uptr = __UINTPTR_TYPE__;
+
+uintptr_t pagetable_virt_offset = 0;
+
+uintptr_t get_pagetable_virt_offset() {
+	return pagetable_virt_offset;
+}
+
+void set_pagetable_virt_offset(uintptr_t offset) {
+	pagetable_virt_offset = offset;
+}
 
 // Bounds of the shim image, defined by arm64shim.ld. _start is the load
 // address (0x40080000) and __end is just past the boot stack, so [_start,__end)
@@ -482,6 +493,89 @@ namespace {
 		}
 	}
 
+	enum MapFlags : u32 {
+		MapFlagNone       = 0,
+		MapFlagWrite      = 1 << 0,
+		MapFlagExecutable = 1 << 1,
+		MapFlagUser       = 1 << 2,
+		MapFlagDevice     = 1 << 3,
+	};
+
+	std::optional<u64> alloc_pt_page(physpagemap_managed *ppmap) {
+		auto o_page = allocate_physpage(ppmap, 1);
+		if (!o_page) {
+			return {};
+		}
+		u64 phys = static_cast<u64>(*o_page) * PAGE_SIZE;
+		memset(reinterpret_cast<void *>(phys), 0, PAGE_SIZE);
+		return phys;
+	}
+
+	pageentr *get_pageentr(physpagemap_managed *ppmapp, pagetable &root, u64 vaddr) {
+		u64 indices[4];
+		indices[0] = (vaddr >> 39) & 0x1FF;
+		indices[1] = (vaddr >> 30) & 0x1FF;
+		indices[2] = (vaddr >> 21) & 0x1FF;
+		indices[3] = (vaddr >> 12) & 0x1FF;
+
+		pageentr *current_table = &root[0];
+
+		for (int level = 0; level < 3; ++level) {
+			pageentr &entry = current_table[indices[level]];
+			if (!entry.valid()) {
+				if (ppmapp == nullptr) {
+					return nullptr;
+				}
+				auto o_new_pt = alloc_pt_page(ppmapp);
+				if (!o_new_pt) {
+					puts("Failed to allocate sub-table\n");
+					return nullptr;
+				}
+				entry.valid() = 1;
+				entry.table() = 1;
+				entry.ppn() = (*o_new_pt >> 12);
+			}
+			current_table = &entry.get_subtable()[0];
+		}
+
+		pageentr &leaf = current_table[indices[3]];
+		return &leaf;
+	}
+	void map_page(physpagemap_managed *ppmapp, pagetable &root, u64 vaddr, u64 paddr, u32 flags) {
+		pageentr *perhaps_leaf = get_pageentr(ppmapp, root, vaddr);
+		if (perhaps_leaf == nullptr) {
+			puts("Failed to map memory page\n");
+			return;
+		}
+		pageentr &leaf = *perhaps_leaf;
+		leaf.valid() = 1;
+		leaf.table() = 1;
+		leaf.af() = 1;
+
+		u64 ap = 0;
+		if (!(flags & MapFlagWrite)) {
+			ap |= 2; // AP[2] = 1 for ReadOnly
+		}
+		if (flags & MapFlagUser) {
+			ap |= 1; // AP[1] = 1 for User
+		}
+		leaf.ap() = ap;
+
+		bool executable = flags & MapFlagExecutable;
+		leaf.pxn() = executable ? 0 : 1;
+		leaf.uxn() = (executable && (flags & MapFlagUser)) ? 0 : 1;
+
+		leaf.ppn() = (paddr >> 12);
+
+		if (flags & MapFlagDevice) {
+			leaf.attr_indx() = 0;
+			leaf.sh() = 0;
+		} else {
+			leaf.attr_indx() = 1;
+			leaf.sh() = 3;
+		}
+	}
+
 	class ArmShimVPPageAllocator {
 	public:
 		constexpr ArmShimVPPageAllocator() = default;
@@ -509,8 +603,6 @@ namespace {
 // dtb = the device tree pointer the loader left in x0; head.S does not touch
 // x0 before the call, so AAPCS delivers it here as the first argument.
 extern "C" [[noreturn]] void shim_main(u64 dtb) {
-	puts("Hello, world from the jeokernel arm64 boot shim!\n");
-
 	report_paging();
 	report_memory(dtb);
 
@@ -547,6 +639,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	ArmShimVPPageAllocator vpPageAllocator{};
 	VPAllocator<ArmShimVPPageAllocator> vpalloc(&vpPageAllocator, vpalloc_root);
 
+	u64 supervisor_start;
 	{
 		u64 mmfr2;
 		asm volatile("mrs %0, ID_AA64MMFR2_EL1" : "=r"(mmfr2));
@@ -556,7 +649,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 			va_bits = 52;
 		}
 
-		u64 supervisor_start = ~0ULL << va_bits;
+		supervisor_start = ~0ULL << va_bits;
 		u64 supervisor_size = 1ULL << va_bits;
 
 		puts("Releasing supervisor virtual memory: ");
@@ -569,6 +662,24 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 			puts("Failed to release kernel virtual memory\n");
 		}
 	}
+
+	uint32_t kernel_root_pt_phys;
+	{
+		auto o_kernel_root_pt_phys = allocate_physpage(sppmap, 1);
+		if (!o_kernel_root_pt_phys) {
+			puts("Failed to allocate kernel_root_pt_phys - aborting\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		kernel_root_pt_phys = *o_kernel_root_pt_phys;
+	}
+	void *kernel_root_pt_virt = reinterpret_cast<void *>(static_cast<uptr>(kernel_root_pt_phys) * PAGE_SIZE);
+	memset(kernel_root_pt_virt, 0, PAGE_SIZE);
+	puts("Kernel root page table allocated at: ");
+	put_hex(static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE);
+	puts("\n");
+	pagetable &root_pt = *(reinterpret_cast<pagetable *>(kernel_root_pt_virt));
 
 	//u8 *stageloader_src = reinterpret_cast<uint8_t *>(&wrapped_uefistage_start);
 	const uint8_t *kernel_src = &wrapped_kernel_start[0];
@@ -681,7 +792,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	puts(".\n");
     uint64_t entrypoint_addr = elf64_header.e_entry;
     puts("Kernel entrypoint: ");
-    put_hex(entrypoint_addr);
+    put_hex(supervisor_start + entrypoint_addr);
     puts("\n");
     uintptr_t kernel_vmem_start;
     {
@@ -721,8 +832,78 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
         }
     }
     puts("Kernel virtual start addr: ");
-    put_hex(kernel_vmem_start);
+    put_hex(supervisor_start + kernel_vmem_start);
 	puts("\n");
+
+	{
+		uint32_t ph_page_start{static_cast<uint32_t>(reinterpret_cast<phys_t>(phys_kernel) / 0x1000)};
+		for (uint32_t i = 0; i < kernel_pages; i++) {
+			uint64_t vaddr{kernel_vmem_start + (static_cast<uint64_t>(i) * 0x1000)};
+			uint64_t ph_page_addr{ph_page_start + i};
+			ph_page_addr *= 0x1000;
+
+			map_page(sppmap, root_pt, vaddr, ph_page_addr, 0);
+		}
+	}
+
+    for (uint16_t i = 0; i < elf64_header.e_shnum; i++) {
+    	ELF64_section_entry section{};
+        const auto &section_unaligned = elf64_header_unaligned.get_section_entry_unaligned(i);
+    	memcpy(&section, &section_unaligned, sizeof(section));
+        if (section.sh_addr != 0 && section.sh_size != 0) {
+            uint32_t vaddr = (uint32_t) section.sh_addr;
+            uint32_t end_vaddr = vaddr + ((uint32_t) section.sh_size);
+            vaddr = vaddr & 0xFFFFF000;
+            for (; vaddr < end_vaddr; vaddr += 0x1000) {
+                pageentr *pe = get_pageentr(nullptr, root_pt, vaddr);
+                if (section.sh_flags & SHF_WRITE) {
+                    pe->ap() = 0;
+                }
+                if (section.sh_flags & SHF_EXECINSTR) {
+                    pe->pxn() = 0;
+                }
+            }
+        }
+    }
+
+    {
+        const auto *rela_dyn_unaligned = elf64_header_unaligned.get_rela_dyn_section_unaligned();
+        if (rela_dyn_unaligned != nullptr) {
+			ELF64_section_entry rela_dyn{};
+			memcpy(&rela_dyn, rela_dyn_unaligned, sizeof(rela_dyn));
+            ELF64_rela_dyn *rela_dyns_unaligned = (ELF64_rela_dyn *) (void *) (((uint8_t *) &(elf64_header_unaligned.start)) + rela_dyn.sh_offset);
+            /* X - May not handle very big images (in the astronomical range >4G->1TB) due to overflow */
+            static_assert((3 << 3) == sizeof(*rela_dyns_unaligned));
+            auto rela_dyn_count = (uint32_t) (rela_dyn.sh_size >> 3);
+            rela_dyn_count = rela_dyn_count / 3;
+            for (uint32_t i = 0; i < rela_dyn_count; i++) {
+            	typename std::remove_const<typename std::remove_reference<decltype(rela_dyns_unaligned[i])>::type>::type rela_dyn{};
+            	memcpy(&rela_dyn, &(rela_dyns_unaligned[i]), sizeof(rela_dyn));
+                switch (rela_dyn.rela_type) {
+                    case R_AARCH64_RELATIVE: {
+                        if (rela_dyn.sym_index != 0) {
+                        	puts("rela_dyn sym index invalid\n");
+                        	for (;;) {
+                        		asm volatile("wfe");
+                        	}
+                        }
+                        pageentr *pe = get_pageentr(nullptr, root_pt, rela_dyn.offset & ~((uint64_t) 0xFFF));
+                        if (pe == nullptr) {
+                        	puts("rela_dyn out of valid range\n");
+                        	for (;;) {
+                        		asm volatile("wfe");
+                        	}
+                        }
+                        uint64_t phys = static_cast<uint64_t>(pe->ppn()) << 12;
+                        phys += rela_dyn.offset & 0xFFF;
+                        *((uint64_t *) phys) += rela_dyn.addendum;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+	puts("Kernel image ready\n");
 
 	for (;;) {
 		asm volatile("wfe");

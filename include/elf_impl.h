@@ -19,21 +19,23 @@ ELF::ELF(void *ptr, void *end_ptr) : elf_header((ELF_header *) ptr), valid(false
             return;
         }
     }
-    if (elf_header->e_magic != 0x464C457F) {
+    if (read_elf<typename std::remove_const<decltype(elf_header->e_magic)>::type>(elf_header->e_magic) != 0x464C457F) {
         error = "ELF magic";
         return;
     }
-    m64 = (elf_header->e_class == 2);
-    if (!m64 && elf_header->e_class != 1) {
+    auto e_class = read_elf<typename std::remove_const<decltype(elf_header->e_class)>::type>(elf_header->e_class);
+    m64 = (e_class == 2);
+    if (!m64 && e_class != 1) {
         error = "ELF class 64/32 invalid";
         return;
     }
-    le = (elf_header->e_endian == 1);
-    if (!le && elf_header->e_endian != 2) {
+    auto e_endian = read_elf<typename std::remove_const<decltype(elf_header->e_endian)>::type>(elf_header->e_endian);
+    le = (e_endian == 1);
+    if (!le && e_endian != 2) {
         error = "ELF endian le/be invalid";
         return;
     }
-    if (elf_header->e_version != 1 || elf_header->e_version2 != 1) {
+    if (read_elf<typename std::remove_const<decltype(elf_header->e_version)>::type>(elf_header->e_version) != 1 || read_elf<typename std::remove_const<decltype(elf_header->e_version2)>::type>(elf_header->e_version2) != 1) {
         error = "ELF version number invalid";
         return;
     }
@@ -45,13 +47,14 @@ ELF::ELF(void *ptr, void *end_ptr) : elf_header((ELF_header *) ptr), valid(false
         error = "BE not supported";
         return;
     }
+    auto e_machine = read_elf<typename std::remove_const<decltype(elf_header->e_machine)>::type>(elf_header->e_machine);
 #if defined(__aarch64__)
-    if (elf_header->e_machine != EI_ARM64) {
+    if (e_machine != EI_ARM64) {
         error = "Not arm64";
         return;
     }
 #else
-    if (elf_header->e_machine != EI_AMD_X86_64) {
+    if (e_machine != EI_AMD_X86_64) {
         error = "Not X86-64";
         return;
     }
