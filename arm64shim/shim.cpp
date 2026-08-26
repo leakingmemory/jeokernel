@@ -905,6 +905,121 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
     }
 	puts("Kernel image ready\n");
 
+	int stack_pages = 7;
+	++stack_pages;
+	u64 stack_size{static_cast<u64>(stack_pages)};
+	stack_size *= PAGE_SIZE;
+	auto o_stack_vaddr = vpalloc.TryAllocate(stack_size);
+	if (!o_stack_vaddr) {
+		puts("FATAL ERROR: Unable to allocate CPU-boot stack virtual address\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
+	}
+	u64 stack_vaddr = *o_stack_vaddr;
+	auto o_stack_phys = allocate_physpage(sppmap, stack_pages - 1);
+	if (!o_stack_phys) {
+		puts("FATAL ERROR: Unable to allocate CPU-boot stack physical pages\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
+	}
+	u32 stack_pageaddr = *o_stack_phys;
+	for (int i = 1; i < stack_pages; i++) {
+		u64 vaddr = stack_vaddr + (static_cast<u64>(i) * PAGE_SIZE);
+		u64 paddr = static_cast<u64>(stack_pageaddr + (i - 1)) * PAGE_SIZE;
+		map_page(sppmap, root_pt, vaddr, paddr, MapFlagWrite);
+	}
+	u64 stack_addr = stack_vaddr + stack_size;
+	stack_addr &= ~0xFULL;
+
+	// Identity map shim code/data so execution continues smoothly across MMU enablement
+	u64 shim_start_page = reinterpret_cast<u64>(_start) & ~0xFFFULL;
+	u64 shim_end_page = (reinterpret_cast<u64>(__end) + 0xFFFULL) & ~0xFFFULL;
+	for (u64 p = shim_start_page; p < shim_end_page; p += PAGE_SIZE) {
+		map_page(sppmap, root_pt, p, p, MapFlagWrite | MapFlagExecutable);
+	}
+
+	// Map PL011 UART so console output continues working
+	map_page(sppmap, root_pt, PL011_BASE, PL011_BASE, MapFlagWrite | MapFlagDevice);
+
+	// Map DTB if present
+	if (pagesearch.n_res > 1) {
+		u64 dtb_start_page = pagesearch.res_start[1] & ~0xFFFULL;
+		u64 dtb_end_page = (pagesearch.res_end[1] + 0xFFFULL) & ~0xFFFULL;
+		for (u64 p = dtb_start_page; p < dtb_end_page; p += PAGE_SIZE) {
+			map_page(sppmap, root_pt, p, p, MapFlagNone);
+		}
+	}
+
+	puts("Enabling MMU and paging...\n");
+
+	// MAIR_EL1:
+	// Attr 0 (0x04): Device-nGnRE
+	// Attr 1 (0xFF): Normal Inner/Outer Write-Back Non-Transient Read/Write Allocate
+	u64 mair = (0x04ULL << 0) | (0xFFULL << 8);
+	asm volatile("msr MAIR_EL1, %0" :: "r"(mair));
+
+	// TCR_EL1:
+	u64 mmfr0;
+	asm volatile("mrs %0, ID_AA64MMFR0_EL1" : "=r"(mmfr0));
+	u64 parange = mmfr0 & 0xf;
+	if (parange > 6) {
+		parange = 0;
+	}
+
+	u64 tcr = (parange << 32)
+	        | (2ULL << 30) // TG1 = 4KB (0b10)
+	        | (3ULL << 28) // SH1 = Inner Shareable (0b11)
+	        | (1ULL << 26) // ORGN1 = Normal Outer WB WA (0b01)
+	        | (1ULL << 24) // IRGN1 = Normal Inner WB WA (0b01)
+	        | (0ULL << 23) // EPD1 = 0 (walk TTBR1)
+	        | (16ULL << 16)// T1SZ = 16 (48-bit VA)
+	        | (0ULL << 14) // TG0 = 4KB (0b00)
+	        | (3ULL << 12) // SH0 = Inner Shareable (0b11)
+	        | (1ULL << 10) // ORGN0 = Normal Outer WB WA (0b01)
+	        | (1ULL << 8)  // IRGN0 = Normal Inner WB WA (0b01)
+	        | (0ULL << 7)  // EPD0 = 0 (walk TTBR0)
+	        | (16ULL << 0); // T0SZ = 16 (48-bit VA)
+	asm volatile("msr TCR_EL1, %0" :: "r"(tcr));
+
+	u64 ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
+	asm volatile("msr TTBR0_EL1, %0" :: "r"(ttbr));
+	asm volatile("msr TTBR1_EL1, %0" :: "r"(ttbr));
+
+	asm volatile(
+		"dsb ish\n"
+		"tlbi vmalle1\n"
+		"dsb ish\n"
+		"isb\n"
+	);
+
+	u64 sctlr;
+	asm volatile("mrs %0, SCTLR_EL1" : "=r"(sctlr));
+	sctlr |= (1ULL << 0);  // M: enable MMU
+	sctlr |= (1ULL << 2);  // C: enable data cache
+	sctlr |= (1ULL << 12); // I: enable instruction cache
+	sctlr |= (1ULL << 3);  // SA: SP Alignment check
+	sctlr &= ~(1ULL << 1); // A: Alignment check disable
+	asm volatile(
+		"msr SCTLR_EL1, %0\n"
+		"isb\n"
+		:: "r"(sctlr)
+	);
+
+	puts("Paging enabled. Jumping to kernel entrypoint...\n");
+
+	u64 entrypoint = elf64_header.e_entry;
+
+	asm volatile(
+		"mov sp, %0\n"
+		"mov x0, %1\n"
+		"br %2\n"
+		:
+		: "r"(stack_addr), "r"(dtb), "r"(entrypoint)
+		: "x0"
+	);
+
 	for (;;) {
 		asm volatile("wfe");
 	}

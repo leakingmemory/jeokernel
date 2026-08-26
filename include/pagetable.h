@@ -222,7 +222,7 @@ public:
     constexpr operator uint16_t() const {
         return (value >> N) & uint16_mask_for_bits<S>();
     }
-    constexpr uint8_t operator = (uint16_t val) {
+    constexpr uint16_t operator = (uint16_t val) {
         value = (value & ~(static_cast<T>(uint16_mask_for_bits<S>()) << N)) | (static_cast<T>(val & uint16_mask_for_bits<S>()) << N);
         return val & uint16_mask_for_bits<S>();
     }
@@ -246,7 +246,7 @@ public:
     constexpr operator uint32_t() const {
         return (value >> N) & uint32_mask_for_bits<S>();
     }
-    constexpr uint8_t operator = (uint32_t val) {
+    constexpr uint32_t operator = (uint32_t val) {
         value = (value & ~(static_cast<T>(uint32_mask_for_bits<S>()) << N)) | (static_cast<T>(val & uint32_mask_for_bits<S>()) << N);
         return val & uint32_mask_for_bits<S>();
     }
@@ -271,7 +271,7 @@ public:
         return (value >> N) & uint64_mask_for_bits<S>();
     }
     constexpr uint64_t operator = (uint64_t val) {
-        value = (value & (static_cast<T>(~(uint64_mask_for_bits<S>()) << N))) | (static_cast<T>(val & uint64_mask_for_bits<S>()) << N);
+        value = (value & ~(static_cast<T>(uint64_mask_for_bits<S>()) << N)) | (static_cast<T>(val & uint64_mask_for_bits<S>()) << N);
         return val & uint64_mask_for_bits<S>();
     }
 };
