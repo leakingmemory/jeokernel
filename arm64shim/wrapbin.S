@@ -11,3 +11,8 @@ wrapped_kernel_start:
 .incbin KERNEL_PATH
 .global wrapped_kernel_end
 wrapped_kernel_end:
+.global wrapped_armstage_start
+wrapped_armstage_start:
+.incbin ARM64STAGE_PATH
+.global wrapped_armstage_end
+wrapped_armstage_end:

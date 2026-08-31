@@ -70,6 +70,34 @@ struct VPAllocatorPage {
 			return {};
 		}
 	}
+	template <typename F> constexpr void Dump() const {
+		for (decltype(data.num) i = 0; i < data.num; i++) {
+			F(ranges[i].start, ranges[i].end);
+		}
+	}
+	constexpr bool IsFree(uintptr_t addr, uintptr_t size) const {
+		if (data.num <= 0) {
+			return false;
+		}
+		for (decltype(data.num) i = 0; i < data.num; i++) {
+			if (ranges[i].start == addr) {
+				if (ranges[i].end >= (addr + size)) {
+					return true;
+				} else {
+					return false;
+				}
+			} else if (ranges[i].start < addr && ranges[i].end > addr) {
+				if (ranges[i].end >= (addr + size)) {
+					return true;
+				} else {
+					return false;
+				}
+			} else if (ranges[i].end < addr) {
+				return false;
+			}
+		}
+		return false;
+	}
 	constexpr VPAllocatorResult TryAllocateFromAddress(uintptr_t addr, uintptr_t size) {
 		if (data.num <= 0) {
 			return VPAllocatorResult::ERROR;
@@ -336,6 +364,37 @@ public:
 		MoveOneUp(page, next);
 		return next;
 	}
+	template <typename Flev1, typename Flev2> constexpr void Dump() const {
+		auto *allocator = first;
+		while (allocator != nullptr) {
+			auto *next = allocator->GetNext();
+			if (allocator->HasFree()) {
+				Flev1(true, *(allocator->GetStart()), *(allocator->GetEnd()));
+				allocator->Dump<Flev2>();
+			} else {
+				Flev1(false, 0, 0);
+			}
+			allocator = next;
+		}
+	}
+	constexpr bool IsFree(uintptr_t addr, uintptr_t size) const {
+		auto *allocator = first;
+		while (allocator != nullptr) {
+			auto *next = allocator->GetNext();
+			if (allocator->HasFree()) {
+				if (*(allocator->GetStart()) > addr) {
+					return false;
+				} else if (*(allocator->GetEnd()) < addr) {
+					allocator = next;
+					continue;
+				} else {
+					return allocator->IsFree(addr, size);
+				}
+			}
+			allocator = next;
+		}
+		return false;
+	}
 	constexpr VPAllocatorResult TryAllocateFromAddress(uintptr_t addr, uintptr_t size) {
 		if (pageAllocator == nullptr) {
 			return VPAllocatorResult::ERROR;
@@ -344,9 +403,9 @@ public:
 		while (allocator != nullptr) {
 			auto *next = allocator->GetNext();
 			if (allocator->HasFree()) {
-				if (allocator->GetStart() > addr) {
+				if (*(allocator->GetStart()) > addr) {
 					return VPAllocatorResult::ERROR;
-				} else if (allocator->GetEnd() < addr) {
+				} else if (*(allocator->GetEnd()) < addr) {
 					allocator = next;
 					continue;
 				} else {

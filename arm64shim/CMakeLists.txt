@@ -13,8 +13,11 @@ target_include_directories(arm64shim.elf PRIVATE ../include)
 # as KERNEL_PATH. We embed the stripped "kernel" (no debug symbols), produced by
 # the kernel custom target, which must exist before we assemble wrapbin.S.
 add_dependencies(arm64shim.elf kernel)
+add_dependencies(arm64shim.elf arm64shimstage)
 target_compile_definitions(arm64shim.elf PRIVATE
-	"$<$<COMPILE_LANGUAGE:ASM>:KERNEL_PATH=\"${CMAKE_BINARY_DIR}/kernel/kernel\">")
+	"$<$<COMPILE_LANGUAGE:ASM>:KERNEL_PATH=\"${CMAKE_BINARY_DIR}/kernel/kernel\">"
+	"$<$<COMPILE_LANGUAGE:ASM>:ARM64STAGE_PATH=\"${CMAKE_BINARY_DIR}/arm64shimstage/arm64shimstage\">"
+)
 
 # The loader consumes a flat "Image", not an ELF, so strip the ELF down to a
 # raw binary. Keep the .elf around for gdb (qemu -s -S; gdb arm64shim.elf).

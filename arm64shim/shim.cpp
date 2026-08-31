@@ -40,6 +40,8 @@ extern "C" const u8 _start[];
 extern "C" const u8 __end[];
 extern "C" const u8 wrapped_kernel_start[];
 extern "C" const u8 wrapped_kernel_end[];
+extern "C" const u8 wrapped_armstage_start[];
+extern "C" const u8 wrapped_armstage_end[];
 
 namespace {
 	// QEMU virt PL011 UART. (Pi4: 0xfe201000 - to come from the DTB later.)
@@ -493,6 +495,48 @@ namespace {
 		}
 	}
 
+	template <class VPPageAllocator> std::optional<u32> allocate_jump_physpage(physpagemap_managed *map, u32 pages, VPAllocator<VPPageAllocator> &vp, u64 supervisor_start) {
+		u32 start{0};
+		u32 p{map->base()};
+		u32 n{0};
+		if (pages <= 0) {
+			return {};
+		}
+		while (p < map->max() && n < pages) {
+			if (!map->claimed(p)) {
+				uintptr_t pa{p};
+				pa = pa * 0x1000;
+				vp.template Dump<dump_lev1,dump_lev2>();
+				if (vp.IsFree(supervisor_start + pa, 0x1000)) {
+					if (n == 0) {
+						start = p;
+					}
+					++n;
+				} else {
+					n = 0;
+				}
+			} else {
+				n = 0;
+			}
+			++p;
+		}
+		if (n >= pages) {
+			uintptr_t pa{start};
+			pa = pa * 0x1000;
+			uintptr_t ps{pages};
+			ps = ps * 0x1000;
+			for (uint32_t i = 0; i < pages; i++) {
+				map->claim(start + i);
+			}
+			if (vp.TryAllocateFromAddress(supervisor_start + pa, ps) != VPAllocatorResult::DONE) {
+				return {};
+			}
+			return {start};
+		} else {
+			return {};
+		}
+	}
+
 	enum MapFlags : u32 {
 		MapFlagNone       = 0,
 		MapFlagWrite      = 1 << 0,
@@ -651,6 +695,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 
 		supervisor_start = ~0ULL << va_bits;
 		u64 supervisor_size = 1ULL << va_bits;
+		supervisor_size -= 0x1000;
 
 		puts("Releasing supervisor virtual memory: ");
 		put_hex(supervisor_start);
@@ -681,35 +726,27 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	puts("\n");
 	pagetable &root_pt = *(reinterpret_cast<pagetable *>(kernel_root_pt_virt));
 
-	//u8 *stageloader_src = reinterpret_cast<uint8_t *>(&wrapped_uefistage_start);
+	const uint8_t *stageloader_src = &wrapped_armstage_start[0];
 	const uint8_t *kernel_src = &wrapped_kernel_start[0];
 	const uint8_t *kernel_src_end = &wrapped_kernel_end[0];
 	puts("Shimloader detected entrypoint: ");
 	put_hex(reinterpret_cast<u64>(&shim_main));
-	//puts(L"\nStage loader embedded binary: ");
-	//put_hex(reinterpret_cast<u64>(wrapped_uefistage_start));
+	puts("\nStage loader embedded binary: ");
+	put_hex(reinterpret_cast<u64>(wrapped_armstage_start));
 	puts("\nKernel embedded binary: ");
 	put_hex(reinterpret_cast<u64>(kernel_src));
 	puts("\n");
 
-	//puts("Stage loader size: ");
-	//auto stageloader_size = reinterpret_cast<uintptr_t>(&wrapped_uefistage_end) - reinterpret_cast<uintptr_t>(stageloader_src);
-	//put_hex(static_cast<uint32_t>(stageloader_size));
-	//auto stageloader_pages = static_cast<uint32_t>(stageloader_size / 0x1000);
-	//if ((stageloader_size % 0x1000) != 0) {
-	//	++stageloader_pages;
-	//}
-	//puts(" (pages: ");
-	//put_hex(stageloader_pages);
-	//void *phys_stageloader = allocate_config_pages(stageloader_pages);
-	//puts(")\n");
-	//if (phys_stageloader == nullptr){
-		//puts(L"FATAL ERROR: Failed to allocate kernel pages");
-		//for (;;) {
-		//	asm volatile("wfe");
-		//}
-	//}
-	//memcpy(phys_stageloader, stageloader_src, stageloader_size);
+	puts("Stage loader size: ");
+	auto stageloader_size = reinterpret_cast<uintptr_t>(&wrapped_armstage_end) - reinterpret_cast<uintptr_t>(stageloader_src);
+	put_hex(stageloader_size);
+	auto stageloader_pages = static_cast<uint32_t>(stageloader_size / 0x1000);
+	if ((stageloader_size % 0x1000) != 0) {
+		++stageloader_pages;
+	}
+	puts(" (pages: ");
+	put_hex(stageloader_pages);
+	puts(")\n");
 	puts("Kernel size: ");
 	auto kernel_size = reinterpret_cast<uintptr_t>(kernel_src_end) - reinterpret_cast<uintptr_t>(kernel_src);
 	put_hex(static_cast<uint32_t>(kernel_size));
@@ -733,10 +770,19 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	put_hex(reinterpret_cast<u64>(phys_kernel));
 	puts("\n");
 
-    //if (!stageloader.is_valid()) {
-    //    puts("FATAL ERROR: stageloader binary is not valid");
-    //    asm("ud2");
-    //}
+	ELF stageloader{(void *) stageloader_src, (void *) &wrapped_armstage_end};
+	if (!stageloader.is_valid()) {
+		puts("FATAL ERROR: stageloader binary is not valid\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
+	}
+	if (!stageloader.is_valid()) {
+        puts("FATAL ERROR: stageloader binary is not valid\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
+	}
     ELF kernel{(void *) kernel_src, (void *) kernel_src_end};
     if (!kernel.is_valid()) {
         puts("FATAL ERROR: Kernel binary is not valid: ");
@@ -746,17 +792,21 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
     		asm volatile("wfe");
     	}
     }
-    //const auto &stageloader_header = stageloader.get_elf64_header();
-    //uint64_t stageloader_entrypoint_addr = stageloader_header.e_entry;
-    //puts("Stageloader entrypoint: ");
-    //put_hex(reinterpret_cast<u64>(stageloader_entrypoint_addr));
-    //puts("\n");
-    //uintptr_t stageloader_vmem_start;
-    /*{
+	const auto &stageloader_header_unaligned = stageloader.get_elf64_header();
+	typename std::remove_const<typename std::remove_reference<decltype(stageloader_header_unaligned)>::type>::type stageloader_header{};
+	memcpy(&stageloader_header, &stageloader_header_unaligned, sizeof(stageloader_header));
+    uint64_t stageloader_entrypoint_addr = stageloader_header.e_entry;
+    puts("Stageloader entrypoint: ");
+    put_hex(static_cast<u64>(stageloader_entrypoint_addr));
+    puts("\n");
+    uintptr_t stageloader_vmem_start;
+    {
         bool loaded_first_offset{false};
         uintptr_t first_offset;
         for (uint16_t i = 0; i < stageloader_header.e_phnum; i++) {
-            const auto &ph = stageloader_header.get_program_entry(i);
+            const auto &ph_unaligned = stageloader_header_unaligned.get_program_entry_unaligned(i);
+        	typename std::remove_const<typename std::remove_reference<decltype(ph_unaligned)>::type>::type ph{};
+        	memcpy(&ph, &ph_unaligned, sizeof(ph));
             if (ph.p_type != PHT_LOAD || ph.p_memsz <= 0) {
                 continue;
             }
@@ -767,21 +817,27 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
             }
         }
         if (!loaded_first_offset) {
-            print(L"FATAL ERROR: No loadable sections found in stageloader binary");
-            asm("ud2");
+            puts("FATAL ERROR: No loadable sections found in stageloader binary");
+        	for (;;) {
+        		asm volatile("wfe");
+        	}
         }
         if (stageloader_vmem_start < first_offset) {
-            print(L"FATAL ERROR: Stageloader binary is not properly relocated");
-            asm("ud2");
+            puts("FATAL ERROR: Stageloader binary is not properly relocated");
+        	for (;;) {
+        		asm volatile("wfe");
+        	}
         }
         stageloader_vmem_start -= first_offset;
         if (stageloader_vmem_start % 0x1000 != 0) {
-            print(L"FATAL ERROR: Stageloader binary is not properly page aligned");
-            asm("ud2");
+            puts("FATAL ERROR: Stageloader binary is not properly page aligned");
+        	for (;;) {
+        		asm volatile("wfe");
+        	}
         }
-    }*/
-    //print(L"Stageloader virtual start addr: ");
-    //print_u64(stageloader_vmem_start);
+    }
+    puts("Stageloader virtual start addr: ");
+    put_hex(stageloader_vmem_start);
 	puts("Examining ELF header: ");
 
 	// The embedded image is probably not aligned
@@ -904,6 +960,23 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
         }
     }
 	puts("Kernel image ready\n");
+
+	puts("Allocating shimstage area...\n");
+	void *phys_stageloader;
+	{
+		std::optional<u32> phys_stageloader_addr = allocate_jump_physpage(sppmap, stageloader_pages, vpalloc, supervisor_start);
+		if (!phys_stageloader_addr){
+			puts("FATAL ERROR: Failed to allocate stageloader pages\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		phys_stageloader = reinterpret_cast<void *>(static_cast<u64>(*phys_stageloader_addr) * 0x1000);
+	}
+	memcpy(phys_stageloader, stageloader_src, stageloader_size);
+	puts("Shimstage installed at: ");
+	put_hex(reinterpret_cast<u64>(phys_stageloader));
+	puts("\n");
 
 	int stack_pages = 7;
 	++stack_pages;
