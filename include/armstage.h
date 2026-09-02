@@ -8,6 +8,7 @@ struct ArmStageContext {
     u64 kernel_entrypoint;
     u64 kernel_sp;
     u64 dtb;
+    u64 uart;
 };
 
 #endif //JEOKERNEL_ARMSTAGE_H

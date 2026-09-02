@@ -1042,15 +1042,34 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	stack_addr &= ~0xFULL;
 
 	// Map PL011 UART so console output continues working
-	map_page(sppmap, root_pt, PL011_BASE, PL011_BASE, MapFlagWrite | MapFlagDevice);
+	auto o_uart_vaddr = vpalloc.TryAllocate(PAGE_SIZE);
+	if (!o_uart_vaddr) {
+		puts("FATAL ERROR: Unable to allocate UART virtual address\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
+	}
+	u64 uart_vaddr = *o_uart_vaddr;
+	map_page(sppmap, root_pt, uart_vaddr, PL011_BASE, MapFlagWrite | MapFlagDevice);
 
 	// Map DTB if present
+	u64 dtb_vaddr = 0;
 	if (pagesearch.n_res > 1) {
 		u64 dtb_start_page = pagesearch.res_start[1] & ~0xFFFULL;
 		u64 dtb_end_page = (pagesearch.res_end[1] + 0xFFFULL) & ~0xFFFULL;
-		for (u64 p = dtb_start_page; p < dtb_end_page; p += PAGE_SIZE) {
-			map_page(sppmap, root_pt, p, p, MapFlagNone);
+		u64 dtb_size = dtb_end_page - dtb_start_page;
+		auto o_dtb_vaddr = vpalloc.TryAllocate(dtb_size);
+		if (!o_dtb_vaddr) {
+			puts("FATAL ERROR: Unable to allocate DTB virtual address\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
 		}
+		u64 dtb_vaddr_base = *o_dtb_vaddr;
+		for (u64 p = 0; p < dtb_size; p += PAGE_SIZE) {
+			map_page(sppmap, root_pt, dtb_vaddr_base + p, dtb_start_page + p, MapFlagNone);
+		}
+		dtb_vaddr = dtb_vaddr_base + (pagesearch.res_start[1] & 0xFFFULL);
 	}
 
 	stageloader_sp -= sizeof(ArmStageContext);
@@ -1060,7 +1079,8 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	ctx->ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
 	ctx->kernel_entrypoint = supervisor_start + entrypoint_addr;
 	ctx->kernel_sp = stack_addr;
-	ctx->dtb = dtb;
+	ctx->dtb = dtb_vaddr;
+	ctx->uart = uart_vaddr;
 
 	u64 stageloader_entry = stageloader_entrypoint_addr + reinterpret_cast<u64>(phys_stageloader);
 

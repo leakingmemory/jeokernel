@@ -3,6 +3,7 @@
 //
 
 #include <armstage.h>
+#include <stage1.h>
 
 extern "C" [[noreturn]] void stage_main(ArmStageContext *ctx) {
 	// MAIR_EL1:
@@ -59,15 +60,36 @@ extern "C" [[noreturn]] void stage_main(ArmStageContext *ctx) {
 	);
 
 	u64 kernel_sp = ctx->kernel_sp;
-	u64 dtb = ctx->dtb;
 	u64 entrypoint = ctx->kernel_entrypoint;
+
+	kernel_sp -= sizeof(Stage1Data);
+	kernel_sp &= ~0xFULL;
+
+	Stage1Data *stage1Data = reinterpret_cast<Stage1Data *>(kernel_sp);
+	stage1Data->multibootAddr = 0;
+	stage1Data->physpageMapAddr = 0;
+	stage1Data->init_pml4t = 0;
+	stage1Data->uefiMemoryMapPage = 0;
+	stage1Data->uefiMemoryMapDescrSize = 0;
+	stage1Data->uefiMemoryMapNumDescr = 0;
+	stage1Data->gdtAddr = 0;
+	stage1Data->efi_horiz = 0;
+	stage1Data->efi_vert = 0;
+	stage1Data->efi_pixel_format = 0;
+	stage1Data->kernel_phys = 0;
+	stage1Data->kernel_size = 0;
+	stage1Data->efi_framebuffer = 0;
+	stage1Data->efi_framebuffer_size = 0;
+	stage1Data->efi_rsdp_ptr = 0;
+	stage1Data->uart = ctx->uart;
+	stage1Data->dtb = ctx->dtb;
 
 	asm volatile(
 		"mov sp, %0\n"
 		"mov x0, %1\n"
 		"br %2\n"
 		:
-		: "r"(kernel_sp), "r"(dtb), "r"(entrypoint)
+		: "r"(kernel_sp), "r"(reinterpret_cast<u64>(stage1Data)), "r"(entrypoint)
 		: "x0"
 	);
 

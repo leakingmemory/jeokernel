@@ -31,6 +31,10 @@ struct Stage1Data {
     uint64_t efi_framebuffer_size;
 
     uint64_t efi_rsdp_ptr;
+
+    uint64_t uart;
+
+    uint64_t dtb;
 };
 
 #endif //JEOKERNEL_STAGE1_H
