@@ -1,4 +1,4 @@
-ENTRY(bootstrap)
+ENTRY(stage_main)
 
 SECTIONS
 {

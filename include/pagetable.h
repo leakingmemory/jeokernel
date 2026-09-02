@@ -276,7 +276,7 @@ public:
     }
 };
 
-#if defined(__x86_64__)
+#if !defined(__aarch64__)
 struct GDT {
     uint64_t value;
 
@@ -503,7 +503,7 @@ COMPILER_WARNINGS_POP()
 static_assert(sizeof(GDT) == 8);
 #endif
 
-#if defined(__x86_64__)
+#if !defined(__aarch64__)
 struct pageentr {
     uint64_t value;
 
@@ -756,7 +756,7 @@ static_assert(sizeof(pageentr) == 8);
 
 typedef pageentr pagetable[512];
 
-#if defined(__x86_64__)
+#if !defined(__aarch64__)
 pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr);
 pageentr &get_pdpt_pageentr64(pagetable &pdpt_ref, uint64_t addr);
 pageentr &get_pdt_pageentr64(pagetable &pdt_ref, uint64_t addr);

@@ -7,8 +7,8 @@
 
 #include <pagetable.h>
 
-#if defined(__x86_64__)
-pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr) {
+#if !defined(__aarch64__)
+inline pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr) {
     uint16_t vector{0};
     {
         uint64_t vector64 = addr >> 39;
@@ -18,7 +18,7 @@ pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr) {
     return pml4t[vector];
 }
 
-pageentr &get_pdpt_pageentr64(pagetable &pdpt_ref, uint64_t addr) {
+inline pageentr &get_pdpt_pageentr64(pagetable &pdpt_ref, uint64_t addr) {
     uint16_t vector{0};
     {
         uint64_t vector64 = addr >> 30;
@@ -28,7 +28,7 @@ pageentr &get_pdpt_pageentr64(pagetable &pdpt_ref, uint64_t addr) {
     return pdpt_ref[vector];
 }
 
-pageentr &get_pdt_pageentr64(pagetable &pdt_ref, uint64_t addr) {
+inline pageentr &get_pdt_pageentr64(pagetable &pdt_ref, uint64_t addr) {
     uint16_t vector{0};
     {
         uint64_t vector64 = addr >> 21;
@@ -38,7 +38,7 @@ pageentr &get_pdt_pageentr64(pagetable &pdt_ref, uint64_t addr) {
     return pdt_ref[vector];
 }
 
-pageentr &get_pt_pageentr64(pagetable &pt_ref, uint64_t addr) {
+inline pageentr &get_pt_pageentr64(pagetable &pt_ref, uint64_t addr) {
     uint16_t vector{0};
     {
         uint64_t vector64 = addr >> 12;
@@ -48,7 +48,7 @@ pageentr &get_pt_pageentr64(pagetable &pt_ref, uint64_t addr) {
     return pt_ref[vector];
 }
 
-pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr) {
+inline pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr) {
     pageentr &pml4t_pe = get_pml4t_pageentr64(pml4t, addr);
     if (!pml4t_pe.present()) {
         return nullptr;

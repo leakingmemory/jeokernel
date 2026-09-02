@@ -14,6 +14,7 @@ target_include_directories(arm64shim.elf PRIVATE ../include)
 # the kernel custom target, which must exist before we assemble wrapbin.S.
 add_dependencies(arm64shim.elf kernel)
 add_dependencies(arm64shim.elf arm64shimstage)
+set_property(SOURCE wrapbin.S PROPERTY OBJECT_DEPENDS "${CMAKE_BINARY_DIR}/kernel/kernel;${CMAKE_BINARY_DIR}/arm64shimstage/arm64shimstage")
 target_compile_definitions(arm64shim.elf PRIVATE
 	"$<$<COMPILE_LANGUAGE:ASM>:KERNEL_PATH=\"${CMAKE_BINARY_DIR}/kernel/kernel\">"
 	"$<$<COMPILE_LANGUAGE:ASM>:ARM64STAGE_PATH=\"${CMAKE_BINARY_DIR}/arm64shimstage/arm64shimstage\">"

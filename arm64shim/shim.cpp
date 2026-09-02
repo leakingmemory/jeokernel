@@ -14,6 +14,7 @@
 #include <pagetable.h>
 #include <elf.h>
 #include <elf_impl.h>
+#include <armstage.h>
 
 // Freestanding build (-nostdinc): use the compiler's built-in fixed-width
 // types instead of <cstdint>, which isn't available without libc++ headers.
@@ -326,7 +327,9 @@ namespace {
 	}
 
 	FreePageSearch get_first_free_page(u64 dtb) {
-		FreePageSearch s{.first_memory_page = 0, .first_memory_page_set = false};
+		FreePageSearch s{};
+		s.first_memory_page = 0;
+		s.first_memory_page_set = false;
 
 		const u64 shim_start = reinterpret_cast<u64>(_start);
 		const u64 shim_end   = reinterpret_cast<u64>(__end);
@@ -506,7 +509,6 @@ namespace {
 			if (!map->claimed(p)) {
 				uintptr_t pa{p};
 				pa = pa * 0x1000;
-				vp.template Dump<dump_lev1,dump_lev2>();
 				if (vp.IsFree(supervisor_start + pa, 0x1000)) {
 					if (n == 0) {
 						start = p;
@@ -907,16 +909,18 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
         const auto &section_unaligned = elf64_header_unaligned.get_section_entry_unaligned(i);
     	memcpy(&section, &section_unaligned, sizeof(section));
         if (section.sh_addr != 0 && section.sh_size != 0) {
-            uint32_t vaddr = (uint32_t) section.sh_addr;
-            uint32_t end_vaddr = vaddr + ((uint32_t) section.sh_size);
-            vaddr = vaddr & 0xFFFFF000;
+            u64 vaddr = section.sh_addr;
+            u64 end_vaddr = vaddr + section.sh_size;
+            vaddr = vaddr & ~0xFFFULL;
             for (; vaddr < end_vaddr; vaddr += 0x1000) {
                 pageentr *pe = get_pageentr(nullptr, root_pt, vaddr);
-                if (section.sh_flags & SHF_WRITE) {
-                    pe->ap() = 0;
-                }
-                if (section.sh_flags & SHF_EXECINSTR) {
-                    pe->pxn() = 0;
+                if (pe != nullptr) {
+                    if (section.sh_flags & SHF_WRITE) {
+                        pe->ap() = 0;
+                    }
+                    if (section.sh_flags & SHF_EXECINSTR) {
+                        pe->pxn() = 0;
+                    }
                 }
             }
         }
@@ -963,6 +967,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 
 	puts("Allocating shimstage area...\n");
 	void *phys_stageloader;
+	uint32_t stageloader_start_page;
 	{
 		std::optional<u32> phys_stageloader_addr = allocate_jump_physpage(sppmap, stageloader_pages, vpalloc, supervisor_start);
 		if (!phys_stageloader_addr){
@@ -971,12 +976,42 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 				asm volatile("wfe");
 			}
 		}
-		phys_stageloader = reinterpret_cast<void *>(static_cast<u64>(*phys_stageloader_addr) * 0x1000);
+		stageloader_start_page = *phys_stageloader_addr;
+		phys_stageloader = reinterpret_cast<void *>(static_cast<u64>(stageloader_start_page) * PAGE_SIZE);
 	}
 	memcpy(phys_stageloader, stageloader_src, stageloader_size);
 	puts("Shimstage installed at: ");
 	put_hex(reinterpret_cast<u64>(phys_stageloader));
 	puts("\n");
+
+	constexpr uint32_t stageloader_stack_pages = 2;
+	uint32_t stageloader_stack_start_page;
+	{
+		std::optional<u32> phys_stack_addr = allocate_jump_physpage(sppmap, stageloader_stack_pages, vpalloc, supervisor_start);
+		if (!phys_stack_addr){
+			puts("FATAL ERROR: Failed to allocate stageloader stack pages\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		stageloader_stack_start_page = *phys_stack_addr;
+	}
+	u64 stageloader_sp = static_cast<u64>(stageloader_stack_start_page + stageloader_stack_pages) * PAGE_SIZE;
+	puts("Shimstage stack top at: ");
+	put_hex(stageloader_sp);
+	puts("\n");
+
+	// Map stageloader pages (identity mapped)
+	for (uint32_t i = 0; i < stageloader_pages; ++i) {
+		u64 p = static_cast<u64>(stageloader_start_page + i) * PAGE_SIZE;
+		map_page(sppmap, root_pt, p, p, MapFlagWrite | MapFlagExecutable);
+	}
+
+	// Map stageloader stack pages (identity mapped)
+	for (uint32_t i = 0; i < stageloader_stack_pages; ++i) {
+		u64 p = static_cast<u64>(stageloader_stack_start_page + i) * PAGE_SIZE;
+		map_page(sppmap, root_pt, p, p, MapFlagWrite);
+	}
 
 	int stack_pages = 7;
 	++stack_pages;
@@ -1006,13 +1041,6 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	u64 stack_addr = stack_vaddr + stack_size;
 	stack_addr &= ~0xFULL;
 
-	// Identity map shim code/data so execution continues smoothly across MMU enablement
-	u64 shim_start_page = reinterpret_cast<u64>(_start) & ~0xFFFULL;
-	u64 shim_end_page = (reinterpret_cast<u64>(__end) + 0xFFFULL) & ~0xFFFULL;
-	for (u64 p = shim_start_page; p < shim_end_page; p += PAGE_SIZE) {
-		map_page(sppmap, root_pt, p, p, MapFlagWrite | MapFlagExecutable);
-	}
-
 	// Map PL011 UART so console output continues working
 	map_page(sppmap, root_pt, PL011_BASE, PL011_BASE, MapFlagWrite | MapFlagDevice);
 
@@ -1025,71 +1053,27 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 		}
 	}
 
-	puts("Enabling MMU and paging...\n");
+	stageloader_sp -= sizeof(ArmStageContext);
+	stageloader_sp &= ~0xFULL;
 
-	// MAIR_EL1:
-	// Attr 0 (0x04): Device-nGnRE
-	// Attr 1 (0xFF): Normal Inner/Outer Write-Back Non-Transient Read/Write Allocate
-	u64 mair = (0x04ULL << 0) | (0xFFULL << 8);
-	asm volatile("msr MAIR_EL1, %0" :: "r"(mair));
+	ArmStageContext *ctx = reinterpret_cast<ArmStageContext *>(stageloader_sp);
+	ctx->ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
+	ctx->kernel_entrypoint = supervisor_start + entrypoint_addr;
+	ctx->kernel_sp = stack_addr;
+	ctx->dtb = dtb;
 
-	// TCR_EL1:
-	u64 mmfr0;
-	asm volatile("mrs %0, ID_AA64MMFR0_EL1" : "=r"(mmfr0));
-	u64 parange = mmfr0 & 0xf;
-	if (parange > 6) {
-		parange = 0;
-	}
+	u64 stageloader_entry = stageloader_entrypoint_addr + reinterpret_cast<u64>(phys_stageloader);
 
-	u64 tcr = (parange << 32)
-	        | (2ULL << 30) // TG1 = 4KB (0b10)
-	        | (3ULL << 28) // SH1 = Inner Shareable (0b11)
-	        | (1ULL << 26) // ORGN1 = Normal Outer WB WA (0b01)
-	        | (1ULL << 24) // IRGN1 = Normal Inner WB WA (0b01)
-	        | (0ULL << 23) // EPD1 = 0 (walk TTBR1)
-	        | (16ULL << 16)// T1SZ = 16 (48-bit VA)
-	        | (0ULL << 14) // TG0 = 4KB (0b00)
-	        | (3ULL << 12) // SH0 = Inner Shareable (0b11)
-	        | (1ULL << 10) // ORGN0 = Normal Outer WB WA (0b01)
-	        | (1ULL << 8)  // IRGN0 = Normal Inner WB WA (0b01)
-	        | (0ULL << 7)  // EPD0 = 0 (walk TTBR0)
-	        | (16ULL << 0); // T0SZ = 16 (48-bit VA)
-	asm volatile("msr TCR_EL1, %0" :: "r"(tcr));
-
-	u64 ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
-	asm volatile("msr TTBR0_EL1, %0" :: "r"(ttbr));
-	asm volatile("msr TTBR1_EL1, %0" :: "r"(ttbr));
-
-	asm volatile(
-		"dsb ish\n"
-		"tlbi vmalle1\n"
-		"dsb ish\n"
-		"isb\n"
-	);
-
-	u64 sctlr;
-	asm volatile("mrs %0, SCTLR_EL1" : "=r"(sctlr));
-	sctlr |= (1ULL << 0);  // M: enable MMU
-	sctlr |= (1ULL << 2);  // C: enable data cache
-	sctlr |= (1ULL << 12); // I: enable instruction cache
-	sctlr |= (1ULL << 3);  // SA: SP Alignment check
-	sctlr &= ~(1ULL << 1); // A: Alignment check disable
-	asm volatile(
-		"msr SCTLR_EL1, %0\n"
-		"isb\n"
-		:: "r"(sctlr)
-	);
-
-	puts("Paging enabled. Jumping to kernel entrypoint...\n");
-
-	u64 entrypoint = elf64_header.e_entry;
+	puts("Jumping to stageloader at: ");
+	put_hex(stageloader_entry);
+	puts("\n");
 
 	asm volatile(
 		"mov sp, %0\n"
 		"mov x0, %1\n"
 		"br %2\n"
 		:
-		: "r"(stack_addr), "r"(dtb), "r"(entrypoint)
+		: "r"(stageloader_sp), "r"(reinterpret_cast<u64>(ctx)), "r"(stageloader_entry)
 		: "x0"
 	);
 

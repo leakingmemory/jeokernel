@@ -92,7 +92,7 @@ struct VPAllocatorPage {
 				} else {
 					return false;
 				}
-			} else if (ranges[i].end < addr) {
+			} else if (ranges[i].start > addr) {
 				return false;
 			}
 		}
@@ -132,6 +132,8 @@ struct VPAllocatorPage {
 					ranges[i + 1].start = addr + size;
 					ranges[i].end = addr;
 					return VPAllocatorResult::DONE;
+				} else if (ranges[i].end <= addr) {
+					continue;
 				} else {
 					return VPAllocatorResult::ERROR;
 				}
