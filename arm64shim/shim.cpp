@@ -290,6 +290,7 @@ namespace {
 		unsigned n_res;
 		bool found;
 		u64 first_memory_page;
+		u64 max_memory_addr;
 		u64 page;
 		bool first_memory_page_set;
 	};
@@ -297,6 +298,9 @@ namespace {
 	void scan_bank(void *ctxv, u64 base, u64 size) {
 		FreePageSearch *s = static_cast<FreePageSearch *>(ctxv);
 		const u64 bank_end = base + size;
+		if (bank_end > s->max_memory_addr) {
+			s->max_memory_addr = bank_end;
+		}
 		u64 cand = page_align_up(base);
 
 		if (!s->first_memory_page_set || s->first_memory_page > cand) {
@@ -329,6 +333,7 @@ namespace {
 	FreePageSearch get_first_free_page(u64 dtb) {
 		FreePageSearch s{};
 		s.first_memory_page = 0;
+		s.max_memory_addr = 0;
 		s.first_memory_page_set = false;
 
 		const u64 shim_start = reinterpret_cast<u64>(_start);
@@ -547,6 +552,23 @@ namespace {
 		MapFlagDevice     = 1 << 3,
 	};
 
+	constexpr size_t MAX_PT_PAGES = 1024;
+	u64 pt_pages[MAX_PT_PAGES];
+	size_t num_pt_pages = 0;
+
+	void record_pt_page(u64 phys) {
+		for (size_t i = 0; i < num_pt_pages; ++i) {
+			if (pt_pages[i] == phys) {
+				return;
+			}
+		}
+		if (num_pt_pages < MAX_PT_PAGES) {
+			pt_pages[num_pt_pages++] = phys;
+		} else {
+			puts("FATAL ERROR: Exceeded MAX_PT_PAGES\n");
+		}
+	}
+
 	std::optional<u64> alloc_pt_page(physpagemap_managed *ppmap) {
 		auto o_page = allocate_physpage(ppmap, 1);
 		if (!o_page) {
@@ -554,6 +576,7 @@ namespace {
 		}
 		u64 phys = static_cast<u64>(*o_page) * PAGE_SIZE;
 		memset(reinterpret_cast<void *>(phys), 0, PAGE_SIZE);
+		record_pt_page(phys);
 		return phys;
 	}
 
@@ -721,6 +744,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 		}
 		kernel_root_pt_phys = *o_kernel_root_pt_phys;
 	}
+	record_pt_page(static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE);
 	void *kernel_root_pt_virt = reinterpret_cast<void *>(static_cast<uptr>(kernel_root_pt_phys) * PAGE_SIZE);
 	memset(kernel_root_pt_virt, 0, PAGE_SIZE);
 	puts("Kernel root page table allocated at: ");
@@ -1072,6 +1096,31 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 		dtb_vaddr = dtb_vaddr_base + (pagesearch.res_start[1] & 0xFFFULL);
 	}
 
+	// Allocate virtual memory for physical memory and map page table pages
+	u64 phys_mem_size = page_align_up(pagesearch.max_memory_addr);
+	if (phys_mem_size < static_cast<u64>(sppmap->max()) * PAGE_SIZE) {
+		phys_mem_size = static_cast<u64>(sppmap->max()) * PAGE_SIZE;
+	}
+	auto o_phys_mem_vaddr = vpalloc.TryAllocate(phys_mem_size);
+	if (!o_phys_mem_vaddr) {
+		puts("FATAL ERROR: Unable to allocate virtual memory for physical memory\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
+	}
+	u64 phys_mem_vaddr = *o_phys_mem_vaddr;
+	puts("Physical memory virtual mapping at: ");
+	put_hex(phys_mem_vaddr);
+	puts(" size ");
+	put_hex(phys_mem_size);
+	puts("\n");
+
+	size_t mapped_pt_pages = 0;
+	while (mapped_pt_pages < num_pt_pages) {
+		u64 pt_pa = pt_pages[mapped_pt_pages++];
+		map_page(sppmap, root_pt, phys_mem_vaddr + pt_pa, pt_pa, MapFlagWrite);
+	}
+
 	stageloader_sp -= sizeof(ArmStageContext);
 	stageloader_sp &= ~0xFULL;
 
@@ -1081,6 +1130,9 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	ctx->kernel_sp = stack_addr;
 	ctx->dtb = dtb_vaddr;
 	ctx->uart = uart_vaddr;
+	ctx->phys_mem_base = phys_mem_vaddr;
+	ctx->phys_mem_size = phys_mem_size;
+	ctx->root_pt = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
 
 	u64 stageloader_entry = stageloader_entrypoint_addr + reinterpret_cast<u64>(phys_stageloader);
 

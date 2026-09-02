@@ -8,8 +8,20 @@
 //
 
 #include <stage1.h>
+#include <pagetable.h>
+
+uintptr_t pagetable_virt_offset = 0;
+
+uintptr_t get_pagetable_virt_offset() {
+    return pagetable_virt_offset;
+}
+
+void set_pagetable_virt_offset(uintptr_t offset) {
+    pagetable_virt_offset = offset;
+}
 
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
+    set_pagetable_virt_offset(stage1Data->phys_mem_base);
     volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
     const char *msg = "AArch64 kernel entrypoint reached with paging enabled!\n";
     while (*msg != '\0') {

@@ -8,6 +8,7 @@
 #include <cstdint>
 
 struct Stage1Data {
+#if defined(__x86_64__) || defined(__i386__)
     uint32_t multibootAddr;
     uint32_t physpageMapAddr;
 
@@ -31,10 +32,17 @@ struct Stage1Data {
     uint64_t efi_framebuffer_size;
 
     uint64_t efi_rsdp_ptr;
-
+#elif defined(__aarch64__)
     uint64_t uart;
 
     uint64_t dtb;
+
+    uint64_t phys_mem_base;
+
+    uint64_t phys_mem_size;
+
+    uint64_t root_pt;
+#endif
 };
 
 #endif //JEOKERNEL_STAGE1_H

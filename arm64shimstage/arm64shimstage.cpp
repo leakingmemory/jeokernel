@@ -66,23 +66,11 @@ extern "C" [[noreturn]] void stage_main(ArmStageContext *ctx) {
 	kernel_sp &= ~0xFULL;
 
 	Stage1Data *stage1Data = reinterpret_cast<Stage1Data *>(kernel_sp);
-	stage1Data->multibootAddr = 0;
-	stage1Data->physpageMapAddr = 0;
-	stage1Data->init_pml4t = 0;
-	stage1Data->uefiMemoryMapPage = 0;
-	stage1Data->uefiMemoryMapDescrSize = 0;
-	stage1Data->uefiMemoryMapNumDescr = 0;
-	stage1Data->gdtAddr = 0;
-	stage1Data->efi_horiz = 0;
-	stage1Data->efi_vert = 0;
-	stage1Data->efi_pixel_format = 0;
-	stage1Data->kernel_phys = 0;
-	stage1Data->kernel_size = 0;
-	stage1Data->efi_framebuffer = 0;
-	stage1Data->efi_framebuffer_size = 0;
-	stage1Data->efi_rsdp_ptr = 0;
 	stage1Data->uart = ctx->uart;
 	stage1Data->dtb = ctx->dtb;
+	stage1Data->phys_mem_base = ctx->phys_mem_base;
+	stage1Data->phys_mem_size = ctx->phys_mem_size;
+	stage1Data->root_pt = ctx->root_pt;
 
 	asm volatile(
 		"mov sp, %0\n"

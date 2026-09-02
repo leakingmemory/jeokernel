@@ -9,6 +9,9 @@ struct ArmStageContext {
     u64 kernel_sp;
     u64 dtb;
     u64 uart;
+    u64 phys_mem_base;
+    u64 phys_mem_size;
+    u64 root_pt;
 };
 
 #endif //JEOKERNEL_ARMSTAGE_H
