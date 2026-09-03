@@ -9,6 +9,15 @@
 
 #include <stage1.h>
 #include <pagetable.h>
+#include <concurrency/hw_spinlock.h>
+
+extern "C" int atexit(void (*)(void)) {
+    return 0;
+}
+
+extern "C" int __cxa_atexit(void (*)(void *), void *, void *) {
+    return 0;
+}
 
 uintptr_t pagetable_virt_offset = 0;
 
@@ -21,7 +30,7 @@ void set_pagetable_virt_offset(uintptr_t offset) {
 }
 
 namespace {
-    volatile unsigned int uart_lock = 0;
+    hw_spinlock uart_spinlock{};
 
     void uart_putc(volatile unsigned int *uart, char c) {
         volatile unsigned int *const uartfr = uart + (0x18 / sizeof(unsigned int));
@@ -58,15 +67,13 @@ namespace {
     }
 
     void print_cpu_entry(volatile unsigned int *uart, uint64_t cpu_id, uint64_t cpu_count) {
-        while (__atomic_test_and_set(&uart_lock, __ATOMIC_ACQUIRE)) {
-            asm volatile("yield");
-        }
+        uart_spinlock.lock();
         uart_puts(uart, "AArch64 kernel entrypoint reached on CPU ");
         uart_put_dec(uart, cpu_id);
         uart_puts(uart, " / ");
         uart_put_dec(uart, cpu_count);
         uart_puts(uart, " with paging enabled!\n");
-        __atomic_clear(&uart_lock, __ATOMIC_RELEASE);
+        uart_spinlock.unlock();
     }
 }
 

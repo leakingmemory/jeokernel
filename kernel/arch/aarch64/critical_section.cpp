@@ -6,24 +6,22 @@
 #include <cstdint>
 
 bool critical_section::has_interrupts_disabled() {
-    uint64_t flags;
-    asm("pushfq; pop %%rax; mov %%rax, %0" : "=r"(flags) :: "%rax");
-    return (flags & 0x200) == 0;
+    uint64_t daif;
+    asm volatile("mrs %0, daif" : "=r"(daif));
+    return (daif & (1 << 7)) != 0;
 }
 
 critical_section::critical_section(bool enter) : entered(enter), activated(enter), was_activated(false) {
+    uint64_t daif;
+    asm volatile("mrs %0, daif" : "=r"(daif));
+    if ((daif & (1 << 7)) != 0) {
+        was_activated = true;
+    }
     if (enter) {
-        uint64_t flags;
-        asm("pushfq; cli; pop %%rax; mov %%rax, %0" : "=r"(flags) :: "%rax");
-        if ((flags & 0x200) == 0) {
-            was_activated = true;
-        }
+        asm volatile("msr daifset, #2" ::: "memory");
     } else {
-        uint64_t flags;
-        asm("pushfq; pop %%rax; mov %%rax, %0" : "=r"(flags) :: "%rax");
-        if ((flags & 0x200) == 0) {
+        if ((daif & (1 << 7)) != 0) {
             activated = true;
-            was_activated = true;
         }
     }
 }
@@ -31,10 +29,10 @@ critical_section::critical_section(bool enter) : entered(enter), activated(enter
 critical_section::~critical_section() {
     if (entered) {
         if (activated && !was_activated) {
-            asm("sti");
+            asm volatile("msr daifclr, #2" ::: "memory");
             activated = false;
         } else if (!activated && was_activated) {
-            asm("cli");
+            asm volatile("msr daifset, #2" ::: "memory");
             activated = true;
         }
         entered = false;
@@ -44,11 +42,11 @@ critical_section::~critical_section() {
 void critical_section::enter() {
     entered = true;
     activated = true;
-    asm("cli");
+    asm volatile("msr daifset, #2" ::: "memory");
 }
 
 void critical_section::leave() {
-    asm("sti");
+    asm volatile("msr daifclr, #2" ::: "memory");
     entered = true;
     activated = false;
 }

@@ -8,7 +8,7 @@ set(triple aarch64-none-elf)
 
 # -mgeneral-regs-only keeps the compiler from emitting NEON/FP in kernel-side
 # code, so we don't have to save/restore SIMD state on the interrupt path later.
-set(archflags "--target=${triple} -mgeneral-regs-only -nostdinc -nostdlib -ffreestanding -fno-stack-protector -fno-builtin -fno-PIC -fno-exceptions -fno-rtti")
+set(archflags "--target=${triple} -mgeneral-regs-only -nostdinc -nostdlib -ffreestanding -fno-stack-protector -fno-builtin -fno-PIC -fno-exceptions -fno-rtti -fno-use-cxa-atexit")
 
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${archflags}")
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${archflags}")

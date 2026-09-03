@@ -1159,6 +1159,20 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
         if (section.sh_addr != 0 && section.sh_size != 0) {
             u64 vaddr = section.sh_addr;
             u64 end_vaddr = vaddr + section.sh_size;
+            if (section.sh_type == SHT_NOBITS) {
+                for (u64 va = vaddr; va < end_vaddr; ) {
+                    pageentr *pe = get_pageentr(nullptr, root_pt, va & ~0xFFFULL);
+                    if (pe != nullptr) {
+                        u64 phys = (static_cast<u64>(pe->ppn()) << 12) + (va & 0xFFF);
+                        u64 bytes_in_page = 0x1000 - (va & 0xFFF);
+                        u64 chunk = (end_vaddr - va < bytes_in_page) ? (end_vaddr - va) : bytes_in_page;
+                        memset(reinterpret_cast<void *>(phys), 0, chunk);
+                        va += chunk;
+                    } else {
+                        va += 0x1000;
+                    }
+                }
+            }
             vaddr = vaddr & ~0xFFFULL;
             for (; vaddr < end_vaddr; vaddr += 0x1000) {
                 pageentr *pe = get_pageentr(nullptr, root_pt, vaddr);
