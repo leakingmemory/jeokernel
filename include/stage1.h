@@ -42,6 +42,10 @@ struct Stage1Data {
     uint64_t phys_mem_size;
 
     uint64_t root_pt;
+
+    uint64_t cpu_id;
+
+    uint64_t cpu_count;
 #endif
 };
 

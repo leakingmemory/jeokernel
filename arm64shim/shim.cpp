@@ -44,6 +44,16 @@ extern "C" const u8 wrapped_kernel_end[];
 extern "C" const u8 wrapped_armstage_start[];
 extern "C" const u8 wrapped_armstage_end[];
 
+constexpr size_t MAX_CPUS = 256;
+
+extern "C" {
+	extern volatile u32 cpu_count;
+	extern volatile u32 release_flag;
+	extern volatile u64 stageloader_entry;
+	extern volatile u64 stage_contexts[MAX_CPUS];
+	extern volatile u64 stage_stacks[MAX_CPUS];
+}
+
 namespace {
 	// QEMU virt PL011 UART. (Pi4: 0xfe201000 - to come from the DTB later.)
 	constexpr uptr PL011_BASE = 0x09000000;
@@ -271,6 +281,61 @@ namespace {
 		}
 		puts("Physical RAM banks (from device tree):\n");
 		for_each_memory_bank(dtb, print_bank, nullptr);
+	}
+
+	u32 count_dtb_cpus(u64 dtb) {
+		const u8 *blob = reinterpret_cast<const u8 *>(dtb);
+		if (dtb == 0 || be32(blob) != FDT_MAGIC) {
+			return 0;
+		}
+
+		const u32 off_struct  = be32(blob + 8);
+		const u8 *p = blob + off_struct;
+
+		int depth = 0;
+		bool in_cpus = false;
+		int cpus_depth = -1;
+		u32 cpus = 0;
+
+		for (;;) {
+			const u32 tok = be32(p);
+			p += 4;
+
+			if (tok == FDT_END) {
+				break;
+			} else if (tok == FDT_NOP) {
+				continue;
+			} else if (tok == FDT_BEGIN_NODE) {
+				++depth;
+				const char *nodename = reinterpret_cast<const char *>(p);
+				if (!in_cpus && (streq(nodename, "cpus") || streq(nodename, "cpus@0"))) {
+					in_cpus = true;
+					cpus_depth = depth;
+				} else if (in_cpus && depth == cpus_depth + 1) {
+					// In FDT, cpu nodes inside /cpus are named cpu@0, cpu@1, or cpu
+					if (nodename[0] == 'c' && nodename[1] == 'p' && nodename[2] == 'u' &&
+					    (nodename[3] == '@' || nodename[3] == '\0')) {
+						++cpus;
+					}
+				}
+				while (*p != '\0') {
+					++p;
+				}
+				p = align4(p + 1);
+			} else if (tok == FDT_END_NODE) {
+				--depth;
+				if (in_cpus && depth < cpus_depth) {
+					in_cpus = false;
+					cpus_depth = -1;
+				}
+			} else if (tok == FDT_PROP) {
+				const u32 len = be32(p);
+				p = align4(p + 8 + len);
+			} else {
+				break;
+			}
+		}
+		return cpus;
 	}
 
 	// ---- First-stage free page search -------------------------------------
@@ -675,6 +740,24 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	report_paging();
 	report_memory(dtb);
 
+	u32 num_cpus = cpu_count;
+	u32 dtb_cpus = count_dtb_cpus(dtb);
+	if (dtb_cpus > num_cpus) {
+		num_cpus = dtb_cpus;
+	}
+	if (num_cpus == 0) {
+		num_cpus = 1;
+	}
+	if (num_cpus > MAX_CPUS) {
+		num_cpus = MAX_CPUS;
+	}
+
+	puts("CPUs detected: ");
+	put_hex(num_cpus);
+	puts(" (checked in: ");
+	put_hex(cpu_count);
+	puts(")\n");
+
 	auto pagesearch = get_and_report_first_free_page(dtb);
 	if (!pagesearch.found) {
 		puts("No free physical page found - aborting\n");
@@ -1008,62 +1091,65 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	put_hex(reinterpret_cast<u64>(phys_stageloader));
 	puts("\n");
 
-	constexpr uint32_t stageloader_stack_pages = 2;
-	uint32_t stageloader_stack_start_page;
-	{
-		std::optional<u32> phys_stack_addr = allocate_jump_physpage(sppmap, stageloader_stack_pages, vpalloc, supervisor_start);
-		if (!phys_stack_addr){
-			puts("FATAL ERROR: Failed to allocate stageloader stack pages\n");
-			for (;;) {
-				asm volatile("wfe");
-			}
-		}
-		stageloader_stack_start_page = *phys_stack_addr;
-	}
-	u64 stageloader_sp = static_cast<u64>(stageloader_stack_start_page + stageloader_stack_pages) * PAGE_SIZE;
-	puts("Shimstage stack top at: ");
-	put_hex(stageloader_sp);
-	puts("\n");
-
 	// Map stageloader pages (identity mapped)
 	for (uint32_t i = 0; i < stageloader_pages; ++i) {
 		u64 p = static_cast<u64>(stageloader_start_page + i) * PAGE_SIZE;
 		map_page(sppmap, root_pt, p, p, MapFlagWrite | MapFlagExecutable);
 	}
 
-	// Map stageloader stack pages (identity mapped)
-	for (uint32_t i = 0; i < stageloader_stack_pages; ++i) {
-		u64 p = static_cast<u64>(stageloader_stack_start_page + i) * PAGE_SIZE;
-		map_page(sppmap, root_pt, p, p, MapFlagWrite);
-	}
+	constexpr uint32_t stageloader_stack_pages = 2;
+	constexpr int kernel_stack_pages = 8;
+	const u64 kernel_stack_size = static_cast<u64>(kernel_stack_pages) * PAGE_SIZE;
 
-	int stack_pages = 7;
-	++stack_pages;
-	u64 stack_size{static_cast<u64>(stack_pages)};
-	stack_size *= PAGE_SIZE;
-	auto o_stack_vaddr = vpalloc.TryAllocate(stack_size);
-	if (!o_stack_vaddr) {
-		puts("FATAL ERROR: Unable to allocate CPU-boot stack virtual address\n");
-		for (;;) {
-			asm volatile("wfe");
+	u64 per_cpu_stage_sp[MAX_CPUS];
+	u64 per_cpu_kernel_sp[MAX_CPUS];
+
+	for (u32 c = 0; c < num_cpus; ++c) {
+		// 1. Allocate stage stack (identity mapped)
+		uint32_t stageloader_stack_start_page;
+		{
+			std::optional<u32> phys_stack_addr = allocate_jump_physpage(sppmap, stageloader_stack_pages, vpalloc, supervisor_start);
+			if (!phys_stack_addr){
+				puts("FATAL ERROR: Failed to allocate stageloader stack pages\n");
+				for (;;) {
+					asm volatile("wfe");
+				}
+			}
+			stageloader_stack_start_page = *phys_stack_addr;
 		}
-	}
-	u64 stack_vaddr = *o_stack_vaddr;
-	auto o_stack_phys = allocate_physpage(sppmap, stack_pages - 1);
-	if (!o_stack_phys) {
-		puts("FATAL ERROR: Unable to allocate CPU-boot stack physical pages\n");
-		for (;;) {
-			asm volatile("wfe");
+		u64 stageloader_sp = static_cast<u64>(stageloader_stack_start_page + stageloader_stack_pages) * PAGE_SIZE;
+
+		// Map stageloader stack pages (identity mapped)
+		for (uint32_t i = 0; i < stageloader_stack_pages; ++i) {
+			u64 p = static_cast<u64>(stageloader_stack_start_page + i) * PAGE_SIZE;
+			map_page(sppmap, root_pt, p, p, MapFlagWrite);
 		}
+		per_cpu_stage_sp[c] = stageloader_sp;
+
+		// 2. Allocate kernel stack (virtual address with guard page)
+		auto o_stack_vaddr = vpalloc.TryAllocate(kernel_stack_size);
+		if (!o_stack_vaddr) {
+			puts("FATAL ERROR: Unable to allocate CPU kernel stack virtual address\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		u64 stack_vaddr = *o_stack_vaddr;
+		auto o_stack_phys = allocate_physpage(sppmap, kernel_stack_pages - 1);
+		if (!o_stack_phys) {
+			puts("FATAL ERROR: Unable to allocate CPU kernel stack physical pages\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		u32 stack_pageaddr = *o_stack_phys;
+		for (int i = 1; i < kernel_stack_pages; i++) {
+			u64 vaddr = stack_vaddr + (static_cast<u64>(i) * PAGE_SIZE);
+			u64 paddr = static_cast<u64>(stack_pageaddr + (i - 1)) * PAGE_SIZE;
+			map_page(sppmap, root_pt, vaddr, paddr, MapFlagWrite);
+		}
+		per_cpu_kernel_sp[c] = (stack_vaddr + kernel_stack_size) & ~0xFULL;
 	}
-	u32 stack_pageaddr = *o_stack_phys;
-	for (int i = 1; i < stack_pages; i++) {
-		u64 vaddr = stack_vaddr + (static_cast<u64>(i) * PAGE_SIZE);
-		u64 paddr = static_cast<u64>(stack_pageaddr + (i - 1)) * PAGE_SIZE;
-		map_page(sppmap, root_pt, vaddr, paddr, MapFlagWrite);
-	}
-	u64 stack_addr = stack_vaddr + stack_size;
-	stack_addr &= ~0xFULL;
 
 	// Map PL011 UART so console output continues working
 	auto o_uart_vaddr = vpalloc.TryAllocate(PAGE_SIZE);
@@ -1096,7 +1182,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 		dtb_vaddr = dtb_vaddr_base + (pagesearch.res_start[1] & 0xFFFULL);
 	}
 
-	// Allocate virtual memory for physical memory and map page table pages
+	// Allocate virtual memory for physical memory
 	u64 phys_mem_size = page_align_up(pagesearch.max_memory_addr);
 	if (phys_mem_size < static_cast<u64>(sppmap->max()) * PAGE_SIZE) {
 		phys_mem_size = static_cast<u64>(sppmap->max()) * PAGE_SIZE;
@@ -1115,37 +1201,61 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	put_hex(phys_mem_size);
 	puts("\n");
 
+	for (u32 c = 0; c < num_cpus; ++c) {
+		u64 stageloader_sp = per_cpu_stage_sp[c];
+		stageloader_sp -= sizeof(ArmStageContext);
+		stageloader_sp &= ~0xFULL;
+
+		ArmStageContext *ctx = reinterpret_cast<ArmStageContext *>(stageloader_sp);
+		ctx->ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
+		ctx->kernel_entrypoint = supervisor_start + entrypoint_addr;
+		ctx->kernel_sp = per_cpu_kernel_sp[c];
+		ctx->dtb = dtb_vaddr;
+		ctx->uart = uart_vaddr;
+		ctx->phys_mem_base = phys_mem_vaddr;
+		ctx->phys_mem_size = phys_mem_size;
+		ctx->root_pt = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
+		ctx->cpu_id = c;
+		ctx->cpu_count = num_cpus;
+
+		stage_contexts[c] = reinterpret_cast<u64>(ctx);
+		stage_stacks[c] = stageloader_sp;
+	}
+
 	size_t mapped_pt_pages = 0;
 	while (mapped_pt_pages < num_pt_pages) {
 		u64 pt_pa = pt_pages[mapped_pt_pages++];
 		map_page(sppmap, root_pt, phys_mem_vaddr + pt_pa, pt_pa, MapFlagWrite);
 	}
 
-	stageloader_sp -= sizeof(ArmStageContext);
-	stageloader_sp &= ~0xFULL;
-
-	ArmStageContext *ctx = reinterpret_cast<ArmStageContext *>(stageloader_sp);
-	ctx->ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
-	ctx->kernel_entrypoint = supervisor_start + entrypoint_addr;
-	ctx->kernel_sp = stack_addr;
-	ctx->dtb = dtb_vaddr;
-	ctx->uart = uart_vaddr;
-	ctx->phys_mem_base = phys_mem_vaddr;
-	ctx->phys_mem_size = phys_mem_size;
-	ctx->root_pt = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
-
-	u64 stageloader_entry = stageloader_entrypoint_addr + reinterpret_cast<u64>(phys_stageloader);
+	u64 stageloader_entry_addr = stageloader_entrypoint_addr + reinterpret_cast<u64>(phys_stageloader);
+	stageloader_entry = stageloader_entry_addr;
 
 	puts("Jumping to stageloader at: ");
-	put_hex(stageloader_entry);
+	put_hex(stageloader_entry_addr);
 	puts("\n");
+
+	// Memory synchronization before releasing secondary cores
+	asm volatile("dsb sy\n" "isb\n" ::: "memory");
+
+	release_flag = 1;
+
+	// Flush and wake secondary cores
+	asm volatile(
+		"dsb sy\n"
+		"sev\n"
+		::: "memory"
+	);
+
+	u64 primary_stage_sp = stage_stacks[0];
+	u64 primary_ctx = stage_contexts[0];
 
 	asm volatile(
 		"mov sp, %0\n"
 		"mov x0, %1\n"
 		"br %2\n"
 		:
-		: "r"(stageloader_sp), "r"(reinterpret_cast<u64>(ctx)), "r"(stageloader_entry)
+		: "r"(primary_stage_sp), "r"(primary_ctx), "r"(stageloader_entry_addr)
 		: "x0"
 	);
 

@@ -23,9 +23,11 @@ void set_pagetable_virt_offset(uintptr_t offset) {
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     set_pagetable_virt_offset(stage1Data->phys_mem_base);
     volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
-    const char *msg = "AArch64 kernel entrypoint reached with paging enabled!\n";
-    while (*msg != '\0') {
-        *uart = static_cast<unsigned int>(*msg++);
+    if (stage1Data->cpu_id == 0) {
+        const char *msg = "AArch64 kernel entrypoint reached with paging enabled!\n";
+        while (*msg != '\0') {
+            *uart = static_cast<unsigned int>(*msg++);
+        }
     }
     for (;;) {
         asm volatile("wfe");

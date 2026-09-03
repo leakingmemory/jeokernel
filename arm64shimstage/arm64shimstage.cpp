@@ -71,6 +71,8 @@ extern "C" [[noreturn]] void stage_main(ArmStageContext *ctx) {
 	stage1Data->phys_mem_base = ctx->phys_mem_base;
 	stage1Data->phys_mem_size = ctx->phys_mem_size;
 	stage1Data->root_pt = ctx->root_pt;
+	stage1Data->cpu_id = ctx->cpu_id;
+	stage1Data->cpu_count = ctx->cpu_count;
 
 	asm volatile(
 		"mov sp, %0\n"

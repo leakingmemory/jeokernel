@@ -16,6 +16,8 @@ struct ArmStageContext {
     u64 phys_mem_base;
     u64 phys_mem_size;
     u64 root_pt;
+    u64 cpu_id;
+    u64 cpu_count;
 };
 
 #endif //JEOKERNEL_ARMSTAGE_H

@@ -9,9 +9,14 @@
  *   x0 = physical address of the device tree blob (DTB)
  *   x1..x3 = 0 (reserved)
  *
- * Milestone 1 just prints "hello world" over the PL011 UART, so all we do here
- * is set up a stack and call into C++. The DTB pointer in x0 is preserved for
- * later milestones (it is the arm64 equivalent of the x86 ACPI/MPFP tables).
+ * Early multi-CPU gating:
+ * An atomic fetch-and-add on cpu_count assigns a unique zero-based cpu_id
+ * to each core. The winning core (cpu_id == 0) becomes the primary core, sets
+ * up its stack, and executes shim_main. All other cores (cpu_id > 0) enter a
+ * WFE wait loop until shim_main completes initialization, sets release_flag,
+ * and issues SEV. The secondary cores then load their assigned stage stack and
+ * ArmStageContext pointer from the arrays populated by shim_main and branch to
+ * the stageloader entrypoint.
  */
 
 	.section .text.boot, "ax"
@@ -29,14 +34,97 @@ _start:
 	.long	0			/* res5: PE/COFF header offset (none)      */
 
 real_start:
-	/* x0 = DTB physical address from the loader; keep it for later. */
+	/* Atomic fetch-and-add on cpu_count.
+	 * Returns previous value in w1 (0 for primary, 1..N for secondaries).
+	 * Preserves x0 (DTB address).
+	 */
+	adrp	x5, cpu_count
+	add	x5, x5, :lo12:cpu_count
+1:
+	ldaxr	w1, [x5]
+	add	w2, w1, #1
+	stlxr	w3, w2, [x5]
+	cbnz	w3, 1b
+
+	/* If w1 != 0, this is a secondary core */
+	cbnz	w1, secondary_cpu_wait
+
+	/* Primary CPU (cpu_id == 0) */
 	adrp	x1, __stack_top
 	add	x1, x1, :lo12:__stack_top
 	mov	sp, x1
 
+	/* Call shim_main with x0 = DTB address */
 	bl	shim_main
 
-	/* shim_main should not return in milestone 1; park the core. */
+	/* shim_main should not return; park the core */
 hang:
 	wfe
 	b	hang
+
+secondary_cpu_wait:
+	/* Save cpu_id (in callee-saved w19) */
+	mov	w19, w1
+
+	cmp	w19, #256
+	b.hs	hang
+
+	adrp	x20, release_flag
+	add	x20, x20, :lo12:release_flag
+
+2:
+	ldar	w21, [x20]
+	cbnz	w21, 3f
+	wfe
+	b	2b
+
+3:
+	/* Ensure all prior memory writes from primary CPU are visible */
+	dsb	sy
+	isb
+
+	/* x0 = stage_contexts[cpu_id] */
+	adrp	x22, stage_contexts
+	add	x22, x22, :lo12:stage_contexts
+	uxtw	x19, w19
+	ldr	x0, [x22, x19, lsl #3]
+
+	/* sp = stage_stacks[cpu_id] */
+	adrp	x23, stage_stacks
+	add	x23, x23, :lo12:stage_stacks
+	ldr	x1, [x23, x19, lsl #3]
+	mov	sp, x1
+
+	/* x2 = stageloader_entry */
+	adrp	x24, stageloader_entry
+	add	x24, x24, :lo12:stageloader_entry
+	ldr	x2, [x24]
+
+	/* Jump to stageloader */
+	br	x2
+
+	.section .data
+	.align 2
+	.globl cpu_count
+cpu_count:
+	.word	0
+
+	.align 2
+	.globl release_flag
+release_flag:
+	.word	0
+
+	.align 3
+	.globl stageloader_entry
+stageloader_entry:
+	.quad	0
+
+	.align 3
+	.globl stage_contexts
+stage_contexts:
+	.space	8 * 256
+
+	.align 3
+	.globl stage_stacks
+stage_stacks:
+	.space	8 * 256
