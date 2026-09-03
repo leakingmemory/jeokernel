@@ -283,19 +283,77 @@ namespace {
 		for_each_memory_bank(dtb, print_bank, nullptr);
 	}
 
-	u32 count_dtb_cpus(u64 dtb) {
+	enum class PsciConduit {
+		None,
+		Smc,
+		Hvc,
+	};
+
+	struct PsciConfig {
+		PsciConduit conduit{PsciConduit::None};
+		u32 cpu_on_fn{0xC4000003}; // Standard PSCI 0.2+ SMC64 CPU_ON
+	};
+
+	enum class CpuEnableMethod {
+		Unknown,
+		Psci,
+		SpinTable,
+	};
+
+	struct DtbCpuInfo {
+		u64 reg{0};
+		CpuEnableMethod enable_method{CpuEnableMethod::Unknown};
+		u64 release_addr{0};
+	};
+
+	static inline int64_t psci_call(PsciConduit conduit, u32 function_id, u64 arg1, u64 arg2, u64 arg3) {
+		register u64 r0 asm("x0") = function_id;
+		register u64 r1 asm("x1") = arg1;
+		register u64 r2 asm("x2") = arg2;
+		register u64 r3 asm("x3") = arg3;
+		if (conduit == PsciConduit::Hvc) {
+			asm volatile(
+				"hvc #0\n"
+				: "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3)
+				:
+				: "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory"
+			);
+		} else {
+			asm volatile(
+				"smc #0\n"
+				: "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3)
+				:
+				: "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory"
+			);
+		}
+		return static_cast<int64_t>(r0);
+	}
+
+	u32 start_secondary_cpus(u64 dtb) {
 		const u8 *blob = reinterpret_cast<const u8 *>(dtb);
 		if (dtb == 0 || be32(blob) != FDT_MAGIC) {
-			return 0;
+			return cpu_count > 0 ? cpu_count : 1;
 		}
 
 		const u32 off_struct  = be32(blob + 8);
+		const u32 off_strings = be32(blob + 12);
+		const char *strings = reinterpret_cast<const char *>(blob + off_strings);
 		const u8 *p = blob + off_struct;
 
+		u32 root_addr_cells = 2;
+		u32 cpus_addr_cells = 2;
+
+		PsciConfig psci{};
+		DtbCpuInfo cpus[MAX_CPUS];
+		u32 num_dtb_cpus = 0;
+
 		int depth = 0;
+		bool in_psci = false;
+		int psci_depth = -1;
 		bool in_cpus = false;
 		int cpus_depth = -1;
-		u32 cpus = 0;
+		bool in_cpu_node = false;
+		int cpu_node_depth = -1;
 
 		for (;;) {
 			const u32 tok = be32(p);
@@ -308,14 +366,23 @@ namespace {
 			} else if (tok == FDT_BEGIN_NODE) {
 				++depth;
 				const char *nodename = reinterpret_cast<const char *>(p);
-				if (!in_cpus && (streq(nodename, "cpus") || streq(nodename, "cpus@0"))) {
+				if (!in_psci && !in_cpus && (streq(nodename, "psci") ||
+				    (nodename[0] == 'p' && nodename[1] == 's' && nodename[2] == 'c' && nodename[3] == 'i' &&
+				     (nodename[4] == '@' || nodename[4] == '\0')))) {
+					in_psci = true;
+					psci_depth = depth;
+				} else if (!in_cpus && !in_psci && (streq(nodename, "cpus") || streq(nodename, "cpus@0"))) {
 					in_cpus = true;
 					cpus_depth = depth;
+					cpus_addr_cells = root_addr_cells;
 				} else if (in_cpus && depth == cpus_depth + 1) {
-					// In FDT, cpu nodes inside /cpus are named cpu@0, cpu@1, or cpu
-					if (nodename[0] == 'c' && nodename[1] == 'p' && nodename[2] == 'u' &&
-					    (nodename[3] == '@' || nodename[3] == '\0')) {
-						++cpus;
+					if ((nodename[0] == 'c' && nodename[1] == 'p' && nodename[2] == 'u' &&
+					     (nodename[3] == '@' || nodename[3] == '\0')) || streq(nodename, "cpu")) {
+						in_cpu_node = true;
+						cpu_node_depth = depth;
+						if (num_dtb_cpus < MAX_CPUS) {
+							cpus[num_dtb_cpus] = DtbCpuInfo{};
+						}
 					}
 				}
 				while (*p != '\0') {
@@ -323,19 +390,93 @@ namespace {
 				}
 				p = align4(p + 1);
 			} else if (tok == FDT_END_NODE) {
-				--depth;
-				if (in_cpus && depth < cpus_depth) {
+				if (in_cpu_node && depth == cpu_node_depth) {
+					in_cpu_node = false;
+					cpu_node_depth = -1;
+					if (num_dtb_cpus < MAX_CPUS) {
+						++num_dtb_cpus;
+					}
+				}
+				if (in_cpus && depth <= cpus_depth) {
 					in_cpus = false;
 					cpus_depth = -1;
 				}
+				if (in_psci && depth <= psci_depth) {
+					in_psci = false;
+					psci_depth = -1;
+				}
+				--depth;
 			} else if (tok == FDT_PROP) {
-				const u32 len = be32(p);
+				const u32 len     = be32(p);
+				const u32 nameoff = be32(p + 4);
+				const u8 *val = p + 8;
 				p = align4(p + 8 + len);
+
+				const char *name = strings + nameoff;
+				if (depth == 1 && streq(name, "#address-cells")) {
+					root_addr_cells = be32(val);
+				} else if (in_psci) {
+					if (streq(name, "method")) {
+						const char *method_str = reinterpret_cast<const char *>(val);
+						if (streq(method_str, "hvc")) {
+							psci.conduit = PsciConduit::Hvc;
+						} else if (streq(method_str, "smc")) {
+							psci.conduit = PsciConduit::Smc;
+						}
+					} else if (streq(name, "cpu_on") && len >= 4) {
+						psci.cpu_on_fn = be32(val);
+					}
+				} else if (in_cpus && depth == cpus_depth) {
+					if (streq(name, "#address-cells")) {
+						cpus_addr_cells = be32(val);
+					}
+				} else if (in_cpu_node && num_dtb_cpus < MAX_CPUS) {
+					if (streq(name, "reg")) {
+						cpus[num_dtb_cpus].reg = read_cells(val, cpus_addr_cells);
+					} else if (streq(name, "enable-method")) {
+						const char *method_str = reinterpret_cast<const char *>(val);
+						if (streq(method_str, "psci")) {
+							cpus[num_dtb_cpus].enable_method = CpuEnableMethod::Psci;
+						} else if (streq(method_str, "spin-table")) {
+							cpus[num_dtb_cpus].enable_method = CpuEnableMethod::SpinTable;
+						}
+					} else if (streq(name, "cpu-release-addr")) {
+						cpus[num_dtb_cpus].release_addr = read_cells(val, len >= 8 ? 2 : 1);
+					}
+				}
 			} else {
 				break;
 			}
 		}
-		return cpus;
+
+		u64 mpidr;
+		asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
+		u64 my_hwid = mpidr & 0xff00ffffffULL;
+
+		u64 start_addr = reinterpret_cast<u64>(_start);
+
+		for (u32 i = 0; i < num_dtb_cpus; ++i) {
+			if ((cpus[i].reg & 0xff00ffffffULL) == my_hwid) {
+				continue;
+			}
+			if (cpus[i].enable_method == CpuEnableMethod::Psci ||
+			    (cpus[i].enable_method == CpuEnableMethod::Unknown && psci.conduit != PsciConduit::None)) {
+				psci_call(psci.conduit, psci.cpu_on_fn, cpus[i].reg, start_addr, dtb);
+			} else if (cpus[i].enable_method == CpuEnableMethod::SpinTable && cpus[i].release_addr != 0) {
+				*reinterpret_cast<volatile u64 *>(cpus[i].release_addr) = start_addr;
+				asm volatile("dsb sy\n" "sev\n" ::: "memory");
+			}
+		}
+
+		u32 expected_cpus = num_dtb_cpus > 0 ? num_dtb_cpus : 1;
+		for (u32 spin = 0; spin < 5000000; ++spin) {
+			if (cpu_count >= expected_cpus) {
+				break;
+			}
+			asm volatile("yield");
+		}
+
+		return num_dtb_cpus;
 	}
 
 	// ---- First-stage free page search -------------------------------------
@@ -740,8 +881,8 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	report_paging();
 	report_memory(dtb);
 
+	u32 dtb_cpus = start_secondary_cpus(dtb);
 	u32 num_cpus = cpu_count;
-	u32 dtb_cpus = count_dtb_cpus(dtb);
 	if (dtb_cpus > num_cpus) {
 		num_cpus = dtb_cpus;
 	}

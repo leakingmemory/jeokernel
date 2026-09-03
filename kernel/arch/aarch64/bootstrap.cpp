@@ -20,15 +20,63 @@ void set_pagetable_virt_offset(uintptr_t offset) {
     pagetable_virt_offset = offset;
 }
 
-extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
-    set_pagetable_virt_offset(stage1Data->phys_mem_base);
-    volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
-    if (stage1Data->cpu_id == 0) {
-        const char *msg = "AArch64 kernel entrypoint reached with paging enabled!\n";
-        while (*msg != '\0') {
-            *uart = static_cast<unsigned int>(*msg++);
+namespace {
+    volatile unsigned int uart_lock = 0;
+
+    void uart_putc(volatile unsigned int *uart, char c) {
+        volatile unsigned int *const uartfr = uart + (0x18 / sizeof(unsigned int));
+        constexpr unsigned int UARTFR_TXFF = 1u << 5;
+        while (*uartfr & UARTFR_TXFF) {
+            // spin until FIFO has space
+        }
+        *uart = static_cast<unsigned int>(c);
+    }
+
+    void uart_puts(volatile unsigned int *uart, const char *s) {
+        for (; *s != '\0'; ++s) {
+            if (*s == '\n') {
+                uart_putc(uart, '\r');
+            }
+            uart_putc(uart, *s);
         }
     }
+
+    void uart_put_dec(volatile unsigned int *uart, uint64_t v) {
+        if (v == 0) {
+            uart_putc(uart, '0');
+            return;
+        }
+        char buf[32];
+        int idx = 0;
+        while (v > 0) {
+            buf[idx++] = static_cast<char>('0' + (v % 10));
+            v /= 10;
+        }
+        for (int i = idx - 1; i >= 0; --i) {
+            uart_putc(uart, buf[i]);
+        }
+    }
+
+    void print_cpu_entry(volatile unsigned int *uart, uint64_t cpu_id, uint64_t cpu_count) {
+        while (__atomic_test_and_set(&uart_lock, __ATOMIC_ACQUIRE)) {
+            asm volatile("yield");
+        }
+        uart_puts(uart, "AArch64 kernel entrypoint reached on CPU ");
+        uart_put_dec(uart, cpu_id);
+        uart_puts(uart, " / ");
+        uart_put_dec(uart, cpu_count);
+        uart_puts(uart, " with paging enabled!\n");
+        __atomic_clear(&uart_lock, __ATOMIC_RELEASE);
+    }
+}
+
+extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
+    if (stage1Data->cpu_id == 0) {
+        set_pagetable_virt_offset(stage1Data->phys_mem_base);
+    }
+    volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
+    print_cpu_entry(uart, stage1Data->cpu_id, stage1Data->cpu_count);
+
     for (;;) {
         asm volatile("wfe");
     }
