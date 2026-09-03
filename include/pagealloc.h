@@ -22,7 +22,9 @@
 static_assert(USERSPACE_LOW_END > 0 && USERSPACE_LOW_END < 512);
 static_assert(PMLT4_USERSPACE_HIGH_START > 0);
 
+#if defined(__x86_64__) || defined(__i386__)
 class ApStartup;
+#endif
 class vmem;
 
 struct VPerCpuPagetables {
@@ -34,7 +36,9 @@ struct VPerCpuPagetables {
 
 void set_init_pml4t(uintptr_t addr);
 uintptr_t get_init_pml4t();
+#if defined(__x86_64__) || defined(__i386__)
 void relocate_kernel_vmemory();
+#endif
 pagetable &get_root_pagetable();
 uintptr_t vpagealloc(uintptr_t size);
 uintptr_t vpagealloc32(uintptr_t size);
@@ -61,7 +65,9 @@ void *pagealloc32(uintptr_t size);
 void *pagealloc(uintptr_t size);
 void pagefree(void *vaddr);
 
+#if defined(__x86_64__) || defined(__i386__)
 void vmem_switch_to_multicpu(ApStartup *apStartup, int numCpus);
+#endif
 void vmem_set_per_cpu_pagetables();
 
 void setup_pvpage_stats();

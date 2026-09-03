@@ -10,6 +10,7 @@
 #include <stage1.h>
 #include <pagetable.h>
 #include <concurrency/hw_spinlock.h>
+#include <pagealloc.h>
 
 extern "C" int atexit(void (*)(void)) {
     return 0;
@@ -80,6 +81,11 @@ namespace {
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     if (stage1Data->cpu_id == 0) {
         set_pagetable_virt_offset(stage1Data->phys_mem_base);
+
+        /*
+         * Let's try to alloc a stack
+         */
+        set_init_pml4t(stage1Data->root_pt);
     }
     volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
     print_cpu_entry(uart, stage1Data->cpu_id, stage1Data->cpu_count);

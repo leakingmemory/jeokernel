@@ -21,7 +21,9 @@ static long long int total_vpages = 0;
 static long long int allocated_ppages = 0;
 static long long int allocated_vpages = 0;
 
+#if defined(__x86_64__) || defined(__i386__)
 static ApStartup *apStartup = nullptr;
+#endif
 static pagetable **per_cpu_pagetables = nullptr;
 static int v_num_cpus = 0;
 static bool is_v_multicpu = false;
@@ -32,9 +34,11 @@ uintptr_t init_pml4t_addr;
 #define _get_pml4t_cpu0()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[0]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + init_pml4t_addr))))
 static phys_t ppagealloc_locked(uintptr_t size);
 
+#if defined(__x86_64__) || defined(__i386__)
 pagetable &get_root_pagetable() {
     return _get_pml4t_this_cpu();
 }
+#endif
 
 void set_init_pml4t(uintptr_t addr) {
     init_pml4t_addr = addr;
@@ -43,6 +47,7 @@ uintptr_t get_init_pml4t() {
     return init_pml4t_addr;
 }
 
+#if defined(__x86_64__) || defined(__i386__)
 void relocate_kernel_vmemory() {
     /* copy the initial pagetable for starting up APs - needs some of the 16/32bit memory fixed mappings */
     memcpy((void *) (init_pml4t_addr + 0x4000), (void *) (get_pagetable_virt_offset() + init_pml4t_addr), 0x3000);
@@ -80,7 +85,9 @@ void relocate_kernel_vmemory() {
     }
     set_pagetable_virt_offset(KERNEL_MEMORY_OFFSET);
 }
+#endif
 
+#if defined(__x86_64__) || defined(__i386__)
 uint64_t vpagealloc(uint64_t vsize) {
     std::unique_lock lock{get_pagetables_lock()};
 
@@ -1088,3 +1095,5 @@ void physmem_stats(sysinfo &info) {
     info.freeram = total_ppages - allocated_ppages;
     info.freehigh = total_ppages - allocated_ppages;
 }
+
+#endif
