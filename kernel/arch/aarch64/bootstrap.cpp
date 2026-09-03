@@ -9,7 +9,6 @@
 
 #include <stage1.h>
 #include <pagetable.h>
-#include <concurrency/hw_spinlock.h>
 #include <pagealloc.h>
 
 extern "C" int atexit(void (*)(void)) {
@@ -31,7 +30,7 @@ void set_pagetable_virt_offset(uintptr_t offset) {
 }
 
 namespace {
-    hw_spinlock uart_spinlock{};
+    raw_spinlock *uart_spinlock;
 
     void uart_putc(volatile unsigned int *uart, char c) {
         volatile unsigned int *const uartfr = uart + (0x18 / sizeof(unsigned int));
@@ -68,30 +67,41 @@ namespace {
     }
 
     void print_cpu_entry(volatile unsigned int *uart, uint64_t cpu_id, uint64_t cpu_count) {
-        uart_spinlock.lock();
+        uart_spinlock->lock();
         uart_puts(uart, "AArch64 kernel entrypoint reached on CPU ");
         uart_put_dec(uart, cpu_id);
         uart_puts(uart, " / ");
         uart_put_dec(uart, cpu_count);
         uart_puts(uart, " with paging enabled!\n");
-        uart_spinlock.unlock();
+        uart_spinlock->unlock();
     }
 }
 
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
+    stage1Data->early_init_lock.lock();
+    uart_spinlock = &(stage1Data->early_init_lock);
+    stage1Data->early_init_lock.unlock();
+
+    volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
+    uint64_t mpidr;
+    asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
+    uint64_t cpu_id = mpidr & 0xFF;
+    print_cpu_entry(uart, cpu_id, stage1Data->cpu_count);
+
     if (stage1Data->early_init_lock.try_lock()) {
+        uart_puts(uart, "Early init starts\n");
+
         set_pagetable_virt_offset(stage1Data->phys_mem_base);
 
         /*
          * Let's try to alloc a stack
          */
         set_init_pml4t(stage1Data->root_pt);
+
+        uart_puts(uart, "Early init ends\n");
+
+        stage1Data->early_init_lock.unlock();
     }
-    volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
-    uint64_t mpidr;
-    asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
-    uint64_t cpu_id = mpidr & 0xFF;
-    print_cpu_entry(uart, cpu_id, stage1Data->cpu_count);
 
     for (;;) {
         asm volatile("wfe");
