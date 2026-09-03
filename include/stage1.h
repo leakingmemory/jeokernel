@@ -5,7 +5,10 @@
 #ifndef JEOKERNEL_STAGE1_H
 #define JEOKERNEL_STAGE1_H
 
-#include <cstdint>
+#include <stdint.h>
+#if defined(__aarch64__)
+#include <concurrency/raw_spinlock.h>
+#endif
 
 struct Stage1Data {
 #if defined(__x86_64__) || defined(__i386__)
@@ -43,9 +46,9 @@ struct Stage1Data {
 
     uint64_t root_pt;
 
-    uint64_t cpu_id;
-
     uint64_t cpu_count;
+
+    raw_spinlock early_init_lock;
 #endif
 };
 

@@ -15,6 +15,7 @@
 #include <elf.h>
 #include <elf_impl.h>
 #include <armstage.h>
+#include <stage1.h>
 
 // Freestanding build (-nostdinc): use the compiler's built-in fixed-width
 // types instead of <cstdint>, which isn't available without libc++ headers.
@@ -50,7 +51,7 @@ extern "C" {
 	extern volatile u32 cpu_count;
 	extern volatile u32 release_flag;
 	extern volatile u64 stageloader_entry;
-	extern volatile u64 stage_contexts[MAX_CPUS];
+	extern volatile u64 stage_context;
 	extern volatile u64 stage_stacks[MAX_CPUS];
 }
 
@@ -1252,6 +1253,20 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 		map_page(sppmap, root_pt, p, p, MapFlagWrite | MapFlagExecutable);
 	}
 
+	uint32_t stage_ctx_page;
+	{
+		std::optional<u32> phys_ctx_addr = allocate_jump_physpage(sppmap, 1, vpalloc, supervisor_start);
+		if (!phys_ctx_addr) {
+			puts("FATAL ERROR: Failed to allocate ArmStageContext page\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		stage_ctx_page = *phys_ctx_addr;
+	}
+	u64 stage_ctx_phys = static_cast<u64>(stage_ctx_page) * PAGE_SIZE;
+	map_page(sppmap, root_pt, stage_ctx_phys, stage_ctx_phys, MapFlagWrite);
+
 	constexpr uint32_t stageloader_stack_pages = 2;
 	constexpr int kernel_stack_pages = 8;
 	const u64 kernel_stack_size = static_cast<u64>(kernel_stack_pages) * PAGE_SIZE;
@@ -1356,26 +1371,52 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	put_hex(phys_mem_size);
 	puts("\n");
 
-	for (u32 c = 0; c < num_cpus; ++c) {
-		u64 stageloader_sp = per_cpu_stage_sp[c];
-		stageloader_sp -= sizeof(ArmStageContext);
-		stageloader_sp &= ~0xFULL;
-
-		ArmStageContext *ctx = reinterpret_cast<ArmStageContext *>(stageloader_sp);
-		ctx->ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
-		ctx->kernel_entrypoint = supervisor_start + entrypoint_addr;
-		ctx->kernel_sp = per_cpu_kernel_sp[c];
-		ctx->dtb = dtb_vaddr;
-		ctx->uart = uart_vaddr;
-		ctx->phys_mem_base = phys_mem_vaddr;
-		ctx->phys_mem_size = phys_mem_size;
-		ctx->root_pt = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
-		ctx->cpu_id = c;
-		ctx->cpu_count = num_cpus;
-
-		stage_contexts[c] = reinterpret_cast<u64>(ctx);
-		stage_stacks[c] = stageloader_sp;
+	// Allocate virtual memory for Stage1Data
+	auto o_stage1_vaddr = vpalloc.TryAllocate(PAGE_SIZE);
+	if (!o_stage1_vaddr) {
+		puts("FATAL ERROR: Unable to allocate Stage1Data virtual address\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
 	}
+	u64 stage1_vaddr = *o_stage1_vaddr;
+	auto o_stage1_phys = allocate_physpage(sppmap, 1);
+	if (!o_stage1_phys) {
+		puts("FATAL ERROR: Unable to allocate Stage1Data physical page\n");
+		for (;;) {
+			asm volatile("wfe");
+		}
+	}
+	u32 stage1_phys_page = *o_stage1_phys;
+	map_page(sppmap, root_pt, stage1_vaddr, static_cast<u64>(stage1_phys_page) * PAGE_SIZE, MapFlagWrite);
+
+	Stage1Data *stage1Data = reinterpret_cast<Stage1Data *>(static_cast<u64>(stage1_phys_page) * PAGE_SIZE);
+	memset(stage1Data, 0, sizeof(Stage1Data));
+	stage1Data->uart = uart_vaddr;
+	stage1Data->dtb = dtb_vaddr;
+	stage1Data->phys_mem_base = phys_mem_vaddr;
+	stage1Data->phys_mem_size = phys_mem_size;
+	stage1Data->root_pt = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
+	stage1Data->cpu_count = num_cpus;
+
+	ArmStageContext *shared_stage_ctx = reinterpret_cast<ArmStageContext *>(stage_ctx_phys);
+	memset(shared_stage_ctx, 0, sizeof(ArmStageContext));
+	shared_stage_ctx->ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
+	shared_stage_ctx->kernel_entrypoint = supervisor_start + entrypoint_addr;
+	shared_stage_ctx->dtb = dtb_vaddr;
+	shared_stage_ctx->uart = uart_vaddr;
+	shared_stage_ctx->phys_mem_base = phys_mem_vaddr;
+	shared_stage_ctx->phys_mem_size = phys_mem_size;
+	shared_stage_ctx->root_pt = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
+	shared_stage_ctx->cpu_count = num_cpus;
+	shared_stage_ctx->stage1data = stage1_vaddr;
+
+	for (u32 c = 0; c < num_cpus; ++c) {
+		shared_stage_ctx->kernel_stacks[c] = per_cpu_kernel_sp[c];
+		stage_stacks[c] = per_cpu_stage_sp[c];
+	}
+
+	stage_context = stage_ctx_phys;
 
 	size_t mapped_pt_pages = 0;
 	while (mapped_pt_pages < num_pt_pages) {
@@ -1403,7 +1444,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	);
 
 	u64 primary_stage_sp = stage_stacks[0];
-	u64 primary_ctx = stage_contexts[0];
+	u64 primary_ctx = stage_context;
 
 	asm volatile(
 		"mov sp, %0\n"

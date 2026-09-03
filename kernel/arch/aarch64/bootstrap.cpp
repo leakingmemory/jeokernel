@@ -79,7 +79,7 @@ namespace {
 }
 
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
-    if (stage1Data->cpu_id == 0) {
+    if (stage1Data->early_init_lock.try_lock()) {
         set_pagetable_virt_offset(stage1Data->phys_mem_base);
 
         /*
@@ -88,7 +88,10 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
         set_init_pml4t(stage1Data->root_pt);
     }
     volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
-    print_cpu_entry(uart, stage1Data->cpu_id, stage1Data->cpu_count);
+    uint64_t mpidr;
+    asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
+    uint64_t cpu_id = mpidr & 0xFF;
+    print_cpu_entry(uart, cpu_id, stage1Data->cpu_count);
 
     for (;;) {
         asm volatile("wfe");

@@ -5,8 +5,7 @@
 #ifndef JEOKERNEL_RAW_SPINLOCK_H
 #define JEOKERNEL_RAW_SPINLOCK_H
 
-#include <cstdint>
-#include "critical_section.h"
+#include <stdint.h>
 
 class raw_spinlock {
 private:

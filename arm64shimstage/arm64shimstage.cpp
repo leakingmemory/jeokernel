@@ -59,27 +59,23 @@ extern "C" [[noreturn]] void stage_main(ArmStageContext *ctx) {
 		:: "r"(sctlr)
 	);
 
-	u64 kernel_sp = ctx->kernel_sp;
+	u64 mpidr;
+	asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
+	u64 cpu_id = mpidr & 0xFF;
+	if (cpu_id >= ctx->cpu_count) {
+		cpu_id = 0;
+	}
+
+	u64 kernel_sp = ctx->kernel_stacks[cpu_id];
 	u64 entrypoint = ctx->kernel_entrypoint;
-
-	kernel_sp -= sizeof(Stage1Data);
-	kernel_sp &= ~0xFULL;
-
-	Stage1Data *stage1Data = reinterpret_cast<Stage1Data *>(kernel_sp);
-	stage1Data->uart = ctx->uart;
-	stage1Data->dtb = ctx->dtb;
-	stage1Data->phys_mem_base = ctx->phys_mem_base;
-	stage1Data->phys_mem_size = ctx->phys_mem_size;
-	stage1Data->root_pt = ctx->root_pt;
-	stage1Data->cpu_id = ctx->cpu_id;
-	stage1Data->cpu_count = ctx->cpu_count;
+	u64 stage1DataPtr = ctx->stage1data;
 
 	asm volatile(
 		"mov sp, %0\n"
 		"mov x0, %1\n"
 		"br %2\n"
 		:
-		: "r"(kernel_sp), "r"(reinterpret_cast<u64>(stage1Data)), "r"(entrypoint)
+		: "r"(kernel_sp), "r"(stage1DataPtr), "r"(entrypoint)
 		: "x0"
 	);
 

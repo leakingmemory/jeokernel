@@ -83,17 +83,17 @@ secondary_cpu_wait:
 	dsb	sy
 	isb
 
-	/* x0 = stage_contexts[cpu_id] */
-	adrp	x22, stage_contexts
-	add	x22, x22, :lo12:stage_contexts
-	uxtw	x19, w19
-	ldr	x0, [x22, x19, lsl #3]
-
 	/* sp = stage_stacks[cpu_id] */
 	adrp	x23, stage_stacks
 	add	x23, x23, :lo12:stage_stacks
+	uxtw	x19, w19
 	ldr	x1, [x23, x19, lsl #3]
 	mov	sp, x1
+
+	/* x0 = stage_context */
+	adrp	x22, stage_context
+	add	x22, x22, :lo12:stage_context
+	ldr	x0, [x22]
 
 	/* x2 = stageloader_entry */
 	adrp	x24, stageloader_entry
@@ -120,9 +120,9 @@ stageloader_entry:
 	.quad	0
 
 	.align 3
-	.globl stage_contexts
-stage_contexts:
-	.space	8 * 256
+	.globl stage_context
+stage_context:
+	.quad	0
 
 	.align 3
 	.globl stage_stacks
