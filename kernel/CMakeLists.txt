@@ -13,11 +13,12 @@ set(CMAKE_CXX_STANDARD 23)
 
 enable_language(C ASM)
 
+add_subdirectory(kmemory)
+
 # Subsystem libraries. x86_64-only for now; as each is ported to aarch64 it
 # moves out of this guard to be shared by both architectures.
 if (ARCH STREQUAL "x86_64")
 add_subdirectory(textconsole)
-add_subdirectory(kmemory)
 add_subdirectory(devices)
 add_subdirectory(pci)
 add_subdirectory(concurrency)
@@ -59,7 +60,8 @@ endif()
 # The kernel image - same target name (kernel.full) on both architectures, with
 # architecture-specific sources; the loader/shim embeds this target's file.
 if (ARCH STREQUAL "aarch64")
-add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/hw_spinlock.cpp arch/aarch64/raw_spinlock.cpp arch/aarch64/critical_section.cpp pagealloc.cpp)
+add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/hw_spinlock.cpp arch/aarch64/raw_spinlock.cpp arch/aarch64/critical_section.cpp)
+#add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/hw_spinlock.cpp arch/aarch64/raw_spinlock.cpp arch/aarch64/critical_section.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp)
 target_compile_options(kernel.full PRIVATE -g -Wall -Wextra)
 else()
 add_executable(kernel.full m64-stage1.cpp arch/x86_64/bootstrap.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp stack.cpp GlobalDescriptorTable.cpp GlobalDescriptorTable.h InterruptDescriptorTable.cpp InterruptDescriptorTable.h TaskStateSegment.cpp TaskStateSegment.h InterruptTaskState.cpp InterruptTaskState.h interrupt.S interrupt.cpp PageFault.cpp PageFault.h elf.cpp KernelElf.cpp KernelElf.h vmem.cpp cpu_mpfp.cpp LocalApic.cpp Pic.cpp Pic.h IOApic.cpp IOApic.h HardwareInterrupts.cpp HardwareInterrupts.h PITTimerCalib.cpp PITTimerCalib.h ap_trampoline.S start_ap.cpp start_ap.h ap_started.S ap_bootstrap.cpp nanotime.cpp AcpiBoot.cpp AcpiBoot.h link_stubs.cpp ctime.cpp perror.cpp CpuInterrupts.cpp CpuInterrupts.h remove.cpp ApStartup.cpp ApStartup.h DoubleFault.cpp DoubleFault.h statistics_root.cpp physpagemap.cpp dynlinker.cpp PerCpuVMem.cpp PerCpuVMem.cpp SyscallSupport.cpp SyscallSupport.h uname_info.cpp x86fpu.cpp)
@@ -89,11 +91,12 @@ add_custom_target(
         DEPENDS kernel.full kernel.debug
 )
 
+#target_link_libraries(kernel.full PRIVATE kmemory)
+
 # x86_64-only subsystem linkage; becomes shared as subsystems are ported.
 if (ARCH STREQUAL "x86_64")
 target_link_libraries(kernel.full PRIVATE bootstrap)
 target_link_libraries(kernel.full PRIVATE textconsole)
-target_link_libraries(kernel.full PRIVATE kmemory)
 target_link_libraries(kernel.full PRIVATE devices)
 target_link_libraries(kernel.full PRIVATE pci)
 target_link_libraries(kernel.full PRIVATE concurrency)

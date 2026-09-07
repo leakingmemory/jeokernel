@@ -1397,6 +1397,9 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	stage1Data->phys_mem_base = phys_mem_vaddr;
 	stage1Data->phys_mem_size = phys_mem_size;
 	stage1Data->root_pt = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;
+	stage1Data->ppmap = reinterpret_cast<uint64_t>(ppmap);
+	stage1Data->ppmap_base_page = base_page;
+	stage1Data->vpalloc_root_vaddr = reinterpret_cast<uint64_t>(vpalloc_root) + phys_mem_vaddr;
 	stage1Data->cpu_count = num_cpus;
 
 	ArmStageContext *shared_stage_ctx = reinterpret_cast<ArmStageContext *>(stage_ctx_phys);
@@ -1422,6 +1425,18 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	while (mapped_pt_pages < num_pt_pages) {
 		u64 pt_pa = pt_pages[mapped_pt_pages++];
 		map_page(sppmap, root_pt, phys_mem_vaddr + pt_pa, pt_pa, MapFlagWrite);
+	}
+	map_page(sppmap, root_pt, phys_mem_vaddr + reinterpret_cast<uint64_t>(ppmap), reinterpret_cast<uint64_t>(ppmap), MapFlagWrite);
+
+	{
+		auto *vpalloc_page = vpalloc_root;
+		VPAllocatorPage *vpalloc_prev = nullptr;
+		while (vpalloc_page != nullptr) {
+			auto vpalloc_physaddr = reinterpret_cast<u64>(vpalloc_page);
+			u64 vpalloc_vaddr = phys_mem_vaddr + vpalloc_physaddr;
+			map_page(sppmap, root_pt, phys_mem_vaddr + vpalloc_physaddr, vpalloc_physaddr, MapFlagWrite);
+			vpalloc_page = vpalloc_page->GetNext();
+		}
 	}
 
 	u64 stageloader_entry_addr = stageloader_entrypoint_addr + reinterpret_cast<u64>(phys_stageloader);

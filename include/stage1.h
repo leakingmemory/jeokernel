@@ -46,6 +46,11 @@ struct Stage1Data {
 
     uint64_t root_pt;
 
+    uint64_t ppmap;
+    uint64_t ppmap_base_page;
+
+    uint64_t vpalloc_root_vaddr;
+
     uint64_t cpu_count;
 
     raw_spinlock early_init_lock;

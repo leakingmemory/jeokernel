@@ -172,7 +172,13 @@ uint64_t vpagealloc(uint64_t vsize) {
     lock.release();
     return vpagealloc32(vsize);
 }
+#elif defined(__aarch64__)
+//uint64_t vpagealloc(uint64_t vsize) {
+//    std::unique_lock lock{get_pagetables_lock()};
+//}
+#endif
 
+#if defined(__x86_64__) || defined(__i386__)
 uint64_t vpagealloc32(uint64_t size) {
     std::lock_guard lock{get_pagetables_lock()};
 
@@ -934,6 +940,7 @@ void *pagealloc32(uint64_t size) {
     }
     return (void *) vpages;
 }
+#endif
 
 void *pagealloc(uint64_t size) {
     uint64_t vpages = vpagealloc(size);
@@ -944,12 +951,12 @@ void *pagealloc(uint64_t size) {
                 std::optional<pageentr> pe = get_pageentr(vpages + offset);
                 uint64_t page_ppn = ppages + offset;
                 page_ppn = page_ppn >> 12;
-                pe->page_ppn() = page_ppn;
-                pe->present() = 1;
-                pe->writeable() = 1;
-                pe->execution_disabled() = 1;
-                pe->write_through() = 0;
-                pe->cache_disabled() = 0;
+                pe->value = 0;
+                pe->ppn() = page_ppn;
+                pe->valid() = 1;
+                pe->ap() = 0;
+                pe->pxn() = 1;
+                pe->uxn() = 1;
                 update_pageentr(vpages + offset, *pe);
             }
 
@@ -964,6 +971,7 @@ void *pagealloc(uint64_t size) {
     return (void *) vpages;
 }
 
+#if defined(__x86_64__) || defined(__i386__)
 void pagefree(void *vaddr) {
     uint64_t vai = (uint64_t) vaddr;
     uint64_t phys = get_phys_from_virt(vai);

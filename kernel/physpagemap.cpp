@@ -122,6 +122,7 @@ physpagemap_managed *get_physpagemap() {
     return physp;
 }
 
+#if defined(__x86_64__) || defined(__i386__)
 #ifndef LOADER
 class extendable_physpagemap_managed : public simple_physpagemap_managed {
 private:
@@ -186,4 +187,4 @@ void extend_to_advanced_physpagemap() {
     physp = new extendable_physpagemap_managed(*((simple_physpagemap_managed *) physp));
 }
 #endif
-
+#endif

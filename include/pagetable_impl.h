@@ -47,7 +47,9 @@ inline pageentr &get_pt_pageentr64(pagetable &pt_ref, uint64_t addr) {
     }
     return pt_ref[vector];
 }
+#endif
 
+#if defined(__x86_64__)
 inline pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr) {
     pageentr &pml4t_pe = get_pml4t_pageentr64(pml4t, addr);
     if (!pml4t_pe.present()) {
@@ -64,6 +66,29 @@ inline pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr) {
     pageentr &pt = get_pt_pageentr64(pdt.get_subtable(), addr);
     return &pt;
 }
+#elif defined(__aarch64__)
+
+inline pageentr *get_pageentr64(pagetable &root, uint64_t vaddr) {
+    uint64_t indices[4];
+    indices[0] = (vaddr >> 39) & 0x1FF;
+    indices[1] = (vaddr >> 30) & 0x1FF;
+    indices[2] = (vaddr >> 21) & 0x1FF;
+    indices[3] = (vaddr >> 12) & 0x1FF;
+
+    pageentr *current_table = &root[0];
+
+    for (int level = 0; level < 3; ++level) {
+        pageentr &entry = current_table[indices[level]];
+        if (!entry.valid()) {
+            return nullptr;
+        }
+        current_table = &entry.get_subtable()[0];
+    }
+
+    pageentr &leaf = current_table[indices[3]];
+    return &leaf;
+}
+
 #endif
 
 #endif //JEOKERNEL_PAGETABLE_IMPL_H

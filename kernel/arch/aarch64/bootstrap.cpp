@@ -10,6 +10,8 @@
 #include <stage1.h>
 #include <pagetable.h>
 #include <pagealloc.h>
+#include <physpagemap.h>
+#include <vpallocator.h>
 
 extern "C" int atexit(void (*)(void)) {
     return 0;
@@ -93,10 +95,29 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
 
         set_pagetable_virt_offset(stage1Data->phys_mem_base);
 
+        VPAllocatorPage *vpalloc_root = reinterpret_cast<VPAllocatorPage *>(stage1Data->vpalloc_root_vaddr);
+        {
+            auto *vpalloc_page = vpalloc_root;
+            while (vpalloc_page) {
+                uart_puts(uart, "vpalloc_page import");
+                auto physaddr = vpalloc_page->next.paddr.addr;
+                if (physaddr != 0) {
+                    auto vaddr = physaddr + stage1Data->phys_mem_base;
+                    auto vptr = reinterpret_cast<VPAllocatorPage *>(vaddr);
+                    vpalloc_page->SetNextVirtual(vptr);
+                    vpalloc_page = vpalloc_page->GetNext();
+                } else {
+                    uart_puts(uart, ": last page\n");
+                    vpalloc_page = nullptr;
+                }
+            }
+        }
+
         /*
          * Let's try to alloc a stack
          */
-        set_init_pml4t(stage1Data->root_pt);
+        //set_init_pml4t(stage1Data->root_pt);
+        //init_simple_physpagemap(stage1Data->ppmap + stage1Data->phys_mem_base, stage1Data->ppmap_base_page);
 
         uart_puts(uart, "Early init ends\n");
 

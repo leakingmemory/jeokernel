@@ -780,6 +780,7 @@ hw_spinlock &get_pagetables_lock();
 
 #if defined(__x86_64__)
 uint64_t get_phys_from_virt(uint64_t vaddr);
+#endif
 std::optional<pageentr> get_pageentr(uint64_t addr);
 /**
  * Update the vmem properties of the pageentr. Any allocation
@@ -790,6 +791,7 @@ std::optional<pageentr> get_pageentr(uint64_t addr);
  * @return True on success.
  */
 bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update);
+#if defined(__x86_64__)
 bool update_pageentr(uint64_t addr, std::function<void (pageentr &pe)>);
 #endif
 
