@@ -20,20 +20,44 @@ extern "C" {
     static MemoryAllocator *memoryAllocator = nullptr;
 
     struct MallocImpl {
-        void *(*malloc)(uint32_t);
+        void *(*malloc)(uintptr_t);
+        void (*free_sized)(void *, uintptr_t);
+#if !defined(__aarch64__)
         void (*free)(void *);
-        uint32_t (*sizeof_alloc)(void *);
+        uintptr_t (*sizeof_alloc)(void *);
+#endif
     };
 
     static const MallocImpl *impl = nullptr;
 
-    void *wild_malloc(uint32_t size) {
+    void *wild_malloc(uintptr_t size) {
         if (size < MAX_NONPAGED_SIZE) {
             return memoryAllocator->sm_allocate(size);
         } else {
             return pagealloc(size);
         }
     }
+#if defined(__aarch64__)
+    void wild_free_sized(void *ptr, uintptr_t size) {
+        if (memoryAllocator->sm_owned(ptr)) {
+            if (memoryAllocator->sm_free(ptr) == 0) {
+                get_klogger() << "Free: Invalid ptr or not ours to free\n";
+            }
+        } else {
+            uint64_t vaddr = (uint64_t) ptr;
+            if ((vaddr & 0xFFF) != 0) {
+                get_klogger() << "Free: Invalid pagealloc ptr or not ours to free\n";
+            }
+            {
+                uintptr_t sz_page_off = size & 0xFFF;
+                if (sz_page_off != 0) {
+                    size += 0x1000 - sz_page_off;
+                }
+            }
+            pagefree(ptr, size);
+        }
+    }
+#else
     void wild_free(void *ptr) {
         if (memoryAllocator->sm_owned(ptr)) {
             if (memoryAllocator->sm_free(ptr) == 0) {
@@ -47,7 +71,8 @@ extern "C" {
             pagefree(ptr);
         }
     }
-    uint32_t wild_sizeof_alloc(void *ptr) {
+
+    uintptr_t wild_sizeof_alloc(void *ptr) {
         if (memoryAllocator->sm_owned(ptr)) {
             return memoryAllocator->sm_sizeof(ptr);
         } else {
@@ -59,6 +84,13 @@ extern "C" {
         }
     }
 
+    void wild_free_sized(void *ptr, uintptr_t size) {
+        if (wild_sizeof_alloc(ptr) < size) {
+            wild_panic("Wrong size for sized free");
+        }
+        wild_free(ptr);
+    }
+#endif
     uint64_t wild_malloc_total() {
         return memoryAllocator->sm_total_size();
     }
@@ -69,7 +101,7 @@ extern "C" {
 
     static MallocImpl wild_malloc_struct{};
 
-    void *malloc(uint32_t size) {
+    void *malloc(size_t size) {
         void *ptr = impl->malloc(size);
         if (ptr == nullptr) {
             wild_panic("Out of memory");
@@ -93,7 +125,7 @@ extern "C" {
         return malloc(totsize);
     }
 
-    uint32_t malloc_sizeof(void *ptr);
+    uintptr_t malloc_sizeof(void *ptr);
 
 #ifdef DELAY_FREE_MEM
     hw_spinlock delaySpin;
@@ -101,6 +133,47 @@ extern "C" {
     void *delayFreeMem[DELAY_FREE_MEM];
 #endif
 
+    void free_sized(void *ptr, size_t size) {
+#ifdef FREE_MEM_POISON
+        memset(ptr, 0xd0, size);
+#endif
+#ifndef DISABLE_FREE_MEM
+#ifdef DELAY_FREE_MEM
+        void *freeptr = nullptr;
+        {
+            critical_section cli{};
+            std::lock_guard lock{delaySpin};
+            unsigned long int index = delayCountMem % DELAY_FREE_MEM;
+            if (index < delayCountMem) {
+                freeptr = delayFreeMem[index];
+            }
+            delayFreeMem[index] = ptr;
+            ++delayCountMem;
+        }
+        if (freeptr != nullptr) {
+            impl->free_sized(freeptr, size);
+        }
+#else
+        impl->free_sized(ptr, size);
+#endif
+#endif
+    }
+
+
+    void *realloc_sized(void *ptr, size_t original_size, size_t new_size) {
+        size_t prev_size = original_size;
+        void *newptr = malloc(new_size);
+        if (newptr != nullptr) {
+            if (prev_size > new_size) {
+                prev_size = new_size;
+            }
+            bcopy(ptr, newptr, prev_size);
+            free_sized(ptr, original_size);
+        }
+        return newptr;
+    }
+
+#if !defined(__aarch64__)
     void free(void *ptr) {
 #ifdef FREE_MEM_POISON
         memset(ptr, 0xd0, malloc_sizeof(ptr));
@@ -127,12 +200,12 @@ extern "C" {
 #endif
     }
 
-    uint32_t malloc_sizeof(void *ptr) {
+    uintptr_t malloc_sizeof(void *ptr) {
         return impl->sizeof_alloc(ptr);
     }
 
-    void *realloc(void *ptr, uint32_t size) {
-        uint32_t prev_size = malloc_sizeof(ptr);
+    void *realloc(void *ptr, size_t size) {
+        size_t prev_size = malloc_sizeof(ptr);
         void *newptr = malloc(size);
         if (newptr != nullptr) {
             if (prev_size > size) {
@@ -143,6 +216,7 @@ extern "C" {
         }
         return newptr;
     }
+#endif
 
 };
 
@@ -152,8 +226,11 @@ void setup_simplest_malloc_impl() {
     int delayCountMem = 0;
 #endif
     wild_malloc_struct.malloc = wild_malloc;
+    wild_malloc_struct.free_sized = wild_free_sized;
+#if !defined(__aarch64__)
     wild_malloc_struct.free = wild_free;
     wild_malloc_struct.sizeof_alloc = wild_sizeof_alloc;
+#endif
     impl = &wild_malloc_struct;
     memoryAllocator = CreateChainedAllocatorRoot();
 }

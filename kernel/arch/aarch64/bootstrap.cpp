@@ -116,8 +116,9 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
         /*
          * Let's try to alloc a stack
          */
-        //set_init_pml4t(stage1Data->root_pt);
-        //init_simple_physpagemap(stage1Data->ppmap + stage1Data->phys_mem_base, stage1Data->ppmap_base_page);
+        init_mapping_pages(stage1Data->phys_mem_base + stage1Data->mem_mapper_8pages);
+        set_init_pml4t(stage1Data->root_pt);
+        init_simple_physpagemap(stage1Data->ppmap + stage1Data->phys_mem_base, stage1Data->ppmap_base_page);
 
         uart_puts(uart, "Early init ends\n");
 

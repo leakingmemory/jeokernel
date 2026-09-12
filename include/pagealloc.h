@@ -48,8 +48,12 @@ uint32_t vpagetablecount();
 void pmemcounts();
 phys_t ppagealloc(uintptr_t size);
 phys_t ppagealloc32(uint32_t size);
+#if defined(__aarch64__)
+bool vpagefree(uintptr_t addr, uintptr_t size);
+#else
 uintptr_t vpagefree(uintptr_t addr);
 uintptr_t vpagesize(uintptr_t addr);
+#endif
 void ppagefree(phys_t addr, uintptr_t size);
 
 uintptr_t pv_fixp1g_pagealloc(uintptr_t size);
@@ -63,7 +67,10 @@ void reload_pagetables();
 void *pagealloc_phys32(uintptr_t size);
 void *pagealloc32(uintptr_t size);
 void *pagealloc(uintptr_t size);
+void pagefree(void *vaddr, uintptr_t size);
+#if !defined(__aarch64__)
 void pagefree(void *vaddr);
+#endif
 
 #if defined(__x86_64__) || defined(__i386__)
 void vmem_switch_to_multicpu(ApStartup *apStartup, int numCpus);

@@ -756,7 +756,11 @@ static_assert(sizeof(pageentr) == 8);
 
 typedef pageentr pagetable[512];
 
-#if !defined(__aarch64__)
+#if defined(__aarch64__)
+struct PageentrAvailablePages;
+pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr, PageentrAvailablePages &available_pages);
+void init_mapping_pages(uint64_t vaddr);
+#else
 pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr);
 pageentr &get_pdpt_pageentr64(pagetable &pdpt_ref, uint64_t addr);
 pageentr &get_pdt_pageentr64(pagetable &pdt_ref, uint64_t addr);
@@ -778,9 +782,7 @@ void initialize_pagetable_control();
 
 hw_spinlock &get_pagetables_lock();
 
-#if defined(__x86_64__)
 uint64_t get_phys_from_virt(uint64_t vaddr);
-#endif
 std::optional<pageentr> get_pageentr(uint64_t addr);
 /**
  * Update the vmem properties of the pageentr. Any allocation

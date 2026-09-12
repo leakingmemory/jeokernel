@@ -90,17 +90,20 @@ namespace std {
 
         constexpr ~optional() = default;
 
-        std::optional<T> & operator = (const T &cp) {
+        constexpr std::optional<T> & operator = (const T &cp) {
             _data = cp;
             return *this;
         }
+        constexpr void reset() {
+            _data = detail::empty_optional();
+        }
 
-        constexpr T &operator*() {
+        constexpr const T &operator*() const {
             struct {
-                constexpr T & operator () (T &ref) {
+                constexpr const T & operator () (const T &ref) {
                     return ref;
                 }
-                [[noreturn]] T & operator () (detail::empty_optional &) {
+                [[noreturn]] const T & operator () (const detail::empty_optional &) {
 #if defined(__x86_64__)
                     asm("ud2");
 #elif defined(__aarch64__)

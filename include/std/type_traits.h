@@ -159,6 +159,24 @@ namespace std {
     static_assert(!is_convertible<detail::test_is_convertible,uint16_t>::value);
     static_assert(is_convertible<void *,void *>::value);
     static_assert(is_convertible<uint16_t *,void *>::value);
+
+    constexpr bool is_constant_evaluated() noexcept {
+#if defined(__cpp_lib_is_constant_evaluated) && __cpp_lib_is_constant_evaluated >= 201811L
+        return std::is_constant_evaluated();
+#elif defined(__has_builtin)
+#if __has_builtin(__builtin_is_constant_evaluated)
+        return __builtin_is_constant_evaluated();
+#elif __has_builtin(__builtin_constant_p)
+        return __builtin_constant_p(0); // Approximation
+#else
+        return false;
+#endif
+#elif defined(__GNUC__) || defined(__clang__)
+        return __builtin_is_constant_evaluated();
+#else
+        return false;
+#endif
+    }
 }
 
 #endif //JEOKERNEL_TYPE_TRAITS_H

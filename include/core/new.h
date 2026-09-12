@@ -11,4 +11,6 @@ inline void *operator new(size_t size, void*ref) {
     return ref;
 };
 
+void *operator new(size_t size);
+
 #endif //JEOKERNEL_CORE_NEW_H

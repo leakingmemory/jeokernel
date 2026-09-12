@@ -14,6 +14,8 @@
 #include "ApStartup.h"
 #include <sys/sysinfo.h>
 
+#include "vpallocator.h"
+
 #define DEBUG_PALLOC_FAILURE
 
 static long long int total_ppages = 0;
@@ -173,9 +175,58 @@ uint64_t vpagealloc(uint64_t vsize) {
     return vpagealloc32(vsize);
 }
 #elif defined(__aarch64__)
-//uint64_t vpagealloc(uint64_t vsize) {
-//    std::unique_lock lock{get_pagetables_lock()};
-//}
+class Arm64VPPageAllocator {
+public:
+    constexpr Arm64VPPageAllocator() = default;
+    constexpr ~Arm64VPPageAllocator() = default;
+    std::optional<VPAllocatorPage *> TryAllocate() const {
+        phys_t ppage = ppagealloc(PAGESIZE);
+        uint64_t vpage{ppage};
+        vpage = vpage + get_pagetable_virt_offset();
+        auto pe = get_pageentr(vpage);
+        if (!pe) {
+            return {};
+        }
+        pe->value = 0;
+        pe->ppn() = ppage >> 12;
+        pe->pxn() = 1;
+        pe->uxn() = 1;
+        pe->valid() = 1;
+        update_pageentr(vpage, *pe);
+        return new (reinterpret_cast<void *>(vpage)) VPAllocatorPage();
+    }
+    constexpr void Free(VPAllocatorPage *vp) const {
+        vp->~VPAllocatorPage();
+        uint64_t vpage = reinterpret_cast<uint64_t>(vp);
+        phys_t ppage{vpage - get_pagetable_virt_offset()};
+        ppagefree(ppage, PAGESIZE);
+    }
+    constexpr bool IsVirtualAddress() const {
+        return true;
+    }
+};
+
+static VPAllocator<Arm64VPPageAllocator> *vpallocator;
+static uint8_t vpallocator_buf[sizeof(*vpallocator)];
+static Arm64VPPageAllocator vp_page_allocator{};
+
+void set_vpalloc_root(VPAllocatorPage *vpalloc_root) {
+    vpallocator = new (static_cast<void *>(&vpallocator_buf[0])) VPAllocator<Arm64VPPageAllocator>(&vp_page_allocator, vpalloc_root);
+}
+uint64_t vpagealloc(uint64_t vsize) {
+    if ((vsize & 4095) != 0) {
+        vsize += 4096 - (vsize & 4095);
+    }
+    auto size = vsize;
+    size /= 4096;
+    std::unique_lock lock{get_pagetables_lock()};
+    auto opt = vpallocator->TryAllocate(vsize);
+    if (!opt) {
+        return 0;
+    }
+    allocated_vpages += size;
+    return *opt;
+}
 #endif
 
 #if defined(__x86_64__) || defined(__i386__)
@@ -463,6 +514,7 @@ void pmemcounts() {
     }
     get_klogger() << "Ppages " << scan << " pages scanned, " << free_pages << " free encountered\n";
 }
+#endif
 
 //#define DEBUG_PALLOC_FAILURE
 static phys_t ppagealloc_locked(uintptr_t size) {
@@ -518,6 +570,7 @@ phys_t ppagealloc(uintptr_t size) {
     return ppagealloc_locked(size);
 }
 
+#if defined(__x86_64__) || defined(__i386__)
 phys_t ppagealloc32(uint32_t size) {
     std::lock_guard lock{get_pagetables_lock()};
 
@@ -563,6 +616,10 @@ phys_t ppagealloc32(uint32_t size) {
     return 0;
 }
 
+bool vpagefree(uint64_t addr, uint64_t vsize) {
+    return (vpagefree(addr) >= vsize);
+}
+
 uint64_t vpagefree(uint64_t addr) {
     std::lock_guard lock{get_pagetables_lock()};
 
@@ -603,7 +660,28 @@ uint64_t vpagefree(uint64_t addr) {
     allocated_vpages -= size;
     return size << 12;
 }
+#elif defined(__aarch64__)
+bool vpagefree(uint64_t addr, uint64_t vsize) {
+    if ((vsize & 4095) != 0) {
+        vsize += 4096 - (vsize & 4095);
+    }
+    auto size = vsize;
+    size /= 4096;
 
+    std::lock_guard lock{get_pagetables_lock()};
+
+    auto res = vpallocator->TryFree(addr, vsize);
+
+    if (res != VPAllocatorResult::DONE) {
+        return false;
+    }
+
+    allocated_vpages -= size;
+    return true;
+}
+#endif
+
+#if defined(__x86_64__) || defined(__i386__)
 uint64_t vpagesize(uint64_t addr) {
     std::lock_guard lock{get_pagetables_lock()};
 
@@ -846,33 +924,34 @@ void free_stack(uint64_t vaddr) {
     ppagefree(phys_addr, size);
     reload_pagetables();
 }
+#endif
 
 void reload_pagetables() {
     critical_section cli{};
+#if defined(__aarch64__)
+    asm volatile(
+        "dsb ish\n"
+        "tlbi vmalle1\n"
+        "dsb ish\n"
+        "isb\n"
+        ::: "memory"
+    );
+#else
     uint64_t cr3 = (uint64_t) &(_get_pml4t_this_cpu()) - get_pagetable_virt_offset();
     asm("mov %0,%%cr3; " :: "r"(cr3));
+#endif
 }
 
 void ppagefree(uint64_t addr, uint64_t size) {
     std::lock_guard lock{get_pagetables_lock()};
 
-    pagetable &pml4t = _get_pml4t_cpu0();
     addr = addr >> 12;
     if ((size & 4095) != 0) {
         size += 4096;
     }
     size = size >> 12;
-    uint64_t first = addr;
     auto *phys = get_physpagemap();
     while (size > 0) {
-        uint64_t paddr = addr;
-        int l = (int) (paddr & 511);
-        paddr = paddr >> 9;
-        int k = (int) (paddr & 511);
-        paddr = paddr >> 9;
-        int j = (int) (paddr & 511);
-        paddr = paddr >> 9;
-        int i = (int) (paddr & 511);
         if (!phys->claimed(addr) || addr >= phys->max()) {
             wild_panic("PFree pointed at available page");
         }
@@ -883,6 +962,7 @@ void ppagefree(uint64_t addr, uint64_t size) {
     }
 }
 
+#if defined(__x86_64__) || defined(__i386__)
 void *pagealloc_phys32(uint64_t size) {
     uint64_t vpages = vpagealloc(size);
     if (vpages != 0) {
@@ -951,18 +1031,27 @@ void *pagealloc(uint64_t size) {
                 std::optional<pageentr> pe = get_pageentr(vpages + offset);
                 uint64_t page_ppn = ppages + offset;
                 page_ppn = page_ppn >> 12;
+#if defined(__aarch64__)
                 pe->value = 0;
                 pe->ppn() = page_ppn;
                 pe->valid() = 1;
                 pe->ap() = 0;
                 pe->pxn() = 1;
                 pe->uxn() = 1;
+#else
+                pe->page_ppn() = page_ppn;
+                pe->present() = 1;
+                pe->writeable() = 1;
+                pe->execution_disabled() = 1;
+                pe->write_through() = 0;
+                pe->cache_disabled() = 0;
+#endif
                 update_pageentr(vpages + offset, *pe);
             }
 
             reload_pagetables();
         } else {
-            vpagefree(vpages);
+            vpagefree(vpages, size);
             vpages = 0;
 
             reload_pagetables();
@@ -971,7 +1060,22 @@ void *pagealloc(uint64_t size) {
     return (void *) vpages;
 }
 
+void pagefree(void *vaddr, uintptr_t size) {
+    uint64_t vai = (uint64_t) vaddr;
+    uint64_t phys = get_phys_from_virt(vai);
+#if defined(__aarch64__)
+    vpagefree(vai, size);
+#else
+    if (size != vpagefree(vai)) {
+        asm("ud2");
+    }
+#endif
+    ppagefree(phys, size);
+    reload_pagetables();
+}
+
 #if defined(__x86_64__) || defined(__i386__)
+
 void pagefree(void *vaddr) {
     uint64_t vai = (uint64_t) vaddr;
     uint64_t phys = get_phys_from_virt(vai);
@@ -979,6 +1083,7 @@ void pagefree(void *vaddr) {
     ppagefree(phys, size);
     reload_pagetables();
 }
+
 
 class pvpage_stats : public statistics_object {
 public:

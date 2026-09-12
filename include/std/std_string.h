@@ -26,11 +26,25 @@ namespace std {
             return ptr;
         }
         static constexpr char_type *move(char_type *dest, const char_type *src, std::size_t count) {
-            return (char_type *) memmove((void *) dest, (void *) src, count * sizeof(char_type));
+            if (std::is_constant_evaluated()) {
+                for (std::size_t i = 0; i < count; i++) {
+                    std::construct_at(&dest[i], src[i]);
+                }
+                return dest;
+            } else {
+                return (char_type *) memmove((void *) dest, (void *) src, count * sizeof(char_type));
+            }
         }
 
         static constexpr char_type *copy(char_type *dest, const char_type *src, std::size_t count) {
-            return (char_type *) memcpy((void *) dest, (void *) src, count * sizeof(char_type));
+            if (std::is_constant_evaluated()) {
+                for (std::size_t i = 0; i < count; i++) {
+                    dest[i] = src[i];
+                }
+                return dest;
+            } else {
+                return (char_type *) memcpy((void *) dest, (void *) src, count * sizeof(char_type));
+            }
         }
 
         static constexpr std::size_t length(const char_type *s) {
@@ -57,51 +71,53 @@ namespace std {
         /* May be too restrictive. But to make sure algorithms are not applied outside of good ranges
          * Tests 8 byte alignment and size between 16 and 32 bytes.
          * */
-        static_assert((sizeof(string_pointer) & ((8 * sizeof(CharT)) - 1)) == 0 && sizeof(string_pointer) >= 16 &&
+        static_assert(sizeof(string_pointer) >= 15 &&
                       sizeof(string_pointer) <= 32);
 
-        union {
-            CharT str[sizeof(string_pointer) / sizeof(CharT)];
-            struct {
-                uint8_t short_string_space[sizeof(string_pointer) - 1];
-                uint8_t unused_capacity;
-            } __attribute__((__packed__));
-        } __attribute__((__packed__));
+        CharT short_string_space[sizeof(string_pointer) / sizeof(CharT)];
+
+        constexpr short_string_s() : short_string_space() {
+        }
 
         constexpr CharT *get_data() {
-            return &(str[0]);
+            return &(short_string_space[0]);
         }
 
         constexpr const CharT *get_data() const {
-            return &(str[0]);
+            return &(short_string_space[0]);
         }
 
-        constexpr void set_empty() {
-            str[0] = 0;
+        constexpr void set_empty(uint8_t &unused_capacity) {
+            short_string_space[0] = 0;
             unused_capacity = get_capacity();
         }
 
-        void set_size(uint8_t size) {
+        constexpr void set_size(uint8_t &unused_capacity, uint8_t size) {
             if (size != 0) {
                 unused_capacity = get_capacity() - size;
-                str[size] = 0;
+                if (size < sizeof(short_string_space)) {
+                    short_string_space[size] = 0;
+                }
             } else {
-                set_empty();
+                set_empty(unused_capacity);
             }
         }
 
-        constexpr bool is_short() const {
+        constexpr static bool is_short(const uint8_t &unused_capacity) {
             return unused_capacity <= get_capacity();
         }
 
-        constexpr uint8_t get_size() const {
-            return (sizeof(string_pointer) / sizeof(CharT)) - unused_capacity - 1;
+        constexpr static uint8_t get_size(const uint8_t &unused_capacity) {
+            return (sizeof(string_pointer) / sizeof(CharT)) - unused_capacity;
         }
 
-        constexpr uint8_t get_capacity() const {
-            return (sizeof(string_pointer) / sizeof(CharT)) - 1;
+        constexpr static uint8_t get_capacity() {
+            return (sizeof(string_pointer) / sizeof(CharT));
         }
-    };
+    } __attribute__((__packed__));
+
+    static_assert(sizeof(short_string_s<char, char[15]>::short_string_space) == 15);
+    static_assert(sizeof(short_string_s<char, char[15]>) == 15);
 
     template<class CharT, class size_type, size_type memory_alloc_unit_multiplier = 16>
     struct string_pointer_s {
@@ -113,7 +129,7 @@ namespace std {
         typedef CharT char_type;
         CharT *pointer;
         size_type size;
-        size_type capacity; // allocated - 1
+        uint8_t capacity[sizeof(size_type) - 1]; // allocated - 1
 
         constexpr CharT *get_data() const {
             return pointer;
@@ -128,15 +144,22 @@ namespace std {
             this->size = size;
         }
 
-        constexpr void set_capacity(size_type cap) {
-            capacity = (cap >> get_shift_bits()) | get_end_mark();
+        constexpr void set_capacity(uint8_t &high_byte, size_type cap) {
+            high_byte = 0xFF;
+            for (int i = 0; i < (sizeof(cap) - 1); i++) {
+                capacity[i] = (cap >> (i * 8)) & 0xff;
+            }
         }
-        constexpr size_type get_capacity() const {
-            return ((capacity & ~get_end_mark()) << get_shift_bits()) | get_alloc_unit_minus_1();
+        constexpr size_type get_capacity(const uint8_t &high_byte) const {
+            size_type cap{0};
+            for (int i = 0; i < (sizeof(cap) - 1); i++) {
+                cap += static_cast<size_type>(capacity[i]) << (i * 8);
+            }
+            return cap;
         }
 
-        constexpr size_type get_alloc_unit() const {
-            const auto ptr_size = sizeof(*this);
+        constexpr static size_type get_alloc_unit() {
+            const auto ptr_size = sizeof(string_pointer_s<CharT,size_type, memory_alloc_unit_multiplier>);
 
             const auto multiplier_val = get_bits(memory_alloc_unit_multiplier - 1);
             const auto capacity_val = get_bits((ptr_size / sizeof(CharT)) - 1);
@@ -145,10 +168,10 @@ namespace std {
 
             return 1 << combined;
         }
-        constexpr size_type get_alloc_unit_minus_1() const {
+        constexpr static size_type get_alloc_unit_minus_1() {
             return get_alloc_unit() - 1;
         }
-        constexpr uint8_t get_bits(size_type num) const {
+        constexpr static uint8_t get_bits(size_type num) {
             uint8_t i = 0;
             while (num != 0) {
                 num = num >> 1;
@@ -165,7 +188,7 @@ namespace std {
             return mark;
         }
 
-        constexpr size_type pad_capacity(size_type suggestion) const {
+        constexpr static size_type pad_capacity(size_type suggestion) {
             suggestion *= sizeof(CharT);
             size_type overshoot = suggestion & get_alloc_unit_minus_1();
             if (overshoot == 0) {
@@ -176,26 +199,28 @@ namespace std {
         }
     } __attribute__((__packed__));
 
+    static_assert(short_string_s<char,string_pointer_s<char,size_t>>().get_capacity() == 23);
+
     static_assert(sizeof(void *) == 8);
-    static_assert(sizeof(string_pointer_s<uint8_t, uint32_t>) == 16);
+    static_assert(sizeof(string_pointer_s<uint8_t, uint32_t>) == 15);
     static_assert(string_pointer_s<uint8_t, uint32_t>().get_alloc_unit_minus_1() == 15);
     static_assert(string_pointer_s<uint8_t, uint32_t>().pad_capacity(8) == 16);
     static_assert(string_pointer_s<uint8_t, uint32_t>().pad_capacity(15) == 16);
     static_assert(string_pointer_s<uint8_t, uint32_t>().pad_capacity(16) == 16);
     static_assert(string_pointer_s<uint8_t, uint32_t>().pad_capacity(17) == 32);
-    static_assert(sizeof(string_pointer_s<uint16_t, uint32_t>) == 16);
+    static_assert(sizeof(string_pointer_s<uint16_t, uint32_t>) == 15);
     static_assert(string_pointer_s<uint16_t, uint32_t>().get_alloc_unit_minus_1() == 15);
     static_assert(string_pointer_s<uint16_t, uint32_t>().pad_capacity(8) == 8);
     static_assert(string_pointer_s<uint16_t, uint32_t>().pad_capacity(15) == 16);
     static_assert(string_pointer_s<uint16_t, uint32_t>().pad_capacity(16) == 16);
     static_assert(string_pointer_s<uint16_t, uint32_t>().pad_capacity(17) == 24);
-    static_assert(sizeof(string_pointer_s<uint16_t, uint32_t, 8>) == 16);
+    static_assert(sizeof(string_pointer_s<uint16_t, uint32_t, 8>) == 15);
     static_assert(string_pointer_s<uint16_t, uint32_t, 8>().get_alloc_unit_minus_1() == 7);
     static_assert(string_pointer_s<uint16_t, uint32_t, 8>().pad_capacity(15) == 16);
     static_assert(string_pointer_s<uint16_t, uint32_t, 8>().pad_capacity(15) == 16);
     static_assert(string_pointer_s<uint16_t, uint32_t, 8>().pad_capacity(16) == 16);
     static_assert(string_pointer_s<uint16_t, uint32_t, 8>().pad_capacity(17) == 20);
-    static_assert(sizeof(string_pointer_s<uint32_t, uint32_t, 8>) == 16);
+    static_assert(sizeof(string_pointer_s<uint32_t, uint32_t, 8>) == 15);
     static_assert(string_pointer_s<uint32_t, uint32_t, 8>().get_alloc_unit_minus_1() == 7);
     static_assert(string_pointer_s<uint32_t, uint32_t, 8>().pad_capacity(7) == 8);
     static_assert(string_pointer_s<uint32_t, uint32_t, 8>().pad_capacity(15) == 16);
@@ -273,24 +298,25 @@ namespace std {
                 short_string_s<CharT, string_pointer_s<CharT, size_type>> shrt;
                 string_pointer_s<CharT, size_type> ptr;
             }__attribute__((__packed__));
+            uint8_t unused_capacity;
 
-            constexpr _data_container() : allocator(), shrt() {
+            constexpr _data_container() : allocator(), shrt(), unused_capacity((sizeof(ptr) - 1) / sizeof(CharT)) {
             }
         }__attribute__((__packed__));
 
         _data_container c;
 
-        allocator &get_allocator() {
+        constexpr allocator &get_allocator() {
             return c;
         }
 
     public:
         constexpr basic_string() {
-            c.shrt.set_empty();
+            c.shrt.set_empty(c.unused_capacity);
         }
 
         constexpr CharT *data() {
-            if (c.shrt.is_short()) {
+            if (c.shrt.is_short(c.unused_capacity)) {
                 return c.shrt.get_data();
             } else {
                 return c.ptr.get_data();
@@ -298,7 +324,7 @@ namespace std {
         }
 
         constexpr const CharT *data() const {
-            if (c.shrt.is_short()) {
+            if (c.shrt.is_short(c.unused_capacity)) {
                 return c.shrt.get_data();
             } else {
                 return c.ptr.get_data();
@@ -328,18 +354,18 @@ namespace std {
         }
 
         constexpr size_type size() const {
-            if (c.shrt.is_short()) {
-                return c.shrt.get_size();
+            if (c.shrt.is_short(c.unused_capacity)) {
+                return c.shrt.get_size(c.unused_capacity);
             } else {
                 return c.ptr.get_size();
             }
         }
 
         constexpr size_type capacity() const {
-            if (c.shrt.is_short()) {
+            if (c.shrt.is_short(c.unused_capacity)) {
                 return c.shrt.get_capacity();
             } else {
-                return c.ptr.get_capacity();
+                return c.ptr.get_capacity(c.unused_capacity);
             }
         }
 
@@ -363,7 +389,7 @@ namespace std {
             return *ptr;
         }
 
-        CharT &operator[](size_type pos) {
+        constexpr CharT &operator[](size_type pos) {
             return at(pos);
         }
 
@@ -390,14 +416,17 @@ namespace std {
         constexpr void reserve(size_type new_cap) {
             size_type prev_cap = capacity();
             if (new_cap > prev_cap) {
-                bool is_short = c.shrt.is_short();
+                bool is_short = c.shrt.is_short(c.unused_capacity);
                 size_type padded_alloc_len = c.ptr.pad_capacity(new_cap + 1);
                 size_type size_v = size();
                 CharT *old_data = data();
                 CharT *new_data = get_allocator().allocate(padded_alloc_len);
-                Traits::move(new_data, old_data, size_v + 1);
+                if (size_v > 0) {
+                    Traits::move(new_data, old_data, size_v);
+                }
+                std::construct_at(&new_data[size_v], 0);
                 c.ptr.pointer = new_data;
-                c.ptr.set_capacity(padded_alloc_len - 1);
+                c.ptr.set_capacity(c.unused_capacity, padded_alloc_len - 1);
                 if (is_short) {
                     c.ptr.size = size_v;
                 } else {
@@ -423,22 +452,24 @@ namespace std {
             }
         }
 
-        basic_string(basic_string &&mv) : c(mv.c) {
-            if (!mv.c.shrt.is_short()) {
-                mv.c.shrt.set_empty();
+        constexpr basic_string(basic_string &&mv) : c(std::move(mv.c)) {
+            if (!mv.c.shrt.is_short(mv.c.unused_capacity)) {
+                mv.c = {};
+                mv.c.shrt.set_empty(mv.c.unused_capacity);
             }
         }
 
     private:
         void copy_from(const basic_string &cp) {
-            if (cp.c.shrt.is_short() && c.shrt.is_short()) {
+            if (cp.c.shrt.is_short(cp.c.unused_capacity) && c.shrt.is_short(c.unused_capacity)) {
                 this->c.shrt = cp.c.shrt;
+                this->c.unused_capacity = cp.c.unused_capacity;
             } else {
                 size_type s = cp.size();
                 reserve(s);
                 Traits::copy(data(), cp.data(), s + 1);
-                if (c.shrt.is_short()) {
-                    c.shrt.set_size(s);
+                if (c.shrt.is_short(c.unused_capacity)) {
+                    c.shrt.set_size(c.unused_capacity, s);
                 } else {
                     c.ptr.size = s;
                 }
@@ -455,13 +486,13 @@ namespace std {
             if (this == &mv) {
                 return *this;
             }
-            if (!c.shrt.is_short()) {
-                get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
+            if (!c.shrt.is_short(c.unused_capacity)) {
+                get_allocator().deallocate(c.ptr.pointer, c.ptr.get_capacity(c.unused_capacity) + 1);
             }
             static_assert(sizeof(c) == sizeof(mv.c));
             memcpy(&c, &mv.c, sizeof(c));
-            if (!mv.c.shrt.is_short()) {
-                mv.c.shrt.set_empty();
+            if (!mv.c.shrt.is_short(mv.c.unused_capacity)) {
+                mv.c.shrt.set_empty(mv.c.unused_capacity);
             }
             return *this;
         }
@@ -471,20 +502,20 @@ namespace std {
             return *this;
         }
 
-        basic_string(const CharT *cstr, size_type length) : basic_string() {
-            if (length >= capacity()) {
-                reserve(length);
-            }
-            Traits::copy(data(), cstr, length);
-            if (c.shrt.is_short()) {
-                c.shrt.set_size(length);
+        constexpr basic_string(const CharT *cstr, size_type length) : basic_string() {
+            bool is_short{length <= capacity()};
+            if (is_short) {
+                Traits::copy(c.shrt.short_string_space, cstr, length);
+                c.shrt.set_size(c.unused_capacity, length);
             } else {
-                c.ptr.pointer[length] = 0;
+                reserve(length);
+                Traits::move(c.ptr.pointer, cstr, length);
+                std::construct_at(&(c.ptr.pointer[length]), 0);
                 c.ptr.size = length;
             }
         }
 
-        basic_string(const CharT *cstr) : basic_string(cstr, Traits::length(cstr)) {
+        constexpr basic_string(const CharT *cstr) : basic_string(cstr, Traits::length(cstr)) {
         }
 
         basic_string &operator=(const char *cstr) {
@@ -493,8 +524,8 @@ namespace std {
                 reserve(length);
             }
             Traits::copy(data(), cstr, length + 1);
-            if (c.shrt.is_short()) {
-                c.shrt.set_size(length);
+            if (c.shrt.is_short(c.unused_capacity)) {
+                c.shrt.set_size(c.unused_capacity, length);
             } else {
                 c.ptr.size = length;
             }
@@ -502,8 +533,8 @@ namespace std {
         }
 
         constexpr void clear() noexcept {
-            if (c.shrt.is_short()) {
-                c.shrt.set_empty();
+            if (c.shrt.is_short(c.unused_capacity)) {
+                c.shrt.set_empty(c.unused_capacity);
             } else {
                 c.ptr.size = 0;
                 c.ptr.pointer[0] = 0;
@@ -516,8 +547,8 @@ namespace std {
                 reserve(s + count);
             }
             Traits::assign(data() + s, count, ch);
-            if (c.shrt.is_short()) {
-                c.shrt.set_size(s + count);
+            if (c.shrt.is_short(c.unused_capacity)) {
+                c.shrt.set_size(c.unused_capacity, s + count);
             } else {
                 data()[s + count] = 0;
                 c.ptr.size = s + count;
@@ -530,11 +561,11 @@ namespace std {
             if ((s + count) > capacity()) {
                 reserve(s + count);
             }
-            Traits::copy(data() + s, str, count);
-            if (c.shrt.is_short()) {
-                c.shrt.set_size(s + count);
+            Traits::move(data() + s, str, count);
+            if (c.shrt.is_short(c.unused_capacity)) {
+                c.shrt.set_size(c.unused_capacity, s + count);
             } else {
-                data()[s + count] = 0;
+                std::construct_at(&(data()[s + count]), 0);
                 c.ptr.size = s + count;
             }
             return *this;
@@ -566,8 +597,8 @@ namespace std {
                     size_t preserve = sz - end;
                     memcpy(data() + index, data() + end, preserve);
                 }
-                if (this->c.shrt.is_short()) {
-                    this->c.shrt.set_size(sz - count);
+                if (this->c.shrt.is_short(c.unused_capacity)) {
+                    this->c.shrt.set_size(c.unused_capacity, sz - count);
                 } else {
                     this->c.ptr.size = sz - count;
                 }
@@ -580,20 +611,20 @@ namespace std {
         }
         constexpr void resize( size_type count, CharT ch ) {
             size_type size{0};
-            if (c.shrt.is_short()) {
-                size = c.shrt.get_size();
+            if (c.shrt.is_short(c.unused_capacity)) {
+                size = c.shrt.get_size(c.unused_capacity);
                 if (size == count) {
                     return;
                 }
                 if (count < size) {
-                    c.shrt.set_size(count);
+                    c.shrt.set_size(c.unused_capacity, count);
                     return;
                 }
                 if (count <= c.shrt.get_capacity()) {
                     for (auto pos = size; pos < count; pos++) {
-                        c.shrt.str[pos] = ch;
+                        c.shrt.short_string_space[pos] = ch;
                     }
-                    c.shrt.set_size(count);
+                    c.shrt.set_size(c.unused_capacity, count);
                     return;
                 }
                 reserve(count);
@@ -616,10 +647,10 @@ namespace std {
             c.ptr.set_size(count);
         }
 
-        ~basic_string() {
-            if (!c.shrt.is_short()) {
-                get_allocator().deallocate(c.ptr.pointer, c.ptr.capacity + 1);
-                c.shrt.set_empty();
+        constexpr ~basic_string() {
+            if (!c.shrt.is_short(c.unused_capacity)) {
+                get_allocator().deallocate(c.ptr.pointer, c.ptr.get_capacity(c.unused_capacity) + 1);
+                c.unused_capacity = 0;
             }
         }
 
@@ -679,7 +710,7 @@ namespace std {
             }
             return diff;
         }
-        int compare(const CharT *str, std::size_t len) const {
+        constexpr int compare(const CharT *str, std::size_t len) const {
             bool equal_s{false};
             bool larger{false};
             if (len == size()) {
@@ -712,18 +743,46 @@ namespace std {
                 ++i;
             }
             str.at(i) = '\0';
-            if (str.c.shrt.is_short()) {
-                str.c.shrt.set_size(count);
+            if (str.c.shrt.is_short(str.c.unused_capacity)) {
+                str.c.shrt.set_size(str.c.unused_capacity, count);
             } else {
                 str.c.ptr.size = count;
             }
             return str;
         }
 
-        bool operator==(const CharT *rhs ) {
+        constexpr bool operator==(const CharT *rhs ) {
             return compare(rhs, Traits::length(rhs)) == 0;
         }
     };
+
+#if defined(__x86_64__) || defined(__aarch64__)
+    namespace test {
+        static_assert(sizeof(basic_string<char>) == 24);
+        static_assert(basic_string<char>("a").capacity() == 23);
+        static_assert(basic_string<char>("a").size() == 1);
+        static_assert(basic_string<char>("a") == "a");
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaa").capacity() == 23);
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaa").size() == 22);
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaa") == "aaaaaaaaaabbbbbbbbbbaa");
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaaa").capacity() == 23);
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaaa").size() == 23);
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaaa") == "aaaaaaaaaabbbbbbbbbbaaa");
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaaax").capacity() == 31);
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaaax").size() == 24);
+        static_assert(basic_string<char>("aaaaaaaaaabbbbbbbbbbaaax") == "aaaaaaaaaabbbbbbbbbbaaax");
+
+        constexpr basic_string<char> append_to_str(const char *i_str, const char *append_str) {
+            basic_string<char> str{i_str};
+            str.append(append_str);
+            return std::move(str);
+        }
+
+        static_assert(append_to_str("a", "x").size() == 2);
+        static_assert(append_to_str("a", "x") == "ax");
+        static_assert(append_to_str("aaaaaaaaaabbbbbbbbbbaaa", "x") == "aaaaaaaaaabbbbbbbbbbaaax");
+    }
+#endif
 
     typedef basic_string<char> string;
 }

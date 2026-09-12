@@ -51,6 +51,8 @@ struct Stage1Data {
 
     uint64_t vpalloc_root_vaddr;
 
+    uint64_t mem_mapper_8pages;
+
     uint64_t cpu_count;
 
     raw_spinlock early_init_lock;

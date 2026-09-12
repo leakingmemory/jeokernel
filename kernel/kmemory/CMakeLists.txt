@@ -6,10 +6,6 @@ endif()
 
 set(CMAKE_CXX_STANDARD 23)
 
-if (ARCH STREQUAL "aarch64")
-    add_library(kmemory OBJECT malloc.cpp)
-else()
-    add_library(kmemory OBJECT mallocator.cpp mallocator.h malloc.cpp ChainedAllocator.cpp ChainedAllocator.h ChainedAllocatorRoot.cpp ChainedAllocatorRoot.h)
-endif()
+add_library(kmemory OBJECT mallocator.cpp mallocator.h malloc.cpp ChainedAllocator.cpp ChainedAllocator.h ChainedAllocatorRoot.cpp ChainedAllocatorRoot.h)
 
 target_include_directories(kmemory PRIVATE ../../include)

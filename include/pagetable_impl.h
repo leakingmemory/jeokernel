@@ -49,7 +49,7 @@ inline pageentr &get_pt_pageentr64(pagetable &pt_ref, uint64_t addr) {
 }
 #endif
 
-#if defined(__x86_64__)
+#if defined(__x86_64__) || defined(__i386__)
 inline pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr) {
     pageentr &pml4t_pe = get_pml4t_pageentr64(pml4t, addr);
     if (!pml4t_pe.present()) {
@@ -68,7 +68,63 @@ inline pageentr *get_pageentr64(pagetable &pml4t, uint64_t addr) {
 }
 #elif defined(__aarch64__)
 
-inline pageentr *get_pageentr64(pagetable &root, uint64_t vaddr) {
+struct PageentrAvailablePages {
+    constexpr static const uint64_t max = 8;
+    std::optional<uint64_t> p[max] = {{}, {}, {}, {}, {}, {}, {}, {}};
+
+    constexpr uint64_t NumNeeded() {
+        uint64_t c = 0;
+        for (uint64_t i = 0; i < max; i++) {
+            if (!p[i]) {
+                c++;
+                for (uint64_t j = i + 1; j < max; j++) {
+                    if (p[j]) {
+                        auto value = *(p[j]);
+                        p[j].reset();
+                        p[i] = value;
+                        i++;
+                    } else {
+                        c++;
+                    }
+                }
+                break;
+            }
+        }
+        return c;
+    }
+    constexpr bool Fill(uint64_t phys) {
+        for (uint64_t i = 0; i < max; i++) {
+            if (!p[i]) {
+                p[i] = phys;
+                return true;
+            }
+        }
+        return false;
+    }
+    constexpr std::optional<uint64_t> Use() {
+        for (uint64_t i = 0; i < max; i++) {
+            if (p[max - i - 1]) {
+                uint64_t phys = *(p[max - i - 1]);
+                return phys;
+            }
+        }
+        return {};
+    }
+};
+
+static_assert(PageentrAvailablePages().NumNeeded() == PageentrAvailablePages::max);
+static_assert(PageentrAvailablePages().Fill(1234));
+static_assert(!PageentrAvailablePages().Use());
+
+constexpr PageentrAvailablePages TestInstanceIfPageentrAvailablePages() {
+    PageentrAvailablePages ap{};
+    ap.Fill(1234);
+    return ap;
+}
+static_assert(TestInstanceIfPageentrAvailablePages().NumNeeded() == (PageentrAvailablePages::max - 1));
+static_assert(*(TestInstanceIfPageentrAvailablePages().Use()) == 1234);
+
+inline pageentr *get_pageentr64(pagetable &root, uint64_t vaddr, PageentrAvailablePages &available_pages) {
     uint64_t indices[4];
     indices[0] = (vaddr >> 39) & 0x1FF;
     indices[1] = (vaddr >> 30) & 0x1FF;
@@ -80,7 +136,17 @@ inline pageentr *get_pageentr64(pagetable &root, uint64_t vaddr) {
     for (int level = 0; level < 3; ++level) {
         pageentr &entry = current_table[indices[level]];
         if (!entry.valid()) {
-            return nullptr;
+            uint64_t paddr;
+            {
+                std::optional<uint64_t> paddr_o = available_pages.Use();
+                if (!paddr_o) {
+                    return nullptr;
+                }
+                paddr = *paddr_o;
+            }
+            entry.ppn() = (paddr >> 12);
+            entry.table() = 1;
+            entry.valid() = 1;
         }
         current_table = &entry.get_subtable()[0];
     }

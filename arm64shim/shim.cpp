@@ -1390,6 +1390,22 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	u32 stage1_phys_page = *o_stage1_phys;
 	map_page(sppmap, root_pt, stage1_vaddr, static_cast<u64>(stage1_phys_page) * PAGE_SIZE, MapFlagWrite);
 
+	u64 mmapperpages;
+	{
+		std::optional<u32> mmapperpages_p = allocate_physpage(sppmap, 8);
+		if (!mmapperpages_p) {
+			puts("FATAL ERROR: Unable to allocate virtual mapper buffers\n");
+			for (;;) {
+				asm volatile("wfe");
+			}
+		}
+		mmapperpages = static_cast<u64>(*mmapperpages_p) << 12;
+		memset(reinterpret_cast<void *>(mmapperpages), 0, 8 << 12);
+		for (u64 i = 0; i < 8; i++) {
+			map_page(sppmap, root_pt, phys_mem_vaddr + mmapperpages, mmapperpages, MapFlagWrite);
+		}
+	}
+
 	Stage1Data *stage1Data = reinterpret_cast<Stage1Data *>(static_cast<u64>(stage1_phys_page) * PAGE_SIZE);
 	memset(stage1Data, 0, sizeof(Stage1Data));
 	stage1Data->uart = uart_vaddr;
@@ -1400,6 +1416,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	stage1Data->ppmap = reinterpret_cast<uint64_t>(ppmap);
 	stage1Data->ppmap_base_page = base_page;
 	stage1Data->vpalloc_root_vaddr = reinterpret_cast<uint64_t>(vpalloc_root) + phys_mem_vaddr;
+	stage1Data->mem_mapper_8pages = mmapperpages;
 	stage1Data->cpu_count = num_cpus;
 
 	ArmStageContext *shared_stage_ctx = reinterpret_cast<ArmStageContext *>(stage_ctx_phys);

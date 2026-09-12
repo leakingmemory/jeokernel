@@ -49,13 +49,19 @@ namespace std {
         constexpr allocator() noexcept {}
         constexpr allocator( const allocator& other ) noexcept {}
         template<class U> constexpr allocator( const allocator<U>& other) noexcept {}
-        ~allocator() {}
+        constexpr ~allocator() noexcept = default;
 
         [[nodiscard]] constexpr T* allocate( size_type n ) {
-            return (T *) malloc(sizeof(T) * n);
+            if (n == 0) {
+                return nullptr;
+            }
+            return static_cast<T*>(::operator new(n * sizeof(T)));
         }
         constexpr void deallocate( T* p, size_type n ) {
-            free(p);
+            if (p == nullptr || n == 0) {
+                return;
+            }
+            ::operator delete(p, n * sizeof(T));
         }
     };
 

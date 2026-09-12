@@ -186,8 +186,14 @@ extern "C" {
 void wild_panic(const char *str) {
     auto &log = get_klogger();
     log << "Panic in the wild: " << str << "\n";
+#if defined(__aarch64__)
+    for (;;) {
+        asm volatile("wfe");
+    }
+#else
     while (1) {
         asm("hlt;");
     }
+#endif
 }
 }
