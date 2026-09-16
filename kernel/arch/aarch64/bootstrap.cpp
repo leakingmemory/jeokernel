@@ -154,6 +154,7 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
         init_simple_physpagemap(stage1Data->ppmap + stage1Data->phys_mem_base, stage1Data->ppmap_base_page);
         initialize_pagetable_control();
         setup_simplest_malloc_impl();
+        extend_to_advanced_physpagemap();
 
         bootstrap_uart_puts("Early init ends\n");
 

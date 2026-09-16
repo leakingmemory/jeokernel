@@ -16,7 +16,11 @@ vmem::vmem(uint64_t size) {
 
 void vmem::release() {
     if (this->base != 0) {
+#if defined(__aarch64__)
+        vpagefree(this->base, this->size);
+#else
         vpagefree(this->base);
+#endif
         this->base = 0;
     }
 }
@@ -35,6 +39,18 @@ void vmem::reload() {
 
 void vmem_page::rmap(uint64_t paddr) {
     std::optional<pageentr> pe = get_pageentr(addr);
+#if defined(__aarch64__)
+    pe->value = 0;
+    pe->pxn() = 1;
+    pe->uxn() = 1;
+    pe->ap() = 2;
+    pe->attr_indx() = 1;
+    pe->af() = 1;
+    pe->sh() = 3;
+    pe->table() = 1;
+    pe->ppn() = paddr >> 12;
+    pe->valid() = 1;
+#else
     pe->dirty() = 0;
     pe->execution_disabled() = 1;
     pe->writeable() = 0;
@@ -44,17 +60,33 @@ void vmem_page::rmap(uint64_t paddr) {
     pe->cache_disabled() = 0;
     pe->page_ppn() = paddr >> 12;
     pe->present() = 1;
+#endif
     update_pageentr(addr, *pe);
 }
 
 void vmem_page::unmap() {
     std::optional<pageentr> pe = get_pageentr(addr);
+#if defined(__aarch64__)
+    pe->valid() = 0;
+#else
     pe->present() = 0;
+#endif
     update_pageentr(addr, *pe);
 }
 
 void vmem_page::rwmap(uint64_t paddr, bool write_through, bool cache_disabled) {
     std::optional<pageentr> pe = get_pageentr(addr);
+#if defined(__aarch64__)
+    pe->value = 0;
+    pe->pxn() = 1;
+    pe->uxn() = 1;
+    pe->attr_indx() = 1;
+    pe->af() = 1;
+    pe->sh() = 3;
+    pe->table() = 1;
+    pe->ppn() = paddr >> 12;
+    pe->valid() = 1;
+#else
     pe->dirty() = 0;
     pe->execution_disabled() = 1;
     pe->writeable() = 1;
@@ -64,5 +96,6 @@ void vmem_page::rwmap(uint64_t paddr, bool write_through, bool cache_disabled) {
     pe->cache_disabled() = cache_disabled ? 1 : 0;
     pe->page_ppn() = paddr >> 12;
     pe->present() = 1;
+#endif
     update_pageentr(addr, *pe);
 }
