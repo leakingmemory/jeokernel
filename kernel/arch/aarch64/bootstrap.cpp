@@ -33,6 +33,9 @@ void set_pagetable_virt_offset(uintptr_t offset) {
 
 namespace {
     raw_spinlock *uart_spinlock;
+    volatile unsigned int *uart;
+
+    void uart_puts(volatile unsigned int *uart, const char *s);
 
     void uart_putc(volatile unsigned int *uart, char c) {
         volatile unsigned int *const uartfr = uart + (0x18 / sizeof(unsigned int));
@@ -41,15 +44,6 @@ namespace {
             // spin until FIFO has space
         }
         *uart = static_cast<unsigned int>(c);
-    }
-
-    void uart_puts(volatile unsigned int *uart, const char *s) {
-        for (; *s != '\0'; ++s) {
-            if (*s == '\n') {
-                uart_putc(uart, '\r');
-            }
-            uart_putc(uart, *s);
-        }
     }
 
     void uart_put_dec(volatile unsigned int *uart, uint64_t v) {
@@ -68,13 +62,51 @@ namespace {
         }
     }
 
+    void uart_put_hex(volatile unsigned int *uart, uint64_t v) {
+        uart_putc(uart, '0');
+        uart_putc(uart, 'x');
+        if (v == 0) {
+            uart_putc(uart, '0');
+            return;
+        }
+        char buf[32];
+        int idx = 0;
+        while (v > 0) {
+            auto d = v % 16;
+            buf[idx++] = static_cast<char>(d < 10 ? ('0' + d) : ('A' + d - 10));
+            v /= 16;
+        }
+        for (int i = idx - 1; i >= 0; --i) {
+            uart_putc(uart, buf[i]);
+        }
+    }
+
+    void uart_puts(volatile unsigned int *uart, const char *s) {
+        for (; *s != '\0'; ++s) {
+            if (*s == '\n') {
+                uart_putc(uart, '\r');
+            }
+            uart_putc(uart, *s);
+        }
+    }
+}
+
+void bootstrap_uart_put_hex(uint64_t v) {
+    uart_put_hex(uart, v);
+}
+
+void bootstrap_uart_puts(const char *s) {
+    uart_puts(uart, s);
+}
+
+namespace {
     void print_cpu_entry(volatile unsigned int *uart, uint64_t cpu_id, uint64_t cpu_count) {
         uart_spinlock->lock();
-        uart_puts(uart, "AArch64 kernel entrypoint reached on CPU ");
+        bootstrap_uart_puts("AArch64 kernel entrypoint reached on CPU ");
         uart_put_dec(uart, cpu_id);
-        uart_puts(uart, " / ");
+        bootstrap_uart_puts(" / ");
         uart_put_dec(uart, cpu_count);
-        uart_puts(uart, " with paging enabled!\n");
+        bootstrap_uart_puts(" with paging enabled!\n");
         uart_spinlock->unlock();
     }
 }
@@ -84,14 +116,14 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     uart_spinlock = &(stage1Data->early_init_lock);
     stage1Data->early_init_lock.unlock();
 
-    volatile unsigned int *uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
+    uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
     uint64_t mpidr;
     asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
     uint64_t cpu_id = mpidr & 0xFF;
     print_cpu_entry(uart, cpu_id, stage1Data->cpu_count);
 
     if (stage1Data->early_init_lock.try_lock()) {
-        uart_puts(uart, "Early init starts\n");
+        bootstrap_uart_puts("Early init starts\n");
 
         set_pagetable_virt_offset(stage1Data->phys_mem_base);
 
@@ -99,7 +131,7 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
         {
             auto *vpalloc_page = vpalloc_root;
             while (vpalloc_page) {
-                uart_puts(uart, "vpalloc_page import");
+                bootstrap_uart_puts("vpalloc_page import");
                 auto physaddr = vpalloc_page->next.paddr.addr;
                 if (physaddr != 0) {
                     auto vaddr = physaddr + stage1Data->phys_mem_base;
@@ -107,11 +139,12 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
                     vpalloc_page->SetNextVirtual(vptr);
                     vpalloc_page = vpalloc_page->GetNext();
                 } else {
-                    uart_puts(uart, ": last page\n");
+                    bootstrap_uart_puts(": last page\n");
                     vpalloc_page = nullptr;
                 }
             }
         }
+        set_vpalloc_root(vpalloc_root);
 
         /*
          * Let's try to alloc a stack
@@ -119,8 +152,10 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
         init_mapping_pages(stage1Data->phys_mem_base + stage1Data->mem_mapper_8pages);
         set_init_pml4t(stage1Data->root_pt);
         init_simple_physpagemap(stage1Data->ppmap + stage1Data->phys_mem_base, stage1Data->ppmap_base_page);
+        initialize_pagetable_control();
+        setup_simplest_malloc_impl();
 
-        uart_puts(uart, "Early init ends\n");
+        bootstrap_uart_puts("Early init ends\n");
 
         stage1Data->early_init_lock.unlock();
     }

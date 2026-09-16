@@ -845,7 +845,7 @@ namespace {
 
 		if (flags & MapFlagDevice) {
 			leaf.attr_indx() = 0;
-			leaf.sh() = 0;
+			leaf.sh() = 2;
 		} else {
 			leaf.attr_indx() = 1;
 			leaf.sh() = 3;

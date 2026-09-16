@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 #include <pagetable_impl.h>
+#include <pagealloc.h>
+#include <strings.h>
 #include <concurrency/hw_spinlock.h>
 #include <new>
 #include <mutex>
@@ -45,6 +47,37 @@ void init_mapping_pages(uint64_t vaddr) {
     }
 }
 
+void refill_mapping_pages() {
+    auto num_needed = pageentr_available_pages.NumNeeded();
+    while (num_needed > 0) {
+        for (decltype(num_needed) i = 0; i < num_needed; i++) {
+            auto ppage = ppagealloc(0x1000);
+            if (ppage == 0) {
+                return;
+            }
+            uintptr_t vaddr = ppage;
+            vaddr += get_pagetable_virt_offset();
+            auto *pe = get_pageentr64(_get_pml4t(), vaddr, pageentr_available_pages);
+            if (pe == nullptr) {
+                ppagefree(ppage, 0x1000);
+                return;
+            }
+            pe->value = 0;
+            pe->uxn() = 1;
+            pe->pxn() = 1;
+            pe->ppn() = ppage >> 12;
+            pe->sh() = 3;
+            pe->af() = 1;
+            pe->table() = 1;
+            pe->valid() = 1;
+            reload_pagetables();
+            bzero(reinterpret_cast<void *>(vaddr), 0x1000);
+            pageentr_available_pages.Fill(ppage);
+        }
+        num_needed = pageentr_available_pages.NumNeeded();
+    }
+}
+
 #endif
 
 std::optional<pageentr> get_pageentr(uint64_t addr) {
@@ -53,6 +86,7 @@ std::optional<pageentr> get_pageentr(uint64_t addr) {
 
 #if defined(__aarch64__)
     pageentr *pe = get_pageentr64(_get_pml4t(), addr, pageentr_available_pages);
+    refill_mapping_pages();
 #else
     pageentr *pe = get_pageentr64(_get_pml4t(), addr);
 #endif
@@ -69,6 +103,7 @@ bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update) {
 
 #if defined(__aarch64__)
     pageentr *pe = get_pageentr64(_get_pml4t(), addr, pageentr_available_pages);
+    refill_mapping_pages();
 #else
     pageentr *pe = get_pageentr64(_get_pml4t(), addr);
 #endif

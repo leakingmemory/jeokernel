@@ -39,6 +39,10 @@ uintptr_t get_init_pml4t();
 #if defined(__x86_64__) || defined(__i386__)
 void relocate_kernel_vmemory();
 #endif
+#if defined(__aarch64__)
+struct VPAllocatorPage;
+void set_vpalloc_root(VPAllocatorPage *vpalloc_root);
+#endif
 pagetable &get_root_pagetable();
 uintptr_t vpagealloc(uintptr_t size);
 uintptr_t vpagealloc32(uintptr_t size);

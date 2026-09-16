@@ -7,6 +7,8 @@
 
 #include <pagetable.h>
 
+#include "pagealloc.h"
+
 #if !defined(__aarch64__)
 inline pageentr &get_pml4t_pageentr64(pagetable &pml4t, uint64_t addr) {
     uint16_t vector{0};
@@ -105,6 +107,7 @@ struct PageentrAvailablePages {
         for (uint64_t i = 0; i < max; i++) {
             if (p[max - i - 1]) {
                 uint64_t phys = *(p[max - i - 1]);
+                p[max - i - 1].reset();
                 return phys;
             }
         }

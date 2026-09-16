@@ -179,6 +179,10 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
 #if defined(__aarch64__)
             pe->value = 0;
             pe->ppn() = ppage >> 12;
+            pe->attr_indx() = 1;
+            pe->sh() = 3;
+            pe->af() = 1;
+            pe->table() = 1;
             pe->pxn() = 1;
             pe->uxn() = 1;
             pe->valid() = 1;
@@ -202,6 +206,10 @@ BasicMemoryAllocator *CreateBasicMemoryAllocator() {
 #if defined(__aarch64__)
             pe->value = 0;
             pe->ppn() = ppage >> 12;
+            pe->attr_indx() = 1;
+            pe->sh() = 3;
+            pe->af() = 1;
+            pe->table() = 1;
             pe->pxn() = 1;
             pe->uxn() = 1;
             pe->valid() = 1;
