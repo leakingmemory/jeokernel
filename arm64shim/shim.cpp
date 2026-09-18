@@ -596,6 +596,26 @@ namespace {
 		return s;
 	}
 
+	void add_release_loader(Stage1Data &stage1_data, u64 dtb) {
+		u64 shim_start = reinterpret_cast<u64>(_start);
+		u32 shim_num;
+		{
+			u64 shim_end   = reinterpret_cast<u64>(__end);
+			shim_start = shim_start >> 12;
+			if ((shim_end & 0xFFF) != 0) {
+				shim_end += 0xFFF;
+			}
+			shim_end = shim_end >> 12;
+			shim_num = shim_end - shim_start;
+		}
+		puts("Set up for release shim image: ");
+		put_hex(shim_start);
+		puts(" x");
+		put_hex(shim_num);
+		puts("\n");
+		stage1_data.AddFreePhys(shim_start, shim_num);
+	}
+
 	// ---- Populate the PhyspageMap -----------------------------------------
 	// Hand the page allocator a complete picture of the window the map covers,
 	// [base, max()): every page that is usable RAM is released, everything else
@@ -667,6 +687,11 @@ namespace {
 			const u32 end   =
 				static_cast<u32>(page_align_up(s.res_end[i]) / PAGE_SIZE);
 			if (end > first) {
+				puts("Claiming phys pages ");
+				put_hex(first);
+				puts(" - ");
+				put_hex(end);
+				puts("\n");
 				reclaimed += claim_clipped(map, base_page, max_page, first, end);
 			}
 		}
@@ -1418,7 +1443,13 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	stage1Data->vpalloc_root_vaddr = reinterpret_cast<uint64_t>(vpalloc_root) + phys_mem_vaddr;
 	stage1Data->mem_mapper_8pages = mmapperpages;
 	stage1Data->cpu_count = num_cpus;
-
+	add_release_loader(*stage1Data, dtb);
+	puts("Putting stageloader pages up for release: ");
+	put_hex(stageloader_start_page);
+	puts(" x");
+	put_hex(stageloader_pages);
+	puts("\n");
+	stage1Data->AddFreePhys(stageloader_start_page, stageloader_pages);
 	ArmStageContext *shared_stage_ctx = reinterpret_cast<ArmStageContext *>(stage_ctx_phys);
 	memset(shared_stage_ctx, 0, sizeof(ArmStageContext));
 	shared_stage_ctx->ttbr = static_cast<u64>(kernel_root_pt_phys) * PAGE_SIZE;

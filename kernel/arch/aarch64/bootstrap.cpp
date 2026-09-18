@@ -115,6 +115,8 @@ namespace {
 
 extern "C" void init_kernel();
 
+static uint32_t num_cpus_entered{0};
+
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     stage1Data->early_init_lock.lock();
     uart_spinlock = &(stage1Data->early_init_lock);
@@ -168,6 +170,17 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
             init_simple_physpagemap(stage1Data->ppmap + stage1Data->phys_mem_base, stage1Data->ppmap_base_page);
             initialize_pagetable_control();
             setup_simplest_malloc_impl();
+
+            while (stage1Data->HasFreePhys()) {
+                auto free_phys = stage1Data->GetFreePhys();
+                bootstrap_uart_puts("Free phys: page = ");
+                bootstrap_uart_put_hex(static_cast<uint64_t>(free_phys.page));
+                bootstrap_uart_puts(", num = ");
+                bootstrap_uart_put_hex(static_cast<uint64_t>(free_phys.num));
+                bootstrap_uart_puts("\n");
+                ppagefree(static_cast<uint64_t>(free_phys.page) << 12, static_cast<uint64_t>(free_phys.num) << 12);
+            }
+
             extend_to_advanced_physpagemap(stage1Data->ppmap, stage1Data->phys_mem_base >> 12);
 
             bootstrap_uart_puts("Early init ends\n");
@@ -180,10 +193,36 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
         }
     }
 
-    bootstrap_uart_puts("Waiting for bootstrap\n");
+    bootstrap_uart_puts("Waiting for cpu counter\n");
     while (true) {
         stage1Data->smp_synch_lock.lock();
-        if (stage1Data->boot_stage_counter == 2) {
+        if (stage1Data->boot_stage_counter > 0) {
+            ++num_cpus_entered;
+            if (num_cpus_entered == stage1Data->cpu_count) {
+                stage1Data->boot_stage_counter = 3;
+            }
+            stage1Data->smp_synch_lock.unlock();
+            break;
+        }
+        stage1Data->smp_synch_lock.unlock();
+    }
+    stage1Data->early_init_lock.lock();
+    bootstrap_uart_puts("Waiting for all cores\n");
+    stage1Data->early_init_lock.unlock();
+    while (true) {
+        stage1Data->smp_synch_lock.lock();
+        if (stage1Data->boot_stage_counter >= 2) {
+            stage1Data->smp_synch_lock.unlock();
+            break;
+        }
+        stage1Data->smp_synch_lock.unlock();
+    }
+    stage1Data->early_init_lock.lock();
+    bootstrap_uart_puts("Waiting for bootstrap\n");
+    stage1Data->early_init_lock.unlock();
+    while (true) {
+        stage1Data->smp_synch_lock.lock();
+        if (stage1Data->boot_stage_counter == 3) {
             stage1Data->smp_synch_lock.unlock();
             break;
         }
