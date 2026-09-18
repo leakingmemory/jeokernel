@@ -24,5 +24,5 @@ bootstrap:
 
 .globl secondboot
 secondboot:
-    call init_m64
+    call init_kernel
     hlt

@@ -531,7 +531,7 @@ static phys_t ppagealloc_locked(uintptr_t size) {
         uint64_t starting_addr = 0;
         uint64_t count = 0;
         auto *phys = get_physpagemap();
-        for (uint32_t page = 512; page < phys->max(); page++) {
+        for (uint32_t page = phys->base(); page < phys->max(); page++) {
             if (!phys->claimed(page)) {
                 if (starting_addr != 0) {
                     count++;
@@ -829,8 +829,9 @@ uint64_t pv_fixp1g_pagefree(uint64_t vaddr) {
     reload_pagetables();
     return size;
 }
+#endif
 
-uint64_t alloc_stack(uint64_t size) {
+uintptr_t alloc_stack(uintptr_t size) {
     uint64_t vaddr_top = 0;
     uint64_t vaddr_bottom = vpagealloc(size + 4096);
     if (vaddr_bottom != 0) {
@@ -841,26 +842,61 @@ uint64_t alloc_stack(uint64_t size) {
                 std::optional<pageentr> pe = get_pageentr(vaddr_start + offset);
                 uint64_t page_ppn = paddr_start + offset;
                 page_ppn = page_ppn >> 12;
+#if defined(__aarch64__)
+                pe->value = 0;
+                pe->ppn() = page_ppn;
+                pe->valid() = 1;
+                pe->af() = 1;
+                pe->sh() = 3;
+                pe->attr_indx() = 1;
+                pe->table() = 1;
+                pe->uxn() = 1;
+                pe->pxn() = 1;
+#else
                 pe->page_ppn() = page_ppn;
                 pe->present() = 1;
                 pe->writeable() = 1;
                 pe->write_through() = 0;
                 pe->cache_disabled() = 0;
                 pe->execution_disabled() = 1;
+#endif
                 update_pageentr(vaddr_start + offset, *pe);
             }
             vaddr_top = vaddr_start + size;
 
             reload_pagetables();
         } else {
-            vpagefree(vaddr_bottom);
+            vpagefree(vaddr_bottom, size + 4096);
             vaddr_top = 0;
         }
     }
     return vaddr_top;
 }
 
-void free_stack(uint64_t vaddr) {
+#if defined(__aarch64__)
+void free_stack(uintptr_t vaddr_top, uintptr_t size) {
+    uintptr_t vaddr_start = vaddr_top - size;
+    uint64_t vaddr_bottom = vaddr_start - 4096;
+    uint64_t paddr_start{0};
+    for (uint64_t offset = 0; offset < size; offset += 4096) {
+        std::optional<pageentr> pe = get_pageentr(vaddr_start + offset);
+        uint64_t page_ppn = pe->ppn();
+        pe->value = 0;
+        update_pageentr(vaddr_start + offset, *pe);
+        if (offset == 0) {
+            paddr_start = page_ppn << 12;
+        }
+    }
+
+    reload_pagetables();
+
+    if (paddr_start != 0) {
+        ppagefree(paddr_start, size);
+    }
+    vpagefree(vaddr_bottom, size + 4096);
+}
+#else
+void free_stack(uintptr_t vaddr) {
     uint64_t size = 0;
     uint64_t phys_addr = 0;
     vaddr = vaddr >> 12;

@@ -64,7 +64,11 @@ uintptr_t pv_fixp1g_pagealloc(uintptr_t size);
 uintptr_t pv_fixp1g_pagefree(uintptr_t addr);
 
 uintptr_t alloc_stack(uintptr_t size);
+#if defined(__aarch64__)
+void free_stack(uintptr_t addr, uintptr_t size);
+#else
 void free_stack(uintptr_t addr);
+#endif
 
 void reload_pagetables();
 

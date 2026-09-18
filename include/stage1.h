@@ -56,6 +56,8 @@ struct Stage1Data {
     uint64_t cpu_count;
 
     raw_spinlock early_init_lock;
+    raw_spinlock smp_synch_lock;
+    uint32_t boot_stage_counter;
 #endif
 };
 

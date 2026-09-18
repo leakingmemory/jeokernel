@@ -15,7 +15,11 @@ normal_stack::normal_stack() : addr(alloc_stack(NORMAL_STACK_SIZE)) {
 
 normal_stack::~normal_stack() {
     if (addr != 0) {
+#if defined(__aarch64__)
+        free_stack(addr, NORMAL_STACK_SIZE);
+#else
         free_stack(addr);
+#endif
         addr = 0;
     }
 }

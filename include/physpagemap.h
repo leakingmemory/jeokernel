@@ -95,7 +95,11 @@ public:
 };
 
 void init_simple_physpagemap(uint64_t mapaddr, uint32_t base_mapaddr);
+#if defined(__aarch64__)
+void extend_to_advanced_physpagemap(phys_t map, phys_t base_addr);
+#else
 void extend_to_advanced_physpagemap();
+#endif
 physpagemap_managed *get_physpagemap();
 
 #endif //JEOKERNEL_PHYSPAGEMAP_H

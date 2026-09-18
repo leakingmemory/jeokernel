@@ -129,6 +129,13 @@ private:
     std::vector<uint64_t> phys;
     uint32_t size;
 public:
+    extendable_physpagemap_managed(phys_t p_map, phys_t p_base_addr) : simple_physpagemap_managed(p_map, p_base_addr) {
+        vm = std::make_unique<vmem>(sizeof(*map));
+        phys.push_back((uint64_t) map);
+        memmap(*vm, phys, 1);
+        map = (PhyspageMap *) vm->pointer();
+        size = this->simple_physpagemap_managed::max() - base_addr;
+    }
     extendable_physpagemap_managed(const simple_physpagemap_managed &original) : simple_physpagemap_managed((uint64_t) original.map, original.base_addr) {
         vm = std::make_unique<vmem>(sizeof(*map));
         phys.push_back((uint64_t) map);
@@ -182,7 +189,13 @@ void extendable_physpagemap_managed::set_max(uint32_t max) {
     size = max;
 }
 
+#if defined(__aarch64__)
+void extend_to_advanced_physpagemap(phys_t map, phys_t base_addr) {
+    physp = new extendable_physpagemap_managed(map, base_addr);
+}
+#else
 void extend_to_advanced_physpagemap() {
     physp = new extendable_physpagemap_managed(*((simple_physpagemap_managed *) physp));
 }
+#endif
 #endif

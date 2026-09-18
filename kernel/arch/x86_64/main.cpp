@@ -4,15 +4,15 @@
 
 #include <loaderconfig.h>
 #include <stdint.h>
-#include "textconsole/b8000logger.h"
-#include "TaskStateSegment.h"
-#include "InterruptTaskState.h"
-#include "InterruptDescriptorTable.h"
-#include "interrupt.h"
-#include "KernelElf.h"
+#include "../../textconsole/b8000logger.h"
+#include "../../TaskStateSegment.h"
+#include "../../InterruptTaskState.h"
+#include "../../InterruptDescriptorTable.h"
+#include "../../interrupt.h"
+#include "../../KernelElf.h"
 #include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
-#include "Pic.h"
+#include "../../Pic.h"
 #include <pagealloc.h>
 #include <multiboot_impl.h>
 #include <core/malloc.h>
@@ -23,15 +23,15 @@
 #include <sstream>
 #include <string>
 #include <mutex>
-#include "PITTimerCalib.h"
-#include "HardwareInterrupts.h"
-#include "CpuInterrupts.h"
+#include "../../PITTimerCalib.h"
+#include "../../HardwareInterrupts.h"
+#include "../../CpuInterrupts.h"
 #include <core/vmem.h>
-#include "start_ap.h"
-#include "AcpiBoot.h"
-#include "pci/pci.h"
-#include "display/vga.h"
-#include "pci/pci_bridge.h"
+#include "../../start_ap.h"
+#include "../../AcpiBoot.h"
+#include "../../pci/pci.h"
+#include "../../display/vga.h"
+#include "../../pci/pci_bridge.h"
 #include <core/scheduler.h>
 #include <thread>
 #include <core/nanotime.h>
@@ -39,21 +39,21 @@
 #include <devices/devices.h>
 #include <devices/drivers.h>
 #include <framebuffer/framebuffer.h>
-#include "usb/usb_hcis.h"
-#include "ps2/ps2.h"
-#include "usb/usbifacedev.h"
-#include "usb/usbkbd.h"
-#include "ApStartup.h"
-#include "framebuffer/framebuffer_console.h"
-#include "framebuffer/framebuffer_kconsole.h"
-#include "framebuffer/framebuffer_kconsole_spinlocked.h"
-#include "framebuffer/framebuffer_kcons_with_worker_thread.h"
+#include "../../usb/usb_hcis.h"
+#include "../../ps2/ps2.h"
+#include "../../usb/usbifacedev.h"
+#include "../../usb/usbkbd.h"
+#include "../../ApStartup.h"
+#include "../../framebuffer/framebuffer_console.h"
+#include "../../framebuffer/framebuffer_kconsole.h"
+#include "../../framebuffer/framebuffer_kconsole_spinlocked.h"
+#include "../../framebuffer/framebuffer_kcons_with_worker_thread.h"
 #include "kshell/kshell.h"
 #include "kshell/kshell_commands.h"
-#include "usb/usbhub.h"
-#include "usb/usbstorage.h"
-#include "scsi/scsidevice.h"
-#include "scsi/scsida.h"
+#include "../../usb/usbhub.h"
+#include "../../usb/usbstorage.h"
+#include "../../scsi/scsidevice.h"
+#include "../../scsi/scsida.h"
 #include <acpi/acpi_8042.h>
 #include <physpagemap.h>
 #include <stage1.h>
@@ -63,12 +63,12 @@
 #include <tty/ttyinit.h>
 #include <core/x86fpu.h>
 #include <variant>
-#include "serial/serialport.h"
+#include "../../serial/serialport.h"
 
 #include "uefi.h"
-#include "serial/serialtty.h"
+#include "../../serial/serialtty.h"
 #include "uefistage/uefistage.h"
-#include "arch/x86_64/bootstrap.h"
+#include "bootstrap.h"
 
 //#define THREADING_TESTS // Master switch
 //#define FULL_SPEED_TESTS
@@ -461,7 +461,7 @@ pagetable *allocate_pageentr() {
 
 extern "C" {
 
-    void init_m64() {
+    void init_kernel() {
         relocate_kernel_vmemory();
 
         b8000logger *b8000Logger = new b8000logger();
