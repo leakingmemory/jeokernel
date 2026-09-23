@@ -19,7 +19,9 @@
 #define DEBUG_PALLOC_FAILURE
 
 static long long int total_ppages = 0;
+#if !defined(__aarch64__)
 static long long int total_vpages = 0;
+#endif
 static long long int allocated_ppages = 0;
 static long long int allocated_vpages = 0;
 
@@ -1119,21 +1121,29 @@ void pagefree(void *vaddr) {
     ppagefree(phys, size);
     reload_pagetables();
 }
-
+#endif
 
 class pvpage_stats : public statistics_object {
 public:
     void Accept(statistics_visitor &visitor) override {
-        long long int total_p, total_v, allocated_p, allocated_v;
+        long long int total_p;
+#if !defined(__aarch64__)
+        long long int total_v;
+#endif
+        long long int allocated_p, allocated_v;
         {
             std::lock_guard lock{get_pagetables_lock()};
             total_p = total_ppages;
+#if !defined(__aarch64__)
             total_v = total_vpages;
+#endif
             allocated_p = allocated_ppages;
             allocated_v = allocated_vpages;
         }
         visitor.Visit("total_ppages", total_p);
+#if !defined(__aarch64__)
         visitor.Visit("kernel_vpages", total_v);
+#endif
         visitor.Visit("allocated_p", allocated_p);
         visitor.Visit("allocated_v", allocated_v);
     }
@@ -1146,6 +1156,7 @@ public:
     }
 };
 
+#if defined(__x86_64__) || defined(__i386__)
 void vmem_switch_to_multicpu(ApStartup *apStartupP, int numCpus) {
     critical_section cli{};
     apStartup = apStartupP;
@@ -1175,12 +1186,15 @@ void vmem_set_per_cpu_pagetables() {
     std::cout << "Set per-cpu pagetables root to " << std::hex << ((uintptr_t) table) << std::dec << "\n";
     asm("mov %0, %%rax; mov %%rax, %%cr3" :: "r"(table) : "%rax");
 }
+#endif
 
 void setup_pvpage_stats() {
     {
         long long int visited_nonavail_phys = 0;
         std::lock_guard lock{get_pagetables_lock()};
+#if !defined(__aarch64__)
         total_vpages = 0;
+#endif
         allocated_ppages = 0;
         allocated_vpages = 0;
         auto *phys = get_physpagemap();
@@ -1197,6 +1211,7 @@ void setup_pvpage_stats() {
                 }
             }
         }
+#if !defined(__aarch64__)
         pagetable &pml4t = _get_pml4t_cpu0();
         for (int i = 0; i < 512; i++) {
             if (pml4t[i].present()) {
@@ -1232,10 +1247,12 @@ void setup_pvpage_stats() {
                 }
             }
         }
+#endif
     }
     GetStatisticsRoot().Add("pagealloc", std::make_shared<pvpages_stats_factory>());
 }
 
+#if defined(__x86_64__) || defined(__i386__)
 void physmem_stats(sysinfo &info) {
     std::lock_guard lock{get_pagetables_lock()};
     info.mem_unit = PAGESIZE;

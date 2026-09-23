@@ -133,6 +133,7 @@ extern "C" void init_kernel() {
             get_klogger() << "Done with mapping physical memory\n";
         }
 
+        setup_pvpage_stats();
         setup_simplest_malloc_stats();
 
         for (const std::tuple<uint64_t,uint64_t> &res_mem : reserved_mem) {
