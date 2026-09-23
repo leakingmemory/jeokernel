@@ -14,6 +14,7 @@
 #include <vpallocator.h>
 
 #include "stack.h"
+#include "bootstrap.h"
 
 extern "C" int atexit(void (*)(void)) {
     return 0;
@@ -36,6 +37,7 @@ void set_pagetable_virt_offset(uintptr_t offset) {
 namespace {
     raw_spinlock *uart_spinlock;
     volatile unsigned int *uart;
+    uint64_t dtb_ptr{0};
 
     void uart_puts(volatile unsigned int *uart, const char *s);
 
@@ -105,6 +107,10 @@ volatile void *bootstrap_get_uart() {
     return uart;
 }
 
+uint64_t bootstrap_get_dtb() {
+    return dtb_ptr;
+}
+
 namespace {
     void print_cpu_entry(volatile unsigned int *uart, uint64_t cpu_id, uint64_t cpu_count) {
         uart_spinlock->lock();
@@ -120,13 +126,13 @@ namespace {
 extern "C" void init_kernel();
 
 static uint32_t *cpuids;
-static int32_t num_cpus_entered{0};
+static uint32_t num_cpus_entered{0};
 
 int get_cpu_num() {
     uint64_t mpidr;
     asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
     uint32_t cpu_id = mpidr & 0xFFFFFF;
-    for (int i = 0; i < num_cpus_entered; i++) {
+    for (uint32_t i = 0; i < num_cpus_entered; i++) {
         if (cpuids[i] == cpu_id) {
             return i;
         }
@@ -140,6 +146,7 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     stage1Data->early_init_lock.unlock();
 
     uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
+    dtb_ptr = stage1Data->dtb;
     uint64_t mpidr;
     asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
     uint32_t cpu_id = mpidr & 0xFFFFFF;
@@ -198,7 +205,7 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
                 ppagefree(static_cast<uint64_t>(free_phys.page) << 12, static_cast<uint64_t>(free_phys.num) << 12);
             }
 
-            extend_to_advanced_physpagemap(stage1Data->ppmap, stage1Data->phys_mem_base >> 12);
+            extend_to_advanced_physpagemap(stage1Data->ppmap, stage1Data->ppmap_base_page);
 
             cpuids = reinterpret_cast<decltype(cpuids)>(malloc(sizeof(*cpuids) * stage1Data->cpu_count));
 
