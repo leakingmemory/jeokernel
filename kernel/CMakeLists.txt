@@ -14,6 +14,8 @@ set(CMAKE_CXX_STANDARD 23)
 enable_language(C ASM)
 
 add_subdirectory(kmemory)
+add_subdirectory(serial)
+add_subdirectory(concurrency)
 
 # Subsystem libraries. x86_64-only for now; as each is ported to aarch64 it
 # moves out of this guard to be shared by both architectures.
@@ -21,7 +23,6 @@ if (ARCH STREQUAL "x86_64")
 add_subdirectory(textconsole)
 add_subdirectory(devices)
 add_subdirectory(pci)
-add_subdirectory(concurrency)
 add_subdirectory(tasks)
 add_subdirectory(acpi)
 add_subdirectory(display)
@@ -52,7 +53,6 @@ add_subdirectory(tty)
 add_subdirectory(procfs)
 add_subdirectory(resource)
 add_subdirectory(prockshell)
-add_subdirectory(serial)
 
 add_library(bootstrap arch/x86_64/bootstrap.S)
 endif()
@@ -60,7 +60,7 @@ endif()
 # The kernel image - same target name (kernel.full) on both architectures, with
 # architecture-specific sources; the loader/shim embeds this target's file.
 if (ARCH STREQUAL "aarch64")
-add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/hw_spinlock.cpp arch/aarch64/raw_spinlock.cpp arch/aarch64/critical_section.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp klogger.cpp strings.cpp pagetable.cpp statistics_root.cpp vmem.cpp arch/aarch64/main.cpp stack.cpp)
+add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp klogger.cpp strings.cpp pagetable.cpp statistics_root.cpp vmem.cpp arch/aarch64/main.cpp stack.cpp arch/aarch64/null_klogger.cpp)
 target_compile_options(kernel.full PRIVATE -g -Wall -Wextra)
 else()
 add_executable(kernel.full arch/x86_64/main.cpp arch/x86_64/bootstrap.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp stack.cpp GlobalDescriptorTable.cpp GlobalDescriptorTable.h InterruptDescriptorTable.cpp InterruptDescriptorTable.h TaskStateSegment.cpp TaskStateSegment.h InterruptTaskState.cpp InterruptTaskState.h interrupt.S interrupt.cpp PageFault.cpp PageFault.h elf.cpp KernelElf.cpp KernelElf.h vmem.cpp cpu_mpfp.cpp LocalApic.cpp Pic.cpp Pic.h IOApic.cpp IOApic.h HardwareInterrupts.cpp HardwareInterrupts.h PITTimerCalib.cpp PITTimerCalib.h ap_trampoline.S start_ap.cpp start_ap.h ap_started.S ap_bootstrap.cpp nanotime.cpp AcpiBoot.cpp AcpiBoot.h link_stubs.cpp ctime.cpp perror.cpp CpuInterrupts.cpp CpuInterrupts.h remove.cpp ApStartup.cpp ApStartup.h DoubleFault.cpp DoubleFault.h statistics_root.cpp physpagemap.cpp dynlinker.cpp PerCpuVMem.cpp PerCpuVMem.cpp SyscallSupport.cpp SyscallSupport.h uname_info.cpp x86fpu.cpp)
@@ -91,6 +91,8 @@ add_custom_target(
 )
 
 target_link_libraries(kernel.full PRIVATE kmemory)
+target_link_libraries(kernel.full PRIVATE serial)
+target_link_libraries(kernel.full PRIVATE concurrency)
 
 # x86_64-only subsystem linkage; becomes shared as subsystems are ported.
 if (ARCH STREQUAL "x86_64")
@@ -98,7 +100,6 @@ target_link_libraries(kernel.full PRIVATE bootstrap)
 target_link_libraries(kernel.full PRIVATE textconsole)
 target_link_libraries(kernel.full PRIVATE devices)
 target_link_libraries(kernel.full PRIVATE pci)
-target_link_libraries(kernel.full PRIVATE concurrency)
 target_link_libraries(kernel.full PRIVATE tasks)
 target_link_libraries(kernel.full PRIVATE acpi)
 target_link_libraries(kernel.full PRIVATE display)
@@ -131,5 +132,4 @@ target_link_libraries(kernel.full PRIVATE tty)
 target_link_libraries(kernel.full PRIVATE procfs)
 target_link_libraries(kernel.full PRIVATE resource)
 target_link_libraries(kernel.full PRIVATE prockshell)
-target_link_libraries(kernel.full PRIVATE serial)
 endif()

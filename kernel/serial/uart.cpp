@@ -87,11 +87,15 @@ uint8_t uart::input() const {
 
 bool uart::probe() const {
     if (base == nullptr) {
-        get_klogger() << "PL011 UART not available (nullptr base)\n";
+        if (has_klogger()) {
+            get_klogger() << "PL011 UART not available (nullptr base)\n";
+        }
         return false;
     }
     set_up();
-    get_klogger() << "PL011 UART available\n";
+    if (has_klogger()) {
+        get_klogger() << "PL011 UART available\n";
+    }
     return true;
 }
 
@@ -147,5 +151,5 @@ KLogger & uart::operator << (const char *str) {
 }
 
 bool uart::has_input() const {
-    return true;
+    return false;
 }

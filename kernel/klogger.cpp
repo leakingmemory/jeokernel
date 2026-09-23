@@ -178,6 +178,10 @@ std::vector<KLogger *> get_kloggers() {
     return vec;
 }
 
+bool has_klogger() {
+    return klogger != nullptr;
+}
+
 KLogger &get_klogger() {
     return *klogger;
 }

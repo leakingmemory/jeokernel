@@ -12,6 +12,7 @@
 #include "../HardwareInterrupts.h"
 #include <keyboard/keyboard.h>
 
+#if !defined(__aarch64__)
 class serialtty_input_thread {
 private:
     hw_spinlock mtx;
@@ -105,11 +106,12 @@ void serialtty_input_thread::run(std::shared_ptr<serialtty_input_thread> &&stty_
         }
     }
 }
+#endif
 
-serialtty::serialtty(serialport *sport) : spinlock(), sport(sport), ioapic(nullptr), lapic(nullptr), outbuf(nullptr), outbuf_size(64), outbuf_off(0), outbuf_len(0), inbuf_off(0), inbuf_len(0) { }
+serialtty::serialtty(std::shared_ptr<serialport_interface> &&sport) : spinlock(), sport(std::move(sport)), ioapic(nullptr), lapic(nullptr), outbuf(nullptr), outbuf_size(64), outbuf_off(0), outbuf_len(0), inbuf_off(0), inbuf_len(0) { }
 
-std::shared_ptr<serialtty> serialtty::Create(serialport *sport) {
-    std::shared_ptr<serialtty> shptr{new serialtty(sport)};
+std::shared_ptr<serialtty> serialtty::Create(std::shared_ptr<serialport_interface> &&sport) {
+    std::shared_ptr<serialtty> shptr{new serialtty(std::move(sport))};
     std::weak_ptr<serialtty> wptr{shptr};
     shptr->self_ptr = std::move(wptr);
     return shptr;
@@ -123,6 +125,7 @@ void serialtty::init(std::string &&i_device_type, uint32_t i_device_id) {
         msg << device_type << (unsigned int) device_id << ": Init\n";
         get_klogger() << msg.str().c_str();
     }
+#if !defined(__aarch64__)
     uint8_t ioapic_intn{sport->get_irq()};
 
     ApStartup *ap = GetApStartup();
@@ -181,6 +184,7 @@ void serialtty::init(std::string &&i_device_type, uint32_t i_device_id) {
 
     input_thread = std::make_shared<serialtty_input_thread>(self_ptr.lock());
     input_thread->init(input_thread);
+#endif
 
     {
         std::stringstream str{};
@@ -190,25 +194,28 @@ void serialtty::init(std::string &&i_device_type, uint32_t i_device_id) {
 }
 
 int serialtty::increase_size(size_t minimum) {
-    char *newbuf = reinterpret_cast<char *>(malloc(minimum));
+    size_t newbuf_size = minimum;
+    char *newbuf = reinterpret_cast<char *>(malloc(newbuf_size));
     if (newbuf == nullptr) {
         return -ENOMEM;
     }
     {
         std::lock_guard lock{spinlock};
-        if (minimum > outbuf_size || outbuf == nullptr) {
+        if (newbuf_size > outbuf_size || outbuf == nullptr) {
             if (outbuf != nullptr) {
                 memcpy(newbuf, outbuf + outbuf_off, outbuf_len);
             }
             char *tmp = outbuf;
+            auto tmp_size = outbuf_size;
             outbuf = newbuf;
-            outbuf_size = minimum;
+            outbuf_size = newbuf_size;
             outbuf_off = 0;
             newbuf = tmp;
+            newbuf_size = tmp_size;
         }
     }
     if (newbuf != nullptr) {
-        free(newbuf);
+        free_sized(newbuf, newbuf_size);
     }
     return 0;
 }
@@ -234,11 +241,15 @@ size_t serialtty::append_buf(const char *output, size_t len) {
 }
 
 void serialtty::consume(std::shared_ptr<keycode_consumer> consumer) const {
+#if !defined(__aarch64__)
     input_thread->consume(consumer);
+#endif
 }
 
 void serialtty::unconsume(std::shared_ptr<keycode_consumer> consumer) const {
+#if !defined(__aarch64__)
     input_thread->unconsume(consumer);
+#endif
 }
 
 int serialtty::write(const char *output, size_t len) {

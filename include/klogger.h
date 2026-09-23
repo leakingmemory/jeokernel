@@ -70,6 +70,7 @@ public:
 int add_klogger(KLogger *klogger);
 void replace_klogger(int h, KLogger *klogger);
 std::vector<KLogger *> get_kloggers();
+bool has_klogger();
 KLogger &get_klogger();
 
 extern "C" {

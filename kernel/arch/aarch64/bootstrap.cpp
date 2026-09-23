@@ -101,6 +101,10 @@ void bootstrap_uart_puts(const char *s) {
     uart_puts(uart, s);
 }
 
+volatile void *bootstrap_get_uart() {
+    return uart;
+}
+
 namespace {
     void print_cpu_entry(volatile unsigned int *uart, uint64_t cpu_id, uint64_t cpu_count) {
         uart_spinlock->lock();
@@ -115,7 +119,20 @@ namespace {
 
 extern "C" void init_kernel();
 
-static uint32_t num_cpus_entered{0};
+static uint32_t *cpuids;
+static int32_t num_cpus_entered{0};
+
+int get_cpu_num() {
+    uint64_t mpidr;
+    asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
+    uint32_t cpu_id = mpidr & 0xFFFFFF;
+    for (int i = 0; i < num_cpus_entered; i++) {
+        if (cpuids[i] == cpu_id) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     stage1Data->early_init_lock.lock();
@@ -125,7 +142,7 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
     uint64_t mpidr;
     asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
-    uint64_t cpu_id = mpidr & 0xFF;
+    uint32_t cpu_id = mpidr & 0xFFFFFF;
     print_cpu_entry(uart, cpu_id, stage1Data->cpu_count);
 
     if (stage1Data->early_init_lock.try_lock()) {
@@ -183,6 +200,8 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
 
             extend_to_advanced_physpagemap(stage1Data->ppmap, stage1Data->phys_mem_base >> 12);
 
+            cpuids = reinterpret_cast<decltype(cpuids)>(malloc(sizeof(*cpuids) * stage1Data->cpu_count));
+
             bootstrap_uart_puts("Early init ends\n");
 
             stage1Data->early_init_lock.unlock();
@@ -196,7 +215,8 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     bootstrap_uart_puts("Waiting for cpu counter\n");
     while (true) {
         stage1Data->smp_synch_lock.lock();
-        if (stage1Data->boot_stage_counter > 0) {
+        if (stage1Data->boot_stage_counter > 1) {
+            cpuids[num_cpus_entered] = cpu_id;
             ++num_cpus_entered;
             if (num_cpus_entered == stage1Data->cpu_count) {
                 stage1Data->boot_stage_counter = 3;
