@@ -12,6 +12,8 @@
 #include <vector>
 #include <tuple>
 
+extern "C" void fpu_init();
+
 extern "C" void init_kernel() {
     bootstrap_uart_puts("init_kernel called for core\n");
     uart *spcom_cons{nullptr};
@@ -141,6 +143,9 @@ extern "C" void init_kernel() {
             uint64_t end_addr = base_addr + std::get<1>(res_mem) - 1;
             get_klogger() << "Reserved memory range " << base_addr << " - " << end_addr << "\n";
         }
+
+        fpu_init();
+        get_klogger() << "FPU enabled\n";
     }
     for (;;) {
         asm volatile("wfe");
