@@ -9,7 +9,7 @@
 #include <devices/devices.h>
 #include <acpi/pci_irq_rt.h>
 #include <core/LocalApic.h>
-#include "../IOApic.h"
+#include <IOApic.h>
 #include <klogger.h>
 #endif
 

@@ -9,7 +9,7 @@
 #include "TaskStateSegment.h"
 #include <core/LocalApic.h>
 #include "InterruptDescriptorTable.h"
-#include "ApStartup.h"
+#include <ApStartup.h>
 #include "SyscallSupport.h"
 #include <core/scheduler.h>
 #include <core/nanotime.h>

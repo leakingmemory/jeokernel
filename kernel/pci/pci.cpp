@@ -3,7 +3,7 @@
 //
 
 #include "pci.h"
-#include "../ApStartup.h"
+#include <ApStartup.h>
 #include <cpuio.h>
 #include <thread>
 #include <mutex>

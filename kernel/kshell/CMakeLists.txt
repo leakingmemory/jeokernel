@@ -6,3 +6,6 @@ add_library(kshell OBJECT kshell.cpp kshell_commands.cpp kshell_ps.cpp kshell_ps
 
 target_include_directories(kshell PRIVATE ../../include)
 target_include_directories(kshell PRIVATE ../blockdevs/include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(kshell PRIVATE ../arch/x86_64/include)
+endif()

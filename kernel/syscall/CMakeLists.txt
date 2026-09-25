@@ -24,3 +24,6 @@ add_library(syscall OBJECT SyscallHandler.cpp SyscallHandler.h Exit.cpp Exit.h W
         Kill.cpp Kill.h)
 
 target_include_directories(syscall PRIVATE ../../include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(syscall PRIVATE ../arch/x86_64/include)
+endif()

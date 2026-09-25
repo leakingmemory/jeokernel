@@ -8,3 +8,6 @@ add_library(blockdevsystem OBJECT blockdev_interface.cpp blockdevsystem.cpp
 
 target_include_directories(blockdevsystem PRIVATE ../../include)
 target_include_directories(blockdevsystem PRIVATE ../blockdevs/include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(blockdevsystem PRIVATE ../arch/x86_64/include)
+endif()

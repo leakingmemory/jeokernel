@@ -7,3 +7,6 @@ add_subdirectory(dev)
 add_library(tty OBJECT tty.cpp ttyhandler.cpp ttyhandler.h)
 
 target_include_directories(tty PRIVATE ../../include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(tty PRIVATE ../arch/x86_64/include)
+endif()

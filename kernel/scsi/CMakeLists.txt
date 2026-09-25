@@ -6,3 +6,6 @@ add_library(scsi OBJECT scsidevice.cpp scsidevice.h scsida.cpp scsida.h Callback
 
 target_include_directories(scsi PRIVATE ../../include)
 target_include_directories(scsi PRIVATE ../blockdevs/include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(scsi PRIVATE ../arch/x86_64/include)
+endif()

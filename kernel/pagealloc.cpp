@@ -11,7 +11,9 @@
 #include <iostream>
 #include <stats/statistics_root.h>
 #include <physpagemap.h>
-#include "ApStartup.h"
+#if !defined(__aarch64__)
+#include <ApStartup.h>
+#endif
 #include <sys/sysinfo.h>
 
 #include "vpallocator.h"

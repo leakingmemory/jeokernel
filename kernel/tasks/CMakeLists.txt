@@ -5,3 +5,6 @@ set(CMAKE_CXX_STANDARD 23)
 add_library(tasks OBJECT tasklist.cpp thread.cpp thread_trampoline.S schedwrapper.cpp)
 
 target_include_directories(tasks PRIVATE ../../include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(tasks PRIVATE ../arch/x86_64/include)
+endif()

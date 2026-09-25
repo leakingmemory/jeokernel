@@ -9,3 +9,6 @@ add_library(acpi OBJECT ACPI.cpp acpi_madt.cpp)
 target_link_libraries(acpi PUBLIC acpica)
 
 target_include_directories(acpi PRIVATE ../../include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(acpi PRIVATE ../arch/x86_64/include)
+endif()

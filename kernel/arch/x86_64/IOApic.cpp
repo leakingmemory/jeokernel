@@ -4,7 +4,7 @@
 
 #include <klogger.h>
 #include <sstream>
-#include "IOApic.h"
+#include <IOApic.h>
 
 IOApic::IOApic(const apics_info *mpc) : vm(0x2000) {
     if (mpc->GetNumberOfIoapics() < 1) {

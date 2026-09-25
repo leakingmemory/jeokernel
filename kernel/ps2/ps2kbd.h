@@ -6,7 +6,7 @@
 #define JEOKERNEL_PS2KBD_H
 
 #include "ps2.h"
-#include "../IOApic.h"
+#include <IOApic.h>
 #include <core/LocalApic.h>
 #include <memory>
 #include <concurrency/hw_spinlock.h>

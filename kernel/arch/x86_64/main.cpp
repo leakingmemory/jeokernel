@@ -8,7 +8,7 @@
 #include "../../TaskStateSegment.h"
 #include "../../InterruptTaskState.h"
 #include "../../InterruptDescriptorTable.h"
-#include "../../interrupt.h"
+#include "interrupt.h"
 #include "../../KernelElf.h"
 #include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
@@ -43,7 +43,7 @@
 #include "../../ps2/ps2.h"
 #include "../../usb/usbifacedev.h"
 #include "../../usb/usbkbd.h"
-#include "../../ApStartup.h"
+#include <ApStartup.h>
 #include "../../framebuffer/framebuffer_console.h"
 #include "../../framebuffer/framebuffer_kconsole.h"
 #include "../../framebuffer/framebuffer_kconsole_spinlocked.h"

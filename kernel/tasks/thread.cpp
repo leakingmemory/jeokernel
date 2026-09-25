@@ -5,7 +5,7 @@
 #include <core/scheduler.h>
 #include <core/cpu_mpfp.h>
 #include <std/thread.h>
-#include "../ApStartup.h"
+#include <ApStartup.h>
 
 
 extern "C" {

@@ -31,3 +31,6 @@ target_link_libraries(acpica PRIVATE acpica-utilities)
 
 target_include_directories(acpica PUBLIC ../../../include)
 target_include_directories(acpica PRIVATE acpica-unix-20210604/source/include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(acpica PRIVATE ../../arch/x86_64/include)
+endif()

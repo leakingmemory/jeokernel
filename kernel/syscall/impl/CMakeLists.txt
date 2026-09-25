@@ -6,3 +6,6 @@ add_library(syscall_impl OBJECT SysOpenImpl.cpp SysOpenImpl.h SysCloneImpl.cpp S
         SysFaccessatImpl.cpp SysFaccessatImpl.h SysMembarrierImpl.cpp SysMembarrierImpl.h)
 
 target_include_directories(syscall_impl PRIVATE ../../../include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(syscall_impl PRIVATE ../../arch/x86_64/include)
+endif()

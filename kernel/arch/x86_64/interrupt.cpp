@@ -11,14 +11,14 @@
 #include <core/nanotime.h>
 #include <sstream>
 #include <exec/procthread.h>
-#include "PageFault.h"
-#include "CpuExceptionTrap.h"
-#include "KernelElf.h"
-#include "HardwareInterrupts.h"
-#include "CpuInterrupts.h"
-#include "ApStartup.h"
-#include "DoubleFault.h"
-#include "syscall/SyscallHandler.h"
+#include "../../PageFault.h"
+#include "../../CpuExceptionTrap.h"
+#include "../../KernelElf.h"
+#include "../../HardwareInterrupts.h"
+#include "../../CpuInterrupts.h"
+#include <ApStartup.h>
+#include "../../DoubleFault.h"
+#include "../../syscall/SyscallHandler.h"
 
 //#define PRINT_HANDLED_CPU_INTR
 #define SYSCALL_NOT_FOUND_KILL

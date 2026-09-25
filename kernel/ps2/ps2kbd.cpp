@@ -9,7 +9,7 @@
 #include <thread>
 #include "ps2kbd.h"
 #include "../HardwareInterrupts.h"
-#include "../ApStartup.h"
+#include <ApStartup.h>
 #include <keyboard/keyboard.h>
 
 //#define DEBUG_BUFFER

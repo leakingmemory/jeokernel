@@ -4,7 +4,7 @@
 
 #include <errno.h>
 #include <core/scheduler.h>
-#include "interrupt_frame.h"
+#include "../arch/x86_64/include/interrupt_frame.h"
 #include "SyscallHandler.h"
 #include "Exit.h"
 #include "Write.h"

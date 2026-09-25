@@ -4,12 +4,16 @@
 
 #include "serialtty.h"
 #include <sstream>
+#if !defined(__aarch64__)
 #include <thread>
+#endif
 
 #include "errno.h"
 #include "serialport.h"
-#include "../ApStartup.h"
+#if !defined(__aarch64__)
+#include <ApStartup.h>
 #include "../HardwareInterrupts.h"
+#endif
 #include <keyboard/keyboard.h>
 
 #if !defined(__aarch64__)

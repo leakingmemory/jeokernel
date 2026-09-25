@@ -9,3 +9,6 @@ add_library(procfs OBJECT procfs.cpp ProcDatafile.cpp ProcDatafile.h ProcAuxv.cp
 
 target_include_directories(procfs PRIVATE ../../include)
 target_include_directories(procfs PRIVATE ../blockdevs/include)
+if (ARCH STREQUAL "x86_64")
+    target_include_directories(procfs PRIVATE ../arch/x86_64/include)
+endif()

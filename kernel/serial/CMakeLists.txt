@@ -10,6 +10,7 @@ if (ARCH STREQUAL "aarch64")
     add_library(serial OBJECT serialtty.cpp serialtty.h uart.cpp uart.h)
 else()
     add_library(serial OBJECT serialport.cpp serialport.h serialtty.cpp serialtty.h)
+    target_include_directories(serial PRIVATE ../arch/x86_64/include)
 endif()
 
 target_include_directories(serial PRIVATE ../../include)

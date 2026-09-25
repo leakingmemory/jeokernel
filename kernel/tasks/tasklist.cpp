@@ -10,7 +10,7 @@
 #include <sstream>
 #include <core/nanotime.h>
 #include <pagealloc.h>
-#include "../ApStartup.h"
+#include <ApStartup.h>
 #include <core/x86fpu.h>
 
 #define CONTINUE_RUNNING_BIAS 12
