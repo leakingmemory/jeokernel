@@ -60,8 +60,9 @@ endif()
 # The kernel image - same target name (kernel.full) on both architectures, with
 # architecture-specific sources; the loader/shim embeds this target's file.
 if (ARCH STREQUAL "aarch64")
-add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp klogger.cpp strings.cpp pagetable.cpp statistics_root.cpp vmem.cpp arch/aarch64/main.cpp stack.cpp arch/aarch64/null_klogger.cpp arch/aarch64/dtb.cpp arch/aarch64/initfpu.S)
+add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp klogger.cpp strings.cpp pagetable.cpp statistics_root.cpp vmem.cpp arch/aarch64/main.cpp stack.cpp arch/aarch64/null_klogger.cpp arch/aarch64/dtb.cpp arch/aarch64/initfpu.S arch/aarch64/interrupt.cpp)
 target_compile_options(kernel.full PRIVATE -g -Wall -Wextra)
+target_include_directories(kernel.full PRIVATE arch/aarch64/include)
 else()
         add_executable(kernel.full arch/x86_64/main.cpp arch/x86_64/bootstrap.cpp cpuio.cpp pagetable.cpp pagealloc.cpp cpp_handlers.cpp strings.cpp klogger.cpp stack.cpp GlobalDescriptorTable.cpp GlobalDescriptorTable.h InterruptDescriptorTable.cpp InterruptDescriptorTable.h TaskStateSegment.cpp TaskStateSegment.h InterruptTaskState.cpp InterruptTaskState.h arch/x86_64/interrupt.S arch/x86_64/interrupt.cpp PageFault.cpp PageFault.h elf.cpp KernelElf.cpp KernelElf.h vmem.cpp cpu_mpfp.cpp LocalApic.cpp Pic.cpp Pic.h arch/x86_64/IOApic.cpp arch/x86_64/include/IOApic.h HardwareInterrupts.cpp HardwareInterrupts.h PITTimerCalib.cpp PITTimerCalib.h ap_trampoline.S start_ap.cpp start_ap.h ap_started.S ap_bootstrap.cpp nanotime.cpp AcpiBoot.cpp AcpiBoot.h link_stubs.cpp ctime.cpp perror.cpp CpuInterrupts.cpp CpuInterrupts.h remove.cpp arch/x86_64/ApStartup.cpp arch/x86_64/include/ApStartup.h DoubleFault.cpp DoubleFault.h statistics_root.cpp physpagemap.cpp dynlinker.cpp PerCpuVMem.cpp PerCpuVMem.cpp SyscallSupport.cpp SyscallSupport.h uname_info.cpp x86fpu.cpp)
         target_include_directories(kernel.full PRIVATE arch/x86_64/include)

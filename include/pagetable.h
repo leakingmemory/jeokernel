@@ -679,6 +679,15 @@ struct pageentr {
     constexpr const ptbl_ReadBitfieldOfValue<uint64_t,55,4> software() const {
         return {value};
     }
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,55> os_virt_avail() const {
+        return {value};
+    }
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,56> os_virt_start() const {
+        return {value};
+    }
+    constexpr const ptbl_ReadBitfieldOfValue<uint64_t,0> present() const {
+        return valid();
+    }
     /** Page-Based Hardware Attributes */
     constexpr const ptbl_ReadBitfieldOfValue<uint64_t,59,3> pbha() const {
         return {value};
@@ -732,6 +741,15 @@ struct pageentr {
     }
     constexpr ptbl_BitfieldOfValue<uint64_t,55,4> software() {
         return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,55> os_virt_avail() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,56> os_virt_start() {
+        return {value};
+    }
+    constexpr ptbl_BitfieldOfValue<uint64_t,0> present() {
+        return valid();
     }
     constexpr ptbl_BitfieldOfValue<uint64_t,59,3> pbha() {
         return {value};
