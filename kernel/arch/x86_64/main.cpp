@@ -5,14 +5,14 @@
 #include <loaderconfig.h>
 #include <stdint.h>
 #include "../../textconsole/b8000logger.h"
-#include "../../TaskStateSegment.h"
-#include "../../InterruptTaskState.h"
-#include "../../InterruptDescriptorTable.h"
+#include "TaskStateSegment.h"
+#include "InterruptTaskState.h"
+#include "InterruptDescriptorTable.h"
 #include "interrupt.h"
 #include "../../KernelElf.h"
 #include <core/cpu_mpfp.h>
 #include <core/LocalApic.h>
-#include "../../Pic.h"
+#include "Pic.h"
 #include <pagealloc.h>
 #include <multiboot_impl.h>
 #include <core/malloc.h>
@@ -27,7 +27,7 @@
 #include "../../HardwareInterrupts.h"
 #include "../../CpuInterrupts.h"
 #include <core/vmem.h>
-#include "../../start_ap.h"
+#include "start_ap.h"
 #include "../../AcpiBoot.h"
 #include "../../pci/pci.h"
 #include "../../display/vga.h"

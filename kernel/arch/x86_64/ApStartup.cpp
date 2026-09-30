@@ -8,10 +8,10 @@
 #include <thread>
 #include <acpi/acpi_madt_provider.h>
 #include <acpi/acpi_madt.h>
-#include "../../TaskStateSegment.h"
-#include "../../InterruptTaskState.h"
-#include "../../GlobalDescriptorTable.h"
-#include "../../start_ap.h"
+#include "TaskStateSegment.h"
+#include "InterruptTaskState.h"
+#include "GlobalDescriptorTable.h"
+#include "start_ap.h"
 #include "../../PITTimerCalib.h"
 #include <IOApic.h>
 #include "../../SyscallSupport.h"
