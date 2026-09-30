@@ -12,6 +12,7 @@
 #include <vector>
 #include <tuple>
 #include "../../HardwareInterrupts.h"
+#include "../../CpuInterrupts.h"
 
 extern "C" void fpu_init();
 
@@ -149,6 +150,8 @@ extern "C" void init_kernel() {
         get_klogger() << "FPU enabled\n";
 
         create_hw_interrupt_handler();
+        create_cpu_interrupt_handler();
+
     }
     for (;;) {
         asm volatile("wfe");
