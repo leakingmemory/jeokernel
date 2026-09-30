@@ -27,9 +27,13 @@ void *BasicMemoryAllocatorImpl::sm_allocate(uint32_t size) {
 #if defined(__aarch64__)
                 pe->value = 0;
                 pe->ppn() = ppagealloc(4096) >> 12;
-                pe->valid() = 1;
+                pe->attr_indx() = 1;
+                pe->sh() = 3;
+                pe->af() = 1;
+                pe->table() = 1;
                 pe->pxn() = 1;
                 pe->uxn() = 1;
+                pe->valid() = 1;
 #else
                 pe->page_ppn() = ppagealloc(4096) >> 12;
                 pe->present() = 1;

@@ -37,8 +37,8 @@ typedef uint32_t phys_t;
 typedef uint64_t size_t;
 typedef int64_t ssize_t;
 #else
-typedef unsigned long int size_t;
-typedef signed long int ssize_t;
+typedef __SIZE_TYPE__ size_t;
+typedef __PTRDIFF_TYPE__ ssize_t;
 #endif
 typedef int64_t ptrdiff_t;
 typedef int64_t intptr_t;

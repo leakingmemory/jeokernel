@@ -162,6 +162,7 @@ void extendable_physpagemap_managed::memmap(vmem &vm, std::vector<uint64_t> &pag
         vm.page(i).rwmap(page);
         ++i;
     }
+    reload_pagetables();
 }
 
 uint32_t extendable_physpagemap_managed::max() const {

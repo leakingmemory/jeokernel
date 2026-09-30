@@ -3,6 +3,7 @@
 //
 
 #include <strings.h>
+#include <string.h>
 #include <core/malloc.h>
 #include <klogger.h>
 #include "mallocator.h"
@@ -102,7 +103,7 @@ extern "C" {
     static MallocImpl wild_malloc_struct{};
 
     void *malloc(size_t size) {
-        void *ptr = impl->malloc(size);
+        void *ptr = impl->malloc(static_cast<uintptr_t>(size));
         if (ptr == nullptr) {
             wild_panic("Out of memory");
         }

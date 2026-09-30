@@ -11,6 +11,7 @@
 #include <core/malloc.h>
 #include <vector>
 #include <tuple>
+#include "../../HardwareInterrupts.h"
 
 extern "C" void fpu_init();
 
@@ -146,6 +147,8 @@ extern "C" void init_kernel() {
 
         fpu_init();
         get_klogger() << "FPU enabled\n";
+
+        create_hw_interrupt_handler();
     }
     for (;;) {
         asm volatile("wfe");
