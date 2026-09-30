@@ -6,6 +6,8 @@
 #include <interrupt.h>
 #include <tuple>
 #include <vector>
+#include "../../HardwareInterrupts.h"
+#include "../../CpuInterrupts.h"
 
 bool Interrupt::has_error_code() const {
     return _has_error_code;
@@ -117,5 +119,21 @@ void Interrupt::print_debug(bool double_fault, bool stack_dump) const {
         ++count;
         uint64_t lraddr = std::get<1>(value);
         get_klogger() << "  [" << (uint16_t) count << "] " << (uint64_t) lraddr << "\n";
+    }
+}
+
+extern "C" {
+    bool interrupt_handler(uint64_t interrupt_vector, InterruptCpuFrame *cpu_frame, InterruptStackFrame *stack_frame, aarch64_fpu_state *fpu) {
+        Interrupt interrupt{cpu_frame, stack_frame, fpu, static_cast<uint8_t>(interrupt_vector)};
+        if (interrupt_vector < CPU_INT_N) {
+            bool handled = get_cpu_interrupt_handler().handle(interrupt);
+            if (handled) {
+                return false;
+            }
+        }
+        get_klogger() << "\nReceived exception/interrupt vector " << (uint64_t) interrupt_vector << "\n";
+        interrupt.print_debug();
+        wild_panic("unhandled aarch64 exception");
+        return false;
     }
 }

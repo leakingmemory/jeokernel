@@ -13,6 +13,7 @@
 #include <tuple>
 #include "../../HardwareInterrupts.h"
 #include "../../CpuInterrupts.h"
+#include <interrupt.h>
 
 extern "C" void fpu_init();
 
@@ -151,6 +152,9 @@ extern "C" void init_kernel() {
 
         create_hw_interrupt_handler();
         create_cpu_interrupt_handler();
+
+        install_exception_vectors();
+        get_klogger() << "Exception vectors installed\n";
 
     }
     for (;;) {

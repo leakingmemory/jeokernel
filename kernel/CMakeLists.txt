@@ -60,7 +60,7 @@ endif()
 # The kernel image - same target name (kernel.full) on both architectures, with
 # architecture-specific sources; the loader/shim embeds this target's file.
 if (ARCH STREQUAL "aarch64")
-add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp klogger.cpp strings.cpp pagetable.cpp statistics_root.cpp vmem.cpp arch/aarch64/main.cpp stack.cpp arch/aarch64/null_klogger.cpp arch/aarch64/dtb.cpp arch/aarch64/initfpu.S arch/aarch64/interrupt.cpp HardwareInterrupts.cpp CpuInterrupts.cpp)
+add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp klogger.cpp strings.cpp pagetable.cpp statistics_root.cpp vmem.cpp arch/aarch64/main.cpp stack.cpp arch/aarch64/null_klogger.cpp arch/aarch64/dtb.cpp arch/aarch64/initfpu.S arch/aarch64/interrupt.S arch/aarch64/interrupt.cpp HardwareInterrupts.cpp CpuInterrupts.cpp)
 target_compile_options(kernel.full PRIVATE -g -Wall -Wextra)
 target_include_directories(kernel.full PRIVATE arch/aarch64/include)
 else()

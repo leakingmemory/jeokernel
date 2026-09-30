@@ -134,4 +134,27 @@ public:
     void print_debug(bool double_fault = false, bool stack_dump = true) const;
 };
 
+extern "C" {
+void install_exception_vectors();
+void exception_vector_table();
+void vector_curr_el_sp0_sync();
+void vector_curr_el_sp0_irq();
+void vector_curr_el_sp0_fiq();
+void vector_curr_el_sp0_serror();
+void vector_curr_el_spx_sync();
+void vector_curr_el_spx_irq();
+void vector_curr_el_spx_fiq();
+void vector_curr_el_spx_serror();
+void vector_lower_el_aarch64_sync();
+void vector_lower_el_aarch64_irq();
+void vector_lower_el_aarch64_fiq();
+void vector_lower_el_aarch64_serror();
+void vector_lower_el_aarch32_sync();
+void vector_lower_el_aarch32_irq();
+void vector_lower_el_aarch32_fiq();
+void vector_lower_el_aarch32_serror();
+
+bool interrupt_handler(uint64_t interrupt_vector, InterruptCpuFrame *cpu_frame, InterruptStackFrame *stack_frame, aarch64_fpu_state *fpu);
+}
+
 #endif //JEOKERNEL_INTERRUPT_H
