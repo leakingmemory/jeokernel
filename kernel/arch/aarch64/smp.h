@@ -6,5 +6,6 @@
 #define JEOKERNEL_AARCH64_SMP_H
 
 int get_cpu_num();
+int get_num_cpus();
 
 #endif //JEOKERNEL_AARCH64_SMP_H

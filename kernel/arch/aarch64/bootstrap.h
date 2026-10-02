@@ -11,5 +11,7 @@ void bootstrap_uart_put_hex(uint64_t v);
 void bootstrap_uart_puts(const char *s);
 volatile void *bootstrap_get_uart();
 uint64_t bootstrap_get_dtb();
+void bootstrap_lock();
+void bootstrap_unlock();
 
 #endif //JEOKERNEL_AARCH64_BOOTSTRAP_H

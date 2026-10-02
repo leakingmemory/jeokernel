@@ -111,6 +111,14 @@ uint64_t bootstrap_get_dtb() {
     return dtb_ptr;
 }
 
+void bootstrap_lock() {
+    uart_spinlock->lock();
+}
+
+void bootstrap_unlock() {
+    uart_spinlock->unlock();
+}
+
 namespace {
     void print_cpu_entry(volatile unsigned int *uart, uint64_t cpu_id, uint64_t cpu_count) {
         uart_spinlock->lock();
@@ -138,6 +146,10 @@ int get_cpu_num() {
         }
     }
     return -1;
+}
+
+int get_num_cpus() {
+    return num_cpus_entered;
 }
 
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {

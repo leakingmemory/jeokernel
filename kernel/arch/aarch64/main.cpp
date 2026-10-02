@@ -14,11 +14,15 @@
 #include "../../HardwareInterrupts.h"
 #include "../../CpuInterrupts.h"
 #include <interrupt.h>
+#include <mutex>
 
 extern "C" void fpu_init();
 
-extern "C" void init_kernel() {
-    bootstrap_uart_puts("init_kernel called for core\n");
+static hw_spinlock *boot_lock{nullptr};
+static int boot_stage_counter{0};
+static int cpu_num_vector{0};
+
+static void early_init() {
     uart *spcom_cons{nullptr};
     int primary_console{0};
     if (get_cpu_num() == 0) {
@@ -154,9 +158,59 @@ extern "C" void init_kernel() {
         create_cpu_interrupt_handler();
 
         install_exception_vectors();
-        get_klogger() << "Exception vectors installed\n";
+        get_klogger() << "cpu0: Exception vectors installed\n";
 
     }
+}
+
+static uint8_t boot_lock_data[sizeof(*boot_lock)];
+
+extern "C" void init_kernel() {
+    bootstrap_lock();
+    if (boot_lock == nullptr) {
+        boot_lock = new (reinterpret_cast<void *>(boot_lock_data)) hw_spinlock();
+        bootstrap_unlock();
+        bootstrap_uart_puts("init_kernel preinit done\n");
+    } else {
+        bootstrap_unlock();
+    }
+    auto current_cpu = get_cpu_num();
+    auto num_cpus = get_num_cpus();
+    bootstrap_uart_puts("init_kernel called for core\n");
+    early_init();
+    if (current_cpu == 0) {
+        std::lock_guard lock{*boot_lock};
+        cpu_num_vector = 1;
+        boot_stage_counter = 1;
+    }
+    if (current_cpu != 0) {
+        while (true) {
+            std::lock_guard lock{*boot_lock};
+            if (boot_stage_counter == 1 && cpu_num_vector == current_cpu) {
+                break;
+            }
+        }
+
+        install_exception_vectors();
+        get_klogger() << "cpu" << static_cast<uint16_t>(current_cpu) << ": Exception vectors installed\n";
+
+        std::lock_guard lock{*boot_lock};
+        cpu_num_vector = current_cpu + 1;
+        if (cpu_num_vector == num_cpus) {
+            boot_stage_counter = 2;
+        }
+    }
+
+    if (current_cpu == 0) {
+        while (true) {
+            std::lock_guard lock{*boot_lock};
+            if (boot_stage_counter == 2) {
+                break;
+            }
+        }
+        get_klogger() << "cpu0: All cpus have installed exception vectors\n";
+    }
+
     for (;;) {
         asm volatile("wfe");
     }
