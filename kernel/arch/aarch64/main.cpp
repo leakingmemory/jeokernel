@@ -191,6 +191,7 @@ extern "C" void init_kernel() {
             }
         }
 
+        fpu_init();
         install_exception_vectors();
         get_klogger() << "cpu" << static_cast<uint16_t>(current_cpu) << ": Exception vectors installed\n";
 
