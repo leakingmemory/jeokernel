@@ -39,25 +39,28 @@ void set_pagetable_virt_offset(uintptr_t offset) {
 
 #else
 
-static PageentrAvailablePages pageentr_available_pages;
+static PageentrAvailablePages *pageentr_available_pages;
+static uint8_t pageentr_available_pages_data[sizeof(*pageentr_available_pages)];
 
-void init_mapping_pages(uint64_t vaddr) {
+void init_mapping_pages(uint64_t paddr) {
+    pageentr_available_pages = reinterpret_cast<PageentrAvailablePages *>(&pageentr_available_pages_data[0]);
+    std::construct_at(pageentr_available_pages);
     for (uint64_t i = 0; i < 8; i++) {
-        pageentr_available_pages.Fill(vaddr + (i << 12));
+        pageentr_available_pages->Fill(paddr + (i << 12));
     }
 }
 
 void refill_mapping_pages() {
-    auto num_needed = pageentr_available_pages.NumNeeded();
+    auto num_needed = pageentr_available_pages->NumNeeded();
     while (num_needed > 0) {
         for (decltype(num_needed) i = 0; i < num_needed; i++) {
-            auto ppage = ppagealloc(0x1000);
+            auto ppage = ppagealloc_locked(0x1000);
             if (ppage == 0) {
                 return;
             }
             uintptr_t vaddr = ppage;
             vaddr += get_pagetable_virt_offset();
-            auto *pe = get_pageentr64(_get_pml4t(), vaddr, pageentr_available_pages);
+            auto *pe = get_pageentr64(_get_pml4t(), vaddr, *pageentr_available_pages);
             if (pe == nullptr) {
                 ppagefree(ppage, 0x1000);
                 return;
@@ -68,13 +71,14 @@ void refill_mapping_pages() {
             pe->ppn() = ppage >> 12;
             pe->sh() = 3;
             pe->af() = 1;
+            pe->attr_indx() = 1;
             pe->table() = 1;
             pe->valid() = 1;
             reload_pagetables();
             bzero(reinterpret_cast<void *>(vaddr), 0x1000);
-            pageentr_available_pages.Fill(ppage);
+            pageentr_available_pages->Fill(ppage);
         }
-        num_needed = pageentr_available_pages.NumNeeded();
+        num_needed = pageentr_available_pages->NumNeeded();
     }
 }
 
@@ -85,7 +89,7 @@ std::optional<pageentr> get_pageentr(uint64_t addr) {
     std::lock_guard lock{*pagetables_lock};
 
 #if defined(__aarch64__)
-    pageentr *pe = get_pageentr64(_get_pml4t(), addr, pageentr_available_pages);
+    pageentr *pe = get_pageentr64(_get_pml4t(), addr, *pageentr_available_pages);
     refill_mapping_pages();
 #else
     pageentr *pe = get_pageentr64(_get_pml4t(), addr);
@@ -102,7 +106,7 @@ bool update_pageentr(uint64_t addr, const pageentr &pe_vmem_update) {
     std::lock_guard lock{*pagetables_lock};
 
 #if defined(__aarch64__)
-    pageentr *pe = get_pageentr64(_get_pml4t(), addr, pageentr_available_pages);
+    pageentr *pe = get_pageentr64(_get_pml4t(), addr, *pageentr_available_pages);
     refill_mapping_pages();
 #else
     pageentr *pe = get_pageentr64(_get_pml4t(), addr);

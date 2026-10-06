@@ -50,6 +50,9 @@ VPerCpuPagetables vpercpuallocpagetable();
 VPerCpuPagetables vpercpuallocpagetable32();
 uint32_t vpagetablecount();
 void pmemcounts();
+#if defined(__aarch64__)
+phys_t ppagealloc_locked(uintptr_t size);
+#endif
 phys_t ppagealloc(uintptr_t size);
 phys_t ppagealloc32(uint32_t size);
 #if defined(__aarch64__)

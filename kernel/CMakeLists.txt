@@ -16,6 +16,7 @@ enable_language(C ASM)
 add_subdirectory(kmemory)
 add_subdirectory(serial)
 add_subdirectory(concurrency)
+add_subdirectory(fstreams)
 
 # Subsystem libraries. x86_64-only for now; as each is ported to aarch64 it
 # moves out of this guard to be shared by both architectures.
@@ -30,7 +31,6 @@ add_subdirectory(usb)
 add_subdirectory(ps2)
 add_subdirectory(keyboard)
 add_subdirectory(strutil)
-add_subdirectory(fstreams)
 add_subdirectory(framebuffer)
 add_subdirectory(font)
 add_subdirectory(kshell)
@@ -60,7 +60,7 @@ endif()
 # The kernel image - same target name (kernel.full) on both architectures, with
 # architecture-specific sources; the loader/shim embeds this target's file.
 if (ARCH STREQUAL "aarch64")
-add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp klogger.cpp strings.cpp pagetable.cpp statistics_root.cpp vmem.cpp arch/aarch64/main.cpp stack.cpp arch/aarch64/null_klogger.cpp arch/aarch64/dtb.cpp arch/aarch64/initfpu.S arch/aarch64/interrupt.S arch/aarch64/interrupt.cpp HardwareInterrupts.cpp CpuInterrupts.cpp)
+add_executable(kernel.full arch/aarch64/bootstrap.cpp arch/aarch64/cppimpl.cpp pagealloc.cpp physpagemap.cpp klogger.cpp strings.cpp pagetable.cpp statistics_root.cpp vmem.cpp arch/aarch64/main.cpp stack.cpp arch/aarch64/null_klogger.cpp arch/aarch64/dtb.cpp arch/aarch64/initfpu.S arch/aarch64/interrupt.S arch/aarch64/interrupt.cpp HardwareInterrupts.cpp CpuInterrupts.cpp KernelElf.cpp elf.cpp)
 target_compile_options(kernel.full PRIVATE -g -Wall -Wextra)
 target_include_directories(kernel.full PRIVATE arch/aarch64/include)
 else()
@@ -95,6 +95,7 @@ add_custom_target(
 target_link_libraries(kernel.full PRIVATE kmemory)
 target_link_libraries(kernel.full PRIVATE serial)
 target_link_libraries(kernel.full PRIVATE concurrency)
+target_link_libraries(kernel.full PRIVATE fstreams)
 
 # x86_64-only subsystem linkage; becomes shared as subsystems are ported.
 if (ARCH STREQUAL "x86_64")
@@ -109,7 +110,6 @@ target_link_libraries(kernel.full PRIVATE usb)
 target_link_libraries(kernel.full PRIVATE ps2)
 target_link_libraries(kernel.full PRIVATE keyboard)
 target_link_libraries(kernel.full PRIVATE strutil)
-target_link_libraries(kernel.full PRIVATE fstreams)
 target_link_libraries(kernel.full PRIVATE framebuffer)
 target_link_libraries(kernel.full PRIVATE font)
 target_link_libraries(kernel.full PRIVATE kshell)

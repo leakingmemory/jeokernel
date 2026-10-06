@@ -58,6 +58,9 @@ struct Stage1Data {
 
     uint64_t mem_mapper_8pages;
 
+    uint64_t kernel_phys;
+    uint64_t kernel_size;
+
     uint32_t cpu_count;
 
     static constexpr uint32_t phys_mem_free_max = 2;

@@ -147,6 +147,7 @@ inline pageentr *get_pageentr64(pagetable &root, uint64_t vaddr, PageentrAvailab
                 }
                 paddr = *paddr_o;
             }
+            entry.value = 0;
             entry.ppn() = (paddr >> 12);
             entry.table() = 1;
             entry.valid() = 1;

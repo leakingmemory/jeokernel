@@ -38,6 +38,8 @@ namespace {
     raw_spinlock *uart_spinlock;
     volatile unsigned int *uart;
     uint64_t dtb_ptr{0};
+    uint64_t kernel_phys;
+    uint64_t kernel_size;
 
     void uart_puts(volatile unsigned int *uart, const char *s);
 
@@ -119,6 +121,14 @@ void bootstrap_unlock() {
     uart_spinlock->unlock();
 }
 
+uint64_t bootstrap_get_kernel_phys() {
+    return kernel_phys;
+}
+
+uint64_t bootstrap_get_kernel_size() {
+    return kernel_size;
+}
+
 namespace {
     void print_cpu_entry(volatile unsigned int *uart, uint64_t cpu_id, uint64_t cpu_count) {
         uart_spinlock->lock();
@@ -155,6 +165,12 @@ int get_num_cpus() {
 extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
     stage1Data->early_init_lock.lock();
     uart_spinlock = &(stage1Data->early_init_lock);
+    if (kernel_phys != stage1Data->kernel_phys) {
+        kernel_phys = stage1Data->kernel_phys;
+    }
+    if (kernel_size != stage1Data->kernel_size) {
+        kernel_size = stage1Data->kernel_size;
+    }
     stage1Data->early_init_lock.unlock();
 
     uart = reinterpret_cast<volatile unsigned int *>(stage1Data->uart);
@@ -201,7 +217,10 @@ extern "C" [[noreturn]] void _start(Stage1Data *stage1Data) {
             /*
              * Let's try to alloc a stack
              */
-            init_mapping_pages(stage1Data->phys_mem_base + stage1Data->mem_mapper_8pages);
+            bootstrap_uart_puts("Initial memory mapping buffers: ");
+            bootstrap_uart_put_hex(stage1Data->mem_mapper_8pages);
+            bootstrap_uart_puts("\n");
+            init_mapping_pages(stage1Data->mem_mapper_8pages);
             set_init_pml4t(stage1Data->root_pt);
             init_simple_physpagemap(stage1Data->ppmap + stage1Data->phys_mem_base, stage1Data->ppmap_base_page);
             initialize_pagetable_control();

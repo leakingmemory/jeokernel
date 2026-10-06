@@ -832,6 +832,7 @@ namespace {
 					puts("Failed to allocate sub-table\n");
 					return nullptr;
 				}
+				memset(reinterpret_cast<void *>(*o_new_pt), 0, PAGESIZE);
 				entry.valid() = 1;
 				entry.table() = 1;
 				entry.ppn() = (*o_new_pt >> 12);
@@ -1427,7 +1428,7 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 		mmapperpages = static_cast<u64>(*mmapperpages_p) << 12;
 		memset(reinterpret_cast<void *>(mmapperpages), 0, 8 << 12);
 		for (u64 i = 0; i < 8; i++) {
-			map_page(sppmap, root_pt, phys_mem_vaddr + mmapperpages, mmapperpages, MapFlagWrite);
+			map_page(sppmap, root_pt, phys_mem_vaddr + mmapperpages + (i * 0x1000), mmapperpages + (i * 0x1000), MapFlagWrite);
 		}
 	}
 
@@ -1442,6 +1443,8 @@ extern "C" [[noreturn]] void shim_main(u64 dtb) {
 	stage1Data->ppmap_base_page = base_page;
 	stage1Data->vpalloc_root_vaddr = reinterpret_cast<uint64_t>(vpalloc_root) + phys_mem_vaddr;
 	stage1Data->mem_mapper_8pages = mmapperpages;
+	stage1Data->kernel_phys = reinterpret_cast<u64>(phys_kernel);
+	stage1Data->kernel_size = kernel_size;
 	stage1Data->cpu_count = num_cpus;
 	add_release_loader(*stage1Data, dtb);
 	puts("Putting stageloader pages up for release: ");

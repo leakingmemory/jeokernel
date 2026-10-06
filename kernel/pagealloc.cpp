@@ -38,7 +38,9 @@ uintptr_t init_pml4t_addr;
 
 #define _get_pml4t_this_cpu()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[apStartup->GetCpuNum()]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + init_pml4t_addr))))
 #define _get_pml4t_cpu0()  (is_v_multicpu ? *((pagetable *) (void *) (((phys_t) per_cpu_pagetables[0]) + get_pagetable_virt_offset())) : (*((pagetable *) (get_pagetable_virt_offset() + init_pml4t_addr))))
+#if !defined(__aarch64__)
 static phys_t ppagealloc_locked(uintptr_t size);
+#endif
 
 #if defined(__x86_64__) || defined(__i386__)
 pagetable &get_root_pagetable() {
@@ -521,7 +523,10 @@ void pmemcounts() {
 #endif
 
 //#define DEBUG_PALLOC_FAILURE
-static phys_t ppagealloc_locked(uintptr_t size) {
+#if !defined(__aarch64__)
+static
+#endif
+phys_t ppagealloc_locked(uintptr_t size) {
 #ifdef DEBUG_PALLOC_FAILURE
     uint64_t scan = 0;
     uint64_t free_pages = 0;

@@ -6,8 +6,14 @@
 #include <string>
 #include "KernelElf.h"
 
-KernelElf::KernelElf(uint64_t phys_start, uint64_t size) : ptr(nullptr), end_ptr(nullptr) {
+KernelElf::KernelElf(uint64_t phys_start, uint64_t size) : ptr(nullptr), end_ptr(nullptr)
+#if defined(__aarch64__)
+, vsize(size)
+#endif
+{
+#if !defined(__aarch64__)
     uint64_t vsize{size};
+#endif
     {
         uint64_t overshoot = vsize & 0xFFF;
         if (overshoot != 0) {
@@ -22,6 +28,18 @@ KernelElf::KernelElf(uint64_t phys_start, uint64_t size) : ptr(nullptr), end_ptr
     }
     for (uint64_t i = 0; i < vsize; i += 0x1000) {
         std::optional<pageentr> pe = get_pageentr(vstart + i);
+#if defined(__aarch64__)
+        pe->value = 0;
+        pe->ppn() = (phys_start + i) >> 12;
+        pe->valid() = 1;
+        pe->ap() = 2;
+        pe->af() = 1;
+        pe->sh() = 3;
+        pe->attr_indx() = 1;
+        pe->table() = 1;
+        pe->uxn() = 1;
+        pe->pxn() = 1;
+#else
         pe->page_ppn() = (phys_start + i) >> 12;
         pe->writeable() = 0;
         pe->accessed() = 0;
@@ -31,6 +49,7 @@ KernelElf::KernelElf(uint64_t phys_start, uint64_t size) : ptr(nullptr), end_ptr
         pe->execution_disabled() = 1;
         pe->dirty() = 0;
         pe->present() = 1;
+#endif
         update_pageentr(vstart + i, *pe);
     }
     reload_pagetables();
@@ -38,6 +57,7 @@ KernelElf::KernelElf(uint64_t phys_start, uint64_t size) : ptr(nullptr), end_ptr
     kernel_elf = ELF(ptr, end_ptr);
 }
 
+#if defined(__x86_64__) || defined(__i386__)
 KernelElf *KernelElf::CreateFromMultiboot(const MultibootInfoHeader &multibootInfoHeader) {
     const MultibootModuleInfo *kernel_info = nullptr;
 
@@ -62,10 +82,15 @@ KernelElf *KernelElf::CreateFromMultiboot(const MultibootInfoHeader &multibootIn
 
     return new KernelElf(static_cast<uint64_t>(kernel_info->mod_start), static_cast<uint64_t>(kernel_info->mod_end - kernel_info->mod_start));
 }
+#endif
 
 KernelElf::~KernelElf() {
     if (ptr != nullptr) {
+#if defined(__aarch64__)
+        vpagefree((uint64_t) ptr, vsize);
+#else
         vpagefree((uint64_t) ptr);
+#endif
         ptr = nullptr;
     }
 }

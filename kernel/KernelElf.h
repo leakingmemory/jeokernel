@@ -15,9 +15,14 @@ class KernelElf {
 private:
     void *ptr, *end_ptr;
     ELF kernel_elf;
+#if defined(__aarch64__)
+    uint64_t vsize;
+#endif
 public:
     KernelElf(uint64_t phys_start, uint64_t size);
+#if defined(__x86_64__) || defined(__i386__)
     static KernelElf *CreateFromMultiboot(const MultibootInfoHeader &multibootInfoHeader);
+#endif
     ~KernelElf();
 
     const ELF &elf() const;
