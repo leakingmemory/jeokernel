@@ -10,8 +10,15 @@
 #include <sstream>
 #include <core/nanotime.h>
 #include <pagealloc.h>
+
+#include "../arch/aarch64/include/smp.h"
+#if defined(__aarch64__)
+#include <smp.h>
+#include <core/aarch64fpu.h>
+#else
 #include <ApStartup.h>
 #include <core/x86fpu.h>
+#endif
 
 #define CONTINUE_RUNNING_BIAS 12
 #define RESOURCE_PRIORITY_BIAS 12
@@ -44,11 +51,19 @@ std::string get_64bit_str(uint64_t strint) {
 void task::set_blocked(const char *name, bool blocked) {
     bits.blocked = blocked ? true : false;
     bits.blocked_by = get_64bit_str(name);
+#if defined(__aarch64__)
+    asm("dmb st");
+#else
     asm("sfence");
+#endif
 }
 
 std::string task::get_blocked_by() const {
+#if defined(__aarch64__)
+    asm("dsb sy");
+#else
     asm("mfence");
+#endif
     auto blocked_by_int = bits.blocked_by;
     return get_64bit_str(blocked_by_int);
 }
@@ -100,6 +115,7 @@ void tasklist::start_multi_cpu(uint8_t cpu) {
     multicpu = true;
 }
 
+#if !defined(__aarch64__)
 void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     task *current_task;
 
@@ -304,18 +320,24 @@ void tasklist::thread_reaper() {
         delete t;
     }
 }
+#endif
 
 void tasklist::emergency_drop_lock() {
     _lock.unlock();
 }
 
+#if !defined(__aarch64__)
 bool tasklist::page_fault(Interrupt &interrupt) {
     critical_section cli{};
+#if defined(__aarch64__)
+    auto cpu = get_cpu_num();
+#else
     uint8_t cpu = 0;
     if (multicpu) {
         ApStartup *apStartup = GetApStartup();
         cpu = apStartup->GetCpuNum();
     }
+#endif
     task *current_task = nullptr;
 
     {
@@ -342,11 +364,15 @@ bool tasklist::page_fault(Interrupt &interrupt) {
 
 bool tasklist::exception(const std::string &name, Interrupt &interrupt) {
     critical_section cli{};
+#if defined(__aarch64__)
+    auto cpu = get_cpu_num();
+#else
     uint8_t cpu = 0;
     if (multicpu) {
         ApStartup *apStartup = GetApStartup();
         cpu = apStartup->GetCpuNum();
     }
+#endif
     task *current_task = nullptr;
 
     {
@@ -368,6 +394,92 @@ bool tasklist::exception(const std::string &name, Interrupt &interrupt) {
     switch_tasks(interrupt, cpu);
     return handled;
 }
+#endif
+
+#if defined(__aarch64__)
+
+uint32_t tasklist::new_task(uint64_t pc, uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3, uint64_t x4,
+                            uint64_t x5, const std::vector<task_resource *> &resources) {
+    std::vector<task_resource *> my_resources{};
+    for (auto resource : resources) {
+        my_resources.push_back(resource);
+    }
+
+    task_stack_resource *stack_resource = new task_stack_resource;
+    uint64_t frame_pointer = stack_resource->get_address();
+    uint64_t sp = frame_pointer;
+
+    my_resources.push_back(stack_resource);
+
+    return new_task(pc, sp, frame_pointer, x0, x1, x2, x3, x4, x5, my_resources);
+}
+
+uint32_t tasklist::new_task(uint64_t pc, uint64_t sp, uint64_t frame_pointer, uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3, uint64_t x4,
+                            uint64_t x5, const std::vector<task_resource *> &resources) {
+    aarch64_fpu_state fpu{
+        .v = {},
+        .fpcr = 0,
+        .fpsr = 0,
+        .reserved = 0
+    };
+    InterruptStackFrame isf{
+        .x0 = x0,
+        .x1 = x1,
+        .x2 = x2,
+        .x3 = x3,
+        .x4 = x4,
+        .x5 = x5,
+        .x6 = 0,
+        .x7 = 0,
+        .x8 = 0,
+        .x9 = 0,
+        .x10 = 0,
+        .x11 = 0,
+        .x12 = 0,
+        .x13 = 0,
+        .x14 = 0,
+        .x15 = 0,
+        .x16 = 0,
+        .x17 = 0,
+        .x18 = 0,
+        .x19 = 0,
+        .x20 = 0,
+        .x21 = 0,
+        .x22 = 0,
+        .x23 = 0,
+        .x24 = 0,
+        .x25 = 0,
+        .x26 = 0,
+        .x27 = 0,
+        .x28 = 0,
+        .x29 = frame_pointer,
+        .x30 = 0,
+        .tpidr_el0 = 0,
+        .tpidrro_el0 = 0,
+        .tpidr_el1 = 0
+    };
+    InterruptCpuFrame cpuf{
+        .esr = 0,
+        .far = 0,
+        .elr = pc,
+        .spsr = 0x205,
+        .sp = sp
+    };
+    return new_task(fpu, isf, cpuf, resources);
+}
+uint32_t tasklist::new_task(const aarch64_fpu_state &fpusse_state, const InterruptStackFrame &cpu_state,
+                            const InterruptCpuFrame &cpu_frame, const std::vector<task_resource *> &resources) {
+    critical_section cli{};
+    std::lock_guard lock{_lock};
+
+    task *t = new task(cpu_frame, cpu_state, fpusse_state, resources);
+    tasks.push_back(t);
+    t->set_id(get_next_id());
+    t->set_blocked("newtask", false);
+    return t->get_id();
+}
+
+#else
 
 uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
                             uint64_t r9, const std::vector<task_resource *> &resources) {
@@ -385,7 +497,6 @@ uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rs
     auto &fpu = get_fpu0_initial();
     return new_task(rip, cs, 0x10, 0, rbp, rsp, rdi, rsi, rdx, rcx, r8, r9, fpu.fcw, fpu.mxcsr, my_resources);
 }
-
 
 uint32_t tasklist::new_task(uint64_t rip, uint16_t cs, uint16_t ds, uint64_t fsbase, uint64_t rbp, uint64_t rsp, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t rcx, uint64_t r8,
                         uint64_t r9, uint16_t fcw, uint32_t mxcsr, const std::vector<task_resource *> &resources) {
@@ -428,6 +539,7 @@ uint32_t tasklist::new_task(const x86_fpu_state &fpusse_state, const InterruptSt
     t->set_blocked("newtask", false);
     return t->get_id();
 }
+#endif
 
 bool tasklist::terminate_blocked(task *end_task) {
     critical_section cli{};
@@ -477,14 +589,21 @@ void tasklist::exit(uint8_t cpu, bool returnToCallerIfNotTerminatedImmediately) 
         }
     }
 
+    // TODO aarch64
+#if !defined(__aarch64__)
     asm("int $0xFE"); // Request task switch now.
+#endif
 
     if (!returnToCallerIfNotTerminatedImmediately) {
         /*
          * Wait for being evicted
          */
         while (true) {
+#if defined(__aarch64__)
+            asm("wfe");
+#else
             asm("hlt");
+#endif
         }
     }
 }
@@ -492,12 +611,16 @@ void tasklist::exit(uint8_t cpu, bool returnToCallerIfNotTerminatedImmediately) 
 void tasklist::user_exit(int64_t returnValue) {
     task *current_task = nullptr;
 
+#if defined(__aarch64__)
+    auto cpu = get_cpu_num();
+#else
     int cpu;
     if (multicpu) {
         cpu = GetApStartup()->GetCpuNum();
     } else {
         cpu = 0;
     }
+#endif
 
     critical_section cli{};
     std::lock_guard lock{_lock};
@@ -592,7 +715,10 @@ void tasklist::join(uint32_t task_id) {
         t.set_blocked("taskjoin", true);
     }
 
+    // TODO aarch64
+#if !defined(__aarch64__)
     asm("int $0xFE"); // Request task switch now.
+#endif
 
     while (true) {
         {
@@ -604,7 +730,11 @@ void tasklist::join(uint32_t task_id) {
             }
         }
         for (int i = 0; i < 10; i++) {
+#if defined(__aarch64__)
+            asm("yield");
+#else
             asm("pause");
+#endif
         }
     }
 }
@@ -629,16 +759,22 @@ void tasklist::when_out_of_lock(const std::function<void()> &func) {
 uint32_t tasklist::get_current_task_id() {
     critical_section cli{};
 
+#if defined(__aarch64__)
+    auto cpu_num = get_cpu_num();
+#else
     uint8_t cpu_num = 0;
+#endif
 
     task *current_task;
 
     std::lock_guard lock{_lock};
 
+#if !defined(__aarch64__)
     if (multicpu) {
         ApStartup *apStartup = GetApStartup();
         cpu_num = apStartup->GetCpuNum();
     }
+#endif
 
     for (task *t : tasks) {
         if (t->get_cpu() == cpu_num && t->is_running()) {
@@ -661,9 +797,15 @@ task &tasklist::get_task_with_lock(uint32_t task_id) {
         }
     }
     wild_panic("Task not found");
+#if defined(__aarch64__)
+    while (true) {
+        asm("wfe");
+    }
+#else
     while (true) {
         asm("hlt");
     }
+#endif
 }
 
 task *tasklist::get_nullable_task_with_lock(uint32_t task_id) {
@@ -676,11 +818,15 @@ task *tasklist::get_nullable_task_with_lock(uint32_t task_id) {
 }
 
 task &tasklist::get_current_task_with_lock() {
+#if defined(__aarch64__)
+    auto cpu_num = get_cpu_num();
+#else
     uint8_t cpu_num = 0;
     if (multicpu) {
         ApStartup *apStartup = GetApStartup();
         cpu_num = apStartup->GetCpuNum();
     }
+#endif
 
     task *current_task;
 
@@ -832,7 +978,10 @@ void tasklist::ticks_millisleep(uint64_t ms) {
         t.set_blocked("msleep", true);
     }
 
+    // TODO aarch64
+#if !defined(__aarch64__)
     asm("int $0xFE"); // Request task switch now.
+#endif
 
     while (true) {
         {
@@ -844,11 +993,16 @@ void tasklist::ticks_millisleep(uint64_t ms) {
             }
         }
         for (int i = 0; i < 1000; i++) {
+#if defined(__aarch64__)
+            asm("yield");
+#else
             asm("pause");
+#endif
         }
     }
 }
 
+#if !defined(__aarch64__)
 void tasklist::tsc_nanosleep(uint64_t nanos) {
     nanos += get_nanotime_ref() + 1;
     {
@@ -860,7 +1014,10 @@ void tasklist::tsc_nanosleep(uint64_t nanos) {
         t.set_blocked("nanoslp", true);
     }
 
+    // TODO aarch64
+#if !defined(__aarch64__)
     asm("int $0xFE"); // Request task switch now.
+#endif
 
     while (true) {
         {
@@ -872,7 +1029,11 @@ void tasklist::tsc_nanosleep(uint64_t nanos) {
             }
         }
         for (int i = 0; i < 1000; i++) {
+#if defined(__aarch64__)
+            asm("yield");
+#else
             asm("pause");
+#endif
         }
     }
 }
@@ -901,6 +1062,7 @@ void tasklist::nanosleep(uint64_t nanos) {
         millisleep((nanos / 1000000) + ((nanos % 1000000) > 0 ? 1 : 0));
     }
 }
+#endif
 
 void tasklist::add_task_event_handler(task_event_handler *handler) {
     critical_section cli{};

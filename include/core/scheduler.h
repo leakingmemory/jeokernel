@@ -371,7 +371,9 @@ class tasklist {
     friend task_timeout100hz_handler_ref;
 private:
     hw_spinlock _lock;
+#if !defined(__aarch64__)
     raw_semaphore _reaper_sema;
+#endif
     uint64_t tick_counter;
     uint32_t serial;
     bool multicpu;
@@ -390,7 +392,11 @@ private:
     void ticks_millisleep(uint64_t ms);
     void tsc_nanosleep(uint64_t nanos);
 public:
-    tasklist() : _lock(), _reaper_sema(-1), tick_counter(0), serial(0), multicpu(false), tasks(), task_delete_prequeue(), task_delete_queue(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool(), do_when_out_of_lock() {
+    tasklist() : _lock(),
+#if !defined(__aarch64__)
+    _reaper_sema(-1),
+#endif
+    tick_counter(0), serial(0), multicpu(false), tasks(), task_delete_prequeue(), task_delete_queue(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool(), do_when_out_of_lock() {
         tasks.reserve(PREALLOC_TASK_SLOTS);
         task_delete_prequeue.reserve(PREALLOC_REAPER_SLOTS);
         task_delete_queue.reserve(PREALLOC_REAPER_SLOTS);
@@ -410,6 +416,14 @@ public:
     bool page_fault(Interrupt &interrupt);
     bool exception(const std::string &name, Interrupt &interrupt);
 
+#if defined(__aarch64__)
+    uint32_t new_task(uint64_t pc, uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3, uint64_t x4,
+                            uint64_t x5, const std::vector<task_resource *> &resources);
+    uint32_t new_task(uint64_t pc, uint64_t sp, uint64_t frame_pointer, uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3, uint64_t x4,
+                            uint64_t x5, const std::vector<task_resource *> &resources);
+    uint32_t new_task(const aarch64_fpu_state &fpusse_state, const InterruptStackFrame &cpu_state,
+                            const InterruptCpuFrame &cpu_frame, const std::vector<task_resource *> &resources);
+#else
     uint32_t new_task(uint64_t rip, uint16_t cs, uint64_t rdi, uint64_t rsi,
                   uint64_t rdx, uint64_t rcx, uint64_t r8, uint64_t r9,
                   const std::vector<task_resource *> &resources);
@@ -418,6 +432,7 @@ public:
                       uint64_t r9, uint16_t fcw, uint32_t mxcsr, const std::vector<task_resource *> &resources);
     uint32_t new_task(const x86_fpu_state &fpusse_state, const InterruptStackFrame &cpu_state,
              const InterruptCpuFrame &cpu_frame, const std::vector<task_resource *> &resources);
+#endif
 
     bool terminate_blocked(task *t);
 

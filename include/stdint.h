@@ -13,6 +13,10 @@ typedef signed int int32_t;
 typedef unsigned int uint32_t;
 typedef signed long long int int64_t;
 typedef unsigned long long int uint64_t;
+#if defined(__aarch64__)
+typedef unsigned __int128 uint128_t;
+typedef signed __int128 int128_t;
+#endif
 
 #ifdef __cplusplus
 static_assert(sizeof(int8_t) == 1);

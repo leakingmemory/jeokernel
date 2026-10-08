@@ -1,10 +1,16 @@
-include(../arch/x86_64/toolchain.cmake)
+if (ARCH STREQUAL "aarch64")
+    include(../arch/aarch64/toolchain.cmake)
+else()
+    include(../arch/x86_64/toolchain.cmake)
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_library(tasks OBJECT tasklist.cpp thread.cpp thread_trampoline.S schedwrapper.cpp)
-
-target_include_directories(tasks PRIVATE ../../include)
-if (ARCH STREQUAL "x86_64")
+if (ARCH STREQUAL "aarch64")
+    add_library(tasks OBJECT tasklist.cpp thread.cpp aarch64/thread_trampoline.S schedwrapper.cpp)
+    target_include_directories(tasks PRIVATE ../arch/aarch64/include)
+else()
+    add_library(tasks OBJECT tasklist.cpp thread.cpp x86_64/thread_trampoline.S schedwrapper.cpp)
     target_include_directories(tasks PRIVATE ../arch/x86_64/include)
 endif()
+target_include_directories(tasks PRIVATE ../../include)

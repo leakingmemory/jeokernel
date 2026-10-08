@@ -2,7 +2,7 @@
 // Created by sigsegv on 9/17/26.
 //
 #include "../../serial/uart.h"
-#include "smp.h"
+#include "include/smp.h"
 #include "null_klogger.h"
 #include "bootstrap.h"
 #include "dtb.h"
@@ -18,6 +18,7 @@
 #include "../../KernelElf.h"
 
 #include "iostream"
+#include "core/scheduler.h"
 
 extern "C" void fpu_init();
 
@@ -25,6 +26,11 @@ static hw_spinlock *boot_lock{nullptr};
 static int boot_stage_counter{0};
 static int cpu_num_vector{0};
 static KernelElf *kernel_elf = nullptr;
+static tasklist *scheduler = nullptr;
+
+tasklist *get_scheduler() {
+    return scheduler;
+}
 
 static void early_init() {
     uart *spcom_cons{nullptr};
@@ -258,6 +264,12 @@ extern "C" void init_kernel() {
             }
         }
         std::cout << "Kernel ELF constructors done\n";
+
+        scheduler = new tasklist;
+        {
+            scheduler->create_current_idle_task(0);
+        }
+        std::cout << "Scheduler created\n";
     }
 
     for (;;) {

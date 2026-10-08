@@ -6,7 +6,10 @@
 
 extern "C" {
     int sched_yield() {
+        // TODO aarch64
+#if !defined(__aarch64__)
         asm("int $0xFE"); // Request task switch now.
+#endif
         return 0;
     }
 }

@@ -5,7 +5,11 @@
 #include <core/scheduler.h>
 #include <core/cpu_mpfp.h>
 #include <std/thread.h>
+#if defined(__aarch64__)
+#include <smp.h>
+#else
 #include <ApStartup.h>
+#endif
 
 
 extern "C" {
@@ -17,14 +21,22 @@ extern "C" {
         tasklist *scheduler = get_scheduler();
         {
             critical_section cli{};
+#if defined(__aarch64__)
+            cpu_num = get_cpu_num();
+#else
             if (scheduler->is_multicpu()) {
                 ApStartup *apStartup = GetApStartup();
                 cpu_num = apStartup->GetCpuNum();
             }
+#endif
             scheduler->exit(cpu_num, true);
         }
         while (true) {
+#if defined(__aarch64__)
+            asm("wfe");
+#else
             asm("hlt");
+#endif
         }
     }
 }
@@ -35,7 +47,11 @@ namespace std {
         tasklist *scheduler = get_scheduler();
         {
             std::vector<task_resource *> resources{};
+#if defined(__aarch64__)
+            return scheduler->new_task((uint64_t) thread_trampoline_start, (uint64_t) start_context, 0, 0, 0, 0, 0, resources);
+#else
             return scheduler->new_task((uint64_t) thread_trampoline_start, 0x8, (uint64_t) start_context, 0, 0, 0, 0, 0, resources);
+#endif
         }
     }
 
