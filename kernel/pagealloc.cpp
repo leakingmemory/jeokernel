@@ -1080,9 +1080,11 @@ void *pagealloc(uint64_t size) {
                 pe->value = 0;
                 pe->ppn() = page_ppn;
                 pe->valid() = 1;
-                pe->ap() = 0;
+                pe->af() = 1;
                 pe->pxn() = 1;
                 pe->uxn() = 1;
+                pe->attr_indx() = 1;
+                pe->table() = 1;
 #else
                 pe->page_ppn() = page_ppn;
                 pe->present() = 1;
