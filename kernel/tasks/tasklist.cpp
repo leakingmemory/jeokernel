@@ -11,7 +11,6 @@
 #include <core/nanotime.h>
 #include <pagealloc.h>
 
-#include "../arch/aarch64/include/smp.h"
 #if defined(__aarch64__)
 #include <smp.h>
 #include <core/aarch64fpu.h>
@@ -115,7 +114,6 @@ void tasklist::start_multi_cpu(uint8_t cpu) {
     multicpu = true;
 }
 
-#if !defined(__aarch64__)
 void tasklist::switch_tasks(Interrupt &interrupt, uint8_t cpu) {
     task *current_task;
 
@@ -320,13 +318,11 @@ void tasklist::thread_reaper() {
         delete t;
     }
 }
-#endif
 
 void tasklist::emergency_drop_lock() {
     _lock.unlock();
 }
 
-#if !defined(__aarch64__)
 bool tasklist::page_fault(Interrupt &interrupt) {
     critical_section cli{};
 #if defined(__aarch64__)
@@ -394,7 +390,6 @@ bool tasklist::exception(const std::string &name, Interrupt &interrupt) {
     switch_tasks(interrupt, cpu);
     return handled;
 }
-#endif
 
 #if defined(__aarch64__)
 

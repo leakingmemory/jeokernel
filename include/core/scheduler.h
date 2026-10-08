@@ -371,9 +371,7 @@ class tasklist {
     friend task_timeout100hz_handler_ref;
 private:
     hw_spinlock _lock;
-#if !defined(__aarch64__)
     raw_semaphore _reaper_sema;
-#endif
     uint64_t tick_counter;
     uint32_t serial;
     bool multicpu;
@@ -392,11 +390,7 @@ private:
     void ticks_millisleep(uint64_t ms);
     void tsc_nanosleep(uint64_t nanos);
 public:
-    tasklist() : _lock(),
-#if !defined(__aarch64__)
-    _reaper_sema(-1),
-#endif
-    tick_counter(0), serial(0), multicpu(false), tasks(), task_delete_prequeue(), task_delete_queue(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool(), do_when_out_of_lock() {
+    tasklist() : _lock(), _reaper_sema(-1), tick_counter(0), serial(0), multicpu(false), tasks(), task_delete_prequeue(), task_delete_queue(), event_handler_loop(), events_in_event(), events_in_event_tmp(), task_pool(), next_task_pool(), do_when_out_of_lock() {
         tasks.reserve(PREALLOC_TASK_SLOTS);
         task_delete_prequeue.reserve(PREALLOC_REAPER_SLOTS);
         task_delete_queue.reserve(PREALLOC_REAPER_SLOTS);
