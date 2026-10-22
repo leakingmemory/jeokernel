@@ -268,8 +268,36 @@ extern "C" void init_kernel() {
         scheduler = new tasklist;
         {
             scheduler->create_current_idle_task(0);
+            std::cout << "cpu" << current_cpu << ": idle task created\n";
         }
         std::cout << "Scheduler created\n";
+
+        std::lock_guard lock{*boot_lock};
+        boot_stage_counter = 3;
+        cpu_num_vector = 1;
+    } else {
+        while (true) {
+            std::lock_guard lock{*boot_lock};
+            if (boot_stage_counter == 3 && cpu_num_vector == current_cpu) {
+                break;
+            }
+        }
+        scheduler->create_current_idle_task(current_cpu);
+        std::cout << "cpu" << current_cpu << ": idle task created\n";
+        std::lock_guard lock{*boot_lock};
+        cpu_num_vector = current_cpu + 1;
+        if (cpu_num_vector == num_cpus) {
+            boot_stage_counter = 4;
+        }
+    }
+    if (current_cpu == 0) {
+        while (true) {
+            std::lock_guard lock{*boot_lock};
+            if (boot_stage_counter == 4) {
+                break;
+            }
+        }
+        std::cout << "Idle tasks created\n";
     }
 
     for (;;) {
